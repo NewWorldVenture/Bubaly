@@ -2,7 +2,6 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from './pipeline';
 import { detectScamWithAI } from './scam-ai';
 import { formatPhone } from './phone';
@@ -46,7 +45,11 @@ const observedDecision = (row: SavedSms): boolean => ['received', 'screening', '
   && (row.routing_rule_id === null || validId(row.routing_rule_id)) && (row.scam_type === null || typeof row.scam_type === 'string')
   && (row.from_name === null || typeof row.from_name === 'string') && (row.contact_id === null || validId(row.contact_id));
 function unavailable(): never { throw new Error('Guardian SMS processing unavailable'); }
-const table = (client: Client, name: Parameters<ReturnType<typeof withGuardianTables>['from']>[0]) => withGuardianTables(client).from(name) as ReturnType<Client['from']>;
+// The eight guardian_* tables are declared in database.types.ts, so these reads
+// go through the generated types rather than a hand-rolled cast layer. The name
+// is constrained to the generated table list, so a typo is a compile error.
+type GuardianTable = Extract<keyof Database['public']['Tables'], `guardian_${string}`>;
+const table = (client: Client, name: GuardianTable) => client.from(name) as ReturnType<Client['from']>;
 function resultEnvelope(raw: unknown): { data: unknown; error: unknown; count: unknown } {
   if (!raw || typeof raw !== 'object' || !('data' in raw) || !('error' in raw) || !('count' in raw)) return unavailable();
   return { data: raw.data, error: raw.error, count: raw.count };

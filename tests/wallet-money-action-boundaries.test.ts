@@ -44,8 +44,18 @@ describe('wallet and Stripe money action boundaries', () => {
 
   it('rolls back a held spend when its approval row cannot be created', () => {
     expect(walletMoneyActions).toContain('const { error: approvalError } = await supabase.from(\'parent_approvals\').insert');
-    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval');");
+    // The predicate, not the statement terminator. This used to pin
+    // `.eq('status', 'requires_parent_approval');` WITH the semicolon, so adding
+    // the `.select('id')` readback after it failed a test about the rollback for a
+    // reason that had nothing to do with rolling back.
+    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval')");
     expect(walletMoneyActions).toContain("return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'))");
+    // And the readback itself, because the rollback's only trace is a log: RLS
+    // FILTERS the cancel rather than refusing it, so without this the one case
+    // worth logging — a held debit left in the ledger with no approval row that
+    // could ever resolve it — raised nothing and logged nothing.
+    expect(walletMoneyActions).toMatch(/const \{ data: cancelled, error: rollbackError \}/);
+    expect(walletMoneyActions).toContain("console.error('[wallet spend] approval rollback changed no row'");
   });
 
   it('does not silently downgrade entitlement when subscription reads fail', () => {

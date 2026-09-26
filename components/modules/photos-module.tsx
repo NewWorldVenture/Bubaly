@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
 import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
@@ -14,6 +14,8 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -24,6 +26,9 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
+import { galleryStep } from '@/lib/ui/gallery';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
@@ -64,6 +69,19 @@ export function PhotosModule() {
 
   const [activeAlbum, setActiveAlbum] = useState<Album | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const lightboxOpen = lightboxIdx !== null;
+  // C2-01: this overlay is a modal dialog in every respect except that it said
+  // so nowhere. It had no role, no `aria-modal`, no Escape, no focus move-in, no
+  // focus trap and no scroll lock — its only dismissal was a backdrop click, so
+  // a keyboard or screen-reader user could open a photo and had no way out and
+  // no way to reach the controls. Same contract as `<Modal>`, from the same
+  // hook; the chrome stays full-bleed black rather than becoming a titled panel,
+  // which is why this is not simply swapped for `<Modal>`.
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const closeLightbox = useCallback(() => setLightboxIdx(null), []);
+  useDialogBehavior(lightboxRef, lightboxOpen, { onClose: closeLightbox });
+  const lightboxLabelId = useId();
+  const lightboxCaptionId = useId();
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -88,10 +106,30 @@ export function PhotosModule() {
     },
   });
 
+  // SEC-001: every photo, video, cover and download below is read through a URL
+  // signed with this viewer's session. `url` stays the stored reference.
+  const media = useFamilyMediaUrls(allPhotos.map((p) => p.url));
+
   const photos = allPhotos.filter((p) =>
     !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
+
+  // Left/Right walk the gallery while the lightbox is open. The two chevrons
+  // are the only way to move between photos and they unmount at each end, so
+  // without this a keyboard user could reach the first photo and then had to
+  // close and reopen to see the next one. Clamped rather than wrapped: the
+  // buttons do not wrap either, and the counter ("3 / 20") says where you are.
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (galleryStep(0, e.key, 1) === null) return;
+      setLightboxIdx((i) => (i === null ? i : galleryStep(i, e.key, photos.length) ?? i));
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxIdx, photos.length]);
 
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
@@ -261,8 +299,7 @@ export function PhotosModule() {
                     className="group text-left">
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <FamilyMediaImg src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
                       ) : (
                         <div className="flex h-full items-center justify-center text-5xl opacity-30">
                           <kind.icon className="h-12 w-12" style={{ color: kind.color }} />
@@ -323,17 +360,19 @@ export function PhotosModule() {
               {photos.map((photo, idx) => {
                 const isVideo = photo.media_type === 'video';
                 return (
-                <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
-                  onClick={() => setLightboxIdx(idx)}>
+                <div key={photo.id} role="button" tabIndex={0}
+                  className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40 focus-ring"
+                  onClick={() => setLightboxIdx(idx)}
+                  onKeyDown={(e) => openOnKey(e, () => setLightboxIdx(idx))}>
                   {isVideo ? (
                     <div className="flex aspect-video w-full cursor-pointer items-center justify-center bg-black/80">
                       <Play className="h-10 w-10 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
+                    <FamilyMediaImg src={photo.url} alt={photo.caption ?? tr('photosModule.photo')}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
-                      loading="lazy" decoding="async" />
+                      loading="lazy" decoding="async"
+                      fallback={<div className="aspect-square w-full bg-surface/40" />} />
                   )}
                   {/* Video badge */}
                   {isVideo && (
@@ -372,15 +411,15 @@ export function PhotosModule() {
             /* List */
             <div className="overflow-hidden rounded-2xl border border-border">
               {photos.map((photo, idx) => (
-                <div key={photo.id} onClick={() => setLightboxIdx(idx)}
-                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
+                <div key={photo.id} role="button" tabIndex={0} onClick={() => setLightboxIdx(idx)}
+                  onKeyDown={(e) => openOnKey(e, () => setLightboxIdx(idx))}
+                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0 focus-ring">
                   {photo.media_type === 'video' ? (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/80">
                       <Play className="h-5 w-5 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
+                    <FamilyMediaImg src={photo.url} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
@@ -400,8 +439,34 @@ export function PhotosModule() {
 
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
-          onClick={() => setLightboxIdx(null)}>
+        // This is a SUPPRESSION and worth reading as one, not a fix.
+        //
+        // The rule wants a keydown handler beside the backdrop click. The
+        // correct keyboard affordance for dismissing a dialog is ESCAPE, and it
+        // is bound — with the focus trap and focus restore — by
+        // `useDialogBehavior` on `lightboxRef` below. The rule cannot see into
+        // a hook, so it reports a dialog that is already keyboard-closable.
+        //
+        // Binding Enter or Space here instead would be actively WRONG: inside a
+        // dialog those keys belong to whatever has focus, so the lightbox would
+        // close every time someone activated the next or previous button.
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events
+        <div
+          ref={lightboxRef}
+          role="dialog"
+          aria-modal="true"
+          // Named by what is already on screen — the "3 / 20" counter plus the
+          // caption when there is one — rather than by a new string in eleven
+          // locales. Numbers and the caption are the photo's own words, so the
+          // name is translated by construction.
+          aria-labelledby={photos[lightboxIdx].caption ? `${lightboxLabelId} ${lightboxCaptionId}` : lightboxLabelId}
+          tabIndex={-1}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)] outline-none"
+          // Only a click on the backdrop ITSELF closes. Guarding here rather
+          // than stopping propagation in a child is what lets the media wrapper
+          // below go back to being a plain container: it carried an onClick for
+          // no reason except to undo this one.
+          onClick={(e) => { if (e.target === e.currentTarget) setLightboxIdx(null); }}>
           {/* Nav */}
           {lightboxIdx > 0 && (
             <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
@@ -419,27 +484,28 @@ export function PhotosModule() {
           )}
 
           {/* Media */}
-          <div onClick={(e) => e.stopPropagation()} className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
+          <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
             {photos[lightboxIdx].media_type === 'video' ? (
               <video
-                src={photos[lightboxIdx].url ?? ''}
+                src={media(photos[lightboxIdx].url) ?? undefined}
                 controls
                 autoPlay
                 playsInline
                 className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
               />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
-                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+              <FamilyMediaImg src={photos[lightboxIdx].url} alt={photos[lightboxIdx].caption ?? ''}
+                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl"
+                fallback={<div className="h-[50vh] w-[60vw] max-w-full rounded-2xl bg-white/10" />} />
             )}
             {/* Controls */}
             <div className="mt-4 flex items-center gap-3 text-white">
-              <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
-              {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
+              <span id={lightboxLabelId} className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
+              {photos[lightboxIdx].caption && <p id={lightboxCaptionId} className="text-sm">{photos[lightboxIdx].caption}</p>}
               <div className="ml-auto flex gap-2">
-                <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
-                  onClick={(e) => e.stopPropagation()}
+                <a href={media(photos[lightboxIdx].url) ?? undefined} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                  aria-disabled={media(photos[lightboxIdx].url) ? undefined : true}
+                  onClick={(e) => { e.stopPropagation(); if (!media(photos[lightboxIdx].url)) e.preventDefault(); }}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Download className="h-4 w-4" />
                 </a>
@@ -641,8 +707,8 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
   return (
     <Modal open onClose={onClose} title={tr('photos.editPhoto')}>
       <div className="space-y-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
+        <FamilyMediaImg src={photo.url} alt="" className="max-h-48 w-full rounded-xl object-cover"
+          fallback={<div className="h-48 w-full rounded-xl bg-surface/40" />} />
         <Field label={tr('photos.caption')}>
           {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={tr('photos.addACaption')} autoFocus />}
         </Field>

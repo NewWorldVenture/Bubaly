@@ -43,7 +43,11 @@ export function ExitIntent() {
   // `aria-modal="true"`. Scroll lock stays with useLockBodyScroll above.
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeOffer = useCallback(() => setOpen(false), []);
-  useDialogBehavior(dialogRef, open, { onClose: closeOffer, lockScroll: false });
+  // `open` alone, not `Boolean(offer) && open`: this banner is ALWAYS mounted
+  // and returns null below, so the hook must not act while there is no offer to
+  // show. main gates it with lockScroll: false for the same reason — a banner
+  // is not a modal and must not freeze the page behind it.
+  useDialogBehavior(dialogRef, Boolean(offer) && open, { onClose: closeOffer, lockScroll: false });
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
@@ -110,15 +114,19 @@ export function ExitIntent() {
   if (!offer || !open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
+    // The overlay only closes on its OWN click now, which retires the panel's
+    // `onClick={(e) => e.stopPropagation()}` — a handler whose whole purpose was
+    // to undo this one. Escape and the focus trap come from `useDialogBehavior`.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"
-        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl outline-none"
       >
         <button onClick={() => setOpen(false)} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />

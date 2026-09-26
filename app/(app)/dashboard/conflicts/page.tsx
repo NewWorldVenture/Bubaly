@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
+import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'AI Conflict Resolution' };
@@ -35,7 +36,7 @@ export default async function ConflictsPage() {
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
 
-  const [{ data: events }, { data: members }] = await settleAll([
+  const [eventsResult, membersResult] = await settleAll([
     supabase
       .from('calendar_events')
       .select('id, title, starts_at, ends_at, all_day, location, assignee_id')
@@ -48,6 +49,19 @@ export default async function ConflictsPage() {
       .limit(MAX_EVENTS),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
+
+  // `settleAll` hands back `{ data: null, error }` on a failed read, so
+  // destructuring `{ data }` alone turns an outage into "no conflicts found" —
+  // on the page whose entire job is finding them. That is the same shape as the
+  // ledger reconciler rendering "everything reconciles" from a truncated read:
+  // an absence presented as an all-clear.
+  const readError = eventsResult.error ?? membersResult.error;
+  if (readError) {
+    console.error('[conflicts] calendar read failed', readError);
+    return <ErrorState message={t('root.somethingWentWrong')} />;
+  }
+  const { data: events } = eventsResult;
+  const { data: members } = membersResult;
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const timed: TimedEvent[] = (events ?? []).map((e) => ({

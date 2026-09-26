@@ -14,9 +14,13 @@ name: Cron dispatch
 # the explicit credential-free preview. Malformed base URLs or unregistered
 # manual routes also fail before credentials can be sent.
 #
-# Cost lever: the tick is every 5 minutes (~290 short runs/day). Change it to
-# '*/15 * * * *' to cut Actions minutes by two thirds; the only routes that
-# lose precision are those registered with a five-minute cadence in SCHEDULES.
+# Cost lever: the tick ASKS for every 5 minutes (~290 short runs/day). It does
+# not get it — the first 95 runs of this workflow averaged one every 209
+# minutes, ~7/day, and never once came 5 minutes apart. Slowing the request to
+# '*/15 * * * *' would therefore save little, because the request is not what
+# is being billed or delivered; raising delivery needs a scheduler that keeps
+# its word (Vercel Pro's native sub-daily crons) rather than a different cron
+# string here. See scripts/cron-dispatch.mjs for the per-route shortfall.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:

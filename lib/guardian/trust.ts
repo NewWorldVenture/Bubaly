@@ -1,13 +1,10 @@
 // lib/guardian/trust.ts — Family Trust Graph™ trust levels and scoring.
 
-export type TrustLevel =
-  | 'immediate_family'
-  | 'close_family'
-  | 'trusted_friend'
-  | 'known_contact'
-  | 'unknown'
-  | 'suspected_spam'
-  | 'blocked';
+import type { GuardianTrustLevel } from '@/lib/database.types';
+
+// One definition, and it is the column's. `guardian_contacts.trust_level` is a
+// Postgres enum; re-typing its members here let the two drift silently.
+export type TrustLevel = GuardianTrustLevel;
 
 export const TRUST_LEVELS: TrustLevel[] = [
   'immediate_family',

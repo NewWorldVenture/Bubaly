@@ -56,7 +56,16 @@ describe('actual marketing action completes audience reads before delivery', () 
     expect(state.send).toHaveBeenCalledTimes(1001);
     expect(state.send.mock.calls.at(-1)?.[1]).toBe(userId(1000));
     expect(campaign(f)).toMatchObject({ status: 'sent', recipients: 1001, sent: 1001 });
-    expect(f.calls.filter(c => c.table === 'profiles').map(c => c.count)).toEqual([200, 0, 200, 0, 200, 0, 200, 0, 200, 0, 1, 0]);
+    // 1001 users in chunks of ID_CHUNK = 100, each chunk paged until it answers
+    // empty: ten full chunks, then the remainder. The chunk size is NOT PAGE_SIZE
+    // and must not drift back to it — a `.in()` list travels in the query string,
+    // where lib/supabase/chunked-in.ts puts a UUID at roughly 40 bytes and caps a
+    // batch at 100 to keep the longest URL "well inside the common 8 KB limit".
+    // 200 ids is that limit rather than a margin under it, and here an over-long
+    // request line is not a slow read, it is a refused campaign: this module
+    // turns an incomplete read into a throw.
+    expect(f.calls.filter(c => c.table === 'profiles').map(c => c.count))
+      .toEqual([...Array.from({ length: 10 }, () => [100, 0]).flat(), 1, 0]);
   });
 
   it('continues to empty under a response cap smaller than the requested page, including profiles', async () => {

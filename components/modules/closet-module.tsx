@@ -24,6 +24,7 @@ import {
 } from '@/lib/closet/outfits';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -37,11 +38,6 @@ const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 function fmtDate(d: string): string {
   return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
 }
 
 export function ClosetModule() {
@@ -231,11 +227,10 @@ export function ClosetModule() {
             <>
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                 {suggestion.picks.map((p) => {
-                  const url = photoUrl(p.item.photo_path);
                   return (
                     <li key={p.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-                      {url ? <img src={url} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/10 text-xl">{categoryMeta(p.item.category).emoji}</span>}
+                      <FamilyMediaImg src={p.item.photo_path} alt="" className="h-10 w-10 rounded-lg object-cover"
+                        fallback={<span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/10 text-xl">{categoryMeta(p.item.category).emoji}</span>} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{p.item.name}</p>
                         <p className="truncate text-xs text-muted">{p.reasons.slice(0, 2).join(' · ') || categoryMeta(p.item.category).label}</p>
@@ -297,13 +292,12 @@ export function ClosetModule() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
-            const url = photoUrl(item.photo_path);
             const cpw = costPerWear(item);
             return (
               <div key={item.id} className="group rounded-2xl border border-border bg-surface/40 p-3">
                 <div className="flex items-start gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-                  {url ? <img src={url} alt={item.name} className="h-14 w-14 rounded-xl object-cover" /> : <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl">{categoryMeta(item.category).emoji}</span>}
+                  <FamilyMediaImg src={item.photo_path} alt={item.name} className="h-14 w-14 shrink-0 rounded-xl object-cover"
+                    fallback={<span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl">{categoryMeta(item.category).emoji}</span>} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{item.name}</p>
                     <p className="truncate text-xs text-muted">{categoryMeta(item.category).label}{item.color ? ` · ${item.color}` : ''}{item.size ? ` · ${item.size}` : ''}</p>
@@ -408,7 +402,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   const [seasons, setSeasons] = useState<string[]>(item?.seasons ?? []);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(t('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'closet', file.name);
@@ -451,7 +445,6 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -491,8 +484,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
           <Field label={t('closet.price')} hint={t('closetModule.enablesCostPerWear')}>{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
         </div>
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-          {url ? <img src={url} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>}
+          <FamilyMediaImg src={photoPath} alt="" className="h-12 w-12 rounded-xl object-cover"
+            fallback={<span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>} />
           <label className="cursor-pointer text-sm text-brand-text">
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />

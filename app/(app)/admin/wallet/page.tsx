@@ -31,7 +31,7 @@ export default async function AdminWalletPage() {
     supabase.from('parent_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     // Money: `.limit(10000)` was never 10,000 (PostgREST caps at db-max-rows),
     // so this platform total was the sum of 1,000 arbitrary rows.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').order('id').range(from, to), { max: 10000 }),
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('amount_cents, direction, status').eq('status', 'completed').order('id').range(from, to), { max: 10000, failOnMax: true }),
     supabase.from('feature_flags').select('key, enabled, description').order('key'),
     supabase.from('wallet_audit_logs').select('id, family_id, action, entity_type, detail, created_at').order('created_at', { ascending: false }).limit(25),
   ]);

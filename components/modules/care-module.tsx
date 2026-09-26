@@ -110,12 +110,19 @@ export function CareModule() {
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('care_log').update(fields).eq('id', form.id)
-      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
+    // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+    // not rewrite comes back `error: null` with nothing changed. See
+    // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+    // predicate bounds the write to one household and `.select('id')` makes
+    // the empty result an answer. An INSERT needs neither — RLS refuses one
+    // with an error instead of filtering it away.
+    const { data, error: err } = form.id
+      ? await sb.from('care_log').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
+      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success(form.id ? 'Entry updated' : 'Care logged');
+    if (!data || data.length === 0) { toastError(tr('actions.couldNotSaveThatRecord')); return; }
+    success(form.id ? tr('careModule.entryUpdated') : tr('careModule.careLogged'));
     setModalOpen(false);
   }
 
@@ -133,8 +140,15 @@ export function CareModule() {
   async function remove(e: CareEntry) {
     if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0323 treats care_log as Rule B — a record of medical fact about someone,
+    // which its subject may not erase.
+    const { data, error: err } = await sb.from('care_log').delete()
+      .eq('id', e.id).eq('family_id', familyId).select('id').maybeSingle();
     if (err) { toastError(describeDbError(err)); return; }
+    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
     success(tr('careModule.entryDeleted'));
   }
 

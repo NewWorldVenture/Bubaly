@@ -53,6 +53,8 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
     fetcher: (sb) => sb.from('subscriptions_tracked').select('*').eq('family_id', familyId).order('status').order('name'),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [candidateDraft, setCandidateDraft] = useState(false);
   const [priceHistoryDraft, setPriceHistoryDraft] = useState<string | null>(null);
@@ -63,24 +65,37 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.name.trim()) return;
-    const row = {
-      name: form.name.trim(),
-      cost_cents: Math.round(parseFloat(form.cost || '0') * 100),
-      cadence: form.cadence,
-      category: form.category,
-      status: form.status,
-      next_charge: form.next_charge || null,
-      last_used: form.last_used || null,
-      note: form.note.trim() || null,
-    };
-    const supabase = createClient();
-    const { error } = form.id
-      ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id)
-      : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.name.trim()) return;
+      const row = {
+        name: form.name.trim(),
+        cost_cents: Math.round(parseFloat(form.cost || '0') * 100),
+        cadence: form.cadence,
+        category: form.category,
+        status: form.status,
+        next_charge: form.next_charge || null,
+        last_used: form.last_used || null,
+        note: form.note.trim() || null,
+      };
+      const supabase = createClient();
+      const { error } = form.id
+        ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id)
+        : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(form.id ? 'Updated' : 'Added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function markUsed(id: string) {
@@ -198,7 +213,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
             <Field label={t('subscriptions.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('subscriptions.cancel')}</Button>
-              <Button type="submit">{candidateDraft ? 'Save subscription' : form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{candidateDraft ? 'Save subscription' : form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

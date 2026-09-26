@@ -13,21 +13,37 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function dayBounds() {
-  const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in7 = new Date(start); in7.setDate(in7.getDate() + 7);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
-  const weekStart = new Date(start);
-  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
-  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
-  return { start, end, in7, in14, weekStart, weekEnd };
+// Every bound below is the FAMILY's, not the host's.
+//
+// `setHours(0, 0, 0, 0)` is the server's midnight, which on a UTC host is 17:00
+// in California and 11:00 the same morning in Sydney. This dashboard's "today",
+// "this week" and "next 7 / 14 days" all hung off it, so a household opening it
+// after their afternoon cutover saw tomorrow's day and lost today's — every
+// day. Same defect and same fix as the kitchen display
+// (app/(app)/display/page.tsx:122).
+//
+// Day KEYS rather than millisecond arithmetic: `+ 7 * 86400000` drifts by an
+// hour across a DST boundary, and `zonedDayBoundsMs` re-resolves each key onto a
+// real local midnight. `weekStartDayKey` keeps the Monday-start week the strip
+// already used.
+function dayBounds(tz: string) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const today = zonedDayBoundsMs(todayKey, tz);
+  const weekStartKey = weekStartDayKey(todayKey);
+  return {
+    start: new Date(today.start),
+    end: new Date(today.end),
+    in7: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 7), tz).start),
+    in14: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 14), tz).start),
+    weekStart: new Date(zonedDayBoundsMs(weekStartKey, tz).start),
+    weekEnd: new Date(zonedDayBoundsMs(addDaysToDayKey(weekStartKey, 7), tz).start),
+  };
 }
 
 function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
@@ -54,7 +70,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const tr = await getTranslations();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds();
+  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(ctx.active.family.timezone || 'UTC');
 
   const [
     { data: todayEvents },

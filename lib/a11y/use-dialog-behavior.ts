@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -50,6 +50,21 @@ export function useDialogBehavior(
 ): void {
   const { onClose, lockScroll = true } = options;
 
+  // `onClose` is held in a REF and the effect below does not depend on it.
+  //
+  // 92 of the 226 call sites pass an inline `onClose={() => setOpen(false)}` — a
+  // fresh function identity on every render of the component that owns the
+  // dialog's form state. With `onClose` in the dependency array, a single
+  // keystroke re-rendered that component, the deps compared unequal, and React
+  // tore the effect down and set it up again. Both halves move focus: cleanup
+  // restores the trigger BEHIND the dialog, setup focuses the FIRST control in
+  // it. Anything but the first field was untypeable.
+  //
+  // The ref keeps Escape calling the CURRENT handler while the trap itself is
+  // built once per open. Pinned by tests/a-dialog-does-not-steal-the-caret.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const dialog = ref.current;
@@ -65,7 +80,7 @@ export function useDialogBehavior(
       if (e.key === 'Escape') {
         // No `onClose` means this dialog is not dismissible. Escape does
         // nothing, and the trap below still holds — which is the point.
-        if (onClose) onClose();
+        onCloseRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -93,5 +108,5 @@ export function useDialogBehavior(
       if (lockScroll) document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [ref, open, onClose, lockScroll]);
+  }, [ref, open, lockScroll]);
 }

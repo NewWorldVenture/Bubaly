@@ -25,6 +25,7 @@ import {
 } from '@/lib/wishlists/gifts';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Wish = Tables<'wishlist_items'>;
 
@@ -187,7 +188,7 @@ export function WishlistsModule() {
                 {w.notes && <p className="mt-0.5 text-sm text-muted flex-1">{w.notes}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {w.price != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{w.price}</span>}
-                  {w.url && <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('wishlists.view')}</a>}
+                  {w.url && <a href={safeWebLink(w.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('wishlists.view')}</a>}
                 </div>
                 {/* Gift coordination (hidden from owner) */}
                 {!isOwnList && (

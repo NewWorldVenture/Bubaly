@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../../lib/database.types';
-import { withGuardianTables } from '../../lib/supabase/guardian-tables';
+import type { Database, GuardianRoutingMode } from '../../lib/database.types';
 import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 const enabled = process.env.E2E_DURABLE_SESSION === '1';
@@ -75,7 +74,7 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
       const anonymous = client(origin, key);
       const commId = randomUUID(), receiptId = randomUUID(), attemptedId = randomUUID();
       const sid = `SM${randomUUID().replaceAll('-', '')}`;
-      const guardian = withGuardianTables(member);
+      const guardian = member;
       // A real signed-in parent's own-family INSERT is the reason a normal
       // communication row cannot establish service decision authorship.
       const communication = await guardian.from('guardian_communications').insert({
@@ -133,10 +132,13 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
     }
   });
 
-  for (const scenario of [
+  // The modes are the column's own union, so a mode this schema never had is a
+  // compile error here rather than a discarded update at run time.
+  const scenarios: { name: string; forgedMode: GuardianRoutingMode; expectedMode: GuardianRoutingMode; phone: string; notifications: number }[] = [
     { name: 'blocked', forgedMode: 'blocked', expectedMode: 'ai_handle_first', phone: '+12025550181', notifications: 1 },
     { name: 'permitted', forgedMode: 'ai_handle_first', expectedMode: 'blocked', phone: '+12025550182', notifications: 0 },
-  ]) {
+  ];
+  for (const scenario of scenarios) {
     test(`signed SMS replaces a member-forged ${scenario.name} decision and reuses its service receipt on retry`, async ({ baseURL }) => {
       const appOrigin = requireLocalOrigin(baseURL);
       const origin = requireLocalOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -151,7 +153,7 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
         account = await createOwnedAccount(origin, serviceKey);
         const familyId = account.familyId;
         const member = await signedIn(origin, key, account);
-        const guardian = withGuardianTables(member);
+        const guardian = member;
         const members = await member.from('family_members').select('id')
           .eq('family_id', familyId).eq('user_id', account.userId).eq('is_active', true);
         expect(!members.error && members.data?.length === 1, 'Resolve exactly the owned active family member').toBe(true);
@@ -168,7 +170,7 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
           current_context: 'normal', is_active: true,
         }).select('id');
         expect(!profile.error && profile.data?.length === 1, 'Persist the owned family routing profile').toBe(true);
-        const forged = {
+        const forged: Database['public']['Tables']['guardian_communications']['Insert'] = {
           id: commId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
           from_number: params.From, to_number: params.To, body: params.Body, twilio_sms_sid: sid,
           status: scenario.forgedMode === 'blocked' ? 'blocked' : 'received',
@@ -178,7 +180,7 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
         };
         const inserted = await guardian.from('guardian_communications').insert(forged).select('id');
         expect(!inserted.error && inserted.data?.length === 1, 'File the exact inbound identity through real member permissions').toBe(true);
-        const communication = () => withGuardianTables(admin).from('guardian_communications').select('*')
+        const communication = () => admin.from('guardian_communications').select('*')
           .eq('family_id', familyId).eq('member_id', memberId).eq('id', commId).eq('twilio_sms_sid', sid).single();
         const receipts = () => admin.from('ai_tool_calls').select('*')
           .eq('family_id', familyId).eq('tool_name', 'guardian.sms_intake').eq('resource_id', commId);

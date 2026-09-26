@@ -179,8 +179,14 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
   async function removeMember(memberId: string) {
     if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
+    // See family-module: manager-gated, and RLS filters the UPDATE rather than
+    // refusing it, so a removal a non-manager attempted was reported as done.
+    // The `window.location.reload()` below made that especially convincing — the
+    // member came back, with no message saying why.
+    const { data: rows, error } = await supabase.from('family_members')
+      .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!rows || rows.length === 0) return toastError(t('actions.couldNotUpdateThatMember'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -452,10 +458,18 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
-    const { error } = await createClient().from('family_members')
-      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
+    // This form changes a member's ROLE, so it is the sharpest case of the lot:
+    // fm_update (0211) is manager-gated, RLS FILTERS the update rather than
+    // refusing it, and the `window.location.reload()` below then showed the OLD
+    // role right after "Member updated". Scoped by the row's own `family_id`
+    // rather than a threaded prop — the question is whether this row is still in
+    // the family the screen believes it is in.
+    const { data: rows, error } = await createClient().from('family_members')
+      .update({ display_name, role, birthday: birthday || null })
+      .eq('id', member.id).eq('family_id', member.family_id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    if (!rows || rows.length === 0) return toastError(t('actions.couldNotUpdateThatMember'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

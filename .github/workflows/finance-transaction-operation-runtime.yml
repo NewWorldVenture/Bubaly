@@ -58,7 +58,7 @@ jobs:
           # three cannot, because the entrypoint shuts it down in between.
           streak=0
           for attempt in $(seq 1 90); do
-            if docker exec "$container" psql --quiet --no-password \
+            if docker exec "$container" psql -X --quiet --no-password \
               --host=/var/run/postgresql --username=postgres \
               --dbname=bubaly_finance_operation_ci \
               --set=ON_ERROR_STOP=1 --output=/dev/null --command='select 1' 2>/dev/null; then
@@ -69,7 +69,7 @@ jobs:
             fi
             sleep 1
           done
-          printf '%s\n' 'Dedicated synthetic PostgreSQL did not become ready.' >&2
+          printf '%s\n' 'Synthetic PostgreSQL never served bubaly_finance_operation_ci.' >&2
           exit 1
 
       - name: Apply minimal physical bootstrap and actual migration 0274

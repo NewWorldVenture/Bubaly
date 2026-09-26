@@ -35,6 +35,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     fetcher: (sb) => sb.from('health_visits').select('*').eq('family_id', familyId),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
@@ -49,32 +51,56 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      title: form.title.trim(),
-      provider_name: form.provider_name.trim() || null,
-      location: form.location.trim() || null,
-      visit_date: form.visit_date,
-      reason: form.reason.trim() || null,
-      outcome: form.outcome.trim() || null,
-      follow_up_date: form.follow_up_date || null,
-      cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
-    };
-    const { error } = form.id
-      ? await supabase.from('health_visits').update(row).eq('id', form.id)
-      : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Visit updated' : 'Visit added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        title: form.title.trim(),
+        provider_name: form.provider_name.trim() || null,
+        location: form.location.trim() || null,
+        visit_date: form.visit_date,
+        reason: form.reason.trim() || null,
+        outcome: form.outcome.trim() || null,
+        follow_up_date: form.follow_up_date || null,
+        cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
+      };
+      // See immunizations-module: the earlier fix reached the DELETE below and not
+      // this UPDATE, and RLS filters the two the same way. 0323 gives health_visits
+      // the same Rule B treatment, so a blocked edit answered `error: null` and was
+      // reported as saved.
+      const { data, error } = form.id
+        ? await supabase.from('health_visits').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (!data || data.length === 0) return toastError(t('actions.couldNotSaveThatRecord'));
+      success(form.id ? t('healthVisitsModule.visitUpdated') : t('healthVisitsModule.visitAdded'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
-    const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
+    // See immunizations-module: RLS filters a DELETE instead of refusing it, so
+    // without `.select('id')` a blocked removal is indistinguishable from a
+    // successful one. 0323 gives health_visits the same Rule B treatment.
+    const { data, error } = await createClient().from('health_visits').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(describeDbError(error)); return; }
+    if (!data) { toastError(t('actions.couldNotDeleteThatRecord')); return; }
+    success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {
@@ -186,7 +212,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
             <Field label={t('healthVisits.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('healthVisits.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add visit'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add visit'}</Button>
             </div>
           </form>
         </Modal>

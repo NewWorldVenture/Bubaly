@@ -272,10 +272,14 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
   const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
 
-  // Soonest relationship date inside its reminder window (gentle proactive nudge).
+  // Soonest relationship date inside its reminder window (gentle proactive
+  // nudge). The family's day, not the server's: this took no anchor at all and
+  // fell through to `new Date()`, so an anniversary a day out already read
+  // "Today" on a UTC host from 5pm Pacific onwards.
   const relReminder = upcomingRelationship(
     ((relDateRows ?? []) as { id: string; kind: RelKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; status: string }[])
       .map((d) => ({ id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status })),
+    todayKey,
   )[0];
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
@@ -411,10 +415,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     if (candidates.length > 0) {
       const today = todayStart.toISOString().slice(0, 10);
       // Which kinds has the family already dismissed today? Never re-surface those.
-      const { data: existingIns } = await supabase.from('daily_insights')
+      //
+      // If that read fails, nothing may be written: an empty `blocked` set would
+      // send every candidate to the upsert below, and its `status: 'active'`
+      // would overwrite the rows the family dismissed — bringing back, on a bad
+      // read, exactly what they asked not to see again today.
+      const { data: existingIns, error: existingError } = await supabase.from('daily_insights')
         .select('kind, status').eq('family_id', familyId).eq('as_of_date', today);
       const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
-      const toUpsert = candidates.filter((c) => !blocked.has(c.kind));
+      const toUpsert = existingError ? [] : candidates.filter((c) => !blocked.has(c.kind));
       if (toUpsert.length > 0) {
         const { error: insightError } = await settle(supabase.from('daily_insights').upsert(
           toUpsert.map((c) => ({

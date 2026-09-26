@@ -261,10 +261,10 @@ describe('the Activity tab renders what was read, and says so when it could not'
   it('shows the ledger, the dials beside their policies, and the read/withheld names', async () => {
     vi.doMock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
     const React = (await import('react')).default;
-    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { renderTranslated } = await import('./helpers/render-translated');
     const { TrustActivityTab } = await import('@/components/modules/trust-activity-tab');
 
-    const html = renderToStaticMarkup(React.createElement(TrustActivityTab, {
+    const html = renderTranslated(React.createElement(TrustActivityTab, {
       error: null,
       policies: [{ domain: 'finances', enabled: true }],
       activity: {
@@ -301,10 +301,10 @@ describe('the Activity tab renders what was read, and says so when it could not'
   it('renders the retryable failure instead of an empty ledger', async () => {
     vi.doMock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
     const React = (await import('react')).default;
-    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { renderTranslated } = await import('./helpers/render-translated');
     const { TrustActivityTab } = await import('@/components/modules/trust-activity-tab');
 
-    const html = renderToStaticMarkup(React.createElement(TrustActivityTab, {
+    const html = renderTranslated(React.createElement(TrustActivityTab, {
       error: 'Could not load what Bubaly has done from Supabase. Refresh and try again.',
       policies: [],
       activity: null,

@@ -26,6 +26,7 @@ const USER = '22222222-2222-4222-8222-222222222222';
 const PATHS = ['/api/assistant', '/api/assistant/alexa'] as const;
 let linkExists = false;
 let reads: URL[];
+let rateLimitCalls = 0;
 
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks();
@@ -36,11 +37,22 @@ beforeEach(() => {
   mocks.answer.mockResolvedValue({ speech: 'Synthetic authorized answer', intent: 'help', outcome: 'answered' });
   mocks.record.mockResolvedValue(undefined);
   mocks.verifyAlexa.mockResolvedValue({ ok: true });
-  linkExists = false; reads = [];
+  linkExists = false; reads = []; rateLimitCalls = 0;
   const client = createClient('https://assistant-db-fixture.invalid', 'synthetic-service-key', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (raw, init = {}) => {
-      const url = new URL(String(raw)); reads.push(url);
+      const url = new URL(String(raw));
+      // The DURABLE rate limiter runs on the service client BEFORE the token is
+      // resolved, and it FAILS CLOSED — so a fixture that refused its RPC turned
+      // every case in this file into a 429 and asserted nothing about
+      // authorization at all. It is answered here, and deliberately NOT counted
+      // in `reads`: `reads` is this file's record of family data being touched,
+      // and a per-IP counter is neither family data nor keyed by the token.
+      if (url.pathname === '/rest/v1/rpc/rate_limit_hit') {
+        rateLimitCalls++;
+        return Response.json([{ allowed: true, retry_after: 0 }]);
+      }
+      reads.push(url);
       expect(url.pathname).toBe('/rest/v1/assistant_links');
       expect(init.method ?? 'GET').toBe('GET');
       expect(url.searchParams.get('token_hash')).toBe(`eq.${hashAssistantToken(TOKEN)}`);
@@ -80,7 +92,14 @@ describe('exact assistant middleware authorization boundary', () => {
   it.each(PATHS)('rejects a missing token in actual %s before service access', async path => {
     const response = await deliver(path);
     expect(response.status).toBe(path === '/api/assistant' ? 401 : 200);
-    expect(mocks.admin).not.toHaveBeenCalled(); expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
+    // The service client is now constructed for the rate-limit check, so the
+    // property is "no family data was read", not "no client was made".
+    expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
+    // And the ORDER, which is the reason the limiter is there: the per-IP cap is
+    // settled before the token is looked up, so this endpoint cannot be used to
+    // test guessed tokens at speed. The Alexa route caps in process only, so it
+    // makes no such call — asserting 1 for both would have hidden that.
+    expect(rateLimitCalls).toBe(path === '/api/assistant' ? 1 : 0);
     if (path.endsWith('/alexa')) expect(await response.json()).toMatchObject({ response: { outputSpeech: { text: expect.stringContaining('link') } } });
   });
   it.each(PATHS)('rejects an unknown token in actual %s before answering or capturing data', async path => {
@@ -116,7 +135,6 @@ describe('exact assistant middleware authorization boundary', () => {
     // No speech either: there is no device on the other end of a forged
     // request, and a spoken reply would confirm the endpoint is live.
     expect(await response.text()).toBe('');
-    expect(mocks.admin).not.toHaveBeenCalled();
     expect(reads).toEqual([]);
     expect(mocks.answer).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();

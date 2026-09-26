@@ -121,7 +121,7 @@ function VoiceCaptureSession() {
     try {
       if (speech.listening) speech.stop();
       journey.start();
-      if (!route.text) { journey.abandon(); toastError("Didn't catch a command — try again."); return; }
+      if (!route.text) { journey.abandon(); toastError(tr('voiceModule.didntCatchACommand')); return; }
       sb = createClient();
       const res = await saveCapture(sb, {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent,
@@ -178,7 +178,12 @@ function VoiceCaptureSession() {
 
   async function remove(c: VoiceCommand) {
     const sb = createClient();
-    const { error: err } = await sb.from('voice_commands').delete().eq('id', c.id);
+    // Family-scoped in the house style, NOT because the policy bites: 0121
+    // gives voice_commands `is_family_member` for every operation, so it cannot
+    // filter a legitimate member's delete. That is also why this table is
+    // absent from tests/a-filtered-delete-is-not-a-deletion's gated list.
+    const { error: err } = await sb.from('voice_commands').delete()
+      .eq('id', c.id).eq('family_id', familyId);
     if (err) toastError(describeDbError(err));
   }
 

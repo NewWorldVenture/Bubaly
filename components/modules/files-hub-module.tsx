@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { parseISO } from 'date-fns';
 import {
   Upload, Search, Download, Trash2, Star, Lock, LockOpen, Cloud, Share2,
@@ -72,6 +73,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [sortOpen, setSortOpen] = useState(false);
+  useDismissOnEscape(sortOpen, () => setSortOpen(false));
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -115,7 +117,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     // Verifying the delete at least makes that visible instead of reporting it
     // as done; the ordering itself is recorded in audit/claude-1.md.
     if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
-    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -128,7 +130,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     setBusy(id);
     // `is_secure` moves a file between the shared area and the vault — a toggle
     // that silently did nothing leaves it where it was, reported as moved.
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.moveFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -137,7 +139,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function toggleFavorite(id: string) {
     const d = byId.get(id); if (!d) return;
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).eq('family_id', familyId).select('id');
     if (err) return toastError(t('filesHubModule.updateFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     refresh();
@@ -238,7 +240,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
           <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>{t('filesHub.sort')} <ChevronDown className="h-3.5 w-3.5" /></Button>
           {sortOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+              {/* Presentational; the keyboard path is Escape, bound above. */}
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                  <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
                 {([['recent', 'filesHubModule.sortRecent'], ['name', 'filesHubModule.sortName'], ['size', 'filesHubModule.sortLargest']] as const).map(([k, labelKey]) => (
                   <button key={k} onClick={() => { setSort(k); setSortOpen(false); }}

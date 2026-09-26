@@ -120,7 +120,7 @@ export function MomentsView({ departures, departuresFailed = false }: {
     if (!res.ok) return toastError(res.error ?? 'Could not add to list');
     if (res.added && res.ids?.length) {
       const ids = res.ids;
-      success(`Added ${res.added} to your grocery list`, {
+      success(t('moments.addedToGroceryList', { count: res.added }), {
         label: 'Undo',
         onClick: () => {
           void removeMomentGroceryAction({ ids }).then((r) => {

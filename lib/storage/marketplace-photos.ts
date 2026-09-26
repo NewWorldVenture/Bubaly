@@ -1,4 +1,5 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export const MARKETPLACE_PHOTOS_BUCKET = 'marketplace-photos';
 export const MARKETPLACE_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
@@ -29,7 +30,7 @@ export async function removeMarketplacePhotoPath(
   path: string,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.storage.from(MARKETPLACE_PHOTOS_BUCKET).remove([path]);
-  return { error: error?.message ?? null };
+  return { error: error ? describeActionError(error) : null };
 }
 
 export async function removeMarketplacePhotoUrl(

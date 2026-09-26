@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import type { Tables } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -21,12 +22,14 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
   const kind = String(formData.get('kind') ?? 'note');
   const title = String(formData.get('title') ?? '').trim();
   const note = String(formData.get('note') ?? '').trim() || null;
-  const occurredOn = String(formData.get('occurred_on') ?? '') || new Date().toISOString().slice(0, 10);
   const amountRaw = String(formData.get('amount') ?? '').trim();
   const amount = amountRaw ? Number(amountRaw) : null;
   if (!contactId || !title) return;
 
   const ctx = await requireUserContext();
+  // The family's day, not the host's: an interaction logged in the evening was
+  // being dated tomorrow.
+  const occurredOn = String(formData.get('occurred_on') ?? '') || todayKeyFor(ctx);
   const supabase = await createServer();
   const { error } = await supabase.from('contact_interactions').insert({
     family_id: ctx.active.familyId,

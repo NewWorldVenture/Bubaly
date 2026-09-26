@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
 
     const slots = findFreeSlots(busy, {
       windowStart, windowEnd, durationMin,
+      // Working hours and all-day blocking are the FAMILY's local concepts.
+      tz: ctx.active.family.timezone || 'UTC',
       workingHours: body.workingHours,
       contexts: contexts.length > 0 ? contexts : undefined,
       maxSuggestions: Math.min(body.maxSuggestions ?? 6, 12),

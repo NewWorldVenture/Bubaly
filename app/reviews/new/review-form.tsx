@@ -5,6 +5,7 @@ import { Star, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { submitReviewAction } from './actions';
 import { shouldRouteToPublic } from '@/lib/marketing/reviews';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 export type PublicLink = { label: string; url: string };
 
@@ -49,7 +50,7 @@ export function ReviewForm(p: Props) {
         {high && p.publicLinks.length > 0 && (
           <div className="mt-4 space-y-2">
             {p.publicLinks.map((l) => (
-              <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
+              <a key={l.url} href={safeWebLink(l.url) ?? undefined} target="_blank" rel="noreferrer"
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-semibold text-brand-fg">
                 Review us on {l.label} <ExternalLink className="h-4 w-4" />
               </a>

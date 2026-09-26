@@ -2,15 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
-- Total Audit Items: 14038
-- Not Started: 13842
-- In Progress: 192
+- Last Updated: 2026-09-26T18:30:00Z
+- Total Audit Items: 14178
+- Not Started: 13884
+- In Progress: 292
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
-- Failed: 3
+- Failed: 1
 - Overall Completion: 0.01%
+
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. Q64 added two new IDs (migration 0335 and its probe) and moved two more ⬜ → 🔄: 14,175 = 13,886 + 287 + 1 + 1. Q65 added migration 0336 and moved lib/server/push.ts ⬜ → 🔄: 14,176 = 13,885 + 289 + 1 + 1. Q66 added migration 0337 and its probe and moved the Resend webhook route ⬜ → 🔄: 14,178 = 13,884 + 292 + 1 + 1. See Q56–Q66.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -83,7 +85,7 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
+- SEC-001: Family media bucket explicitly public. Every consumer now reads through a URL signed with the viewer's session and renders nothing on failure (Q59), so the bucket can be made private without breaking an image — but until an operator flips it after this release is live (docs/runbooks/LB-009-family-media-signed-urls.md), a stored URL still reads without a session, and authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
@@ -303,7 +305,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0174 | UI | /dashboard/home/warranties | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0175 | UI | /dashboard/homework | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0176 | UI | /dashboard/inbox | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0177 | UI | /dashboard/independence | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0177 | UI | /dashboard/independence | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed milestones read renders ErrorState; only a missing table degrades to empty (the old try/catch could never fire) | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0178 | UI | /dashboard/insurance | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0179 | UI | /dashboard/intelligence | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0180 | UI | /dashboard/inventory | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -407,7 +409,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0278 | UI | /dashboard/vacations/[id]/lodging | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0279 | UI | /dashboard/vacations/[id]/overview | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0280 | UI | /dashboard/vacations/[id]/packing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0281 | UI | /dashboard/vacations/[id] | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0281 | UI | /dashboard/vacations/[id] | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed trip read throws to the error boundary instead of answering 404 | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0282 | UI | /dashboard/vacations/[id]/travel | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0283 | UI | /dashboard/vacations/[id]/weather | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0284 | UI | /dashboard/vacations/calendar | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -435,7 +437,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0306 | UI | /guardian/contacts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0307 | UI | /guardian/history | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0308 | UI | /guardian | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0309 | UI | /guardian/rules | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0309 | UI | /guardian/rules | 🔄 IN PROGRESS | High | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed routing-rules read renders ErrorState instead of an empty rules editor that told a parent no screening rules existed | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0310 | UI | /guardian/settings | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0311 | UI | /home | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0312 | UI | /kids | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -533,7 +535,7 @@ PRODUCTION READY: NO
 | LAYOUT-FE5B3632A041 | LAYOUT | app/(app)/dashboard/home/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-71922492AE14 | LAYOUT | app/(app)/dashboard/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-A54EBC17D0B8 | LAYOUT | app/(app)/dashboard/social/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LAYOUT-2CD878730A6E | LAYOUT | app/(app)/dashboard/vacations/[id]/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LAYOUT-2CD878730A6E | LAYOUT | app/(app)/dashboard/vacations/[id]/layout.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed trip read throws to the error boundary instead of answering 404 | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | LAYOUT-08FAB6DF8C1C | LAYOUT | app/(app)/economy/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-D79E22FFD32D | LAYOUT | app/(app)/family/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-B1C20F0E7596 | LAYOUT | app/(app)/feedback/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1210,7 +1212,7 @@ PRODUCTION READY: NO
 | CONTROL-487BF51E4F91 | CONTROL | input at line 296 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A4B0C60AC072 | CONTROL | Button at line 298 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E09FBF52DA1F | CONTROL | Button at line 299 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-9A7A795F78C3 | COMPONENT | components/vacations/trip-concierge.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-9A7A795F78C3 | COMPONENT | components/vacations/trip-concierge.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed history read no longer looks like "no conversation": sending is held and an alert shown, so a second conversation is not started beside the one that failed to load | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-A6673EB56BDB | CONTROL | Button at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F38E3FA2CD01 | CONTROL | button at line 86 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-544A09EB5DEF | CONTROL | form at line 102 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1783,7 +1785,7 @@ PRODUCTION READY: NO
 | CONTROL-3D25416C3068 | CONTROL | Input at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-688A91282E2B | CONTROL | Button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0FCD6D015B9D | CONTROL | Button at line 170 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0DD4698F12E8 | COMPONENT | components/dashboard/ai-home-dashboard.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0DD4698F12E8 | COMPONENT | components/dashboard/ai-home-dashboard.tsx | 🔄 IN PROGRESS | High | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed read of today's dismissed insights now writes nothing — before, the empty block list sent every candidate to an upsert that set dismissed insights back to active | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-2C356F2B2F90 | CONTROL | Link at line 88 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CCDE57DEA7F0 | CONTROL | Link at line 448 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C38AEA8AC9F1 | CONTROL | Link at line 461 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1869,7 +1871,7 @@ PRODUCTION READY: NO
 | CONTROL-AADFE7449658 | CONTROL | Input at line 230 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5DC5E195C849 | CONTROL | Button at line 244 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CA7E52C8A713 | CONTROL | Button at line 245 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCB59C13F483 | COMPONENT | components/concierge/plan-write-backs.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DCB59C13F483 | COMPONENT | components/concierge/plan-write-backs.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed read of applied write-backs disables the buttons and says so, instead of offering to add the same event, reminder or task again | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-F2405784000F | CONTROL | button at line 67 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-1FF32555441D | COMPONENT | components/concierge/needs-you-actions.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-11241C3F90B8 | CONTROL | button at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2520,7 +2522,7 @@ PRODUCTION READY: NO
 | CONTROL-4D87B58999DE | CONTROL | input at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-34B76897C094 | CONTROL | Textarea at line 56 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DF28FE1EBF0E | CONTROL | Button at line 57 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-355A1C728927 | COMPONENT | components/modules/trips-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-355A1C728927 | COMPONENT | components/modules/trips-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | trips / trip_items writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-E0584E397DEF | CONTROL | ErrorState at line 181 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-16EC03487CEF | CONTROL | button at line 191 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2E575CF4E003 | CONTROL | button at line 225 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2566,7 +2568,7 @@ PRODUCTION READY: NO
 | CONTROL-837E7BA71025 | CONTROL | input at line 173 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B6BD4DC47227 | CONTROL | Button at line 180 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-451B23AFFB02 | CONTROL | Button at line 181 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | nutrition_logs delete was silent and had no success toast, so a filtered no-op was invisible. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7493F1865E5E | CONTROL | ErrorState at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BADD497F00D8 | CONTROL | Button at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FB2B11901AAD | CONTROL | button at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2863,7 +2865,7 @@ PRODUCTION READY: NO
 | CONTROL-5A1E9E3C7F35 | CONTROL | Textarea at line 393 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-09FAA234601E | CONTROL | Button at line 395 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EE455F132F26 | CONTROL | Button at line 396 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4AF344B8C775 | COMPONENT | components/modules/signups-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4AF344B8C775 | COMPONENT | components/modules/signups-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | opportunities writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7C663AE6AC5E | CONTROL | Button at line 157 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B05CB647F8D2 | CONTROL | button at line 186 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A75E7CC1E2CF | CONTROL | label at line 192 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2935,7 +2937,7 @@ PRODUCTION READY: NO
 | CONTROL-9B4FEC781D9E | CONTROL | Input at line 691 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7514CE465857 | CONTROL | Button at line 697 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9AF1923774F4 | CONTROL | Button at line 698 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-745E4A316DE5 | COMPONENT | components/modules/settings-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-745E4A316DE5 | COMPONENT | components/modules/settings-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Member ROLE edit and removal reported success then reload showed old state (fm_update is manager-gated). Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-4CE7518734D4 | CONTROL | button at line 196 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B01A6B13A90F | CONTROL | button at line 218 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A644803C9084 | CONTROL | form at line 227 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2966,7 +2968,7 @@ PRODUCTION READY: NO
 | CONTROL-F05E167371B4 | CONTROL | Button at line 476 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DA499676E35A | CONTROL | Modal at line 489 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3D58F291FBB7 | CONTROL | InviteForm at line 490 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-05D924809AC2 | COMPONENT | components/modules/security-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-05D924809AC2 | COMPONENT | components/modules/security-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (security); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | CONTROL-163FECDE1039 | CONTROL | ErrorState at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2454F96047A9 | CONTROL | Button at line 96 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-ECC2823BF771 | CONTROL | button at line 136 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3081,7 +3083,7 @@ PRODUCTION READY: NO
 | CONTROL-B93304BE56C1 | CONTROL | Select at line 380 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-927E02B0F737 | CONTROL | Button at line 390 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBAF67DACF02 | CONTROL | Button at line 391 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E72D283F7B91 | COMPONENT | components/modules/rides-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E72D283F7B91 | COMPONENT | components/modules/rides-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | rides writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-84E66CDBE051 | CONTROL | Button at line 158 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-295C84B725B2 | CONTROL | button at line 187 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D1E80A0715B8 | CONTROL | button at line 191 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3122,7 +3124,7 @@ PRODUCTION READY: NO
 | CONTROL-0A300EB82CB3 | CONTROL | Button at line 303 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FBAEB7939943 | CONTROL | select at line 327 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FF1549FD4370 | CONTROL | Button at line 331 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0853DCEFFA13 | COMPONENT | components/modules/renewals-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0853DCEFFA13 | COMPONENT | components/modules/renewals-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | renewals writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-EC168645E267 | CONTROL | Button at line 147 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A5880E9CF00C | CONTROL | label at line 167 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBE9F885309E | CONTROL | input at line 168 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3145,7 +3147,7 @@ PRODUCTION READY: NO
 | CONTROL-AAF6682B1F8A | CONTROL | Textarea at line 277 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-14680E4D1959 | CONTROL | Button at line 280 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C2AE1D14A015 | CONTROL | Button at line 281 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — reminder card and editor image; the reminder link now goes through safeWebLink (SEC-006) | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-FDD2504884EB | CONTROL | ErrorState at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5EACC750938F | CONTROL | Button at line 265 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0521203B2D3C | CONTROL | Button at line 268 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3414,7 +3416,7 @@ PRODUCTION READY: NO
 | CONTROL-4B5D1B113D5A | CONTROL | button at line 127 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6B618FEA71D1 | CONTROL | button at line 134 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7409702763E4 | CONTROL | a at line 141 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-F978F5B7A4B6 | COMPONENT | components/modules/photos-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-F978F5B7A4B6 | COMPONENT | components/modules/photos-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — grid, list, lightbox image/video/download, album covers, edit preview | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-07EBA84DA361 | CONTROL | ErrorState at line 210 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B82FB0148768 | CONTROL | input at line 223 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C031415A4CD0 | CONTROL | Button at line 227 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3501,7 +3503,7 @@ PRODUCTION READY: NO
 | CONTROL-948C3DE476FC | CONTROL | button at line 404 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C79292DA31C2 | CONTROL | Button at line 415 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-072E1E123281 | CONTROL | Button at line 416 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-2ED8AA03C015 | COMPONENT | components/modules/passwords-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-2ED8AA03C015 | COMPONENT | components/modules/passwords-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_credentials updates relied on RLS for tenancy; added family scope (readback already present) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-0664E0DC97A4 | CONTROL | ErrorState at line 148 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-79B3219763E7 | CONTROL | Button at line 155 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE17ED7D78D1 | CONTROL | input at line 162 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3585,7 +3587,7 @@ PRODUCTION READY: NO
 | CONTROL-36D3914DED29 | CONTROL | Link at line 162 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1983DDFA4711 | CONTROL | Link at line 175 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-05923044C676 | CONTROL | Link at line 197 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-F2D3C03BE12F | COMPONENT | components/modules/notifications-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-F2D3C03BE12F | COMPONENT | components/modules/notifications-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | notifications dismiss re-appeared on refresh with no message. Added .eq('family_id', …) + .select('id'); refuses on an empty result; bulk mark-all-read correctly exempt (zero rows is normal) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-4BAECBEA4551 | CONTROL | ErrorState at line 140 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C5A7319107A0 | CONTROL | Button at line 150 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-87A94199CDD2 | CONTROL | Button at line 154 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3726,7 +3728,7 @@ PRODUCTION READY: NO
 | CONTROL-88A828476560 | CONTROL | button at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CDF47709DF1A | CONTROL | button at line 168 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F32FCE4B99ED | CONTROL | button at line 221 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E8159AD22642 | COMPONENT | components/modules/messages-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E8159AD22642 | COMPONENT | components/modules/messages-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — image, file, voice note and shared-photo rail | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-B298286441E4 | CONTROL | Button at line 554 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B7060B750386 | CONTROL | input at line 557 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE21B9123D32 | CONTROL | button at line 578 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3820,7 +3822,7 @@ PRODUCTION READY: NO
 | CONTROL-3710FE526613 | CONTROL | Input at line 504 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E9C2DFF37004 | CONTROL | Button at line 508 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-857EC29B4408 | CONTROL | Button at line 509 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5B4BF0217CDA | COMPONENT | components/modules/medical-records-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5B4BF0217CDA | COMPONENT | components/modules/medical-records-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) | health_providers / insurance_policies update+delete filtered id alone; Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | CONTROL-5F182E9C70AB | CONTROL | Button at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-55C7D946F9D2 | CONTROL | Button at line 256 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BB1F169F00D5 | CONTROL | button at line 269 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3883,7 +3885,7 @@ PRODUCTION READY: NO
 | CONTROL-9D084022CB3D | CONTROL | button at line 496 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9D8C788706B5 | CONTROL | ProviderInfoSheet at line 507 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-42854FDAA630 | CONTROL | CheckInSheet at line 510 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4D0C5DE53A9F | COMPONENT | components/modules/meals-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4D0C5DE53A9F | COMPONENT | components/modules/meals-module.tsx | 🔄 IN PROGRESS | Medium | npm run lint (budget 12) exit 0 | Click-away backdrop had no keyboard dismissal; Escape now bound, backdrop aria-hidden | Lint 10/12 | Browser workflow not yet exercised. See finalaudit.md Q49. |
 | CONTROL-2CA903FE8939 | CONTROL | img at line 85 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0E03BA79C539 | CONTROL | ErrorState at line 277 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5AA63295BBC1 | CONTROL | Button at line 290 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3941,7 +3943,7 @@ PRODUCTION READY: NO
 | CONTROL-F8C3FD810E10 | CONTROL | Input at line 919 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5DD81743BF54 | CONTROL | Button at line 921 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5B98B92EDF1F | CONTROL | Button at line 922 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4EE0A2F24EF9 | COMPONENT | components/modules/marketplace-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4EE0A2F24EF9 | COMPONENT | components/modules/marketplace-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Filtered listing delete left the listing and then deleted its photo from storage (data loss); edit reported saved. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-222135F3FE50 | CONTROL | Link at line 241 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BA8016D70FEC | CONTROL | Button at line 246 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F90AB96A51F5 | CONTROL | Input at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3975,7 +3977,7 @@ PRODUCTION READY: NO
 | CONTROL-B9158280D96D | CONTROL | Button at line 452 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5426F2E46F41 | CONTROL | button at line 453 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9F6D01E456E4 | CONTROL | button at line 465 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-16E429E941C5 | COMPONENT | components/modules/locator-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-16E429E941C5 | COMPONENT | components/modules/locator-module.tsx | 🔄 IN PROGRESS | Medium | Catalogue integrity + i18n ratchet | Ten English toast/confirm literals on failure paths translated (7 locales) | i18n gate clean | Browser workflow not yet exercised. See finalaudit.md Q51. |
 | CONTROL-9876AEDE3AD5 | CONTROL | ErrorState at line 216 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3CF6F02E0BEB | CONTROL | div at line 221 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A96D998DE75F | CONTROL | Button at line 228 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4155,7 +4157,7 @@ PRODUCTION READY: NO
 | CONTROL-1576898DB6A4 | CONTROL | Button at line 431 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C53C2364F928 | CONTROL | Button at line 482 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0E1B00E6EFFD | CONTROL | Link at line 483 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5024FD14F7AA | COMPONENT | components/modules/journal-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5024FD14F7AA | COMPONENT | components/modules/journal-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-EEDD6A475D13 | CONTROL | ErrorState at line 65 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6E8DC2BC303D | CONTROL | Button at line 72 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1083F8EADA11 | CONTROL | PromptCard at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4175,7 +4177,7 @@ PRODUCTION READY: NO
 | CONTROL-483327DBD9DB | CONTROL | Textarea at line 238 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A06E8A8E18F2 | CONTROL | Button at line 245 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4D1762E4B356 | CONTROL | Button at line 246 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) · tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | English suffix plurals replaced with CLDR plural keys (inventory); declutter keeps one composite sentence · 2026-09-26 (Q59): family-media reads signed per viewer — list and editor; the render-time getPublicUrl helper is gone | Green · 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Browser workflow not yet exercised. See finalaudit.md Q50. · Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-0A12BE13FB72 | CONTROL | ErrorState at line 128 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E81704CB4087 | CONTROL | Button at line 138 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A98C9EB844BF | CONTROL | Button at line 139 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4327,7 +4329,7 @@ PRODUCTION READY: NO
 | CONTROL-7D76FD76BF2E | CONTROL | Link at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-A0A4E9A10E1B | COMPONENT | components/admin/super-admin-toggle.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F0B5EDC71B35 | CONTROL | button at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7E5DE59B415E | CONTROL | ErrorState at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-26E283453007 | CONTROL | Link at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDAB1FAFF956 | CONTROL | button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4384,7 +4386,7 @@ PRODUCTION READY: NO
 | COMPONENT-44B74C438CD8 | COMPONENT | components/admin/strategy-metric-tiles.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-18452224D121 | CONTROL | a at line 106 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-6460BF6DD712 | COMPONENT | components/admin/status-donut.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-3706AC3F8AE0 | COMPONENT | components/modules/immunizations-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-3706AC3F8AE0 | COMPONENT | components/modules/immunizations-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-FA8CFBEE1C5A | CONTROL | select at line 93 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-97A2211921B3 | CONTROL | Button at line 98 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-78389D00FE84 | CONTROL | ErrorState at line 117 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4432,7 +4434,7 @@ PRODUCTION READY: NO
 | CONTROL-3B7D5FA9AE08 | CONTROL | Button at line 266 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5210A81B1B29 | CONTROL | Button at line 267 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-1B83F1416955 | COMPONENT | components/admin/role-donut.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-09DD937D6288 | COMPONENT | components/modules/home-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-09DD937D6288 | COMPONENT | components/modules/home-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents delete relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-B724B756E80F | CONTROL | ErrorState at line 192 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-60C96325CA76 | CONTROL | ErrorState at line 193 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-512B4A065840 | CONTROL | ErrorState at line 194 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4478,7 +4480,7 @@ PRODUCTION READY: NO
 | CONTROL-DF3EE9C680E2 | CONTROL | Textarea at line 635 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CB25DA862A21 | CONTROL | Button at line 637 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F4DEFF26E352 | CONTROL | Button at line 638 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E0F59583B966 | COMPONENT | components/modules/health-visits-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E0F59583B966 | COMPONENT | components/modules/health-visits-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-2E3E9E393AA9 | CONTROL | select at line 94 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BFE18889811A | CONTROL | Button at line 99 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B996B1C54A80 | CONTROL | ErrorState at line 118 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4505,7 +4507,7 @@ PRODUCTION READY: NO
 | CONTROL-3DEA050879CB | CONTROL | Download at line 33 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-13F206CC8B14 | CONTROL | Button at line 35 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6596E197CAC0 | CONTROL | Download at line 36 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-40158EE0AC0D | COMPONENT | components/modules/health-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-40158EE0AC0D | COMPONENT | components/modules/health-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-D48394F2C07F | CONTROL | ErrorState at line 513 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3AD5A45EB0A4 | CONTROL | Button at line 525 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-711DC8A602EE | CONTROL | Button at line 526 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4582,7 +4584,7 @@ PRODUCTION READY: NO
 | CONTROL-8FB91E20D924 | CONTROL | Select at line 76 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-258490F36582 | CONTROL | Button at line 82 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4F0C40797800 | CONTROL | Button at line 83 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-B87AB8900CCC | COMPONENT | components/modules/habits-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-B87AB8900CCC | COMPONENT | components/modules/habits-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-group-of-controls-needs-a-name.test.ts (ratchet held at 16) | Three <label>s naming nothing (button groups) wired with labelledGroup | Ratchet green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | CONTROL-EB05AB10EAE6 | CONTROL | ErrorState at line 158 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DF382DFD8B8F | CONTROL | Button at line 174 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A8BB2A705826 | CONTROL | Button at line 177 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4684,7 +4686,7 @@ PRODUCTION READY: NO
 | CONTROL-92F3FEDF6C96 | CONTROL | CallDetail at line 485 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2F44DFF31DD6 | CONTROL | button at line 577 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2C7CEB567A30 | CONTROL | button at line 639 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-2B95338B57F6 | COMPONENT | components/admin/feedback-admin.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-2B95338B57F6 | COMPONENT | components/admin/feedback-admin.tsx | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | See Q61. |
 | CONTROL-9885C8ED84C3 | CONTROL | button at line 104 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AFFD24659155 | CONTROL | button at line 109 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4EB5EC08C6DC | CONTROL | Link at line 133 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4782,7 +4784,7 @@ PRODUCTION READY: NO
 | CONTROL-436B25118654 | CONTROL | Button at line 627 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBACC49C6BAF | CONTROL | Button at line 628 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-F2857B231D56 | COMPONENT | components/admin/charts.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DBC7A368F1FF | COMPONENT | components/modules/files-hub-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DBC7A368F1FF | COMPONENT | components/modules/files-hub-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents update/delete relied on RLS for tenancy; added family scope; stub chained to assert both filters | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-E314440BC24A | CONTROL | ErrorState at line 177 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E65DABFEE5CC | CONTROL | Button at line 184 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4EDC22E750B6 | CONTROL | Upload at line 184 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4878,7 +4880,7 @@ PRODUCTION READY: NO
 | CONTROL-256A2E71EDDA | CONTROL | button at line 146 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3C45171AE018 | CONTROL | button at line 159 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-13BBE1B97A2C | CONTROL | button at line 170 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-52449F575294 | COMPONENT | components/modules/family-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-52449F575294 | COMPONENT | components/modules/family-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Member removal/edit reported success over a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result; toasts translated | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-D464CA682485 | CONTROL | ErrorState at line 175 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5AE7593F8273 | CONTROL | Button at line 203 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7B61693E3397 | CONTROL | Button at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4954,7 +4956,7 @@ PRODUCTION READY: NO
 | CONTROL-85F902EFBB85 | CONTROL | button at line 172 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D5FC998AD9FB | CONTROL | button at line 180 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE52D87F984D | CONTROL | button at line 186 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-134808702CA6 | COMPONENT | components/modules/documents-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-134808702CA6 | COMPONENT | components/modules/documents-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents update/delete relied on RLS for tenancy; added family scope. Also: drop zone was unreachable by keyboard (hidden file input) — role=button + openOnKey (Q49) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-25372E1B3983 | CONTROL | ErrorState at line 289 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6B72100CBE95 | CONTROL | Button at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B0DAD6B9C13A | CONTROL | Upload at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5031,7 +5033,7 @@ PRODUCTION READY: NO
 | CONTROL-A2E399C57ED3 | CONTROL | Textarea at line 122 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-060D60FE221D | CONTROL | Button at line 124 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E5F0FE031DFA | CONTROL | Button at line 125 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0337E00DA6ED | COMPONENT | components/modules/declutter-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0337E00DA6ED | COMPONENT | components/modules/declutter-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (declutter); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | CONTROL-5906DC1417A4 | CONTROL | ErrorState at line 134 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4D7F65324E8E | CONTROL | Button at line 154 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F08ED53E3789 | CONTROL | button at line 155 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5263,7 +5265,7 @@ PRODUCTION READY: NO
 | CONTROL-E02A87E4EFDF | CONTROL | input at line 334 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-20AFA9430859 | CONTROL | Button at line 337 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C05138354C9F | CONTROL | Button at line 338 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-86EC8609CEF4 | COMPONENT | components/modules/closet-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-86EC8609CEF4 | COMPONENT | components/modules/closet-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — list, recommendations and editor; the render-time getPublicUrl helper is gone | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-AA276B618426 | CONTROL | ErrorState at line 172 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-25F249C66E17 | CONTROL | Button at line 182 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BB8B6255C834 | CONTROL | Button at line 183 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5450,7 +5452,7 @@ PRODUCTION READY: NO
 | CONTROL-740AAFF3422B | CONTROL | Textarea at line 508 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B952A91CC1B4 | CONTROL | Button at line 510 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F2B73240C7EB | CONTROL | Button at line 511 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8C4361BB3F81 | COMPONENT | components/modules/care-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8C4361BB3F81 | COMPONENT | components/modules/care-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-404044249A1B | CONTROL | Button at line 153 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5D81438C7A36 | CONTROL | button at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7CED5432EE73 | CONTROL | button at line 202 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5554,7 +5556,7 @@ PRODUCTION READY: NO
 | CONTROL-EC0BDFCB5CD0 | CONTROL | input at line 110 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6C42BEFFC3B1 | CONTROL | Button at line 112 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-15F8272E4D19 | CONTROL | Button at line 113 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | bills / financial_accounts writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-9A89563084C4 | CONTROL | button at line 141 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DC8023D43954 | CONTROL | button at line 142 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3EEDCE9496CF | CONTROL | Button at line 161 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5637,7 +5639,7 @@ PRODUCTION READY: NO
 | CONTROL-A6DD0C70F963 | CONTROL | AddBudgetModal at line 1635 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-094C5C8B91F0 | CONTROL | AddBillModal at line 1636 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-631AE440E484 | CONTROL | AddSavingsGoalModal at line 1637 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-18C795CA2A17 | COMPONENT | components/modules/behavior-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-18C795CA2A17 | COMPONENT | components/modules/behavior-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-0EA2A8E63CFE | CONTROL | ErrorState at line 106 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BFE01DB67751 | CONTROL | Select at line 114 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0579FDE0D36B | CONTROL | Link at line 120 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5666,7 +5668,7 @@ PRODUCTION READY: NO
 | CONTROL-9C08DAF75566 | CONTROL | button at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-47B75A3C542E | CONTROL | Link at line 311 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8C88578F89DD | CONTROL | button at line 312 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | ai_conversations delete/rename (0255) dropped the row from the list while it stayed in the table. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-DC7016178372 | CONTROL | button at line 410 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-46597CC81E90 | CONTROL | button at line 460 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-344F7CC5EC3F | CONTROL | button at line 511 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5734,7 +5736,7 @@ PRODUCTION READY: NO
 | CONTROL-EA5ED8F4B5D3 | CONTROL | Link at line 45 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BA26B713234F | CONTROL | Link at line 52 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5119A02B3D21 | CONTROL | SaveButton at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-BF4ECBD166B7 | COMPONENT | components/i18n/locale-provider.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-BF4ECBD166B7 | COMPONENT | components/i18n/locale-provider.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | COMPONENT-F9B18D77DEBF | COMPONENT | components/i18n/language-picker.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D2E3A2DF3EEF | CONTROL | button at line 111 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A95F42458C5F | CONTROL | button at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5849,7 +5851,7 @@ PRODUCTION READY: NO
 | CONTROL-370244CE0CDA | CONTROL | input at line 251 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FB0AE2A684EA | CONTROL | select at line 252 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1354EE23D1C0 | CONTROL | Button at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5844AA6DF59D | COMPONENT | components/family/driving-safety-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5844AA6DF59D | COMPONENT | components/family/driving-safety-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | driving_trips delete (0319) reported 'Deleted' over a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-DDE736C56022 | CONTROL | Button at line 47 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBC8401E9456 | CONTROL | ErrorState at line 56 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D9B6E844A92A | CONTROL | Button at line 58 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -6126,7 +6128,7 @@ PRODUCTION READY: NO
 | CONTROL-D929F5AF67AA | CONTROL | Input at line 118 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CE96F40074BF | CONTROL | Button at line 120 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CA4AF548B634 | CONTROL | Button at line 121 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-63D5990B29C8 | COMPONENT | components/finance/bills-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-63D5990B29C8 | COMPONENT | components/finance/bills-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | bills update/delete relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-22B98F6D8298 | CONTROL | button at line 87 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6FBDD3F59083 | CONTROL | button at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDB4DC854DC7 | CONTROL | button at line 92 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8758,7 +8760,7 @@ PRODUCTION READY: NO
 | API-E1BCA929F06B | API | POST /api/ai/assist | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-E984841AFEA4 | API | POST /api/ai/auto/accident | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-B817F4FD65DE | API | POST /api/ai/briefing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-E8DE1DE9AFA2 | API | POST /api/ai/chat | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-E8DE1DE9AFA2 | API | POST /api/ai/chat | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) | Conversation title update filtered id alone; Added .eq('family_id', …) + .select('id'); refuses on an empty result (logs on no-op) | Guard green | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | API-1DF9D2390329 | API | POST /api/ai/chef | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-754EB564B7B5 | API | POST /api/ai/flyer | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-4332A474F9DA | API | POST /api/ai/gift | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8890,7 +8892,7 @@ PRODUCTION READY: NO
 | API-FCD111ED9432 | API | POST /api/vacations/confirmation-import | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-97822A801C67 | API | POST /api/vacations/weather | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-19260D46CFD1 | API | POST /api/webhooks/money | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-C4A25E75B606 | API | POST /api/webhooks/resend | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-C4A25E75B606 | API | POST /api/webhooks/resend | 🔄 IN PROGRESS | High | docs/audit/email-counter-once-check.sql (a released-and-retaken claim answers already_applied and the counter stays 1; a stale worker counts nothing; unknown campaign left alone; only counter columns; no client can execute) · tests/resend-webhook-execution.test.ts (40, 2 new) | 2026-09-26 (Q66): the campaign counter is applied through apply_resend_campaign_counter() — marked and incremented in one transaction, once per event, only for the claim holder; the compare-and-set loop remains as the fallback for a database without 0337 | Fresh replay 350/350, probes 58/58; route tests 40/40, including one pinning that the pre-0337 fallback still counts twice | EMAIL-002. See Q66. |
 | API-ED756A60DF1B | API | POST /api/webhooks/stripe | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-C282DCE0790A | API | POST /api/weekend/discover | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-9A739F355ACF | API | GET /auth/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9079,9 +9081,9 @@ PRODUCTION READY: NO
 | ACTION-CD9A69A3E83C | ACTION | createChoreAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-868185556319 | ACTION | applyConciergePlanAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-A29C7E5C3F79 | ACTION | planAcceptedAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-AAF8BA72C390 | ACTION | executeQueuedRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-BB7CCC59F13B | ACTION | dismissQueuedRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-A6BF2165755D | ACTION | setConciergeAutopilotAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-AAF8BA72C390 | ACTION | executeQueuedRunAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | A filtered 'executed' left the run pending (plan could apply twice); approval stamp logged nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-BB7CCC59F13B | ACTION | dismissQueuedRunAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Dismiss and decline stamp reported success over nothing; stub gained the filtered-write case. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-A6BF2165755D | ACTION | setConciergeAutopilotAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Autopilot dial reported moved when it had not. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-FBCA9698198B | ACTION | askBubalyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-BD59E51EF937 | ACTION | answerRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D629A3638EB2 | ACTION | controlRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9150,9 +9152,9 @@ PRODUCTION READY: NO
 | ACTION-F4D4116828A1 | ACTION | setLifeEventStatusAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D51DF328F97F | ACTION | updateMyLocation | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-7EC0FD404B79 | ACTION | setLocationSharing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-DCF9C14AD2D4 | ACTION | savePlace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-9A1F079806FF | ACTION | deletePlace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-16D000B65EB5 | ACTION | setGeofenceEnabled | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-DCF9C14AD2D4 | ACTION | savePlace | 🔄 IN PROGRESS | Medium | tests/a-geofence-that-reports-armed-is-armed.test.ts | Stale-id edit reported saved; now reads back | Guard green | Browser workflow not yet exercised. See finalaudit.md Q51. |
+| ACTION-9A1F079806FF | ACTION | deletePlace | 🔄 IN PROGRESS | Medium | tests/a-geofence-that-reports-armed-is-armed.test.ts | 'Place deleted' over a place still on the map; now reads back | Guard green | Browser workflow not yet exercised. See finalaudit.md Q51. |
+| ACTION-16D000B65EB5 | ACTION | setGeofenceEnabled | 🔄 IN PROGRESS | High | tests/a-geofence-that-reports-armed-is-armed.test.ts (8), calibrated by removing the guard | Geofence switch reported ARMED over a row nothing changed; now reads back and refuses | Guard + full suite 17,116/17,119 (3 are container Node 22) | Browser workflow not yet exercised. See finalaudit.md Q51. |
 | ACTION-1A67F7331B29 | ACTION | planMealAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-91AEADE5CC7B | ACTION | removeMealPlanAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2F9CFA288C8F | ACTION | prepareImport | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9242,9 +9244,9 @@ PRODUCTION READY: NO
 | ACTION-B5CAAFBB69C4 | ACTION | deletePolicyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-604D3EBDBFDA | ACTION | acceptPolicySuggestionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2BF1B4138494 | ACTION | setPermissionGrantAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-99F36D6FBAE2 | ACTION | createDelegationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-99F36D6FBAE2 | ACTION | createDelegationAction | 🔄 IN PROGRESS | High | tests/a-delegation-names-two-members-of-this-family.test.ts | Validates both member ids belong to the caller's family | Green after merge | Browser workflow not yet exercised. See finalaudit.md Q43/Q48. |
 | ACTION-A24B5453EA57 | ACTION | createSharingPresetAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-1318E1F05B65 | ACTION | revokeDelegationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-1318E1F05B65 | ACTION | revokeDelegationAction | 🔄 IN PROGRESS | High | tests/a-delegation-names-two-members-of-this-family.test.ts + a-revoke-that-revoked-nothing.test.ts | Revoke reads back via changedNothing(rows); assertion now pins the property, calibrated | Green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | ACTION-72DB6B2CE780 | ACTION | decideApprovalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E665CDB33E65 | ACTION | activateEmergencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-EBAF0F9342CC | ACTION | endEmergencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9254,12 +9256,12 @@ PRODUCTION READY: NO
 | ACTION-9D92F62AA5BE | ACTION | moveAssignmentAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D91AB2BF25EC | ACTION | saveWorkloadSnapshotAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-406DD2DE86E3 | ACTION | createCurrencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-0DBCDF276549 | ACTION | setCurrencyActiveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-0DBCDF276549 | ACTION | setCurrencyActiveAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Currency toggle reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-15AC56471580 | ACTION | awardTokensAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-0DF41D871E0C | ACTION | createRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-8A0C9AFBCF11 | ACTION | setRewardActiveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-82980A9A8005 | ACTION | requestRedemptionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-A8F6037143A6 | ACTION | decideRedemptionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-8A0C9AFBCF11 | ACTION | setRewardActiveAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Reward toggle reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-82980A9A8005 | ACTION | requestRedemptionAction | 🔄 IN PROGRESS | High | docs/audit/reward-balance-check.sql (9 assertions as real authenticated sessions: affordable approval passes, the unaffordable second approval, a straight-to-approved insert, a rejected→approved re-entry and a paid reward moved to a sibling are all refused; fulfilment is not a second charge; earning more makes the request payable; seeds still record; the per-member lock and SECURITY DEFINER are asserted) · tests/reward-redemption-write-path.test.ts (19, 5 new) | 2026-09-26 (Q64): (app/(app)/dashboard/rewards/actions.ts) a child may request only for themselves and a manager only for an active member of the family; a 0335 refusal answers "not enough points" rather than a generic failure | Probe FAILS before 0335 ("100 earned, 200 approved") and passes after; fresh 348-migration replay 0 failed, probes 57/57, run twice on fresh databases; action tests 19/19 | The economy/actions.ts action of the same name is a different table (economy_redemptions) and is not covered here. See Q64. · 2026-09-26 (Q64): the economy/actions.ts action of the same name now applies the same rule — a child requests only against their own tokens (tests/economy-redemption-is-your-own.test.ts; disabling the check fails it). Its approval RPC was already atomic (locks, re-checks the balance, expected pending). |
+| ACTION-A8F6037143A6 | ACTION | decideRedemptionAction | 🔄 IN PROGRESS | High | docs/audit/reward-balance-check.sql (9 assertions as real authenticated sessions: affordable approval passes, the unaffordable second approval, a straight-to-approved insert, a rejected→approved re-entry and a paid reward moved to a sibling are all refused; fulfilment is not a second charge; earning more makes the request payable; seeds still record; the per-member lock and SECURITY DEFINER are asserted) · tests/reward-redemption-write-path.test.ts (19, 5 new) | 2026-09-26 (Q64): (app/(app)/dashboard/rewards/actions.ts) the update is expected-status — approved/rejected only from requested, fulfilled only from approved — so a second parent's decision changes nothing and a reward cannot be fulfilled unapproved; 0335 refusals are named | Probe FAILS before 0335 ("100 earned, 200 approved") and passes after; fresh 348-migration replay 0 failed, probes 57/57, run twice on fresh databases; action tests 19/19 | See Q64. |
 | ACTION-C2C30832A31E | ACTION | createChildLoginAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-25A37296236E | ACTION | resetChildPinAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-82E1146F4C98 | ACTION | submitIdeaAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9273,8 +9275,8 @@ PRODUCTION READY: NO
 | ACTION-763D6D1492D1 | ACTION | updateContextAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-CF3838F9EA45 | ACTION | assignGuardianPhoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-6F7B023FEF84 | ACTION | createRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-80E877267F7C | ACTION | toggleRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-E6F7B4AF6000 | ACTION | deleteRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-80E877267F7C | ACTION | toggleRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Guardian screening rule reported enabled over an unchanged row. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-E6F7B4AF6000 | ACTION | deleteRuleAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Guardian rule delete reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-B50C4C6F0114 | ACTION | generateGuardianSuggestionsAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-A8FDA0AD1999 | ACTION | reviewSuggestionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-BDB3D8713C85 | ACTION | acknowledgeEscalationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9282,7 +9284,7 @@ PRODUCTION READY: NO
 | ACTION-17DECF058BEA | ACTION | toggleSaveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-F7EB4A9FE45E | ACTION | toggleFollowAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D1655FF5DACD | ACTION | upsertStoreAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-A21306398A80 | ACTION | setOrderStatusAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-A21306398A80 | ACTION | setOrderStatusAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Order status update filtered by id alone (0327 narrows it); English lifecycle error translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-AADABAD791D2 | ACTION | leaveReviewAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AE9AAC2E62DB | ACTION | makeOfferAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-B47AF4698D24 | ACTION | createSavedSearchAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9325,21 +9327,21 @@ PRODUCTION READY: NO
 | ACTION-61EE5A6DD0D6 | ACTION | activateFamilyWalletAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-148C47BB8A22 | ACTION | addFundsAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-DD0EECD42C71 | ACTION | payChoreRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-2E83328F1CA0 | ACTION | saveAllowanceRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-432EA8AE6D79 | ACTION | toggleAllowanceRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-14F1D3BFB97A | ACTION | runDueAllowancesAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-2E83328F1CA0 | ACTION | saveAllowanceRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Stale-id allowance edit reported saved. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-432EA8AE6D79 | ACTION | toggleAllowanceRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Reported 'paused' over a rule the nightly cron would still pay. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-14F1D3BFB97A | ACTION | runDueAllowancesAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Schedule rollback after a failed credit logged nothing when filtered — child skipped a whole period. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-A465DB1C3703 | ACTION | createGoalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-9BA4E71ADEE9 | ACTION | fundGoalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-4EFA99FD3EF9 | ACTION | createGiftLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-0F463285844F | ACTION | approveGiftAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-352006673597 | ACTION | dismissGiftAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-CF6E77C74E5C | ACTION | saveBabysitterAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-FADA7B86237A | ACTION | archiveBabysitterAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-352006673597 | ACTION | dismissGiftAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Gift dismiss reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-CF6E77C74E5C | ACTION | saveBabysitterAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Babysitter edit reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-FADA7B86237A | ACTION | archiveBabysitterAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Babysitter archive reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-B0B83B2B1B5A | ACTION | recordBabysitterPaymentAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-34A3D968CD47 | ACTION | saveWalletRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-08F2999FFC3A | ACTION | claimPayHandleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AB41E531B9BB | ACTION | releasePayHandleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-ABA436EAC1FB | ACTION | requestSpendAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-ABA436EAC1FB | ACTION | requestSpendAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Approval rollback could leave a held debit with no approval row, silently. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-3DB849535F18 | ACTION | decideSpendRequestAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-8F2CA578152D | ACTION | sendMoneyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-8AA29BB74838 | ACTION | requestAllowanceAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9349,7 +9351,7 @@ PRODUCTION READY: NO
 | ACTION-7CA10A51A8B8 | ACTION | addPassAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-5D3801997423 | ACTION | addRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2C2B60DC5F0C | ACTION | addTransactionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-ABA3017332BE | ACTION | deleteWalletRowAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-ABA3017332BE | ACTION | deleteWalletRowAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | All five wallet-row delete branches reported ok over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-068676844C8C | ACTION | placeInvestOrderAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-142B5EB6AC00 | ACTION | decideInvestOrderAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E6AC69DF9AEB | ACTION | resolveLandingPathAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9374,7 +9376,7 @@ PRODUCTION READY: NO
 | ACTION-F4CCD6A8E67A | ACTION | updateFamilyRecord | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AAA33C6778C3 | ACTION | deleteFamilyRecord | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-51DBA0529315 | ACTION | setRecommendationStatus | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-8BB383A8C479 | ACTION | resolveAutomationRun | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-8BB383A8C479 | ACTION | resolveAutomationRun | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Wrote an audit entry for an approval that never happened; English refusal translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-BA359E31039E | ACTION | setLocale | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E73A5AEDBAE3 | ACTION | editStepAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-B3DA1B61B51E | SERVICE | recordActivity | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9864,7 +9866,7 @@ PRODUCTION READY: NO
 | LIBRARY-FF6861778C00 | LIBRARY | lib/emails/weekly-digest.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-11B4F5E5BAD6 | LIBRARY | lib/emails/welcome.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-70C7C2A5B87B | LIBRARY | lib/experience/scorecard.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-D33133431A4E | LIBRARY | lib/family/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-D33133431A4E | LIBRARY | lib/family/actions.ts | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Wrote an audit entry for an approval that never happened; English refusal translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | LIBRARY-42C221ED6F2F | LIBRARY | lib/family/conflicts.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-99BF2242E5AD | LIBRARY | lib/family/knowledge.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-A1B57B7549A4 | LIBRARY | lib/family/memory-search.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9875,7 +9877,7 @@ PRODUCTION READY: NO
 | LIBRARY-2F432EF713D3 | LIBRARY | lib/family-tree/tree.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-C6D71A70CBB4 | LIBRARY | lib/features/tiers.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-6ED73EA873C5 | LIBRARY | lib/feedback/admin.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-73DD439E7CD0 | LIBRARY | lib/feedback/board.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-73DD439E7CD0 | LIBRARY | lib/feedback/board.ts | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | See Q61. |
 | LIBRARY-FBCF98112820 | LIBRARY | lib/feedback/github-map.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-76068B87917E | LIBRARY | lib/feedback/github-sync.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-0B3375B4C43A | LIBRARY | lib/feedback/notify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9921,7 +9923,7 @@ PRODUCTION READY: NO
 | LIBRARY-FA44063B4059 | LIBRARY | lib/habits/streaks.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-620DB760DA73 | LIBRARY | lib/health/immunizations.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-187AA1C6C93D | LIBRARY | lib/health/probe.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-5A70B5537E09 | LIBRARY | lib/health/status.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-5A70B5537E09 | LIBRARY | lib/health/status.ts | 🔄 IN PROGRESS | Medium | tests/health-feature-secrets.test.ts | FEATURE_ENV named retired FCM_SERVER_KEY; now FCM_PRIVATE_KEY + APNS_PRIVATE_KEY (what nativePushConfigured gates on) | Calibrated | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | LIBRARY-973DBF62D93C | LIBRARY | lib/health/visits.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E459ED006D8E | LIBRARY | lib/home/asset-detail.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D45563C86CF9 | LIBRARY | lib/home/binder.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9953,9 +9955,9 @@ PRODUCTION READY: NO
 | LIBRARY-033E642E294B | LIBRARY | lib/hooks/use-voice.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AFCB1961A43A | LIBRARY | lib/i18n/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-5DC18A142D4C | LIBRARY | lib/i18n/locales.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-BAF7541BD437 | LIBRARY | lib/i18n/messages.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-BAF7541BD437 | LIBRARY | lib/i18n/messages.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | LIBRARY-F7D16F3110BC | LIBRARY | lib/i18n/resolve.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-E27E3A6FD027 | LIBRARY | lib/i18n/server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-E27E3A6FD027 | LIBRARY | lib/i18n/server.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | LIBRARY-684023661343 | LIBRARY | lib/inbox/server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-CA5E4E612A8C | LIBRARY | lib/inbox/unify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-5BA91163A2C8 | LIBRARY | lib/independence/progression.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10231,7 +10233,7 @@ PRODUCTION READY: NO
 | LIBRARY-2C59908E2DAB | LIBRARY | lib/server/public-calendar-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-BD471D472544 | LIBRARY | lib/server/public-document-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-B12D2BBA10C9 | LIBRARY | lib/server/push-request.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-E981DDB50E9C | LIBRARY | lib/server/push.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-E981DDB50E9C | LIBRARY | lib/server/push.ts | 🔄 IN PROGRESS | High | tests/a-device-is-buzzed-once-per-notification.test.ts (retry reaches only the device that missed it; a failed receipt read sends nothing; a database without 0336 keeps delivering) · 183 push tests incl. the 180 existing | 2026-09-26 (Q65): per-device receipts — devices already reached are skipped on retry and each real send is recorded; a missing receipts table (pre-0336) degrades to the old behaviour; a failed receipt read sends nothing | Calibrated: removing the skip makes the phone buzz twice and the test fail. Fresh replay 349/349, probes 57/57, query audit 492 tables | PUSH-003/PUSH-006. See Q65. |
 | LIBRARY-00C650464ABC | LIBRARY | lib/server/rate-limit-db.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-CDE5E8B65499 | LIBRARY | lib/server/rate-limit.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-82A4A01781E9 | LIBRARY | lib/server/request-rate-limit.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10250,7 +10252,7 @@ PRODUCTION READY: NO
 | LIBRARY-D7D7A618B96F | LIBRARY | lib/social/unfurl.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-EC1C2786E6B8 | LIBRARY | lib/storage/avatars.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AADB2DB77F07 | LIBRARY | lib/storage/documents.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-02F9B7049DA7 | LIBRARY | lib/storage/family-media.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-02F9B7049DA7 | LIBRARY | lib/storage/family-media.ts | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): the reference writer is joined by lib/storage/family-media-ref.ts, which signs every stored reference with the viewer's session; the unguessable-name note stays accurate until the bucket is private | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Consumer half of SEC-001. See Q59. |
 | LIBRARY-EDC7DFDC114E | LIBRARY | lib/storage/feedback-attachments.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-3ABB99740F1B | LIBRARY | lib/storage/marketplace-photos.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-6E08A0BB8033 | LIBRARY | lib/stripe/capabilities.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11372,7 +11374,7 @@ PRODUCTION READY: NO
 | CALLBACK-FEFF9E8A5B7D | CALLBACK | /api/webhooks/stripe | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-18839EEC356A | STORAGE | avatars | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-9B16B44D0E0A | STORAGE | documents | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| STORAGE-EA481A772907 | STORAGE | family-media | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| STORAGE-EA481A772907 | STORAGE | family-media | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): every consumer now reads through createSignedUrls, authorised by 0216's family-folder SELECT policy; the bucket itself is still public=true | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Bucket flip is the operator step in docs/runbooks/LB-009-family-media-signed-urls.md, deliberately NOT a migration (supabase db push on main would land it before the clients). SEC-001 stays ❌. See Q59. |
 | STORAGE-1DDCE18AC48B | STORAGE | feedback-attachments | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-EB36B9D6149D | STORAGE | marketing-assets | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-621E786D7D24 | STORAGE | marketplace-photos | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12055,7 +12057,7 @@ PRODUCTION READY: NO
 | SUPPORT-F7E1F2317110 | SUPPORT | docs/runbooks/LB-005-authenticated-e2e.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-3FD16150512D | SUPPORT | docs/runbooks/LB-006-provider-callback-smoke.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-7E32A3784100 | SUPPORT | docs/runbooks/LB-008-backup-restore-drill.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-1462F49C5A6C | SUPPORT | docs/runbooks/LB-009-family-media-signed-urls.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-1462F49C5A6C | SUPPORT | docs/runbooks/LB-009-family-media-signed-urls.md | 🔄 IN PROGRESS | High | Runbook re-read against the code | 2026-09-26 (Q59): rewritten — Phase 1 done, the storage_path backfill dropped (paths are parsed from the stored URL, no row changes), reminder column corrected to image_url, full consumer list, flip-after-live ordering and verification steps | Runbook matches the shipped code | Operator runbook for the remaining SEC-001 step. See Q59. |
 | SUPPORT-2F25BDB991D8 | SUPPORT | docs/runbooks/LB-016-wallet-permissive-policy-finding.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-39A19900E08A | SUPPORT | docs/runbooks/README.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-A9E03426134E | SUPPORT | docs/runbooks/family-pricing.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12157,7 +12159,7 @@ PRODUCTION READY: NO
 | SUPPORT-D59FA133542C | SUPPORT | public/launch/launch-1320x2868.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4C8E9A36E1EE | SUPPORT | public/launch/launch-750x1334.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-292C0CE6AF4C | SUPPORT | public/launch/launch-828x1792.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout | None | Desired private-image isolation regression RED | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
+| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout |None · 2026-09-26 (Q58): /_next/image is network-only (excluded by PATH — Next marks optimized images public whatever their source, so a header check alone still stores them); responses marked private or no-store are never stored; CACHE bumped v4→v5 so the activate sweep purges what v4 held on existing devices |Desired private-image isolation regression RED · tests/a-private-image-does-not-outlive-the-session.test.ts runs the ACTUAL sw.js in a VM: 5/5 pass; against v4 the three defect cases fail and both positive controls pass; with a header-only fix the optimized-image case still fails. The real-Chromium regression above has not been re-run by this session | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
 | SUPPORT-E3637D40E182 | SUPPORT | route-inventory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-52B4E3C1B5F2 | SUPPORT | scripts/backfill-marketing-asset-provenance.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-010123692F7B | SUPPORT | scripts/backfill-marketing-coverage.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12499,7 +12501,7 @@ PRODUCTION READY: NO
 | SUPPORT-424409F60A53 | SUPPORT | tests/concierge-digest.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-693E9182015C | SUPPORT | tests/concierge-front-desk-intent.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-D2329F4BB039 | SUPPORT | tests/concierge-read-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-9F77CF84C734 | SUPPORT | tests/concierge-run-write-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-9F77CF84C734 | SUPPORT | tests/concierge-run-write-boundary.test.ts | 🔄 IN PROGRESS | Low | Ran in a batch at baseline: the first case timed out at 5 s on a cold import, with and without Q62's changes | 2026-09-26 (Q62): the actions module is imported once in beforeAll (60 s budget); no assertion changed | 801/801 in the batch that failed before | Flake made robust, not skipped. See Q62. |
 | SUPPORT-784DC33EBD14 | SUPPORT | tests/connections-providers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-D409053801CF | SUPPORT | tests/connections-ui-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-8E0BDD12EDE2 | SUPPORT | tests/consent-ui.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13378,7 +13380,7 @@ PRODUCTION READY: NO
 | PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
-| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending |  |
+| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. · 2026-09-26 (Q59): tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): consumer half — every family-media read is signed with the viewer's session and renders nothing on failure; no data migration needed | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | 2026-09-26 (Q58): the service-worker cache half — private rendered images outliving logout — is fixed and tested (see SUPPORT-98FD1D4C44AD). The bucket itself is still public; its rollout order (every consumer before the access change) is unchanged, so SEC-001 stays ❌ FAIL. · Stays ❌ FAIL: the bucket is still public=true and a stored URL still reads without a session until an operator flips it after this release is live (runbook). See Q59. |
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13390,8 +13392,8 @@ PRODUCTION READY: NO
 | REGRESSION-001 | REGRESSION | Second full regression after individual audit completion | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | MOBILE-002 | MOBILE | Native bootstrap listener lifecycle | 🔄 IN PROGRESS | Medium | docs/final-audit/native-cycle.md | Dispose checks after asynchronous boundaries, late handle removal, partial setup cleanup and inactive callbacks after teardown. | Native/PWA combined31 Chromium cases PASS; 28 redirect/PWA regressions PASS. Physical shell remains unverified. | No physical native device or provider workflow pass claimed. |
 | JOB-001 | JOB | Cron dispatcher missing-configuration failure visibility | 🔄 IN PROGRESS | High | docs/final-audit/cron-dispatch-cycle.md | Missing/blank dispatch secret fails; dry-run remains read-only; validate registered route and HTTPS/HTTP-loopback base origin, reject redirects/failures, bound responses/deadlines and redact secret diagnostics. Schedule and lookback unchanged. | 4 suites /44 tests PASS; strict types, scoped lint, syntax and YAML parse PASS. Production configuration/real execution and durable catch-up remain unverified. |  |
-| PUSH-003 | PUSH | Distributed push delivery receipts and concurrent worker claims | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending |  |
-| EMAIL-002 | EMAIL | Transactional campaign webhook metrics | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending |  |
+| PUSH-003 | PUSH | Distributed push delivery receipts and concurrent worker claims | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending | · 2026-09-26 (Q65): the partial-retry half, left open as needing SQL, is fixed in the repository — migration 0336 adds a service-only push_deliveries receipt per (notification, device) and the dispatcher reaches only devices without one. No claim precedes a send, so nothing can be lost. Awaiting operator application. |
+| EMAIL-002 | EMAIL | Transactional campaign webhook metrics | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending | · 2026-09-26 (Q66): the double count after a failed finalisation — left open as needing a marker column or a transaction — fixed in the repository by 0337, which is both. Awaiting operator application. |
 | INT-002 | INT | Durable Contact Center outbound escalation and replies | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04. | Replaced with checked plain insert and exact family/channel/provider/direction duplicate verification on23505; no SQL changes. Durable system receipt before inbox capture, separate deterministic notification repair, revision-claimed one-shot provider attempt, bounded429-only retry, held ambiguous results and fair scheduled drain; intake ACK makes no delivery claim. | 11focused files/187tests pass; independent security review, installed-SDK query contract, handlers and cron execution included; scoped lint pass. Combined fourth-cycle gates pending. See docs/final-audit/contact-center-urgent-cycle.md and contact-center-urgent-security-review.md. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. |  |
 | SEC-003 | SEC | Native deep-link internal navigation boundary | 🔄 IN PROGRESS | High | docs/final-audit/native-cycle.md | Validate parsed pathname through existing safeInternalRedirect; preserve accepted OAuth query/hash unchanged. | Four adversarial paths failed before and pass after fix; ordinary and encoded OAuth returns remain accepted in actual-component Chromium tests. | Origin allowlist policy is separate; preserve supported same-origin navigation and OAuth query/hash. |
 | UI-002 | UI | Public feature-link browser navigation | 🔄 IN PROGRESS | High | docs/final-audit/public-navigation-cycle.md; tests/marketing-public-read-budget.test.ts; private production Chromium feature-link and mobile-menu navigation timing; selected 104-test public browser run | Public SEO/AEO sequential fallback reads share a 1.5-second abort budget; abandoned requests cannot start fallback work. Successful configuration and authoritative empty values remain intact, and failed reads remain uncached. The optional cached social-profile read now has the same 1.5-second SDK abort deadline, preserving throw-inside/catch-outside cache semantics. | Installed-SDK read deadline and failure/recovery checks pass. After both editorial and social-read repairs, integrated production fresh-home load was 2120ms and feature navigation 1657ms with no page errors under a controlled database outage. 104 selected production Chromium checks PASS in 1.8 minutes. Final b4d4ad78 changes private display only. Live configured content and cache invalidation remain open. | Missing service key also caused pricing error-boundary fixture failures; no pricing source defect inferred. |
@@ -13463,7 +13465,7 @@ PRODUCTION READY: NO
 | SERVICE-FF9C62744FCD | SERVICE | nativePushConfigured | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-D6F2AF0CEBFB | SERVICE | sendNativePush | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-003 | UI | Family display calendar and availability correctness | 🔄 IN PROGRESS | High | docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md | Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales. | 10 server/helper/display/reminder suites with 164 tests PASS; 25 display ownership and six clock/photo actual React/Chromium checks PASS, included in the final 108-check component gate. Strict tsc identified an actual Locale object/string mismatch, fixed using .code; corrected fixtures use real locale objects and exercise French dates. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately. |
-| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation. | 68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | Next cycle active: durable v2 user/session/family/access partition, exact envelope/query identity, and descendant retirement after observed account/access change. Source evidence and scope in auth-cache-partition-proposal.md; master remains IN PROGRESS before implementation. |
+| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation. | 68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | Next cycle active: durable v2 user/session/family/access partition, exact envelope/query identity, and descendant retirement after observed account/access change. Source evidence and scope in auth-cache-partition-proposal.md; master remains IN PROGRESS before implementation. · 2026-09-26 (Q62): the "direct query consumers omit read errors" class re-measured — six consequential reads fixed (trip 404, trip concierge fork, independence milestones, concierge write-backs, Guardian rules, dismissed-insight resurrection) and the remaining nine named with their harmless default in tests/a-read-that-drops-its-error-is-named.test.ts. |
 | PUSH-004 | PUSH | User and parental consent on every public push sender | 🔄 IN PROGRESS | High | docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures | Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts. | 13 related suites / 144 tests PASS; final two cron suites / 27 tests PASS; strict types, production build and full 12,715-test suite PASS. Denied user/parental policy sends nothing, policy-read failure marks campaign failed, and recovery/adult/zero-audience cases pass. Provider/device workflow and remaining campaign failure/recovery obligations stay open. | No schema changes or live provider sends. |
 | API-9173F41D99C0 | API | GET /api/sync/[provider]/status | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-2F04FE3C0839 | SUPPORT | docs/runbooks/google-oauth-production.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
@@ -13530,7 +13532,7 @@ PRODUCTION READY: NO
 | SERVICE-0A39AA1471A1 | SERVICE | useAuthenticatedCacheScope | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-5B5CFD08F083 | SERVICE | isAuthenticatedCacheScopeCurrent | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-5B1CF3E6134B | SERVICE | AuthenticatedCacheBoundary | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
-| LIBRARY-4FE1D528B565 | LIBRARY | lib/marketing/push-audience.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| LIBRARY-4FE1D528B565 | LIBRARY | lib/marketing/push-audience.ts | 🔄 IN PROGRESS | High | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. · tests/an-in-filter-travels-in-the-url.test.ts (bound-based), marketing-push-audience-execution | .in() id list chunked at 200 = the 8 KB request-line limit itself, and an incomplete read refuses the whole campaign; split ID_CHUNK = 100 | Calibrated against the live file | Incremental discovery after 9d238e0c; retained permanent identity convention. · Browser workflow not yet exercised. See finalaudit.md Q48. |
 | SERVICE-856AA46CA62C | SERVICE | loadPushCampaignAudience | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-1068DA66AB3F | SUPPORT | tests/app-provider-access-context.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F3E10DEDDB36 | SUPPORT | tests/cache-partition.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
@@ -13538,10 +13540,10 @@ PRODUCTION READY: NO
 | SUPPORT-0BB0813F7C43 | SUPPORT | tests/e2e/auth-cache-partition.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F6DEEF1D5B71 | SUPPORT | tests/e2e/finance-read-states.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
-| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
+| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. · 2026-09-26 (Q64): server/database affordability, reservation and expected-status concurrency — the open half of this record — fixed in the repository: migration 0335 recomputes the balance under a per-member lock whenever a redemption enters approved/fulfilled, and the decide action is expected-status. Awaiting operator application; not FIXED + PASS. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
-| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
+| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🔄 IN PROGRESS | Critical |Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. · 2026-09-26: REPRODUCED as a real authenticated adult on a full replay ("an adult deleted their own read_only restriction"); worse than recorded — the DELETE policy never checked user_id, so ANY member could delete ANY member's row. docs/audit/social-access-delete-boundary-check.sql fails before 0334 and passes after | 0334: DELETE now requires is_family_admin OR social_has_permission(manage_access) — the authority INSERT/UPDATE already required — plus a RESTRICTIVE delete guard and a by-shape sweep. No app code deletes from this table, so nothing legitimate is removed | Fresh replay 347/347, probes 56/56 twice, re-apply rehearsal clean |Release blocker; no production-readiness claim. Continue independent repository repairs. ❌→🔄, not FIXED + PASS: an operator must apply 0334 and the boundary must be verified against the deployed database. See Q58. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -13571,7 +13573,7 @@ PRODUCTION READY: NO
 | CONTROL-500E3CB76770 | CONTROL | Open the persisted post after a publish attempt | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | CONTROL-CE67470D62E2 | CONTROL | Review posts when the create response is unconfirmed | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
 | CONTROL-0B16B431843F | CONTROL | Return to Social Accounts after failed X authorization | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | New recovery control; browser/route execution evidence in the social cycle. Complete workflow and accessibility verification remain separate. |
-| PUSH-006 | PUSH | Marketing push outcomes, retry authority and display units must remain honest | 🔄 IN PROGRESS | High | Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md. | Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records. | Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, shared navigation, live sends or dependency changes. Prior audience pagination repair remains independently verified. |
+| PUSH-006 | PUSH | Marketing push outcomes, retry authority and display units must remain honest | 🔄 IN PROGRESS | High | Five initial actual-action/page failures plus independent opt-out classification and active-deletion reproduction corrected; see docs/final-audit/marketing-push-outcomes-cycle.md. | Versioned attempt/status/timestamp claims; explicit safe pre-dispatch retry proof; uncertain attempts held; unit-separated provider outcome copy; intentional opt-outs complete; conditional server/UI delete protection preserves active/uncertain review records. | Five focused files/76tests pass, including actual action/core/page and9independent English/French consumer cases; scoped lint pass. Combined fourth-cycle gates pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, shared navigation, live sends or dependency changes. Prior audience pagination repair remains independently verified. · 2026-09-26 (Q65): durable per-device receipts now exist for notification dispatch (0336, lib/server/push.ts); marketing-campaign sends are a different path and are not covered. |
 | DATA-006 | DATA | Hydration habit counts and current-owner readback | 🔄 IN PROGRESS | High | 14actual React/query/cache/SDK Chromium characterization checks:4healthy controls and10confirmed defect scenarios. Unique(habit_id,log_date) modeled; no fake duplicate durable rows. See tests/e2e/hydration-audit-repro.spec.ts. | Verified current catalog+log read gates, synchronous owner/lifetime locks, count CAS on family/habit/day/member/currentcount, explicit committedreadback, UTCday advance, modal lifetime retirement and confirmedcreate formclosure. | 30actual Chromium cases PASS;29related unit checks passed before final modal guard; final37combinedhydration+rewardreview cases PASS and lintclean. Combined fullgate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Source discovered under UI-ROUTE-0166, COMPONENT-B87AB8900CCC, DB-TBL-168/169. No production edits before this record. |
 | PERF-002 | PERF | Production response-stream cancellation and supported runtime | 🔄 IN PROGRESS | High | CI34699583414 E2E logs contain GET/ transformAlgorithm TypeErrors. Independent installed Next15.5.25/localNode22.23.1 cancellation/write reproduction25of25; nativeTransformStream25of25 matches hostedNode22.23.2 stack. Official upstream fix review identifies guarded behavior inNode24.15.0; exact hostedGET/ trigger remains unproven. | MinimumNode24.15<25 packageengine with matching rootlockmetadata; webCI Node24. No dependencyversions/globalruntime changed. | Official portableNode24.21.0 checksum verified in isolatedTemp. Same native and installedNext15.5.25 cancel/write harness:Node22.23.1 internal errors25/25+25/25;Node24.21.0 errors0/25+0/25. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. Final production probe:5homepage response cancellations,0internalstreamerrors; home2064ms/navigation1631ms/no pageerrors. Published d36602e (application source608c9307) hosted CI34701809388: all4jobsPASS,13003unit tests,11database probes,697browser tests in5.3minutes, no final flaky summary. Web runtimeNode24.20.0; retrieved log contains no TransformStream/ERR_INVALID_STATE match. Vercel checkPASS. See care-verification-checkpoint.md; live provider/cron/policy proof remains separate. | Finding recorded before configuration changes. Existing dependency tree remains untouched. |
 | TEST-002 | TEST | Authenticated browser fixture ownership across projects | 🔄 IN PROGRESS | High | Actual unmodified beforeEach hooks executed in two isolated VM project modules with shared synthetic Auth store:chromium createsuser/family;iphone shared-emailcleanup deletesboth and replacesuser. Same resultNode22and24. Exact hostedtoast failure attribution remains unproven. | Fresh project/worker/nonce-owned fixture email, identity-checked cleanup and unchanged fullonboarding/taskpersistence assertions. | 4actualhook interleaving/ownership regressions PASS. Published d36602e (application source608c9307) hosted CI34701809388: all4jobsPASS,13003unit tests,11database probes,697browser tests in5.3minutes, no final flaky summary. Web runtimeNode24.20.0; retrieved log contains no TransformStream/ERR_INVALID_STATE match. Vercel checkPASS. See care-verification-checkpoint.md; live provider/cron/policy proof remains separate. | Recorded before fixture edits. No live user accounts modified. |
@@ -13605,14 +13607,14 @@ PRODUCTION READY: NO
 | SUPPORT-4B19503B0067 | SUPPORT | tests/e2e/rewards-readback-review.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-0EA725FB383D | SUPPORT | tests/stream-cancellation-runtime.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SOCIAL-003 | SOCIAL | Scheduled social publishing through verified background execution | 🔄 IN PROGRESS | High | 4actualmodule characterization cases show scheduledaction persists5recordfamilies without registeredworker; genericautomationcron doesnotdispatchposts; manualretry publishesbeforeduedate and leaves schedule/calendar scheduled; offsetfree09:00 interpretedUTC despiteNewYorkworkspace and pasttimesaccepted. Characterization is notworkflowPASS. | Explicit timezone/future/DST and complete X payload validation precede writes. Strict initial/schedule/calendar/cleanup receipts preserve ambiguous result identity. Studio retires stale callbacks, preserves current draft and settles changed-owner/account results into review. Private server-written snapshot/revision claims authorize bounded background dispatch with current actor/approval/account/token checks, per-target durable outcomes, known-rate-limit retries and held uncertainty; calendar/post/schedule projections reconcile. Existing5minute dispatcher and dailyVercel fallback registered. | 75independent action cases,37actual page-render checks,23Studio Chromium cases and58actualSDK/private-worker testsPASS. Scheduler+manual+X171focusedPASS;93cron/scheduler follow-upPASS. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | No liveposts or migrationchanges. KnownAUTHZ003 databasepolicygap remains a productionblocker. |
-| DATA-007 | DATA | Quick Capture current-owner task creation and Undo | 🔄 IN PROGRESS | High | 16 actual component/AppProvider/ToastProvider/cache/SDK characterization cases:4healthy controls,10defect scenarios,2behavioral characterizations;45related unit checks pass. Ordinary Ctrl+Enter bypass of disabledSave produces2POSTs. No attribution to priorCItoastflake. | QuickCapture, CaptureShell and VoiceModule now use synchronous submission guards and current owner/form/lifetime checks. Required list reads, creates and exact mutation/Undo identities are checked. Each SDK request has a15second AbortError deadline and a contained race for noncooperative transport; uncertain mutations hold review rather than blind retry. Confirmed voice capture feedback does not await optional history. | 62helper cases and related5file108test run PASS;39QuickCapture/CaptureShell and9voice Chromium checks PASS. Root combined83capture/social Chromium checks PASS16.3s;10file320focused tests including catalogue/time/action/render/capture PASS. Whole-project types and full lintPASS with4baseline warnings. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | Permanentrefs COMPONENT-97EAFCA06075,CONTROL-C7BEF2FB673A,LIBRARY-3010D3A2884E,DB-TBL-418/419. Explicit Undo of previously created IDs after owner switch and nullable optional roster are behavioral characterizations, not proven defects; preserve their current policy. No shared navigation changes. |
+| DATA-007 | DATA | Quick Capture current-owner task creation and Undo | 🔄 IN PROGRESS | High | 16 actual component/AppProvider/ToastProvider/cache/SDK characterization cases:4healthy controls,10defect scenarios,2behavioral characterizations;45related unit checks pass. Ordinary Ctrl+Enter bypass of disabledSave produces2POSTs. No attribution to priorCItoastflake. | QuickCapture, CaptureShell and VoiceModule now use synchronous submission guards and current owner/form/lifetime checks. Required list reads, creates and exact mutation/Undo identities are checked. Each SDK request has a15second AbortError deadline and a contained race for noncooperative transport; uncertain mutations hold review rather than blind retry. Confirmed voice capture feedback does not await optional history. | 62helper cases and related5file108test run PASS;39QuickCapture/CaptureShell and9voice Chromium checks PASS. Root combined83capture/social Chromium checks PASS16.3s;10file320focused tests including catalogue/time/action/render/capture PASS. Whole-project types and full lintPASS with4baseline warnings. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | Permanentrefs COMPONENT-97EAFCA06075,CONTROL-C7BEF2FB673A,LIBRARY-3010D3A2884E,DB-TBL-418/419. Explicit Undo of previously created IDs after owner switch and nullable optional roster are behavioral characterizations, not proven defects; preserve their current policy. No shared navigation changes. · 2026-09-26 (Q66 note): the cross-client default-list race was re-read in source — lib/services/tasks ensureTodoList and lib/services/groceries ensureDefaultList create a list only when the family has NO un-archived one, with a lookup-then-insert and no constraint, so two first captures at once can create two lists. A duplicate list, not lost data; closing it needs a serialising RPC (families may legitimately hold many lists, so a unique index is the wrong tool). Filed, not fixed. |
 | SEC-004 | SEC | Persisted social URLs must not become active-content links | 🔄 IN PROGRESS | High | Independent actual createPostAction plus real React18 PostPage static rendering persists javascript:alert(document.domain) and renders href=javascript despite a React warning. No browser code execution or live exploit claimed. Source trace also finds unvalidated target/feed/comment permalink anchors. | Shared safeSocialLink validates HTTP(S), no credentials/whitespace and4096character limit. Action rejects unsafe incoming links; post, target, feed and inbox rendering validates persisted links, retains escaped text and safe profile fallbacks. | Independent real action andReactSSR tests pass all9URL-specific checks within37presentation and75action cases. Validlinks remain clickable; unsafe legacy javascript/data/credential/whitespace/overlength values do not become anchors; no React warning. Root combined83Chromium and320focused tests pass. No browser exploit/liveDB claim. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | See independent social-scheduling-actions-review.md. No SQL or provider operations. |
 | SUPPORT-38ACFBD09F34 | SUPPORT | app/api/cron/social-publish/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | API-18FB4D1FF9A8 | API | GET /api/cron/social-publish | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | JOB-3A0C45177B5D | JOB | /api/cron/social-publish | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-9BB09AB06EF2 | SERVICE | assertXCredentials | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-8C21B3472285 | SERVICE | loadScheduledXAccessToken | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
-| LIBRARY-9399B73C5399 | LIBRARY | lib/social/links.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-9399B73C5399 | LIBRARY | lib/social/links.ts | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts asserts safeSocialLink and safeWebLink agree | 2026-09-26 (Q60): delegates to lib/utils/safe-link.ts so SEC-004's rule has one definition | Guard passes | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. · See Q60. |
 | SERVICE-ECB438856465 | SERVICE | safeSocialLink | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | LIBRARY-64AAEA1B313B | LIBRARY | lib/social/schedule-time.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-89713EC4F6A6 | SERVICE | scheduleTimezone | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
@@ -13803,7 +13805,7 @@ PRODUCTION READY: NO
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
-| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
+| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | 🔄 IN PROGRESS | High |Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. · 2026-09-26: REPRODUCED as a real authenticated child on a full 345-migration replay ("a child promoted a blocked caller to immediate_family"); docs/audit/guardian-screening-write-boundary-check.sql fails before 0333 and passes after, including the parent positive control and member reads | 0333 makes guardian_contacts and guardian_member_profiles manager-written (permissive mng_* + RESTRICTIVE guards, strays swept by shape); gated-write probe recorded list 92→94; deleteContactAction and updateContactTrustAction now read back (the trust change was audit-logged unconditionally) | Fresh replay 346/346, probes 55/55 twice, re-apply rehearsal clean, conflict targets 186/186, full suite 17,123/17,126 (3 = container Node 22) |Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. Moves ❌→🔄, not to FIXED + PASS: an operator must apply 0333 (agents must not apply migrations to production) and the boundary must then be verified against the deployed database. See Q57. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
 | SERVICE-274EDFA6815C | SERVICE | createAssistantLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -13946,7 +13948,7 @@ PRODUCTION READY: NO
 | LIBRARY-EC0B659A2F4D | LIBRARY | lib/guardian/sms-notification.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-5C936E0DCDB1 | SERVICE | guardianSmsScope | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-5CF6218528EA | SERVICE | notifyGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
-| LIBRARY-F4955F439221 | LIBRARY | lib/guardian/sms-processing.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-F4955F439221 | LIBRARY | lib/guardian/sms-processing.ts | 🔄 IN PROGRESS | Medium | tests/a-guardian-number-lookup-failure-is-not-an-unknown-number.test.ts (SMS path) | Converted to generated guardian table types (no cast layer); lookup refusal pinned by function boundary | Calibrated after a first draft passed with the fix removed | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. · Browser workflow not yet exercised. See finalaudit.md Q48. |
 | SERVICE-7640CB35DB7E | SERVICE | receiveGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-33AC44AB7C66 | SERVICE | resumeGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-1684F92B9582 | SERVICE | guardianSmsReceiptId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
@@ -14162,12 +14164,149 @@ PRODUCTION READY: NO
 | SUPPORT-9997915A40CF | SUPPORT | tests/auth-pkce-initiation.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Initiation source discovery at tree 453d5a23; tests/auth-pkce-initiation.test.ts. Exact hashes/exports in discovery/auth-initiation-ownership-inventory.json. Focused workflow proof does not pass this separate structural obligation. |
 | SUPPORT-77AD4E25F193 | SUPPORT | tests/e2e/oauth-initiation.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Initiation source discovery at tree 453d5a23; tests/e2e/oauth-initiation.spec.ts. Exact hashes/exports in discovery/auth-initiation-ownership-inventory.json. Focused workflow proof does not pass this separate structural obligation. |
 | SUPPORT-3C97E0C70D8B | SUPPORT | tests/e2e/auth-initiation-order.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Cross-flow initiation ordering fixture at application/test tree bf22aca8; exact hashes/mappings in discovery/auth-initiation-ownership-inventory.json. Eleven scoped cases pass; structural and combined hosted obligations remain separate. |
-
 | SUPPORT-B98CAFA44FB9 | SUPPORT | tests/e2e/phone-auth-boundaries.spec.ts | 🔄 IN PROGRESS | Medium | 34 actual component/SDK regressions | Neutral settlement barrier; original RED evidence retained | 34/34 pass; scoped types/lint/whitespace pass | Response, cookie write and disposal timing; provider authority and storage controls. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
-
 | SERVICE-110F74726994 | SERVICE | verifySmsWithOwnedSession | 🔄 IN PROGRESS | High | Installed SDK verification, session readback and ownership interleavings | Pre-await reservation; isolated writes; stable renewal; post-disposal recheck | 34 focused cases pass; broader workflow remains open | lib/auth/password-client.ts; defaults for password/child/callback stay unchanged. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
-
 | SUPPORT-788038831C82 | SUPPORT | tests/e2e/phone-auth-http.spec.ts | 🔄 IN PROGRESS | Medium | Three real Next/GoTrue cases implemented and discovered | Disposable reserved-number SMS test configuration | Scoped types/lint, discovery3 and workflow66 pass; runtime pending | Wrong/correct OTP, persistence/logout and held-response ordering. No delivery/expiry/one-time proof from reusable test OTP. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
+| LAYOUT-CE2AB8EAF3D8 | LAYOUT | app/gift/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-8E78FBF578E0 | LAYOUT | app/join/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-F63814E98739 | LAYOUT | app/offline/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-36F8A8318CE4 | LAYOUT | app/pay/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-FD69CD4A16D3 | LAYOUT | app/reviews/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| COMPONENT-7A01D1C61B3F | COMPONENT | components/i18n/scoped-locale-provider.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| COMPONENT-75DCE1996F82 | COMPONENT | components/ui/widget-boundary.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-836BF6D8DBFF | LIBRARY | lib/a11y/use-dialog-behavior.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A93F18D7DBD6 | LIBRARY | lib/ai/insight-features.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-DD7BD07EAD12 | LIBRARY | lib/assistant/alexa-verify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C8F578A84570 | LIBRARY | lib/auth/route-access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-5B81A0243366 | LIBRARY | lib/contact-center/sms-ingress.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C0C10BED32E4 | LIBRARY | lib/guardian/voicemail-intake.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F3EC6BD0526F | LIBRARY | lib/hooks/use-dismiss-on-escape.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3FAA194A7B58 | LIBRARY | lib/i18n/scopes.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-4B3EEE9682FD | LIBRARY | lib/i18n/translate.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (12) | pluralCategory / pluralize on Intl.PluralRules; doc comment corrected after its test caught a false claim | Green | Discovered 2026-09-26: source file present with no ledger row (see Q56). Browser workflow not yet exercised. See Q50. |
+| LIBRARY-3A02F3B87E41 | LIBRARY | lib/library/ingest.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8B1AE039959A | LIBRARY | lib/library/progress.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B5E2121F928C | LIBRARY | lib/marketing/content-revisions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-74914FE19010 | LIBRARY | lib/marketing/page-types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AAC2FC27D374 | LIBRARY | lib/marketing/sitemap-urls.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-974EE3C3E5AC | LIBRARY | lib/server/app-url.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F20B6F450427 | LIBRARY | lib/server/feature-entitlement.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D0ECED67194D | LIBRARY | lib/server/list-all-auth-users.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-64F69170410E | LIBRARY | lib/server/public-media-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FDF0D5E2DE2D | LIBRARY | lib/server/secret-equals.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-7AD57457138A | LIBRARY | lib/services/activity/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-73C1D11D203C | LIBRARY | lib/services/ai-settings/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-59C58E2A401A | LIBRARY | lib/services/approvals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-57698E9F7703 | LIBRARY | lib/services/autopilot/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AB5A40BEBDAA | LIBRARY | lib/services/calendar/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AE6D3D550D51 | LIBRARY | lib/services/descriptions-server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-BA5BD32FC275 | LIBRARY | lib/services/descriptions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-31C306D42FA6 | LIBRARY | lib/services/documents/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0B1AC6894983 | LIBRARY | lib/services/family/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-454350D19703 | LIBRARY | lib/services/finances/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3936B990593A | LIBRARY | lib/services/finances/transaction-operation.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A5ACCD4F0F25 | LIBRARY | lib/services/goals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-352743A4EC34 | LIBRARY | lib/services/groceries/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-69E42B35E82C | LIBRARY | lib/services/home/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D61C6C77608B | LIBRARY | lib/services/idempotency.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A4379DAA6AEB | LIBRARY | lib/services/inbox/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-6E0E5DD8F873 | LIBRARY | lib/services/inventory/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0A7DCD820DBE | LIBRARY | lib/services/meals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-312898DD7ABA | LIBRARY | lib/services/memory/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3B0C683E3B9D | LIBRARY | lib/services/messages/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D261897504AE | LIBRARY | lib/services/moving/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-438A78C3BEA2 | LIBRARY | lib/services/notes/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-DD1CEA81A9DE | LIBRARY | lib/services/notifications/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-500E0D9010EA | LIBRARY | lib/services/onboarding-calendar/access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-4C9113CB65E5 | LIBRARY | lib/services/onboarding-calendar/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F48A98DDE26B | LIBRARY | lib/services/onboarding-calendar/oauth.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B94A955A94EB | LIBRARY | lib/services/onboarding-calendar/setup.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-201844DF7085 | LIBRARY | lib/services/paperwork/capture.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8F7B36CA960B | LIBRARY | lib/services/paperwork/email-attachments.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-52370ED057AB | LIBRARY | lib/services/paperwork/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-5679B6D93747 | LIBRARY | lib/services/paperwork/link-access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8969C3A23C94 | LIBRARY | lib/services/paperwork/link.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-1560FAABDD8D | LIBRARY | lib/services/providers/compare.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C6BF887C1462 | LIBRARY | lib/services/purchases/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-63B97C81C212 | LIBRARY | lib/services/purchases/private-result.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-73198D60FBDF | LIBRARY | lib/services/reminders/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-1B3D263A335A | LIBRARY | lib/services/routines/anchors.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-12410F65E196 | LIBRARY | lib/services/routines/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AC09E1AEF57C | LIBRARY | lib/services/routines/schedule.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-09158EAFEF04 | LIBRARY | lib/services/school/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-9E746389A642 | LIBRARY | lib/services/scope.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C1552DEE610F | LIBRARY | lib/services/search/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-85320EB392F3 | LIBRARY | lib/services/sports/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-9EA9189A612B | LIBRARY | lib/services/sync/policy.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-746FB643C7C2 | LIBRARY | lib/services/tasks/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0C19997C0CD6 | LIBRARY | lib/services/trips/confirmation-import.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A1D31B2FD0C0 | LIBRARY | lib/services/trips/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-6C07E8D25C74 | LIBRARY | lib/services/types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B5EE00A4FA0A | LIBRARY | lib/storage/object-name.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-94AB0D35DA7D | LIBRARY | lib/supabase/escape-like.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-2C48109D7D67 | LIBRARY | lib/supabase/read-all.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0056DCF9E763 | LIBRARY | lib/sync/audit.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-CC76B9A33321 | LIBRARY | lib/time/zoned.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C57404E4E963 | LIBRARY | lib/ui/gallery.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| MIGRATION-2BFE0CE0B23C | MIGRATION | supabase/migrations/0285_conflict_targets_inferable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8FF24A0E7DA7 | MIGRATION | supabase/migrations/0286_blog_updated_at_is_a_content_date.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8D08083B41A4 | MIGRATION | supabase/migrations/0290_money_anon_write_grants.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9A8811C272B0 | MIGRATION | supabase/migrations/0291_sync_log_skips_deleted_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-539964B2A745 | MIGRATION | supabase/migrations/0292_privileged_rpc_grant_reassert.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5B9CED571760 | MIGRATION | supabase/migrations/0293_notifications_related_id_is_a_key.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7C05699BD42B | MIGRATION | supabase/migrations/0294_family_scoped_read_indexes.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-518F01A936A9 | MIGRATION | supabase/migrations/0295_reward_redemption_decision_guard.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-10E4CFDF9E0A | MIGRATION | supabase/migrations/0296_family_credentials_manager_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A9BFDB4517FF | MIGRATION | supabase/migrations/0297_sensitive_tables_respect_role.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-CB9C80C565D9 | MIGRATION | supabase/migrations/0298_invites_update_manager_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-258AF69C8DDB | MIGRATION | supabase/migrations/0299_family_keeps_a_manager.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-0192906EF00B | MIGRATION | supabase/migrations/0300_entitlement_is_not_client_writable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-137B4BFBCF7A | MIGRATION | supabase/migrations/0301_notification_authorship.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-977805879C76 | MIGRATION | supabase/migrations/0302_one_live_system_policy.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-EDD777ACC457 | MIGRATION | supabase/migrations/0303_document_bytes_boundary.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-61492AD9AAB3 | MIGRATION | supabase/migrations/0304_economy_invest_decision_guard.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9A55DE49DA69 | MIGRATION | supabase/migrations/0305_chore_award_amounts_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-F3B172550A4C | MIGRATION | supabase/migrations/0306_money_instructions_are_not_member_writable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-BDFF389ED311 | MIGRATION | supabase/migrations/0307_chore_prices_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-FE3B26EA314B | MIGRATION | supabase/migrations/0308_reward_catalogue_is_manager_run.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5D774991D477 | MIGRATION | supabase/migrations/0309_prescriptions_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-B5E70B9CA3B2 | MIGRATION | supabase/migrations/0310_ui_only_manager_gates_are_enforced.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-F9778888C17B | MIGRATION | supabase/migrations/0311_family_scoped_references.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-34BE1C8BB6C7 | MIGRATION | supabase/migrations/0312_sensitive_documents_match_real_folder_names.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9141A0E2BE90 | MIGRATION | supabase/migrations/0313_meal_plan_groceries_stay_in_one_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-BE6007D744D4 | MIGRATION | supabase/migrations/0314_circle_join_codes_are_unambiguous.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-FFC074C15283 | MIGRATION | supabase/migrations/0315_a_listing_is_claimed_once.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-B7488DB9F993 | MIGRATION | supabase/migrations/0316_a_chore_is_paid_once.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-3D916127D33E | MIGRATION | supabase/migrations/0317_listing_status_decides_from_a_locked_row.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8A999315D728 | MIGRATION | supabase/migrations/0318_a_policy_should_say_what_it_checks.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-CE7C59F76A4D | MIGRATION | supabase/migrations/0319_a_driving_score_is_not_the_drivers_to_grade.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-3D0A95BAE466 | MIGRATION | supabase/migrations/0320_a_reward_costs_what_the_parent_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-973FDA6C20BF | MIGRATION | supabase/migrations/0321_invite_terms_are_fixed_at_issue.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-1ABDE84EC69F | MIGRATION | supabase/migrations/0322_a_family_cannot_write_its_own_entitlement.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-822878A10B5A | MIGRATION | supabase/migrations/0323_a_health_record_is_not_a_siblings_to_rewrite.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5E387277CEEF | MIGRATION | supabase/migrations/0324_a_location_is_only_your_own_to_post.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A076E88DA9B3 | MIGRATION | supabase/migrations/0325_allowance_and_gift_writes_are_managers_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-EEB546C018F3 | MIGRATION | supabase/migrations/0326_a_guardian_number_belongs_to_one_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7A85B6584968 | MIGRATION | supabase/migrations/0327_the_terms_of_a_deal_are_fixed_when_it_is_struck.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A76F05AD248B | MIGRATION | supabase/migrations/0328_a_prescription_is_a_parents_to_write.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-650D9F449E6C | MIGRATION | supabase/migrations/0329_a_childs_own_record_is_not_theirs_to_rewrite.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7612FB5B2EAB | MIGRATION | supabase/migrations/0330_a_behaviour_note_belongs_to_whoever_wrote_it.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A3915A0867C0 | MIGRATION | supabase/migrations/0331_a_journal_is_the_one_thing_nobody_else_writes.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-61E07EEE563E | MIGRATION | supabase/migrations/0332_a_diagnosis_is_not_the_familys_to_browse.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-0A4628571BE1 | MIGRATION | supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql | 🔄 IN PROGRESS | High | docs/audit/guardian-screening-write-boundary-check.sql fails before and passes after; fresh replay 346/346; probes 55/55 twice; re-apply rehearsal clean | Written 2026-09-26 for AUTHZ-005 | Local replay only | Discovered 2026-09-26 (Q56/Q57). Not applied to production — agents must not; an operator applies it with the other pending migrations. |
+| MIGRATION-1D84DA6B461C | MIGRATION | supabase/migrations/0334_a_social_restriction_is_not_its_holders_to_lift.sql | 🔄 IN PROGRESS | Critical | docs/audit/social-access-delete-boundary-check.sql fails before and passes after; fresh replay 347/347; probes 56/56 twice | Written 2026-09-26 for AUTHZ-003 | Local replay only | Not applied to production — agents must not; an operator applies it with the other pending migrations. See Q58. |
+| LIBRARY-99CA5C569F65 | LIBRARY | lib/storage/family-media-ref.ts | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | New 2026-09-26 (Q59): strict reference parser (public/sign/authenticated/render URLs and bare paths; traversal, non-uuid family and non-http schemes refused; lookalike hosts treated as this bucket) and one-call signer with no fallback | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| LIBRARY-8223CBE7FA46 | LIBRARY | lib/storage/use-family-media.ts | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | New 2026-09-26 (Q59): memory-only signed-URL cache keyed to the offline-cache purge generation; refresh ahead of expiry; a denied reference held as null, not retried in a loop | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| COMPONENT-14BBCA62DA12 | COMPONENT | components/media/family-media-img.tsx | 🔄 IN PROGRESS | High | tests/a-family-media-reference-is-never-rendered-raw.test.ts pins that src comes only from the signed lookup | New 2026-09-26 (Q59): the one <img> for a stored family-media reference; placeholder of the same box while signing or when denied | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| LIBRARY-8869B0D28BB8 | LIBRARY | lib/utils/safe-link.ts | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts | New 2026-09-26 (Q60): http(s)-only, no credentials, no whitespace, ≤4096 — SEC-004's rule, generalised | Guard passes; calibrated | Discovered 2026-09-26 as new source. See Q60. |
+| SEC-006 | SEC | Stored typed links must not become active-content links outside social | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts: 17 refused spellings (javascript/JavaScript/leading-space/data/vbscript/file/credentials/whitespace/bare host/overlength), and a source guard over every href on a stored link field; calibrated by reverting the wishlist site, which the guard names | 12 sites now render href={safeWebLink(x) ?? undefined}: reminders, wishlists, renewals, signups, projects, career, recipes (source), relationship gifts, weekend (feed and event), pros website, public review links. A refused link renders as text with no anchor | tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | New 2026-09-26: React 18.3 renders javascript: hrefs with only a warning and type="url" accepts them, so a member-saved link ran script in whoever clicked it. Admin notification urls are server-written constants and named as such. No browser execution attempted or claimed. See Q60. |
+| LIBRARY-9AB7D5480A54 | LIBRARY | lib/storage/feedback-attachment-url.ts | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | New 2026-09-26 (Q61): the pure own-attachment URL parser, split out of feedback-attachments.ts so the no-Supabase feedback engine can use it; re-exported unchanged | Guard passes; calibrated — disabling the submit check fails it. tsc clean | Discovered 2026-09-26 as new source. See Q61. |
+| SEC-007 | SEC | A feedback screenshot must not make the super admin's browser fetch an arbitrary URL | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | New 2026-09-26: feedback_ideas.image_url was free text rendered as <img> in the super-admin console, so any signed-in user could plant a beacon reporting when (and from what address) an admin viewed their idea. No script execution — img src is inert — and no browser run claimed. See Q61. |
+| MIGRATION-AB277E911E96 | MIGRATION | supabase/migrations/0335_a_reward_is_paid_for_with_points_that_exist.sql | 🔄 IN PROGRESS | High | docs/audit/reward-balance-check.sql (9 assertions as real authenticated sessions: affordable approval passes, the unaffordable second approval, a straight-to-approved insert, a rejected→approved re-entry and a paid reward moved to a sibling are all refused; fulfilment is not a second charge; earning more makes the request payable; seeds still record; the per-member lock and SECURITY DEFINER are asserted) · tests/reward-redemption-write-path.test.ts (19, 5 new) | New 2026-09-26 (Q64): SECURITY DEFINER balance trigger, named to fire after 0295's decision guard and 0308's cost guard; no status-transition graph in the database (the enum carries pending/cancelled the UI never shows) | Probe FAILS before 0335 ("100 earned, 200 approved") and passes after; fresh 348-migration replay 0 failed, probes 57/57, run twice on fresh databases; action tests 19/19 | Unapplied: an operator applies it; agents do not. See Q64. |
+| SUPPORT-EDE7329E63CD | SUPPORT | docs/audit/reward-balance-check.sql | 🔄 IN PROGRESS | High | Self-verifying probe | New 2026-09-26 (Q64) | Probe FAILS before 0335 ("100 earned, 200 approved") and passes after; fresh 348-migration replay 0 failed, probes 57/57, run twice on fresh databases; action tests 19/19 | Discovered 2026-09-26 as new source. See Q64. |
+| MIGRATION-74521116C2F2 | MIGRATION | supabase/migrations/0336_a_device_is_buzzed_once_per_notification.sql | 🔄 IN PROGRESS | High | tests/a-device-is-buzzed-once-per-notification.test.ts (retry reaches only the device that missed it; a failed receipt read sends nothing; a database without 0336 keeps delivering) · 183 push tests incl. the 180 existing | New 2026-09-26 (Q65): push_deliveries (notification_id, device_id) primary key, cascades from both sides, RLS on with no policies, DML revoked from anon/authenticated | Calibrated: removing the skip makes the phone buzz twice and the test fail. Fresh replay 349/349, probes 57/57, query audit 492 tables | Unapplied: an operator applies it. See Q65. |
+| MIGRATION-6E32CD86D2D9 | MIGRATION | supabase/migrations/0337_an_email_event_is_counted_once.sql | 🔄 IN PROGRESS | High | docs/audit/email-counter-once-check.sql (a released-and-retaken claim answers already_applied and the counter stays 1; a stale worker counts nothing; unknown campaign left alone; only counter columns; no client can execute) · tests/resend-webhook-execution.test.ts (40, 2 new) | New 2026-09-26 (Q66): resend_webhook_events.counter_applied_at and a SECURITY DEFINER apply_resend_campaign_counter(), executable by service_role only | Fresh replay 350/350, probes 58/58; route tests 40/40, including one pinning that the pre-0337 fallback still counts twice | Unapplied: an operator applies it. See Q66. |
+| SUPPORT-10B9901DEA8B | SUPPORT | docs/audit/email-counter-once-check.sql | 🔄 IN PROGRESS | High | Self-verifying probe | New 2026-09-26 (Q66) | Fresh replay 350/350, probes 58/58; route tests 40/40, including one pinning that the pre-0337 fallback still counts twice | Discovered 2026-09-26 as new source. See Q66. |
 
 ## Inventory and evidence rules
 
@@ -15832,11 +15971,15 @@ Two required ledger reads discard error/loading state; a failed history read bec
 #### Fixes Applied
 Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes.
 
+2026-09-26 (Q64): the open server/database half. Migration 0335 adds a SECURITY DEFINER trigger that, whenever a redemption ENTERS approved/fulfilled (insert, status change, or a member/cost change on a paid row), takes a per-member advisory lock and recomputes earned (approved chore_assignments.points_awarded) minus spent (other approved/fulfilled redemptions) from committed rows, refusing with 23514 if the cost is not covered. requestRedemptionAction now refuses a child requesting against another member and a manager naming a member outside the family; decideRedemptionAction is an expected-status update (approved/rejected from requested, fulfilled from approved).
+
 #### Retest Results
 Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md.
 
 Historical evidence:
 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md.
+
+2026-09-26 (Q64): docs/audit/reward-balance-check.sql fails before 0335 ("a parent approved a reward the child could not pay for (100 earned, 200 approved)") and passes after; the pre-existing reward-redemption-decision probe gained 100 earned points for its child so it keeps testing WHO decides rather than tripping over WHETHER the child can pay. Fresh replay 348/348, probes 57/57 on two fresh databases. Concurrency is asserted structurally (the lock is in the function) — a single psql session cannot race itself.
 
 #### Evidence
 Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance.
@@ -15910,7 +16053,7 @@ Executed real access/roles/settle code with controlled database responses: activ
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
-Status: ❌ FAIL
+Status: 🔄 IN PROGRESS
 Severity: Critical
 Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; social_access_permissions; social_role_for
 
@@ -15929,16 +16072,18 @@ Members assigned restrictive social permissions cannot remove their own restrict
 Generic family-member DELETE policy includes social_access_permissions. Later granular policies tighten only INSERT/UPDATE. An active adult with explicit read_only can delete that row and regain marketing_manager connect/publish permissions via successful role fallback.
 
 #### Fixes Applied
-None. Standing no-SQL boundary prevents changing the database policy in this cycle.
+None in the earlier cycle, which worked under a standing no-SQL boundary.
+
+2026-09-26 (Q58): `supabase/migrations/0334_a_social_restriction_is_not_its_holders_to_lift.sql` requires `is_family_admin(family_id) OR social_has_permission(family_id, 'manage_access')` for DELETE — exactly the authority INSERT and UPDATE already required — with a RESTRICTIVE delete guard ANDed with every permissive policy and a by-shape sweep of any other permissive DELETE policy. No application code deletes from the table; its only writer is the manager-gated upsert.
 
 #### Retest Results
-Pending database policy repair and isolated role/tenant execution.
+2026-09-26: `docs/audit/social-access-delete-boundary-check.sql`, as real `authenticated` sessions on a fresh replay, FAILED before 0334 with "an adult deleted their own read_only restriction" and PASSES after it: the adult's role stays `read_only` without publish after a refused delete; an adult cannot delete another member's row either; every member still reads the roles; a parent still revokes. Fresh replay 347/347, all 56 probes pass twice, re-apply rehearsal clean.
 
 #### Evidence
 Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md.
 
 #### Final Status
-❌ FAIL
+🔄 IN PROGRESS — repository fix proven; awaiting operator application of 0334 and verification against the deployed database.
 
 ### DATA-005 — Medication dose actions must use current verified household and daily state
 
@@ -16441,7 +16586,7 @@ Two assistant redirects and five Contact Center neighbor failures reproduced; ac
 
 ### AUTHZ-005 — Guardian contact trust and member profiles require database manager write authority
 
-Status: ❌ FAIL
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; app/(app)/guardian/actions.ts
 
@@ -16462,14 +16607,18 @@ The existing contacts and profiles authenticated FOR ALL policies use active fam
 #### Fixes Applied
 Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force.
 
+2026-09-26 (Q57): `supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql` replaces 01370's `FOR ALL … is_family_member` policy on both tables with manager-gated permissive policies, adds RESTRICTIVE guards ANDed with every permissive policy so a stray one cannot reopen the boundary alone, and sweeps any other permissive write policy by shape. Every writer outside the eleven manager-gated Guardian actions runs on the service client, so no legitimate path is removed. `deleteContactAction` and `updateContactTrustAction` now read the row back; the trust change had been audit-logged unconditionally, so a filtered write recorded a trust change that never happened.
+
 #### Retest Results
 Pending disposable role-boundary reproduction and authorized schema repair.
+
+2026-09-26: `docs/audit/guardian-screening-write-boundary-check.sql`, run as real `authenticated` sessions on a fresh replay, FAILED before 0333 with "a child promoted a blocked caller to immediate_family" and PASSES after it: a child cannot promote a caller, delete the blocking contact, insert an `immediate_family` contact, set `default_mode_unknown` to `immediate_ring`, clear their Guardian number or delete their profile; a child still reads both tables; a parent still writes both. Fresh replay 346/346, all 55 probes pass twice, the re-apply rehearsal is clean.
 
 #### Evidence
 Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed.
 
 #### Final Status
-❌ FAIL
+🔄 IN PROGRESS — repository fix proven; awaiting operator application of 0333 and verification against the deployed database.
 
 ### SMS-002 — Guardian SMS recovery after provider retries stop
 
@@ -21221,6 +21370,10 @@ The invite toast and two Home widgets remain.
 | | Finding | Status |
 |---|---|---|
 | **F-E01** | Every child can read, edit and delete the family password vault; `secret` is plaintext | **Fixed by `0296` + a CI probe — cannot reach production until F5/F-C08** |
+| **F-G03** | Anyone holding an invite could rewrite it and join **any** family as `parent` | **Fixed by `0297` + a CI probe — cannot reach production until F5/F-C08** |
+| **F-G08** | A child can write `allowance_rules`, and the service-role allowance cron mints the money | **Fixed by `0298` + a CI probe — cannot reach production until F5/F-C08** |
+| **F-G17** | A child could rewrite the **price** of their own chores, and every payout path read the price back off the row they rewrote | **Fixed by `0303` + a CI probe — cannot reach production until F5/F-C08** |
+| **F-G18** | A child could set the **price of their own reward redemption**, and the function that moves the tokens debited that number | **Fixed by `0304` + a CI probe — cannot reach production until F5/F-C08** |
 
 ---
 
@@ -21232,12 +21385,16 @@ The invite toast and two Home widgets remain.
 | F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
 | F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
-| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
-| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
+| F-F01 / F-G13 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | **Fixed** — `readAll` now answers `truncated`, and `failOnMax` turns it into the error the five summing call sites already handle |
+| F-F02 / F-G14 | F-017's timezone bug still live on server-rendered surfaces, including the kids page | **Partly fixed** — the kids page and every notification's text now use the family's zone; the remaining 17 sites are held by a ratchet that fails on an eighteenth |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
 | F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
+| **F-G05** | A scam call could be **transferred** instead of hung up — the screening decision was never checked against its own allowed values | **fixed** |
+| **F-G02** | Every child row on `/wallet/treasury` linked to a route that does not exist | **fixed** |
+| F-G09 | The family password vault's sibling gaps: health/medication records readable **and writable** by a child | OPEN |
+
 | F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
 | F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
 
@@ -24698,6 +24855,96 @@ grep-style guards mostly carry explicit non-vacuity blocks, which is unusual
 and means the earlier findings (F4, F-004, F-015, F-019) were the exception
 rather than the pattern.
 
+
+---
+---
+
+# Pass G — third session (2026-09-14)
+
+A third session ran the four-worker protocol against this repository. Its
+workers 2, 3 and 4 hit the account's session rate limit mid-run, so their sweeps
+are **partial and say so**; Claude-3's partial run is nonetheless the most
+valuable single artefact in this pass, because it bootstrapped a throwaway PG16,
+replayed all 308 migrations and probed RLS as a **real child session** rather
+than reasoning about policy text.
+
+Full evidence for every entry is in `audit/claude-1.md` (section "Findings from
+the third audit session") and `audit/claude-3.md`. Nothing in Passes A–F is
+edited or removed.
+
+## Fixed in this pass
+
+| | Severity | Finding | Guard |
+|---|---|---|---|
+| **F-G03** | CRITICAL | **An invite's terms were the recipient's to rewrite.** `invites_update` (0004, re-asserted by 0118) is a `using` clause with no `with check`; Postgres reuses `using` as the check, so the invitee branch passed for any new row whose `email` was still theirs — leaving `role`, `family_id`, `status` and `expires_at` unconstrained. `accept_invite` is SECURITY DEFINER and inserts `(v_invite.family_id, auth.uid(), v_invite.role)` into `family_members`, past `fm_insert`'s `can_manage_family` check, so the invite was attacker-controlled input to a privileged insert. Four escalations confirmed on a live replay: accept as `parent`, never expire, re-accept after removal, and **join a household that never issued the invite** — needing only its uuid. 0004's own header states the guarantee that "no row crosses a family boundary"; this is that guarantee failing inside 0004. | `0297` + `docs/audit/invite-terms-boundary-check.sql` |
+| **F-G09a** | HIGH | **A child could change a dosage and delete the schedule that drives its reminder.** `medications` and `medication_schedules` are written directly from the browser, and the module's idea of who may write is a React boolean — `const canEdit = isManager(role)` — gating the controls and nothing else. A child is a real Supabase auth user, so RLS was the only boundary and it said membership. Proven as a child on a replay: `update medications set dosage='500mg'` → `UPDATE 1`, `delete` → `DELETE 1`. Deleting a schedule also silences the medication reminder. | `0299` + `docs/audit/prescription-write-boundary-check.sql` |
+| **F-G17** | CRITICAL | **A child could rewrite the price of their own chores.** `chores` holds the price list — points, cash_cents, auto_approve_score, the min/max bounds — and `chore_assignments` holds the amount paid; both were UPDATE-able by `is_family_member`, i.e. by the child who gets paid. Three cash-out paths re-read the tampered value instead of re-deriving it, and setting `auto_approve_score = 0` takes the parent out of the loop so the **service role** stamps the payout. 0223's guard could not see it: it fires only on a transition INTO approved/rejected, so an UPDATE changing only `cash_awarded_cents` on an already-approved row passed untouched. Found from opposite directions in the same window by Pass G's Claude-3 (live, on the replay) and Claude-4 (from the app side, which also caught a second `createChoreAction` whose doc comment says "Parent creates a chore" and which checked nothing). Fixed with two different shapes: `chores` writes become managers-only, while `chore_assignments` is restricted BY COLUMN so a member can still submit their own work. | `0303` + `docs/audit/chore-price-write-boundary-check.sql` + `tests/chore-price-is-a-managers-to-write.test.ts` |
+| **F-G18** | CRITICAL | **A child could set the price of their own reward redemption.** `economy_redemptions_insert` constrained one column — `family_id` — so cost, member_id, status and the decision fields were all the caller's, and `economy_decide_redemption()` debited `v_redemption.cost`: the number on the row the child wrote. It locks the `economy_rewards` row two statements earlier, for STOCK, and never read the price off it. Proven live: a 5000-star reward redeemed for **one star**, a row forged already `fulfilled` with a parent's id in `decided_by`, and a redemption billing the *parent's* balance. The asymmetry that found it: the sibling table `reward_redemptions` has carried a decision guard since 0295 — two tables doing the same job, one guarded. `0303` did not cover this; it is the same defect one module over. | `0304` + `docs/audit/economy-redemption-price-check.sql`, which proves the second lock independently of the first |
+| **F-G14** | HIGH | **"Today" was the server's today on the child's own dashboard and in every notification.** `setHours(0,0,0,0)` is the host's midnight — 17:00 in California on a UTC box — so a child opening the kids page after 5pm saw tomorrow's events and lost today's, every day, and a Pacific family was told an 8pm event was "tomorrow". F-017's guard could not see it: it flags `toISOString().slice(0,10)` beside a DATE column, and these are `setHours` against TIMESTAMPTZ. `lib/server/notifications.ts` already resolved `families.timezone` for its medication window — the value was simply never threaded into `timeLabel`, which also rendered the clock with no timeZone at all. Both now routed through `dayKeyInTz`/`zonedDayBoundsMs`. **2 of 19 server-side sites**; the other 17 each need their own decision about which family's day they mean, and are held by a ratchet. | `tests/server-midnight-is-not-the-familys-midnight.test.ts` — fails on an eighteenth site AND on a stale entry |
+| **F-G13** | HIGH | **A caller-chosen ceiling truncated a money read and reported success.** `readAll`'s two exits were asymmetric: the default ceiling errored, a caller's `max` returned `error: null` — so `{ max: 20000 }` could not tell "the table has 14,000 rows" from "it has 400,000 and you got the first 20,000". The reconciler's read is platform-wide and ordered `created_at DESC`, so the rows dropped are the OLDEST: a ledger reconciled from its newest 20,000 rows is arithmetically wrong, and the page rendered "Everything reconciles" from that prefix. Found by Pass G's Claude-4; independently the same defect as F-F01. Now `truncated` is reported, told apart by one single-row probe past the ceiling (a table of exactly `max` rows is complete, and the loop exits identically either way), and `failOnMax` turns it into the error the five summing call sites already render. `wallet/activity` keeps the silent ceiling on purpose — it lists rather than sums. | `tests/supabase-read-all.test.ts`, five new cases |
+| **F-G05** | HIGH | **A scam call could be transferred instead of hung up.** `parseDecision` validated presence, not membership, then assigned `JSON.parse` output into a type promising four specific words. The screening route branches on `action === 'hang_up'` / `risk === 'definite_scam'` to choose between ending the call and transferring it to the member being screened for — and the caller's speech is untrusted input to the model that produces those words, as the system prompt itself states. `endScreening` also writes all three into CHECK-constrained columns, so an unlisted value raised 23514, the update was discarded, and the session stayed `active` with nobody told. | `tests/guardian-screening-decision-is-validated.test.ts` |
+| **F-G02** | HIGH | **Every child row on `/wallet/treasury` was a 404.** `ChildRow` linked to `/wallet/wallets/${id}`; no such route, no redirect, and exactly one reference in the repo. The identifier was correct and the wallet dashboard already linked to `/wallet/children/${id}` from the other surface. Independently found by Pass G's Claude-4 link cross-check. | `tests/internal-links-resolve.test.ts` — 237 hrefs resolved against the real route tree |
+| **F-G08** | CRITICAL | **A child could write an allowance rule, and the service-role cron minted the money.** 0217 narrowed writes to `can_manage_family` on five wallet tables; six more from the same 0088 loop were never on the list and kept its permissive `FOR ALL … is_family_member`. The direct mint 0217 closed was reopened one level up: a child could not insert a `wallet_transaction` but could insert a **rule**, and the nightly cron — service role, RLS bypassed — credited `rule.amount_cents` with no check on its author. Found by Pass G's Claude-3 and proven on a live replay: the child's `wallet_transactions` insert is refused while `insert into allowance_rules (… 999999 …)` returns `INSERT 0 1`. Every one of the eleven app write paths to the six tables is already `isManager`-gated, so the database was simply behind the code. | `0298` + `docs/audit/allowance-rule-write-boundary-check.sql`, and an author check in the cron itself |
+| **F-G10** | MEDIUM | **The two records a child has the most motive to edit were the child's to edit.** `grades` and `screen_time_limits` each carried one `FOR ALL … is_family_member` policy, written directly from the browser, and neither module has a role gate of any kind — so unlike the medications module, no layer was claiming a boundary. Closed with two **different** rules: a limit is set on a child by a parent, so writes are managers-only; a grade is not, so any member may record one and only its author or a manager may rewrite it. Fixing what is defective without quietly removing a feature. | `0300` + `docs/audit/child-record-write-boundary-check.sql`, plus the screen-time module's own gate |
+| **F-G11** | MEDIUM | **A policy named "Managers manage child_logins" was predicated on membership** — and `behavior_logs`, the repo's own "behaviour notes about children", let the child a note is about rewrite it. Not an escalation on child_logins (sign-in derives both email and password from `row.username`), but a child could delete a sibling's login row: a denial of service against an access-control record. Closed with the two rules this sweep settled on. `child_logins` turned out to be fixed first by the parallel session's `0297`, which keeps the policy's name and re-predicates it — and found the sharper impact: the username is an INPUT to the child's credential derivation, so renaming a sibling's row locks that sibling out. This session's migration for it was withdrawn rather than duplicated; `0302` now covers `behavior_logs` alone, and the probe asserts both halves. | `0297` (theirs) + `0302` + `docs/audit/access-record-write-boundary-check.sql` |
+| **F-G15** | MEDIUM | **One inbound message could send the family two urgent 🚨 texts.** Three sibling contact-centre routes escalate a genuine urgency to the family's human fallback number, and all three call `recordInboundMessage`, which answers `inserted: false` on a provider redelivery. The **email** route gates its escalation on that flag; the SMS and voicemail routes gated only the planner routing — and wrote the reasoning down while doing it (*"Twilio retries a transcription callback, so only a delivery that was actually new reaches the planner"*) — while the two side effects that reach a person ran on every redelivery. The correct form already existed in the same directory, which is how "this is deliberate" was ruled out: one of three is not a policy. | `tests/inbound-escalation-fires-once.test.ts` — scoped to the condition, because a bare `toContain('filed.inserted')` would have passed on the planner check alone |
+| **F-G16** | MEDIUM | **An outage rendered as a fact about the family.** `settleAll` answers `{ data: null, error }` so one failed read cannot reject a page's batch — and sixteen server surfaces destructure `{ data }` and drop `error`, so the list renders empty and the outage becomes a claim. Two are sharp: `/dashboard/conflicts` said "no conflicts" on the page whose job is finding them, and `/dashboard/family-access` said a family has no kid logins and offered to create them. The repo already states the principle on the page that gets it right — the kids page's "reassuring-but-wrong, motivation-affecting lie" — so this is a convention applied unevenly, not an absent one. Both fixed; the other fourteen are display lists and each needs its own translated error string, which is a translation task rather than a code one. | `tests/a-failed-read-is-not-an-empty-table.test.ts` — a ratchet that fails on a fifteenth AND on a stale entry |
+| **F-G01** | MEDIUM | **Two integrations had no documented switch, one of them on a daily cron.** Six operator-facing variables (`GITHUB_*` ×4, `APPLE_*` ×2) existed only in `lib/`. `grep -i github .env.example` returned nothing, while `/api/cron/feedback-github-sync` has run daily throughout — and, because it reports only when `result.configured`, silently. Supersedes the OPEN "19 environment variables are undocumented" in `audit/claude-1.md`. | `tests/env-example-covers-runtime-config.test.ts`, both directions |
+| **F-G04** | MEDIUM | **A whole feature queried the database outside the typed layer, behind types that enforced nothing.** Eight `guardian_*` tables were absent from `database.types.ts`, so 27 queries went through casts and the audit insert through `as never`. `lib/supabase/guardian-tables.ts` declared all eight row shapes correctly and wired them so none of them applied — the row types were a key constraint and nothing more. Declaring the tables raised nine previously invisible type errors, two of which were real defects (F-G05, F-G06). | the type declarations themselves; `tsc` |
+| **F-G06** | MEDIUM | **Three inbound Twilio callbacks consumed the event before checking `To`** — the only field that identifies the family. A null `To` makes PostgREST compare against the literal text `'null'`, so the lookup matched nothing while the callback was already claimed and its redelivery dropped as a duplicate. Found by the typed layer; two of the three were hidden by a `Record<string, string>` cast. | guard moved before the claim in all three routes |
+
+## Open, with live evidence
+
+| | Severity | Finding | Source |
+|---|---|---|---|
+| **F-G09** | HIGH | Health records readable **and writable** by a child. The **write half on prescriptions is fixed** by `0299`: `medications` and `medication_schedules` are managers-only, proven behaviourally. Still open, and filed as owner decisions rather than guessed at — **reads** (a child can still read a parent's prescription; narrowing SELECT would hide family-wide rows from children), and **`immunizations` / `health_visits`**, whose modules carry no role gate at all, so tightening the database alone would leave a UI whose Add button fails. `medication_doses` is deliberately left member-writable: the person taking the medicine records it. | `0299` + `docs/audit/prescription-write-boundary-check.sql`; the rest in `audit/claude-1.md` A3-009 |
+| **F-G12** | LOW | **Two icon-only buttons had no accessible name; one deletes a guardian contact.** Found by Pass G's Claude-2. Fixed with `aria-label` following the house pattern, the two strings taking each locale's own existing translation of "Edit" and "Delete" rather than an invented one. Guarded by a scan of every single-line `<button>` in `app/` and `components/`: two unnamed controls out of several hundred icon buttons, so this is a guard against the third rather than a campaign. | `tests/icon-only-buttons-have-a-name.test.ts` |
+| F-G07 | LOW | `demo_sessions` and `demo_email_uses` exist in the schema and no code reads them. Deliberately not actioned: dropping production tables is not worth the risk for tidiness. | `audit/claude-1.md` |
+
+One Pass G finding is recorded as **not** a defect: C2-12 reported `/sitemap.xml`
+and `/robots.txt` as links to routes that do not exist. Next serves both from
+file conventions — `app/sitemap.ts` and `app/robots.ts` are metadata routes the
+framework mounts — so a scanner looking for `{page,route}` files could not match
+them. The correction sits beside the original claim in `audit/claude-1.md`
+rather than replacing it in Claude-2's file.
+
+Pass G's Claude-2 recorded 17 frontend findings (dead Tailwind utilities verified
+against the built CSS, keyboard access on content rows, icon-only control names,
+WCAG contrast computed from the design tokens) in `audit/claude-2.md`, and
+Claude-4 four flow findings in `audit/claude-4.md`. Both stopped early; neither
+is a completed sweep, and both files say so.
+
+## Method note
+
+Every fix in this pass was proven by reverting it and watching the guard go red,
+not by inspection:
+
+- The invite probe, run against the replayed database with 0004's original
+  policy restored, fails at *"an invitee rewrote the role on their own invite"*.
+- Restoring the presence-only `parseDecision` fails exactly the three membership
+  tests and passes the other three.
+- Restoring `/wallet/wallets/` fails the link test, naming the line.
+- Deleting the `GITHUB_TOKEN` and `APPLE_SYNC_ENABLED` lines and restoring
+  `TWILIO_CALLER_NUMBER` fails all three env assertions.
+
+All migrations replayed with 0 failures; every boundary probe passes, the five
+new ones included. The counts moved with each commit in the sweep, so they are
+recorded per-commit rather than frozen here.
+
+---
+
+> **Two sessions each appended a section called "Pass G".** They ran at the same
+> time against the same repository and neither could see the other's heading.
+> Both are kept, in the order git merged them: this session's above, the
+> parallel session's below. Their finding ids do not collide (`F-G01`–`F-G15`
+> here, `G1`–`G2` there), and one of their findings — three boundary probes that
+> passed while testing nothing — is a result about the instruments this whole
+> document depends on, which is worth more than most defects in it.
+>
+> They also found and fixed `child_logins` independently, as `0297`. This
+> session's migration for it was withdrawn rather than duplicated: see
+> `0302`'s header.
+
 ---
 
 # Pass G — the audit's own instruments, and the list the database ignores
@@ -25232,6 +25479,216 @@ escalation is live in production until then.**
 
 ---
 
+# Pass M — the paywall, the health records, the locator and the catalogue
+
+Four findings raised by the specialist workers, verified independently and
+closed, plus two the fixes themselves uncovered. All on
+`claude/bubaly-repo-connect-etzqg7` (PR #548), all proven by reverting the fix
+and watching a guard name the exact defect.
+
+## M1 — CRITICAL: a family could write the row that decides what it paid for
+
+`subscriptions` IS the paywall. `lib/server/plan.ts` reads it with the
+**service-role** client, deliberately, and its own header says why: *"Reading
+the family's own plan is a trusted, server-side gating concern, so we use the
+SERVICE-ROLE client to bypass RLS entirely and read the real plan."*
+
+The real plan was the customer's to write. 0004's `subs_manage`, re-asserted
+verbatim by 0118, grants ALL to `is_family_admin(family_id)` — the parent being
+charged. `billing_manage` does the same for `billing_customers`. And
+`families_update` is `can_manage_family(id)` with no column restriction, while
+that same trusted read takes `trial_ends_at` and `closed_at` from it.
+
+Measured on a replayed database as a real `authenticated` parent under RLS:
+
+```
+update subscriptions set plan='family_plus', status='active' ..... UPDATE 1
+update families set trial_ends_at = now() + '3650 days' .......... UPDATE 1
+insert billing_customers (customer_ref='cus_<another family>') ... INSERT 1
+```
+
+Three consequences, ascending:
+
+1. **The paid product, for free.** `planLevel(s.plan)` over active/trialing rows
+   is the entitlement.
+2. **The trial never ends** — and the sharpest form is not extending it but
+   `trial_ends_at = null`, which `computeEntitlement` reads as GRANDFATHERED,
+   turning "locked, must buy" into permanently unlocked in one word.
+3. **Another family's Stripe account.** `/api/billing/portal` hands
+   `customer_ref` to `stripe.billingPortal.sessions.create({ customer })` with
+   no ownership check. A parent who writes another family's `cus_…` into their
+   own row opens the billing portal **on that customer** — their invoices, their
+   card, their cancellation. Cross-tenant, and not about money the attacker
+   saves.
+
+**0306** is a REVOKE rather than a narrower predicate, because there is no
+narrower predicate to write: no legitimate session-client write to either table
+exists anywhere in the repo. Every writer was already the service role, and the
+two that were not — the `billing_customers` upserts in `billing/checkout` and
+`billing/change-plan` — moved there in the same commit. **The database was
+simply behind the code.** `families` keeps its UPDATE and gains a trigger
+pinning the two columns that are entitlement wearing a profile table's clothes.
+
+Guard: `docs/audit/paywall-write-boundary-check.sql`, plus
+`tests/entitlement-is-never-written-by-its-own-customer.test.ts`, which resolves
+which CLIENT each write was built on — because F5 means code reaches production
+before migrations do.
+
+## M2 — HIGH: nine health tables let any member rewrite any other member's record
+
+The shape 0300 closed on `medications`, on nine tables it did not reach. All are
+written directly from the browser and `grep -n 'isManager\|role ==='` over the
+six modules that write them returns **nothing** — RLS was the only boundary.
+
+**0307** applies **two rules, because these are not one kind of record**:
+
+- a log you keep about yourself (`symptom_logs`, `health_metrics`,
+  `health_goals`, `sleep_logs`, `sleep_checkins`, `nutrition_logs`) — a manager,
+  the author, **or the member the row is about**. The subject matters because
+  three of these upsert on `(member_id, date)`, so the day's second entry is an
+  UPDATE, and an author-only rule would refuse a child correcting their own log
+  the moment a parent recorded one for them.
+- a record of medical fact about someone (`health_visits`, `immunizations`,
+  `care_log`) — a manager or the author, and **not** the subject. A child
+  deleting the record of their own vaccination is the defect, not the feature.
+
+INSERT and reads are untouched: 0300 filed those as owner decisions and this
+answers neither.
+
+## M3 — HIGH: "Strictly self-only" was true of the action and false of the database
+
+`app/(app)/dashboard/locator/actions.ts:30` states the rule in as many words,
+and both writers keep it. The tables did not: a child could move a parent's dot,
+take a parent off the map, fabricate an arrival that notifies the family as
+**urgent**, erase their own departure event, and delete another member's "I am
+safe" — the check-in view's `remove(id)` deletes by id with no author check.
+
+**0308**, three shapes: your own current position (a manager may clear a stale
+row); an **append-only** trail, in `wallet_audit_logs`' idiom, with no UPDATE
+policy at all and only a manager deleting; and a check-in whose "self" is
+established by `created_by` as well as `member_id`, because `member_id` is
+nullable there.
+
+## M4 — HIGH: the English catalogue shipped as JavaScript on every page
+
+`lib/i18n/scopes.ts` had cut the catalogue out of the **RSC payload** — "from
+246 KB of compressed strings to about 2 KB". It could not touch the JS side,
+because there the catalogue arrived through an **import**: the root layout's
+`LocaleProvider` imported `translate` from `lib/i18n/messages`, whose English
+fallback kept en-US.json alive through tree-shaking. 818,132 bytes raw,
+**244,556 gzip**, in a chunk listed for every layout — 62.4% of the marketing
+home page's first-load JavaScript.
+
+The primitive moves to `lib/i18n/translate.ts`, which imports no catalogue;
+`messages.ts` keeps the falling-back wrapper for server callers. The four
+`app/global-error.tsx` keys — which render above every provider and were covered
+by that fallback **by accident** — are inlined.
+
+**Measured on a real production build afterwards: no inlined JSON blob over
+2 KB survives in any chunk**, and the largest remaining chunk is 54 KB gzip
+against the old catalogue's 244 KB alone.
+
+## M5 — HIGH: Approve and Reject failed in complete silence
+
+Four missions actions typed `Promise<void>` with seven, five, five and three
+bare `return;` exits and `revalidatePath` on the success path only. The sharpest
+was `finalizeApproval` throwing — the wallet credit — because by then the
+assignment had already flipped to approved: the rollback runs, the queue keeps
+the item, and a reward that is owed is recorded nowhere.
+
+The shape was never in doubt: `submitProofAction`, in the same file, already
+returned `{ ok, error }` with eight messages that the kid's submit form renders.
+**The child was told why their submission failed; the parent was told nothing
+when the approval did.**
+
+All four now return `{ ok, error }`; the review card, a new client wrapper on
+the create form, and the AI plan generator render it. The plan generator had
+also been marking suggestions "Added" unconditionally, including when the chore
+was refused or rolled back.
+
+## M6 — MEDIUM: the i18n gate scanned one file and called it "the app chrome"
+
+`scanPaths` walks the filesystem, not the import graph, so
+`'app-shell': ['components/app/app-shell.tsx']` gated one file while the two
+chrome components it renders shipped ten English strings to every non-English
+family on all 354 signed-in pages.
+
+Both halves taken — the strings lifted with `TYPES` holding **keys**, and the
+surface widened to `components/app` — and the widening found **three more**
+nobody had: density labels parked in `lib/ui/role-surface.ts`, a template
+literal that hid an English sentence from the gate entirely, and both paywall
+taglines. All eight gated surfaces now report clean.
+
+## Two things this pass got wrong first, and fixed
+
+Recorded because both are the failure modes this kind of work is most prone to.
+
+1. **A probe that asserted a refusal against a write that had nothing to do.**
+   The first draft of the paywall probe checked that a parent cannot clear
+   `closed_at` — on a family whose `closed_at` was already NULL. `is distinct
+   from` is not violated by writing the value a column already holds, so the
+   refusal never fired and the probe read the no-op as a guard.
+2. **A guard that reported ~30 false positives on its first run.** The
+   catalogue-bundle test walked the import graph without stopping at server
+   boundaries, so every client component importing its own `'use server'` action
+   looked like a leak. Next replaces that import with an RPC reference and never
+   bundles the action's graph. The walk now stops at `'use server'` (matched
+   under a leading comment block, which is how every action file here is
+   written), `import 'server-only'`, and `next/headers`; and type-only imports,
+   which the compiler erases, are no longer counted as edges.
+
+## What the catalogue fix cost, and why it was paid
+
+Removing the English fallback broke ~12 test files that rendered client
+components **outside every provider** and relied on it. That is a real signal
+and was worked file by file rather than papered over: they now render through a
+real `LocaleProvider` (`tests/helpers/render-translated.ts`), which is what the
+app does. `app/layout.tsx` wraps the entire tree, so a component rendered
+outside every provider is a configuration the product never ships — the one
+exception, `app/global-error.tsx`, has its four strings inlined for exactly that
+reason.
+
+## Coordination
+
+Third and second migration-version collision of the sweep, both with the same
+parallel session. Main landed `0298_invites_update_manager_only` for the invite
+hole this branch also held a 0298 for; **0298 keeps the policy** and mine is
+renumbered to 0305 and rewritten to carry only the half it does not — the
+trigger fixing an invite's terms at issue.
+
+`lib/supabase/read-all.ts` was fixed by both sessions at once, and on one point
+the two **disagreed**. Main makes every truncated read an error; this branch made
+it silent unless the caller asked. Main's default is the better one and was
+taken: silence-by-default puts the error out of reach of exactly the call site
+nobody thought about, which is this module's own defect one level up. So
+`failOnMax` survives **inverted** — the default errors, and `failOnMax: false` is
+the explicit opt-out, passed at exactly one site (`wallet/activity`, which lists
+newest-first, so for a family with more than 2,000 transactions the 2,000 most
+recent ARE the answer). Main's probe row also rides along on the last page's
+range, one fewer round trip than this branch's follow-up request.
+
+Four of main's test cases were red against this branch's version when the two
+met. They were not adjusted to fit: the implementation changed to match them.
+Their tests were encoding the better rule.
+
+## Verification
+
+- **321/321 migrations replayed on PG16, 0 failed** · **29/29 boundary probes**
+- `npx tsc --noEmit` clean · `npx eslint` clean on every changed file
+- `npm run build` exits 0; bundle measured as above
+- All eight i18n gated surfaces clean
+
+**Status: the three migrations are FIXED IN CODE, NOT YET IN PRODUCTION**, like
+0296–0298 before them: inert until the F5 ledger blocker is cleared. **The
+paywall bypass and the cross-tenant billing-portal path are live in production
+until then.** The code-side changes — the two billing upserts moving to the
+service client, the missions result types, the catalogue split — ship on merge.
+
+---
+
+<!-- Two sessions appended to this file concurrently. Both blocks are kept in
+     full and in the order they were written; neither displaces the other. -->
+
 ## Pass M — a CRM identity decided by a column its subject can rewrite
 
 **F-M01 — a stranger's `crm_contacts` row could be taken over and overwritten.**
@@ -25688,36 +26145,4058 @@ with one new string added to all seven populated catalogues. The new guard is
 verified load-bearing in both directions — removing one `.select('id')` turns it
 red with file, line, table and operation.
 
+# Pass P — the specialist workers' backlog, re-checked rather than taken on report
+
+Six commits on `claude/bubaly-repo-connect-etzqg7` (PR #548), working the OPEN
+findings in `audit/claude-2.md`, `-3.md` and `-4.md`.
+
+**Lettered P, not N.** Passes N and O were claimed by PR #556, which had not
+merged into this branch. Pass L was independently used by two sessions for
+different work and had to be relabelled `L′` after the fact; skipping two letters
+costs nothing and avoids repeating that.
+
+*Confirmed by events:* `main` has since landed its own **Pass N** (the public
+bucket named with `Math.random`, PR #558), which appears immediately above. Had
+this pass taken N, that would have been the second L-collision. O remains claimed
+by #556.
+
+**The method, and what it kept finding.** Every reported finding was verified
+against current source before being worked. That is not ceremony: **six of the
+twelve were already fixed**, two of them by commits earlier in this same session.
+Of the six that were real, **four were larger than reported** — the reporter had
+named one instance of a class, and sweeping by *shape* found more:
+
+| reported | swept by shape | found |
+|---|---|---|
+| `marketplace_orders_update` | `pg_policy` where `with_check ≠ qual` | the `marketplace_offers` twin |
+| "14 bare `.message` returns" | a test, not a grep | **78**, in 30 files |
+| three `===` secret comparisons | every `=== … secret\|Bearer` | a fourth, `hasInternalSecret` |
+| eleven server-midnight surfaces | the repo's own ratchet | the worst one, in `scheduling.ts` |
+
+## P1 — MEDIUM: an UPDATE policy that guards the row you may touch, but not the row you turn it into
+
+`marketplace_orders_update` and `marketplace_offers_update` each restricted
+*which row* you could write — only the two parties, only the offerer or the
+listing's owner — and then let you rewrite it into a row you would never have
+been allowed to touch, because the `WITH CHECK` was `is_family_member(family_id)`
+and nothing more. The asymmetry `0297` fixed on `invites_update`.
+
+Swept by shape: the class has four members in `public`, and the other two are
+healthy — `member_locations_self_update`'s `WITH CHECK` is a strict **superset**
+of its `USING`, and `approval_requests_cancel_own` disagrees with its `USING` **on
+purpose** (`pending` in, `cancelled` out). So the rule in `0311` is *containment*,
+with that one transition guard named and its reason written down. My first sweep
+asserted equality and failed the replay by naming both healthy policies — worth
+recording, because a sweep that is too strict fails loudly, while the
+length-based filter I had used before it would have let a weaker-but-wordier
+`WITH CHECK` through in silence.
+
+Two rules, because the policy alone is not enough: `WITH CHECK` is a
+*disjunction*, so a seller still satisfying `seller_member = me` in the new row
+passes it while rewriting the buyer. `0311` carries the `USING` into the
+`WITH CHECK` **and** freezes the deal's terms with a trigger that does not care
+which branch admitted the row. Proven independently: five denials fire when only
+the triggers are dropped; a sixth — a listing owner pulling someone else's offer
+onto their own listing — survives that and fires only when the `WITH CHECK` is
+reverted.
+
+## P2 — MEDIUM: the database was talking straight to the browser
+
+`describeDbError` classified ten shapes and returned the raw Postgres string for
+everything else, and **78 server sites never called it at all**. An enum coercion
+answers with the whole grammar of a type: *invalid input value for enum
+`redemption_status`: "bogus"*. On the AI paths it goes further than the browser —
+`lib/ai/tools/*` put the string into `fail()`, which reaches the model's context.
+
+The line drawn is not *raw* vs *described* but **who wrote the string**: an error
+carrying a Postgres code came from the database; one without a code the
+application threw itself, and `throw new Error('Pick a date first')` is still the
+best thing to show. Client components are deliberately untouched — that error
+arrived from PostgREST in the browser's own memory.
+
+**One existing test was asserting the leak.** `twin-project-read-boundary`
+required the caller's error to *contain* `'row-level security'`.
+
+## P3 — MEDIUM: an authorization outcome carried in an English sentence
+
+`requireMarketingAdmin` threw to refuse and the status it deserved lived in the
+wording. Two routes recovered it by reading that English back, and the AI route
+matched on `'Forbidden'` — a word that module has never said — so a non-admin was
+answered **500 "Could not generate. Check that the OpenAI API key is set."** The
+failure that is nobody's fault was the one that paged.
+
+**The first fix was wrong and is now pinned.** `describeActionError(err)` looked
+right, since a `MarketingAuthError` carries no Postgres code. It is not:
+`describeDbError` matches `'permission denied'`, the refusal says *"do not have
+permission to manage"*, nothing classifies it, and the caller gets *"Something
+went wrong. Please try again."* — a refusal reported as a generic fault, which is
+the defect this change exists to remove, arriving by a different road.
+
+## P4 — HIGH: a family's day did not turn over at their midnight
+
+`setHours(0, 0, 0, 0)` is the SERVER's midnight — 17:00 in California on a UTC
+host. Eleven of seventeen tracked sites converted.
+
+**The sharpest was not in the report.** `lib/calendar/scheduling.ts` types
+`WorkingHours` as *"local hours, e.g. 9–17"* and applied them on the host, so a
+Californian family's working window was proposed as 09:00–17:00 UTC = **01:00–09:00
+local**: the AI schedule route suggested meetings in the middle of their night and
+treated their real working day as busy.
+
+Three sites show the defect a layer out, where a correction reached one
+expression and not the next — `moments/page.tsx` resolved *today* in the family's
+zone and *tomorrow* in the host's, two lines apart.
+
+Two shapes chosen so the next caller cannot get it wrong: `weekStrip` takes a day
+**key** rather than a `Date`, which removes the zone question instead of
+answering it; `gatherSignalsResult` resolves the zone itself rather than
+accepting an optional one that would default to the host at whichever of its six
+callers forgot.
+
+`dueLabel` is deliberately **not** converted: its only caller is a client module,
+where `new Date()` is the user's own device clock and already right.
+
+## P5 — MEDIUM: the undo was on a clock nothing could stop
+
+The toast auto-dismiss called `setTimeout` for its side effect and discarded the
+id, and the stack had no hover or focus handler — so WCAG 2.2.1's three options
+(pausable, extendable, turn-off-able) were all absent. For the three toasts that
+carry "Undo" the toast **is** the undo, and the stack renders after `{children}`,
+so a keyboard user tabs the whole page to reach it inside seven seconds.
+
+## Filed rather than fixed
+
+**A removed member is silently handed a new, empty family.** The security question
+the report left implicit is **answered and closed**: `ensure_family_for_user`'s
+`on conflict … set is_active = true` targets the family inserted two statements
+earlier, so it cannot reactivate the membership they were removed from — proven by
+driving the real RPC against a real replay after a real removal. What remains is
+that they are told nothing, and that **every removal-then-login mints a fresh
+14-day trial** (measured; not in the original report). Filed because the remedy is
+an interstitial whose copy is a product decision **in eleven locales**, and it
+cannot ship English-only now that `translate`'s English fallback is gone.
+
+## Things this pass got wrong first
+
+Recorded because the failure modes matter more than the fixes.
+
+1. **A fifth prose-as-code instance, and it was mine.** The secret-comparison
+   sweep flagged the doc comment explaining it — *"`secretEquals` rather than
+   `===`"*. Safe direction; comments are stripped now, line-preservingly.
+2. **A tautological assertion.** `expect(secretEquals('Bearer undefined',
+   \`Bearer ${undefined}\`)).toBe(false)` asks whether a string equals itself.
+   The property belongs to the call site and is tested there.
+3. **A fragile assertion, removed rather than kept.** `indexOf('isMarketingAuthError(')
+   < indexOf('status: 500')` passed a reordering that was merely *correct* — and
+   would have passed broken ones too. Source position is not reachability.
+4. **A mutation harness that clobbered a file.** Two backups named by basename
+   both resolved to `route.ts`. Restored from git; the harness now uses distinct
+   names.
+5. **A migration ratchet bumped one commit late**, so `9d8bea83` was red for
+   exactly one test. The bump belongs in the same commit as the migration.
+
+## One mutation that could not be made to fail, and why that is a result
+
+The DST case in the new scheduling test survives stepping days by a drifting
+timestamp — because each step re-derives the day key and `zonedTimeMs` re-anchors
+from it. The day-key formulation is **self-correcting**, which is the reason to
+prefer it and the reason that assertion is a regression net rather than a proof.
+Recorded rather than dressed up as a seventh caught mutation.
+
+## Verification
+
+- **324 migrations replayed from scratch, 0 failed**; 321 re-applied onto the
+  populated schema (idempotent); **32/32 boundary probes, run twice** for
+  isolation.
+- **13,901 tests green across four shards**; `tsc` and `eslint` clean.
+- CI green on `cde0fa24`, which carries every commit in this pass but the last.
+
+---
+
+# Pass Q — the keyboard, the caret, and two tables that answered everyone
+
+Six commits since Pass P, in two groups: the accessibility backlog the earlier
+passes had counted but never worked, and two more instances of this audit's
+recurring shape — a boundary stated where a reader can see it and absent from
+the layer that enforces it.
+
+## Q1 — MEDIUM: a lint rule that had never been switched on
+
+`4fee904e` turns on the `jsx-a11y` rules and pins them with a ratchet
+(`next lint --max-warnings=86`, down from an initial 100 as the tranches
+landed). **One rule was rejected on evidence rather than adopted wholesale:**
+`label-has-associated-control` cannot see this repository's `Field` wrapper, so
+enabling it would have produced 55 warnings that no correct change could clear —
+a ratchet that can only be satisfied by ignoring it teaches people to ignore it.
+
+## Q2 — MEDIUM: rows you could click and could not reach
+
+`fd9d4ac2` adds `lib/ui/a11y.ts`'s `activatable()` — role, tabIndex, click and a
+keydown honouring Enter and Space — and applies it to the first tranche. The
+helper's doc states **what it is not for**, because the remaining flagged
+elements are exactly those cases: an element already containing a button, a link
+or an input (nesting them is invalid ARIA), and a click-outside scrim (a scrim is
+a mouse affordance, not a control).
+
+**The scrims turned out to be the real finding.** `aria-hidden` + `tabIndex={-1}`
+is an honest description of a mouse-only dismiss — and it also silences the two
+lint rules that were pointing at the gap. Five menus were reachable by keyboard
+with **no keyboard way out**: a user could open one and had to pick something.
+Each now handles Escape on the menu itself.
+
+## Q3 — a sixth prose-as-code instance, and it was mine
+
+The calendar scrim comment I wrote in Q2 said *"the keyboard equivalent is
+Escape, handled on the menu itself"*. No Escape handler existed. Making the
+comment true then surfaced four more pre-existing scrims in the same state,
+plus one the lint ratchet found that **my own grep had misread**. Six instances
+of this shape are now on record in this audit; two of them are mine.
+
+**One guard was abandoned rather than shipped.** A scanner meant to prove "no
+nested interactive element" read a 25-line window and reported
+`notes-module:310` clean; its nested buttons were 34 lines down. A guard
+demonstrated unsound is worse than none, because it is cited.
+
+## Q4 — HIGH: typing in a dialog moved the caret to the first field
+
+`10a2615a`. `components/ui/modal.tsx`'s focus-trap effect depended on
+`[open, onClose]`, and **92 of 226 call sites pass an inline
+`onClose={() => setOpen(false)}`** — a new function identity on every render of
+the component holding the dialog's form state. Every keystroke tore the effect
+down and set it up again, and both halves move focus: cleanup calls
+`previouslyFocused.focus()` (by then the trigger *behind* the dialog) and setup
+focuses the first control. Measured with the caret in the third field: focus went
+trigger → field one, per character.
+
+`onClose` now lives in a ref and the effect depends on `open` alone. Nothing
+about the trap needs rebuilding when a handler's identity changes; it needs the
+*current* handler only when Escape is pressed.
+
+**One existing assertion changed, and it is not a weakening.**
+`modal-a11y-contract.test.ts` matched the source against `/onClose\(\)/` — a call
+spelling, not a behaviour. It now accepts either spelling and defers to the new
+test, which *exercises* Escape reaching the current handler.
+
+## Q5 — MEDIUM: a journal anyone in the house could rewrite, delete or forge
+
+`cff4e2eb` / **0315**. Raised by Claude-3, verified still open.
+`journal_entries` had one policy — `FOR ALL using/with check
+(is_family_member(family_id))` — and the module is a client component talking to
+PostgREST with the anon key, so RLS was the only boundary. **Two places already
+called this data private and neither was the database:** the module header
+("Personal Journal … scoped to the signed-in member") and
+`lib/ai/context/policy.ts`, which excludes the table from AI context with the
+reason "private journals". Reads stay family-wide and are **asserted so**, since
+both readers already scope to self and narrowing is an owner's call.
+
+**The first draft shipped a forging hole and the probe caught it on its first
+run.** Reusing 0308's `is_self_member(member_id) or created_by = auth.uid()`: on
+INSERT a child sets `member_id` to the parent and `created_by` to themselves, and
+the second branch is true. **`created_by` says who typed it; `member_id` says
+whose journal it is**, and only the second is the question. The general lesson:
+an idiom lifted from a neighbouring migration is not automatically right.
+
+## Q6 — MEDIUM: every member read every member's diagnoses, and the obvious fix would have shipped an allergy
+
+**0316.** Raised by Claude-3, verified still open — and closed **differently from
+the recommendation**, which is the substance of this entry.
+
+`medical_profiles` (blood type, allergies, conditions, current medications,
+physician, pharmacy, emergency contacts, one row per member) read
+`is_family_member(family_id)`. Any member selected every row. **0009 stated the
+intended rule and the actual rule in two consecutive sentences:** *"everyone in
+the family can READ … This is what enforces 'children view their own info
+read-only' at the database boundary."* Three surfaces state the manager gate —
+`family-health` and `family-emergency` read only `if (manager)`, and
+`pantry-chef/route.ts:129` gives *"medical_profiles is manager-gated to clients"*
+as its reason for using the service client. A server component that declines to
+read is not a boundary, and a child did not need one anyway:
+`medical-records-module.tsx:78` selects `*` for the family and renders a card per
+member, gating only the pencil.
+
+**Why the recommended fix was not safe.** Two readers it glossed —
+`lib/services/groceries/index.ts` and `lib/services/meals/index.ts` — read
+**family-wide allergies through the caller's own client**. The groceries read is
+fail-closed and says why: *"putting peanut butter on the list because
+`medical_profiles` was unreachable is exactly the failure this rule exists to
+prevent."* It checks `error`. **RLS does not error — it returns fewer rows.** A
+narrowing alone would hand a child `{ data: [], error: null }`, the guard would
+pass, and the planner would call the household allergy-free. **The privacy fix
+would have shipped the exact failure that comment exists to describe, by the one
+route it did not cover.**
+
+What shipped: SELECT narrows to
+`is_family_member and (can_manage_family or is_self_member(member_id))`, and
+`allergies` gets its own door — `family_allergies(p_family_id)`, security
+definer, returning `(member_id, allergies)` and nothing else to any member of
+that family, re-checking membership **inside** the function. It **raises** for a
+non-member rather than returning zero rows, which makes the new path *stricter
+than the one it replaces*: the direct select answered a non-member with
+`{ data: [], error: null }` and the fail-closed guard had nothing to catch.
+
+Left for a separate change, and said so in the migration rather than left to be
+discovered: `medications` and `symptom_logs` carry the same per-member shape and
+the same family-wide SELECT, and `app/api/ai/health/coach/route.ts` — which has
+no family check of its own — still reaches any member's meds and symptoms
+through them.
+
+## What the test suite earned this pass
+
+Three bespoke test fakes went red on the 0316 repoint with *"Could not read the
+family food preferences"* — **the allergy-blind path itself**, surfaced by fakes
+that had no `family_allergies`. The shared `tests/helpers/in-memory-supabase.ts`
+now serves it from the backing table, so the fake stays honest about a schema
+where a select and that call are no longer interchangeable.
+
+## Verification
+
+- **329 migrations replayed from scratch, 0 failed**; 326 re-applied onto the
+  populated schema (idempotent); **37/37 boundary probes, run twice** for
+  isolation.
+- **13,987 tests green across four shards under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**; `tsc` clean; `eslint` at the 86-warning ratchet.
+- Every migration and every service change in Q5 and Q6 was mutation-tested;
+  nine mutations across the two, each naming its own defect.
+
+## Q7 — MEDIUM: eleven tables held shut by a policy on a twelfth
+
+**0318.** Found by sweeping `pg_policy` rather than by any report: fifteen
+policies across eleven tables decide family membership with an inline subquery
+instead of `is_family_member(family_id)` —
+`family_id in (select family_id from family_members where user_id = auth.uid())`
+— with no `is_active`. Removal in this product is exactly
+`update({ is_active: false })`, the auth user survives and the session survives.
+Read as written, that is a removed member keeping read **and write** on the
+family's messages, conversations, photos, albums, contacts, recipes, reminders,
+to-do lists and family tree.
+
+**The demonstration was written to confirm it and refuted it instead.** As a
+removed member on a full replay: every one of those tables returned 0 rows and
+the write was refused. The inline subquery reads `public.family_members`, and a
+policy expression is evaluated as the **calling** user — so that read is itself
+filtered by `fm_select`, which *does* check `is_active`. The member cannot see
+their own membership row, the subquery is empty, the predicate is false.
+
+So the boundary is correct, for a reason none of the eleven policies states.
+This is main's 0303 mechanism — a policy's nested read being subject to the
+caller's own RLS — pointed the other way: there it opened the document vault,
+here it happens to close eleven tables.
+
+**The way it breaks is already on the table.** `audit/claude-4.md:1596` proposes,
+correctly, that a removed member should see "you are no longer part of
+<family>" rather than being handed a fresh empty family — and that screen needs
+to read *their inactive membership row*. Claude-4 specifies the service client,
+where nothing moves. Written on the session client it needs `fm_select` widened,
+and the moment that lands all eleven tables open to every removed member, in a
+commit about an onboarding screen.
+
+0318 changes no behaviour today, and says so. Each policy now checks what it
+depends on; `profiles_select_self` gets the two `is_active` terms its two joins
+never had. **The probe asserts the boundary twice** — as the schema stands, and
+with `fm_select` deliberately widened to that exact shape — and the second
+assertion carries a control for the control, checking the widening actually took
+before concluding anything from it. Reverting the predicates fails only the
+second half, which is the correct result and the reason the probe has two.
+
+This is the mirror of the pattern this audit keeps naming. Eleven instances are
+on record of **a guard that cannot fail**; this is **a guard that holds for a
+reason it does not state**, which survives every test until someone changes the
+unrelated thing it was quietly leaning on.
+
+## Filed, not fixed, from Pass Q
+
+- **The rest of the health tables read family-wide** — `medications`,
+  `medication_schedules`, `symptom_logs`, `health_visits`, `health_metrics`,
+  `health_goals`, `immunizations`, `care_log`, `sleep_logs`, `nutrition_logs`,
+  and 0009's `health_providers` / `insurance_policies`. 0316 is **not** the
+  precedent for narrowing them: `medical_profiles` had three product surfaces
+  stating a manager gate, so the database was drifting from the product. These
+  have none, and **0312 already filed their reads as an owner decision in as many
+  words.** The concrete cost of leaving them open is named rather than left
+  implicit: `app/api/ai/health/coach/route.ts` takes `memberId` from the request
+  body with no family check of its own, so after 0316 it no longer hands a child
+  a sibling's *profile* but still summarises their medications and symptoms.
+- **`nutrition_logs` carries two permissive SELECT policies with identical
+  predicates.** Harmless today; it is exactly the shape that makes a future
+  narrowing a no-op, which is why 0311, 0315 and 0316 each end with a sweep for
+  it. Fold it into whichever migration answers the question above.
+- **`medical-records-module.tsx:385`** tells a non-manager "No profile on file."
+  for a record that exists and is private. Honest copy needs a key in eleven
+  locales, so it is filed rather than invented.
+
+## Verification (Q6–Q7)
+
+- **331 migrations replayed from scratch, 0 failed**; 328 re-applied onto the
+  populated schema; **39/39 boundary probes, run twice**.
+- **13,987 tests green across four shards under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**; `tsc` clean; `eslint` at the 86-warning ratchet.
+- An **eighth** migration-number collision arrived mid-pass — main's
+  `0303_document_bytes_boundary.sql` — and this branch's 0303 was renumbered to
+  0317, with the full replay re-run because moving a migration to the end of the
+  chain is an ordering change rather than a rename. Every merge since 0300 has
+  now brought one.
+
+## Q8 — what Pass Q got wrong, and how it was caught
+
+**0316 shipped red, and the defect was in its probe.** CI on `51ef995e` failed
+one E2E test out of 432 — the concierge loop's "Plan our week" — at step 6,
+`groceries.addFromMealPlan`, with *"You don't have permission to do that."*
+
+`family_allergies()` raised unless the caller was a family member. **Every AI
+tool runs on the service client**: `lib/ai/runs/executor.ts` builds its
+`ServiceScope` from `createServiceClient()` and hands that same `db` to every
+tool, so `auth.uid()` is null on that path and there is no membership to find.
+The direct select the RPC replaced worked there because the service role
+bypasses RLS. The function now exempts it, and says why — the service role
+bypasses RLS on `medical_profiles` itself, so refusing it in a function *over*
+that table is the anomaly, not the safeguard.
+
+The thing worth recording is not the missing branch. It is that the probe
+written specifically to protect the allergy path exercised a manager, a child, a
+caregiver, a non-member and `anon` — five session-shaped callers — and never the
+service role, which is the client half of those services' traffic arrives on.
+**Writing every case you think of is not the same as writing every case there
+is**, and the discipline this audit recommends above all others — break what a
+guard protects and confirm it goes red — only covers the cases the guard knows
+about.
+
+A second near-miss inside the fix: seven migrations here detect the service role
+with `current_user = 'service_role' or coalesce(auth.role(),'') = 'service_role'`.
+The first half is a trigger-function idiom, where `current_user` is the caller.
+Inside SECURITY DEFINER `current_user` is the *owner*, so copying the pair would
+have shipped a condition that can never fire — an eleventh-instance guard that
+cannot fail, added by the commit fixing one. `current_setting('role', true)`
+stands in for that half instead. Twice in this pass now, an idiom lifted from a
+neighbouring migration has not been right: 0315's forging hole was the first.
+
+## Q9 — HIGH: the photo lightbox was a modal dialog that said so nowhere
+
+**C2-01**, raised by Claude-2, verified still open, and deliberately held until CI
+confirmed the Modal caret fix it builds on.
+
+`components/modules/photos-module.tsx` renders a full-screen overlay over the
+gallery with **no `role`, no `aria-modal`, no Escape, no focus moved in, no focus
+trap and no scroll lock**. Its only dismissal was a backdrop click. A keyboard
+user could open a photo and had no way out of it and no way to reach the
+download, favourite or delete controls inside it; a screen-reader user was never
+told a dialog had opened and could walk straight out into the gallery behind.
+
+**The fix is not `<Modal>`.** The lightbox is full-bleed black chrome around a
+photo; `<Modal>` is a titled panel on a blurred scrim, and that swap would be a
+design change wearing an audit fix's clothes. Instead the contract itself moved:
+`useDialogBehavior(open, onClose)` returns the ref to hang on whatever carries
+`role="dialog"`, and owns focus-in, Escape, the Tab trap, focus restore and the
+scroll lock. Two surfaces, one definition.
+
+The extraction improved one thing rather than merely relocating it: the hook
+composes the existing `useLockBodyScroll`, which restores the **previous**
+overflow instead of clearing it, so a dialog opened on top of the app-lock or
+paywall gate no longer unlocks the page underneath when it closes.
+
+**Named without a new string in eleven locales.** `aria-labelledby` points at the
+counter already on screen ("3 / 20") plus the caption when there is one, so the
+accessible name is translated by construction. Arrow keys now walk the gallery,
+which C2-01 asks for: the two chevrons are the only way between photos and they
+**unmount at each end**, so a keyboard user reaching the first photo had to close
+and reopen to see the second. Clamped, not wrapped, because the chevrons do not
+wrap either — and the decision lives in a pure `galleryStep(index, key, count)`
+so the ends, the empty gallery and the "not a step key" case are tested directly.
+
+**Four existing guards had to follow the code, and the interesting part is that
+one of them got stronger rather than looser.**
+`consent-preference-centre-focus` licensed `aria-modal` by NAME
+(`f !== 'components/ui/modal.tsx'`), with nothing checking that file still did
+the work. The licence is now a property: a file may declare `aria-modal` only if
+it takes a ref from `useDialogBehavior` **and attaches that same ref** — a hook
+whose ref never reaches the DOM traps nothing. The eleven-file HAND_ROLLED list
+is untouched and may still only shrink. The other three guards assert every
+property they asserted before, against whichever file now carries it, plus a new
+assertion in each that `Modal` actually calls the hook — without which they would
+be reading code the component no longer runs.
+
+**And the extraction exposed a latent fragility in a test written three commits
+earlier.** `a-dialog-does-not-steal-the-caret` drove `mocks.effects[0]`, assuming
+the trap was the component's first effect. The hook runs `useLockBodyScroll`
+first, so index 0 became the scroll lock: the test would have gone on passing
+while asserting about the wrong effect. It now runs **every** effect and asserts
+that **no** effect depends on the handler identity — more faithful to React, and
+a stronger claim than the one it replaced.
+
+Lint ratchet **86 → 85**, measured rather than assumed: `role="dialog"` clears
+the overlay's `no-static-element-interactions`; its `click-events-have-key-events`
+remains because the rule cannot see a listener attached in an effect, and adding
+an `onKeyDown` to satisfy it when Escape is already handled would be decoration.
+
+Non-vacuity, six mutations, each naming its own defect: drop the ref → two
+lightbox assertions fail **and** the aria-modal licence flags the file; drop
+`role="dialog"`; make `galleryStep` wrap; remove Escape from the hook; make
+`Modal` stop using the hook; remove the scroll lock.
+
+**Verified:** 13,994 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+`tsc` clean, `eslint` at the new 85 cap, `npm run build` exits 0.
+
+## Q10 — MEDIUM: a teen could grade their own driving
+
+**0319.** Raised by Claude-3, verified still open. `driving_trips` and
+`driver_licenses` are the two tables of one feature, added together by 0114, and
+they do not carry the same rule: the licence has
+`can_manage_family or is_self_member` on all four commands, while the telemetry —
+hard brakes, max mph, phone-use seconds and the 0-100 score a parent reads before
+deciding about car keys — has plain membership. The view writes with the anon key
+and has no role gate at all, so RLS is the whole boundary.
+
+**Reading the component changed the fix.** Claude-3 suggested copying
+`driver_licenses`' clause onto UPDATE — but `is_self_member` IS the hole here,
+since that is the driver's own member_id on the row. A licence is a record you
+keep about yourself; a trip is a record OF you. They also suggested narrowing
+DELETE to managers, and the view renders Delete for **every** member, which would
+leave a UI whose primary control fails — the trap 0312 recorded for immunizations.
+
+So UPDATE goes manager-only, which costs nothing because **nothing in the product
+updates a trip**: the view selects, inserts and deletes, and that policy was
+reachable only by a hand-made PostgREST call, which is exactly the threat. DELETE
+goes to `can_manage_family or created_by = auth.uid()` — a trip you logged is an
+entry you may withdraw; a trip your parent logged about you is their record, and
+erasing it is the same act as regrading it.
+
+INSERT stays open, and that was checked rather than assumed: the 0315 instinct is
+to pin `member_id` to self, but the log-trip form picks the driver from a
+dropdown of the whole roster, so one member logging for another is the designed
+behaviour. That a member can log a FAKE trip for someone else is real and is
+filed — it needs a product answer about who may log for whom.
+
+Four mutations, and the third is the one worth noting: narrowing DELETE to
+managers fails the probe with *"a teen can no longer delete the trip they logged
+themselves"*. The positive controls are doing as much work as the refusals.
+
+**Verified:** 332 migrations replayed from scratch (0 failed), 329 re-applied,
+40/40 probes run twice, 13,994 tests green under both zones, tsc clean, eslint at
+the 85 ratchet. One non-reproducing failure of `ai-prompt-injection` in the first
+sweep is recorded in `audit/claude-1.md` rather than smoothed over: 23 subsequent
+clean runs, and ruled out on the diff's contents — 0319 touches only SQL and a
+migration-number comment, neither of which that test imports.
+
+## Q11 — MEDIUM: "fully accessible" was in the doc comment and in none of the markup
+
+**C2-03.** `components/ui/input.tsx`'s `Field` — the wrapper behind **1,066 call
+sites** — described itself as "fully accessible" and rendered three of its four
+affordances as pictures only. `hint` was a `<p>` nothing pointed at. `error` was a
+`<p role="alert">` with no `aria-invalid` on the control, so the message is
+announced once as it appears and tabbing back to the field tells you nothing is
+wrong. `required` was a red asterisk. Only `htmlFor`/`id` worked. **The seventh
+prose-as-code instance this sweep, and the widest.**
+
+One change rather than a thousand: `Field` hands the a11y props to the render
+prop as a typed second argument **and** wires them onto the returned control, so
+existing call sites are fixed without being edited — **1,041 of 1,066, 97.7%**.
+
+The allowlist is the point rather than an implementation detail: `wire()` clones
+only real controls, because 25 sites hand back a `<div>` of chips where
+`aria-describedby` announces nothing. Landing it there would make the fix *look*
+universal while doing nothing — this repository's characteristic defect. Those 25
+are enumerated by a test whose bound may only go down.
+
+`aria-required`, not the native `required`, deliberately: native `required`
+changes form SUBMISSION, and switching it on across a thousand fields that were
+only ever marked with an asterisk would start blocking submits that work today.
+Announcing the requirement is the a11y fix; enforcing it is a product decision
+per form.
+
+## Q12 — MEDIUM: a caption over a row of buttons names nothing, and the count was wrong first
+
+**C2-02.** Fifty-odd labels naming nothing and seventy unnamed selects, with one
+shape behind most of them: a caption over a ROW OF BUTTONS. `<label>` names a
+form control, by `htmlFor` or by containing it, and a group of buttons is
+neither. It is **also** the shape of the 25 `Field` sites Q11 cannot wire — one
+pattern behind three separately reported findings. `labelledGroup()` is the fix
+and needs **no new copy**: the caption already exists and is already translated.
+
+**The instrument is the finding here.** A first count with a regex returned 128
+unnamed selects against the parser's 70 — a 45% overcount — and flagged a file
+where the select is wrapped in a label and is correct. "Is this control named?"
+is a question about ANCESTRY. So the scanner is built on the TypeScript parser,
+and **the scanner is tested against fixtures before either count is asserted**.
+`guardian/rules-editor.tsx` is converted end to end as the worked example, 52 → 45.
+
+The 70 selects are not fixed in bulk, and the obvious shortcut is written down
+because it is wrong: a placeholder option is a VALUE, not a name, and labelling a
+control "Whole family" or "All customers" is worse than leaving it unnamed.
+
+## Q13 — the ninth collision was not a number
+
+main landed **seven migrations at once** (0304–0310), colliding with this
+branch's entire block. Renumbering to 0320–0326 was the easy half. Two findings
+came out of the rest:
+
+**A SYMBOL collision, invisible to the migration ledger.** This branch's chores
+migration and main's 0305 both created `chore_assignment_decision_guard()` and
+its trigger; whichever ran last silently replaced the other. The ledger tracks
+FILE NAMES, so renumbering resolves the filename clash and leaves the function
+clash untouched. **Renumbering is not reconciling**, and nothing in the harness
+was looking for it — the probes were, which is how it surfaced.
+
+**A product disagreement, and main was right.** This branch made chore writes
+manager-only outright; main's 0307 guards the PRICE COLUMNS and asserts as a
+positive control that a member may still add a chore. The module offers Add to
+every member — this branch had narrowed past what the screen renders, **the exact
+rule it had applied to `driving_trips` a day earlier**. Withdrawn. What survives
+is the shape of the refusal: main's guard arrived as a bare `return;`.
+
+The opposite case appeared too: main's economy probe asserted as a positive
+control the very thing 0320 forbids (a child naming their own price). That guard
+stays; the fixture now names a real reward and says why.
+
+Reading main's approach also exposed a latent defect here: **0316 and 0319's
+sweeps did not filter `polpermissive`**, so a restrictive guard from main would
+have made them refuse to apply over somebody else's tightening. Earlier
+migrations filter correctly — the rule was known and then stopped being applied.
+
+## Q14 — HIGH: the weekly briefing's "today" was UTC's today
+
+Found by sweeping the tracked host-midnight sites, and it is the guard for that
+class that could not see it. `lib/ai/weekly.ts` built its window from
+`Date.UTC(now.getUTCFullYear(), …)` and bucketed events by
+`starts_at.slice(0, 10)`. So a family in Los Angeles asking for the week ahead
+**at 6pm was told today is tomorrow** — the look-ahead opened a day late on
+exactly the evening somebody plans — and **every evening commitment in the
+Americas appeared on the wrong day**.
+
+`tests/server-midnight-is-not-the-familys-midnight.test.ts` matches
+`setHours(0,0,0,0)`. This is the same defect spelled `toISOString().slice(0,10)`,
+and the module's own header said "all dates are handled in UTC day-keys". **A
+guard that checks one spelling of a defect with two passes while the thing it is
+named for goes on happening.** The ratchet now sees both, with ten tracked sites.
+
+`tz` is required rather than defaulted, because a default is how it was invisible.
+A third shape — `Date.UTC(d.getUTCFullYear(), …)`, sixteen sites — was examined
+and deliberately NOT tracked: `journal/prompts.ts` and `school/timetable.ts` want
+a stable index every member agrees on and are correct, so a ratchet there would
+put correct code on a defect list.
+
+**And the measurement was wrong first, in the way this pass had just written up.**
+A regex over the named form returned 28 sites; the first three checked were false
+positives — a Zod field named `at`, and two line numbers computed against
+comment-stripped source and reported against the original. Having argued two
+commits earlier that an unsound scan is worse than none, the same reach happened
+again. Only the shape that needs no dataflow is tracked.
+
+## Verification (Q9–Q14)
+
+- **CI green on `1c50fa73`, all four jobs including E2E** — which is what
+  validates the lightbox across 226 dialog call sites, the `Field` change across
+  1,066 forms, and the reconciled 338-migration chain with main's restrictive
+  guards interleaved.
+- 338 migrations replayed from scratch (0 failed), 335 re-applied, **46/46 probes
+  run twice**, **14,024 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+---
+
+## Q15 — HIGH: a child who did chores two evenings running was told to start again
+
+`applyCompletionRewards` (`lib/chores/server.ts`) derived "today" from
+`new Date().toISOString().slice(0, 10)` — the **UTC** day — and wrote it to
+`kid_progress.last_activity`. That column is the only thing `nextStreak`
+compares, so **the zone it is read in IS the streak rule**. `nextStreak` itself
+is pure, correct and tested; the entire defect is in what it was handed.
+
+Measured at 6pm on the 23rd in Los Angeles, which is already the 24th in UTC:
+
+| last activity | correct | what shipped |
+|---|---|---|
+| the 22nd (chores two evenings running) | streak 3 → 4 | sees a two-day gap, **resets to 1** |
+| the 23rd (earlier the same family day) | unchanged at 3 | **counts it twice**, 3 → 4 |
+
+Wrong in both directions, with `streak_3`, `streak_7` and `longest_streak` all
+inheriting it. Evenings are when chores get done, so this is the common case,
+not the edge.
+
+Fixed with `dayKeyInTz(new Date(), opts.tz)`, `tz` required and threaded from
+`ctx.active.family.timezone` at both `finalizeApproval` call sites, which
+already had it.
+
+**My first test proved nothing, and the mutation is what said so.** The headline
+case was written at 10am Los Angeles — where the UTC day and the family day
+**agree** — so it passed against the defect as happily as against the fix; only
+one of three assertions caught the mutation. Every instant is now an LA evening,
+the only time the two answers differ, and all three fail when reverted. *A test
+whose scenario cannot distinguish the two implementations is a test of nothing,
+and its name will still read correctly.*
+
+The mutation also **corrected the finding**. I had written it up as "the streak
+does not increment"; the failure message read `expected 1 to be 4` — it
+**resets**. The code comment now says what was measured, not what I assumed.
+
+## Q16 — MEDIUM: six date columns defaulted to the host's day, and the list tracking them was lying
+
+Six `insert`s defaulted a DATE column from the host's day, so a record logged in
+a Californian evening was stamped **tomorrow**. The sharpest is
+`moment_activations.as_of_date`, whose caller's own comment reads *"Hide a moment
+for the rest of today"* and which wrote tomorrow's row — the moment stayed on
+screen all evening and arrived already dismissed the next morning. A rule stated
+in a comment where a reader can see it and absent from the line below it: this
+audit's recurring shape, in miniature, for the **eighth** time.
+`family_food_scores.snapshot_date` is upserted, so an evening score landed on
+tomorrow and collided with tomorrow's real one.
+
+`todayKeyFor(ctx)` is now the single place the `|| DEFAULT_TZ` fallback is
+written; six copies of a defaulting rule is how the seventh gets it wrong.
+
+**My own instrument was lying, two commits after I built it.** The tracked list
+for this spelling inherited the header *"never a site that is fine as it is"*
+while three of its ten entries were exactly that — an allowance cron
+**documented as deliberate in its own source**, a site-admin export with no
+family in scope, and a helper that takes an injected `today`. Leaving them
+unmarked would have had the next person "fix" the allowance cron and change when
+money is paid. The list is now split by reason. **A ratchet that does not
+distinguish "not yet done" from "decided" manufactures regressions.**
+
+A regression I introduced and the suite caught: computing the zone inside auto
+and home's shared `ctx()` ran it for every action there, and two write-boundary
+tests whose mocks carry no `active.family` went red. `todayKeyFor` is now
+**total** — it supplies a default for a date column, and an action that would
+otherwise succeed must not die because the zone could not be read.
+
+## Q17 — HIGH: "expires today" meant the host's today, so the whole kitchen was a day out every evening
+
+Every expiry judgement in the kitchen — `daysUntil`, `expiryStatus`,
+`expiringSoon`, `pantrySummary`, `leftoverUrgency`, `activeLeftovers`,
+`leftoverNudge`, `urgentLeftoverCount` — took `now: number = Date.now()` and
+found midnight with `setHours(0, 0, 0, 0)`: the **host's** midnight. On a UTC
+server that is 5pm in California, so for the last seven hours of every day:
+
+- food expiring **tomorrow** read **"Expires today"**;
+- food expiring **today** read **"Expired yesterday"** — `expired: true`, red
+  tone, and counted in `pantrySummary.expired`;
+- a leftover due tomorrow said **"Eat today"**, and tonight's dinner said
+  **"Past use-by"**;
+- `expiringSoon` handed the **AI chef** and the **meal planner** a 7-day window
+  shifted a day, so both urged cooking what was not urgent and wrote off what was
+  still good.
+
+Food waste is the feature's entire purpose — the Food Score scores the family on
+it — so this defeated the thing it was built for, at dinner time, every day.
+
+Both modules now take a **required `todayKey: string`** with no default. Both
+dates are parsed as UTC midnights, which is not a claim that anyone is in UTC —
+it is how two calendar days are subtracted with no zone entering into it at all.
+**`= Date.now()` is what made this invisible**: all eleven call sites read as
+though they were already correct.
+
+**The client callers are the part worth stating.** The tracked list's standing
+note said the remaining entries were hard *because* they are called from both
+server and client, and that on a client `new Date()` is the device clock and "is
+already right". That is wrong here, and this is the worked example: leaving the
+two client sites on the device clock would give one family **two different
+answers about the same jar** — the server-rendered kitchen page and the
+client-rendered pantry module disagreeing — and would be wrong outright for a
+parent travelling. Both sides now answer from `families.timezone`: the server via
+`todayKeyFor(ctx)`, the client via `dayKeyIn(new Date(), family.timezone)`.
+`KitchenDashboard` does not even recompute it — the server passes `todayKey` down
+in `KitchenData`, so the card and the counts beside it cannot drift apart.
+
+`dayKeyIn` was added to `lib/time/zoned.ts` because `lib/services/scope.ts` is
+`server-only` and a client component cannot import it; `dayKeyInTz` delegates, so
+there is still one implementation.
+
+Both existing suites passed **unchanged** against the defect, because every
+instant in them was one where the host's day and the family's day agree. The new
+blocks name 7pm and 8pm in Los Angeles — dinner, precisely when a leftovers
+module is consulted — and all 8 of their assertions fail against the mutation
+while the other 21 stay green. The failure messages are the defect stated
+plainly: `expected 'expired' to be 'eat_now'`, `'Toss or check lasagne — it's
+past it…'`, and the chef's window reaching `flour` a day early.
+
+`lib/pantry/logic.ts` comes off the `setHours` ratchet: **five entries left of
+the original seventeen.** The stale `lib/services/scope.ts` header, which still
+described `lib/ai/weekly.ts` as correctly UTC-anchored — untrue since Q14 fixed
+that window — is corrected in the same commit.
+
+## Verification (Q15–Q17)
+
+- **14,045 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`**, four
+  shards each, tsc clean, eslint at 85 (no new warnings), `npm run build` exits 0.
+- Non-vacuity by mutation in all three: revert the streak to the UTC day → three
+  assertions fail, naming the reset, the double count and the two-household
+  divergence; make `todayKeyFor` ignore the zone → the Los Angeles and Auckland
+  assertions fail, and the widened ratchet names each reverted file; revert
+  `dayKeyIn` to the UTC day → all 8 new kitchen assertions fail and the other 21
+  stay green.
+
+---
+
+## Q18 — HIGH: the return reminder was sent against the server's day, and its dedupe stamp is one-shot
+
+Same root as Q17 — `setHours(0, 0, 0, 0)` deciding a calendar-day question — but
+the cost here is not cosmetic. `daysUntilDue` underpins every return judgement
+(`returnStatus`, `isOverdue`, `returnLabel`, `needsDueReminder`,
+`needsOverdueAlert`), across two surfaces with **different exposure**:
+
+- **The Orders page** is server-rendered on demand from a UTC host, so for the
+  last seven hours of every Californian day it told a family an item due **today**
+  was **"Overdue by 1 day"**, and one due tomorrow **"Due today"**.
+- **The cron** runs at `0 8 * * *`, and that hour turns out to be well chosen: at
+  08:00 UTC every zone from **UTC-8 through UTC+13 shares the UTC date**. It is
+  **UTC-9 and west** that do not — Alaska and Hawaii are a full day behind at
+  that instant. Narrow, and worth saying plainly rather than inflating.
+
+**Why the cron case is worse than "a day early."** `due_reminder_sent_at` and
+`overdue_notified_at` are **one-shot** — set once, never cleared — and the
+overdue branch `continue`s past the due-soon nudge. A reminder computed against
+the wrong day therefore does not arrive late; it **spends** the only
+notification that order will ever get. A family told "Overdue by 1 day" on the
+morning the item is actually due never receives the "Due today" nudge, because
+the order is now stamped. And the job is **cross-family** — one query, no family
+filter — so one host day decided for every household at once.
+
+Fixed with a required `todayKey: string` and no default, both dates parsed as
+UTC midnights. The cron now resolves each family's scope **before the due-date
+decision** rather than before the send: it already built `systemScopeForFamily`
+per family, so the timezone was right there, one step too late to be the thing
+that answered "is this due today". A family whose zone cannot be read is counted
+as a failure rather than guessed against UTC — the send would have failed on the
+same missing scope anyway, so this only moves the failure to where the reason is
+legible.
+
+The ordering is pinned **by position** in the cron's boundary test, not by
+whether the zone is mentioned: a guard of the weaker kind would have passed
+against the version that shipped, which resolved the scope and then ignored it.
+
+**Verified:** 14,051 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail
+(`expected 'overdue' to be 'due_today'`, and `expected true to be false` for the
+overdue stamp being spent on an item due today), the other 8 stay green.
+
+**Four entries left on the `setHours` ratchet, of the original seventeen.**
+
+---
+
+## Q19 — HIGH: on the morning of their anniversary, the family was told it was in twelve months
+
+`lib/relationship/dates.ts` floored `from: Date = new Date()` with
+`setHours(0, 0, 0, 0)` — the host's midnight — and every function in the module
+is built on it.
+
+**The measured failure is worse than the one I wrote down first.** I had it as
+"today's anniversary is dropped from the list", since `upcomingDates` filters
+`days < 0`. The revert prints **`expected 364 to be +0`**: for a **recurring**
+date, the host having rolled over makes this year's occurrence read as passed,
+so `nextOccurrence` rolls it forward **a full year**. On the morning of their
+anniversary the family is told it is **in 12 months**. Dropping is what happens
+to a one-off. *This is the second time in three passes that the mutation
+corrected the finding rather than merely confirming it.*
+
+**The ratchet's own premise was wrong about this file.** Its header read
+*"Deterministic (inject `from`) so it's fully unit-testable"* — true, and beside
+the point. All four call sites took the **default**, and the default was the
+server's clock. A parameter only ever injected by tests is not a seam; it is a
+comment.
+
+**And the recurring shape, for the ninth time.** Two of the four callers compute
+the family's day *in the same function* and use it for everything else:
+`ai-home-dashboard.tsx:73` has `const todayKey = dayKeyInTz(now, tz)` under a
+comment reading **"The family's own day, not the server's (§16 Today)"**, and
+200 lines later called `upcomingRelationship(...)` with **no anchor at all**;
+`lib/server/notifications.ts:72` computes the same key, and every other reminder
+in that function renders through `timeLabel(..., tz)` while the relationship
+block passed the raw instant. The boundary stated where a reader can see it,
+absent from the line that needed it.
+
+The notification case is sticky in the same way Q18's cron is: the dedup
+`related_id` is `${id}:${occurrence year}` and **permanent**, so a reminder sent
+against the wrong day is the only one that occurrence will ever get.
+
+Fixed with a required `todayKey: string` and no default. `UpcomingDate.next:
+Date` became `nextKey: string`, because the only thing any caller read off it
+was `getFullYear()` — and a UTC-midnight `Date` read with `getFullYear()` on a
+host west of UTC gives the **previous year for January 1st**, the same class of
+bug one layer down. That case is now asserted directly.
+
+Feb 29 in a non-leap year resolves exactly as it always did (to Mar 1) — a
+product decision nobody has made, and not one to change under cover of a
+timezone fix. Noted in the source rather than silently altered.
+
+**Verified:** 14,056 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail, the
+other 13 stay green.
+
+**Three entries left on the `setHours` ratchet, of the original seventeen.**
+
+---
+
+## Q20 — MEDIUM: one chore row said "Tomorrow" on one page and "Today" on another
+
+`dueLabel` floored `now: Date = new Date()` with `setHours(0, 0, 0, 0)`, and its
+one caller is a **client** component — so that is the **viewer's device** zone.
+`chore_assignments.due_at` is a `timestamptz`, an instant, so the zone it is
+read in decides which day it lands on.
+
+The rest of the app reads that same column in the **family's** zone:
+`lib/home/today.ts:142` buckets it with `dayKeyInZone(c.due_at, tz)`, and the
+chore notification renders it with `timeLabel(c.due_at, tz)`. So one chore row
+was **"Tomorrow" on the chores page and "Today" on the home page and in the
+notification** for any viewer whose device zone differs from the household's —
+a parent travelling, a phone left on UTC, a split household. One row, two
+answers.
+
+A second half nobody would have caught: the `normal` branch formatted its
+fallback with `toLocaleDateString` and no `timeZone`, so even with the tone
+fixed the printed date would still have been the device's — a chore due late on
+the 2nd rendering "Fri, Jul 3" while its tone came from the 2nd, the row
+disagreeing with itself. Both halves now take `tz`.
+
+**The ratchet was wrong about this file, in its own words**, and that is the
+part worth keeping. It named `dueLabel` as *"the clearest case: its only caller
+is a client module, so it is listed but may well be correct as it stands."* The
+reasoning — **"a client's own clock is already right"** — is the same premise
+that was wrong for the pantry module (Q17) and for `lib/relationship/dates.ts`
+(Q19). Three times. A client component's clock is right about the *viewer*; the
+question these modules ask is about the *household*. The note is corrected in
+place rather than deleted, because a list that quietly drops its own mistakes
+teaches nothing to whoever works it next.
+
+**Filed, not fixed:** there are now **four** spellings of "the day key in a
+zone" — `dayKeyIn`, `dayKeyInTz` (which delegates to it), and three
+**incompatible** `dayKeyInZone`s taking a `Date` (`lib/briefing/build.ts`), an
+ISO string (`lib/home/today.ts`) and milliseconds (`lib/schedule/zoned.ts`).
+Converging them is real work and not something to do under cover of a timezone
+fix, for the same reason Q19 left Feb 29 alone.
+
+**Verified:** 14,058 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dueLabel` to the device zone → `expected 'soon' to be
+'today'` and `expected 'Fri, Jul 3' to be 'Thu, Jul 2'`; the other 16 stay green.
+
+**Two entries left on the `setHours` ratchet, of the original seventeen:**
+`lib/capture/parse.ts` and `lib/routines/detect.ts`.
+
+---
+
+## Q21 — HIGH: "dinner tomorrow at 6" went on the calendar for the server's tomorrow
+
+`classifyIntentFast` called `classifyVoiceCommand(q, now)` and `parseEvent(q,
+now)` with no zone, so the second resolved against `LOCAL_OPS` — the host's day.
+And the fast path does **not merely classify** on the result: it serialises
+`event.startsAt.toISOString()` into the capture's entities, which is what goes
+on the calendar. "Dentist tomorrow at 3pm" said to the assistant from California
+after 5pm was booked **a day late**.
+
+**The machinery to get this right was built, documented, and not reached.**
+`classifyVoiceCommand` has taken an optional `timezone` all along, and
+`lib/voice/command-router.ts` carries a long header explaining exactly how to
+use it — why the wall clock must be UTC-anchored so the runtime's own DST rules
+cannot normalise it before anyone resolves it, and why `instantForLocalTime`
+rather than `zonedLocalToInstant` (on the spring-forward morning a named time
+that does not exist should move to the first minute that does, not vanish). The
+call site passed none of it. **Tenth instance of the recurring shape.**
+
+**And the type said so out loud.** `classifyIntent`'s signature was
+`Pick<ServiceScope, 'familyId' | 'requestId' | 'now'>` — `tz` was *excluded from
+the Pick*. The scope carried the family's zone the whole time; the fast path was
+handed everything except the one field that says whose tomorrow it is. Both real
+callers pass a full `ServiceScope`, so widening it cost nothing.
+
+**A test I wrote and then had to fix.** My first control assertion checked the
+no-zone path against the **host's** answer — an assertion about whichever
+machine runs it, the exact flaw this whole sweep exists to remove, and it would
+have gone red on CI's `TZ=America/Los_Angeles` leg. It is now a contrast between
+two *named* zones: the same instant is the 6th at 22:00Z for Los Angeles and the
+7th at 15:00Z for UTC. Both correct; which one you get is precisely what the
+zone decides.
+
+## Q22 — MEDIUM: the CI readiness probe named the database and never checked it
+
+`finance-operation-sql` failed on **three of four** pushes this session, always
+in about twenty seconds, with `FATAL: database "bubaly_finance_operation_ci"
+does not exist`. Its readiness gate was `pg_isready --dbname=…`.
+
+**`pg_isready` does not validate `--dbname`** — it reports whether the *server*
+is accepting connections. Measured on the local PG16 harness rather than assumed:
+
+| probe | database that does not exist |
+|---|---|
+| `pg_isready --dbname=…` | **exit 0**, `accepting connections` |
+| `psql --dbname=…` | exit 2, `database … does not exist` |
+
+— the same exit 2 the job dies with. The postgres entrypoint runs `initdb`,
+brings up a **temporary** server on that same socket, and only then creates
+`POSTGRES_DB`. The gate went green against the temporary server, before the
+database existed; whether the next step won the race depended on how warm the
+image layers were. The failing log shows the image pull finishing at `19:46:31`
+and psql dying at `19:46:33`.
+
+**The probe named the database and did not check it** — this pass's recurring
+shape, in CI rather than in product code.
+
+Fixed by polling with an actual `select 1` against that database, requiring
+three consecutive successes (the entrypoint stops the temporary server once init
+finishes, so one success can land in the window where the database exists but
+the server is about to be replaced). Validated by simulating the race locally:
+the new loop reports "not yet" six times and then succeeds; the old gate would
+have passed on attempt one.
+
+Not this PR's defect — the diff touches no finance SQL, migration 0274, or this
+workflow, and the job runs on every push only because the PR's *cumulative* diff
+matches its path filters. Fixed rather than reported because the fix is
+contained and **nothing is skipped or disabled**: the check now tests strictly
+more than it did.
+
+## Verification (Q18–Q22)
+
+- **14,062 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`** (four
+  shards each), tsc clean, eslint at 85 (no new warnings), `npm run build` exits 0.
+- **CI green on every completed head this pass** — `d962e558`, `a4f121d2`,
+  `5ee3609b` — on the main workflow including E2E.
+- Non-vacuity by mutation on all five findings; each revert names the defect in
+  its failure message rather than merely going red.
+
+## Q23 — MEDIUM: a public capability with a careful reader, a hardened route, and no writer
+
+`/api/sync/feeds/<token>` is a public, unauthenticated iCalendar endpoint, and
+it is built with visible care: it validates the token's shape, rate-limits by IP
+**twice** (in memory and durably in the database), scopes strictly to
+`feed_enabled` rows, paginates through `readAll` so a busy calendar cannot be
+silently truncated, and renders ICS with a refresh interval. Beside it,
+`lib/sync/feed-token.ts` supplies 32 bytes of CSPRNG entropy as URL-safe base64,
+an HMAC signer, and a **timing-safe** verifier.
+
+**Nothing issues a token.** Every mention of `sync_calendars.feed_token` in the
+repository is one of four things — the route's own comments, the route's
+`.eq('feed_token', token)` read, the column's declaration in `0018` and
+`CATCH_UP_PROD.sql`, and the generated `database.types.ts`. The column is
+nullable **with no DEFAULT**; `feed_enabled` is `not null default false` and
+nothing ever sets it true; and `generateFeedToken()` has **no callers** —
+`lib/sync/feed-token.ts` is imported by no file in the repository. So
+
+```
+.eq('feed_token', token).eq('feed_enabled', true)
+```
+
+cannot match a row, for any family, ever. **Every request to a feed URL is a
+404, and always has been.** `addToCalendarLinks()` in `lib/calendar/providers.ts`
+— which builds the Google, Apple and `webcal://` subscribe links — is likewise
+called only by its own test, and `/api/sync/feeds` is allow-listed as public in
+`lib/auth/route-access.ts`.
+
+**Why this is worse than ordinary dead code.** The danger is not the absent
+feature, it is what the next reader concludes. A reviewer who checks this route
+reads the two rate limiters, the capability-token comment and the `feed_enabled`
+scoping, and comes away believing the feature is **safe**; the true state is that
+it is **absent**. Whoever eventually wires a publish button will reasonably
+assume the token side is handled — and the single line that actually has to be
+right, writing 32 random bytes rather than reusing the calendar's uuid (already
+visible to every member), is the one line nobody has written. **Dead code that
+looks audited is how a guessable capability URL ships.**
+
+**Checked whether this is a class, and it is not.** The other three public
+token surfaces are live and correctly issued: `gift_links.token` is written by
+`createGiftLinkAction` (manager-gated, wallet ownership verified, `crypto.randomUUID`),
+`pay_handles.handle` by its own action, and `surveys.slug` by the admin console.
+The calendar feed is the only one of the four with a reader and no writer.
+
+**Fixed:** `tests/a-capability-nothing-can-issue.test.ts`, a **ratchet** in the
+idiom this audit has used four times — a closed `CANNOT_BE_ISSUED` list holding
+exactly one entry today, which **only shrinks**. It classifies each mention of a
+column by stripping comments and string literals from the line: a read names the
+column *inside a string* (`.eq('feed_token', …)`), a write names it as an
+identifier. When a writer appears the test goes red and the fix is to **delete
+the entry**, not to widen the allowances. Two further assertions keep it honest —
+the reader must still exist and still filter on the column, or the entry is
+stale. The route now says in its header that it is not reachable, and says how
+to issue a token when someone wires it.
+
+**Revert → :** adding
+`.update({ feed_token: 'x', feed_enabled: true })` anywhere in `app/` turns the
+guard red naming the exact file and line; the other three assertions stay green.
+
+**Non-vacuity, and a mistake caught on the bench.** The guard proves it can tell
+a write from a read by running the same detector over `child_wallet_id`, which
+*is* written, and requiring it to find the writer in `wallet/actions.ts` —
+without that, a detector that finds nothing passes by accident. The first draft
+of the "does not mistake a read for a writer" assertion asked whether a reported
+line *contained* `.eq(`, and a real write chains one
+(`.update({…}).eq('id', id)`), so the guard's own probe came back as a false
+accusation. **That is the third time in this audit a guard has asked the right
+question through a mechanism that assumed one shape of call site** — this one
+caught before it shipped. It is now stated as the behaviour of the stripper on
+literal lines, which cannot be confused by chaining.
+
+**Also fixed:** `app/(app)/dashboard/sync/page.tsx` selected `id, feed_enabled`
+for every calendar in the family and used only `.count`, discarding the rows —
+including a column that cannot vary. Now `head: true`, the idiom the conflicts
+query on the next line already uses.
+
+**Filed, not taken — an owner decision.** Wiring the publish flow is **not** done
+here. Who may publish a family calendar is a privacy decision with a real blast
+radius: these calendars can carry a child's location-tagged events, and "any
+member may publish" and "a manager only" are different products. Proposed shape
+when the owner decides: a manager-gated action that writes
+`generateFeedToken()` and flips `feed_enabled`, a rotate action that overwrites
+the token, and the existing `addToCalendarLinks()` for the subscribe buttons —
+all four pieces already exist and only the action is missing.
+
+## Q24 — HIGH: the URL that tells Twilio where to call, and the URL that checks what Twilio signed, were two different expressions
+
+Twilio signs the **exact URL it called** — HMAC-SHA1 over `url + sortedParams` —
+and `validateTwilioSignature` recomputes that digest from a URL we build
+ourselves. The only thing that matters is whether the two strings are identical.
+They were built by **five different expressions**, and two of them faced each
+other across the HMAC:
+
+```
+lib/contact-center/server.ts   (NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '')
+app/api/contact-center/*  (×3) (NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+app/api/guardian/*        (×7)  NEXT_PUBLIC_APP_URL ?? ''
+lib/email.ts                    NEXT_PUBLIC_APP_URL ?? NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'
+lib/google.ts                   override ?? validated NEXT_PUBLIC_APP_URL ?? request origin, /\/+$/
+```
+
+`lib/contact-center/server.ts` is the side that **registers** the webhook URL
+with Twilio (`provisionNumber` → `VoiceUrl` / `SmsUrl`). The three
+`app/api/contact-center/*` routes are the side that **verifies**. The two
+expressions differ in exactly one thing — the fallback — and that difference is
+the defect. **Measured, both cases:**
+
+```
+CASE 1 — NEXT_PUBLIC_APP_URL unset
+  registered with Twilio : https://www.bubaly.com/api/contact-center/voice
+  verified against       : /api/contact-center/voice
+  Twilio signs           : fVeNA5BaFm0SWFAWJyPo4CfpK10=
+  route computes         : CiC66AlFtASYow/AoZr0RXphK8U=
+  MATCH                  : NO -> 401, every call rejected
+
+CASE 2 — set with a trailing slash, guardian spelling (no strip)
+  guardian builds        : https://www.bubaly.com//api/guardian/inbound/sms
+  Twilio called + signed : https://www.bubaly.com/api/guardian/inbound/sms
+  MATCH                  : NO -> 401, every inbound message rejected
+```
+
+**Why this is a HIGH and not a configuration nit.** The failure is not a broken
+link somebody reports. It is a **401 on an inbound Twilio webhook**, which means
+the call or message is rejected and Guardian is **silently offline** — for every
+family at once, with nothing in the product saying so. This PR already carries a
+HIGH with exactly that impact ("two families could hold the same Guardian
+number, and every call to it was dropped"); that one needed two households to
+collide on a number, and this one needs **one trailing slash in one environment
+variable**. The seven guardian routes — the child-safety surface — carried the
+least defended of the five spellings: no fallback *and* no trailing-slash strip.
+
+A trailing slash is not exotic. `lib/supabase/server.ts` already carries a note
+that a credential pasted into a dashboard "picks up a trailing newline or a
+wrapping pair of quotes more often than anyone admits," and `lib/google.ts`
+carries a note about this exact variable having once been interpolated bare.
+**The repo had learned this lesson twice already, in writing, one field over.**
+
+**Why the existing guard could not see it.**
+`tests/public-webhook-signature-boundary.test.ts` asserts that every
+provider-facing guardian route calls `validateTwilioSignature` and rejects. That
+guard is right and it stays. It checks that the boundary is **present**; it
+cannot check that the URL handed to the boundary is the one that was signed.
+*Presence of a check says nothing about the correctness of its input.*
+
+**Fixed:** `lib/server/app-url.ts` — one `appBaseUrl()`, returning an absolute
+origin with no trailing slash, falling back rather than ever returning something
+relative (a relative fragment does not fail loudly; it fails an HMAC comparison,
+which looks like a forged request). It trims, unquotes in the same idiom as
+`cleanEnv`, strips `/+$` rather than `/$` because `https://host//` is one paste
+away, and validates the result is absolute. Applied to all ten routes on the
+signature path **and to the registration site**, so the two sides are now the
+same function by construction. `lib/email.ts` keeps its `NEXT_PUBLIC_SITE_URL`
+precedence — that is its contract, passed in as the argument — and gains only the
+normalisation.
+
+**Left alone, deliberately:** `lib/google.ts`. It has a
+`GOOGLE_CALENDAR_REDIRECT_URI` override and falls back to the **request origin**,
+which is correct for OAuth and is not what this helper does. Converting it would
+delete a deliberate, documented contract to fix nothing.
+
+**Guard:** `tests/a-signed-url-is-the-url-that-was-signed.test.ts`. It proves the
+digests agree, and each half is **calibrated against the superseded expression**
+— with the old pair, the registration and verification digests differ; with the
+old guardian spelling, a trailing slash changes the digest. Plus a ratchet over
+the eleven files on the signature path: none may read `NEXT_PUBLIC_APP_URL`
+itself, and each must actually call `appBaseUrl()`. Reverting one file to
+`process.env.NEXT_PUBLIC_APP_URL ?? ''` turns both halves red naming that file.
+
+**A note on scope.** The ratchet covers the signature path only, not every reader
+of the variable. On a Stripe return URL or an email link a malformed base makes a
+visibly bad link; sweeping those under the same guard would make a security
+assertion about things that are not security.
+
+**Something the compiler caught, worth recording.** The calibration first spelled
+the old expressions inline against literals, and `tsc` rejected it — TS2873 "this
+kind of expression is always falsy" and TS2869 "right operand of `??` is
+unreachable". The compiler was making this finding's own point one level up: the
+dead branch in `'' || fallback` is exactly what made the two sides disagree. They
+are now functions of the environment variable, which is also more honest about
+what they are.
+
+## Q25 — HIGH: three wallet balances summed a prefix of the ledger and called it the total
+
+A child's balance is derived by summing the immutable ledger. Three functions did
+it with a bare, unbounded `select()`:
+
+| | |
+|---|---|
+| `lib/wallet/server.ts` · `childSpendableCents` | *"what a card authorization is checked against in real time"* |
+| `lib/wallet/server.ts` · `bucketBalanceCents` | *"Used to validate spend + transfers so a wallet can never overdraw"* |
+| `app/(app)/wallet/invest/actions.ts` | the INVEST bucket balance an order is placed against |
+
+**The rule was already written down, in this repo, about exactly this.**
+`lib/supabase/read-all.ts` opens with:
+
+> PostgREST answers an unbounded `select()` with at most `db-max-rows` — 1,000 on
+> a default Supabase project — and says nothing about it. No error, no header the
+> client surfaces, no short-read signal: the caller simply receives 1,000 rows and
+> believes that is the table. **Measured directly against a local project — a
+> table holding 2,011 rows returns exactly 1,000 to an unbounded select.**
+
+and closes with the sentence that decides this finding:
+
+> A truncated list is a display bug; **a truncated sum is a wrong number presented
+> as a right one.**
+
+This PR already fixed that defect once, in the ledger reconciler, where it was
+recorded as *"a ledger reconciled from its newest 20,000 rows is not incomplete,
+it is arithmetically wrong."* The helper was built for it. The three functions
+that decide whether a child can spend never called it.
+
+**Worse than a prefix — an undetermined one.** None of the three ordered the
+read, so *which* rows came back was not defined. Drop debits and the balance
+reads **high**, and `reserveHold` approves a card authorization against money
+that is not there. Drop credits and it reads **low**, and legitimate spending is
+declined. Either way the number is presented as the balance with nothing marking
+it partial.
+
+**Reachable, not exotic.** A thousand ledger rows in one bucket is a few years of
+allowance, chores and spending on one child.
+
+**Measured.** Against a stand-in that caps every response at 1,000 rows the way a
+real PostgREST does, over a ledger of 2,500 completed 100-cent credits:
+
+```
+complete total (paged) .... 250,000
+bare unbounded select ..... 100,000     ← what the three functions returned
+```
+
+**Fixed:** all three now read through `readAll` with a stable `.order('id')`.
+The order is not decoration — `read-all.ts` warns that *"an unordered paged read
+can repeat or skip rows between pages"*, and for a sum either one is a wrong
+total. None passes `failOnMax: false`; that opt-out is documented for **lists**,
+and on a sum it would restore precisely this defect — a prefix returned with
+`error: null`.
+
+**Guard:** `tests/a-truncated-sum-is-a-wrong-balance.test.ts`. It runs the real
+`bucketBalanceCents` against the capping stand-in and requires 250,000, with the
+truncated 100,000 asserted separately as calibration so the fake cannot quietly
+stop capping. Plus a ratchet over the three functions by name: each must page,
+each must order, none may opt out of the truncation error. Reverting
+`bucketBalanceCents` to its bare select turns both halves red — the behavioural
+one naming the number, `expected 100000 to be 250000`.
+
+**Scope, stated.** The ratchet covers the three sums, not every read of
+`wallet_transactions`. Of the other six statements, three are writes and three
+are already bounded; `read-all.ts` draws this line itself — page where the rows
+are **summed**, an explicit `.limit()` is correct where they are **listed**.
+
+**A process note.** The sweep that found these classified six reads as unbounded;
+three of those were writes whose `update`/`insert` sat on a later line than the
+one the classifier matched. Reading all six rather than trusting the count is what
+kept three false accusations out of this finding — the same failure mode recorded
+twice already in this audit, caught here before it reached the page.
+
+## Q26 — HIGH: three `.in()` reads whose id list is sized elsewhere, two of them a stall that cannot clear
+
+A PostgREST `.in()` filter travels in the **query string**.
+`lib/supabase/chunked-in.ts` states the consequence and the remedy:
+
+> one `.in()` carrying a few hundred UUIDs builds a URL of roughly 40 bytes per
+> id. Past the gateway's request-line limit the whole read comes back `URI too
+> long` — and because the calling page usually treats that as "no rows", the
+> failure shows up as **silently missing data rather than as an error**. It only
+> appears once a table has enough rows, so it **survives every test against a
+> small dataset.**
+
+100 ids per request keeps the URL near 4 KB. Six call sites use the helper.
+Three passed the whole array:
+
+| site | size of the array | set by |
+|---|---|---|
+| `lib/server/notification-emails.ts` | up to **500** | `pending` is `.limit(500)` |
+| `app/api/cron/return-reminders/route.ts` | up to **200** | `BATCH = 200` |
+| `app/(app)/admin/marketing/push/actions.ts` | **unbounded** | a `readAll`-paged device list |
+
+**The third is the one worth staring at, because a correct fix created it.**
+That route's `push_devices` read was deliberately converted to `readAll`, with a
+comment saying exactly why: *"past 1,000 devices a campaign would reach a prefix
+of its audience and record `recipients` as if that were everyone."* That fix is
+right. And **removing the 1,000-row cap is precisely what makes the `.in()` on
+the next statement unbounded.** Two helpers, two correct rules, written in two
+headers that do not mention each other — and fixing the first made the second
+reachable at scale.
+
+**Not the silent case — a worse one.** All three fail closed (a 502, a
+`failed: 1`), so no wrong data is produced. What makes them worse than a one-off
+failure is that **two of them cannot recover.** Neither writes anything before
+the failing read, so nothing is settled: the next run selects the *identical* set
+and fails *identically*.
+
+- `notification-emails` reads the same ≥500 pending rows every run and sends
+  nothing, forever.
+- `return-reminders` 502s without stamping a reminder, so the same 200 orders
+  come back next run.
+
+The stall **begins exactly when the backlog is large enough to matter** and never
+clears on its own. That is the shape main just fixed in the allowance cron, where
+one bad row ended the platform's run every night.
+
+**Fixed:** all three read through `readInChunks`.
+
+**Scope, stated.** The ratchet names these three, not every `.in()` in the repo.
+Most carry a family-sized set — a household's members, one project's materials —
+and demanding chunking there would mean chunking where one request is correct and
+cheaper. A guard that cries wolf gets exemptions bolted onto it until it means
+nothing.
+
+**Guard:** `tests/an-in-filter-travels-in-the-url.test.ts` — `readInChunks` never
+exceeds 100 ids per request and returns every row, with the batch count asserted
+`> 1` so the fake cannot pass by not chunking; plus the three-site ratchet.
+Reverting `notification-emails` turns it red naming the file and why.
+
+**A mechanism failure caught mid-sweep, and recorded.** The scan that found these
+first counted `readAll(` and reported three *correctly paged* crons as unpaged —
+`notifications`, `push-scan` and `chore-reminders` all write `readAll<Row>(`, with
+a generic argument between the name and the paren. **This is the second time in
+this audit that a guard has asked the right question through a pattern that
+assumed one shape of call site**; the first was `useDialogBehavior<HTMLDivElement>(`.
+Caught here before it reached a finding, and the new guard's pattern is
+`readInChunks\s*[<(]` by construction, with a test asserting it matches both
+spellings.
+
+## Q27 — HIGH: four fail-closed loaders that stayed open for the one failure that matters, and a helper that unsettled ten reads
+
+A Supabase query builder resolves with `{ data, error }` for anything the
+database answers and **rejects only when the request never completed** — DNS,
+TCP, TLS, a timed-out fetch. `lib/supabase/settle.ts` records that this is what
+took out `/dashboard` while production was reporting `CONNECT_TIMEOUT`.
+
+The previous session fixed four mixed batches and **filed the rest** — "about
+twenty, recorded here for a pass that reads them rather than pattern-matches
+them", having found that a repo-wide guard produced 137 type errors, syntax
+errors in 40 files, and three different wrong counts. This is that pass. Six
+sites, read one at a time; **two were defects of a kind no name-based scan could
+see, four were contracts that were false in one direction only, and three
+further candidates turned out to be correct and were left alone.**
+
+### The helper that unsettled ten reads at once
+
+`app/(app)/dashboard/agents/page.tsx` batches fifteen reads. Four are wrapped in
+`settle(...)`. The other ten read `count(supabase.from(...))` — which *looks*
+wrapped, and is not:
+
+```ts
+async function count(q: PromiseLike<…>): Promise<CountResult> {
+  const { count: n, error } = await q;      // ← the bare await, three dozen lines away
+```
+
+Every sweep for unsettled batches looks for a bare `supabase.from(` **inside**
+the `Promise.all`. Here every call site is `count(...)`, and the thing that fails
+to settle is one `await` in a local helper. One line fixes ten elements.
+
+`app/(app)/marketplace/store/page.tsx` had the mixed batch in its plainest form:
+two of three reads settled, and the third the true branch of a ternary. The
+**branch** is settled, not the ternary — `settle(cond ? a : b)` does not
+typecheck, since `Promise<A> | Promise<B>` is not `PromiseLike<A | B>`.
+
+### Four contracts that were true of one failure and false of the other
+
+These four each inspect `.error` on **every** element of their batch,
+deliberately and in writing:
+
+| module | its own words |
+|---|---|
+| `lib/twin/completeness-server.ts` | *"`{ ok: false }` when ANY of them failed. A partial snapshot would produce a confidently wrong score"* |
+| `lib/schedule/intelligence-server.ts` | *"READ BOUNDARY: this is a fail-closed loader. A failed read of any source returns `{ ok: false }`"* |
+| `lib/autopilot/policy-scan.ts` | `.find((r) => r.error)` |
+| `lib/briefing/deliver.ts` | per-read `if (res.error)` |
+
+**All four handled the resolved error and none handled the rejection.** Inside
+`Promise.all` one rejection rejects the batch, so a transport failure skipped the
+check entirely and surfaced as an unhandled rejection — the error boundary, not
+`{ ok: false }`. Each contract was true of the failure the *database* reports and
+false of the failure the *network* produces, which is the one that actually took
+this product down.
+
+**`settleAll` relaxes none of it.** It converts a rejection into exactly the
+`{ data: null, count: null, error }` shape those checks already read. The
+fail-closed loader still fails closed; the completeness score still refuses to
+score a partial read. What changes is that they do so **by their own stated
+rule** instead of by an exception nobody catches. Nothing is softened — a promise
+is kept.
+
+### Three that were NOT defects, checked and left
+
+- **`lib/metric/strategy-server.ts` `exactCount`** — `await makeQuery()` then
+  `if (error) throw error`. It throws on *both* paths, so settling changes
+  nothing; "an exact metric must not be silently wrong" is the contract, and it
+  holds.
+- **`lib/life-events/launch.ts` `checkedDelete`** — its rollback stack is drained
+  **sequentially inside `try/catch`**, which already does settling's job and,
+  better, keeps running the remaining compensating deletes.
+- **`lib/google.ts`**, revisited: still correct as it stands.
+
+Two of the three would have been false accusations. Checking each rather than
+converting the pattern is the whole reason the previous session filed them.
+
+**Guard:** `tests/a-fail-closed-loader-must-actually-close.test.ts` drives the
+real `loadGraphCompleteness` with a client whose read rejects the way a transport
+failure does, and requires `{ ok: false }`. Reverting `settleAll` to
+`Promise.all` fails it with the raw `ECONNRESET` escaping — which *is* the
+finding. Two further cases keep it honest: a healthy read must still answer
+`ok: true` (a loader that always closed would pass the first case and be
+useless), and the rejection is exercised on four different elements of the
+nine-read batch, not only the first.
+
+**Recorded: a regex of mine broke an import.** Inserting the `settleAll` import
+after "the last line starting with `import `" landed it *inside* a multi-line
+import block in `intelligence-server.ts`, because the opening `import {` line
+matched. `tsc` caught it immediately (TS1005). Same family as the `useId`
+insertion that split a `useState` earlier in this audit.
+
+---
+
+## Q28 — HIGH: a `NOT IN` list that grows with the platform, in the delete that implements erasure
+
+`lib/network/aggregate-server.ts` · `lib/supabase/chunked-in.ts` ·
+`tests/a-not-in-list-is-the-whole-network.test.ts`
+
+The nightly Intelligence Network aggregation ends by pruning the contributions of
+families no longer opted in, and it did that with the natural spelling:
+
+```ts
+.delete().not('family_id', 'in', `(${keepIds.join(',')})`)
+```
+
+which carries the wrong list. A PostgREST filter travels in the query string —
+`chunked-in.ts` puts it at roughly 40 bytes per UUID and caps a **read** at 100
+ids to keep the longest URL near 4 KB, "well inside the common 8 KB limit". But
+`keepIds` is every family **still opted in**, not the handful being removed.
+
+### The pairing, for the second time in three findings
+
+The reason that list has no ceiling is a *fix*.
+`tests/whole-table-reads-are-not-capped.test.ts` made the consent read page,
+because a truncated consent list would DELETE the contribution of a family that
+never withdrew — its own ratchet entry says `network_consent` "drives a not-in
+DELETE of contributions". Paging the read to keep the list complete is exactly
+what removed the request line's bound. Q26 recorded the same shape for the push
+campaign, where converting a capped read to `readAll` made the next statement's
+`.in()` unbounded. Twice now, the fix is what made the following line reachable.
+
+### Why chunking could not fix it, and why the Q26 sweep missed it
+
+`family_id not in (chunk)` deletes every row **outside** that chunk, which is
+every other chunk's rows; run it twice and the table is empty. NOT IN does not
+decompose over a partition of its list, so neither `readInChunks` nor
+`readAllInChunks` applies. And `.in()` is a method a scanner can find, while the
+complement is a hand-built string with no method at all.
+
+### What was actually broken
+
+Past the gateway's limit the delete answers `URI too long`, the run returns
+`failed to prune contributions`, and nothing is written before it — so the next
+night selects the identical set and fails identically. The stall begins at
+**roughly two hundred consenting families** and never clears. Worse than a
+stall: what stops working is the *erasure*. A family that withdrew consent keeps
+feeding the aggregates it withdrew from for as long as the prune stays broken.
+
+### Why every existing test passed over it
+
+The in-memory Supabase models rows, PostgREST's row cap and the filter
+vocabulary. It has no URL, so a request line cannot be too long in it.
+`whole-table-reads-are-not-capped` seeds 1,011 consenting families and asserts
+every one survives the prune; in production that assertion builds a 40 KB request
+line. **The fake is right about the row count and silent about the byte count,
+and the byte count is the failure.**
+
+### Fix
+
+Invert the set: read which families the table actually holds (paged — a short
+read would leave a withdrawn family in place), subtract the ones still opted in,
+and delete the remainder by `.in()` a hundred at a time through the new
+`writeInChunks`. The remainder is also the far smaller list. It subsumes the old
+empty-keep branch, which had to exist because `not in ()` is not "delete
+nothing": PostgREST reads the empty list as one empty string, so it would have
+matched — and deleted — every row.
+
+**Guard.** The new test gives the fake the one thing it lacked: a proxy that
+prices every id entering a filter (its length plus three for the percent-encoded
+comma) and answers 414 past 8,192 bytes. Reverting the fix fails it naming the
+number — `failed to prune contributions (longest request line: 11505 bytes)`,
+which is 295 kept families at 39 bytes each. Three non-vacuity cases keep it
+honest: the proxy is shown to reject an oversized filter and accept a fitting
+one, and to count ids inside a `not-in` **string** and not only an `.in()` array
+— a proxy that priced only the fixed spelling would have let the broken one
+through free.
+
+**Ratchet.** A scanner for the hand-built shape across `app/` and `lib/`, with a
+closed list classifying each site by what bounds its list. Three exist; the other
+two are bounded by their source (`options.excludeStatuses` from a closed set of
+run statuses, `DIGEST_NOTIFICATION_TYPES` a module constant). Demanding chunking
+there would assert something untrue. A new site fails until somebody says which
+it is, and an entry for a site that no longer exists fails too.
+
+---
+
+## Q29 — MEDIUM: `escapeLike` is not enough inside `.or()`, and the one place that knew it kept the knowledge private
+
+`lib/supabase/escape-like.ts` · `lib/ai/activity.ts` ·
+`tests/ilike-patterns-are-escaped.test.ts`
+
+**No live defect.** `listAiActivity` was already correct and already tested —
+`tests/ai-activity.test.ts` carries four cases on exactly this behaviour. What
+was missing is the *rule*, and the rule is what `escape-like.ts` exists to have
+exactly one of.
+
+### The rule is insufficient where it matters most
+
+`.ilike(column, pattern)` sends the pattern as its own query parameter, so
+escaping the two LIKE wildcards is the whole job. `.or(filter)` sends **one
+string** in PostgREST's filter grammar, where `,` separates disjuncts and `()`
+groups them. Neither is a LIKE character, so `escapeLike` passes both through.
+Follow this repository's own documented rule — "use `escapeLike` at the call
+site" — inside a `.or()` and the filter is still splittable:
+
+| term | result |
+|---|---|
+| `a,b` | `feature.ilike.%a,b%,…` — `b%` is not `col.op.val` → PostgREST 400 |
+| `x,status.neq.zzz` | a fourth disjunct matching every row: the search stops filtering |
+
+**It is not a tenant crossing**, and saying so is the point: the or-group is
+AND-ed with the caller's `.eq('family_id', …)` and RLS sits under both. A broken
+search and a filter bypass *within* scope. The more alarming claim would have
+been the wrong one.
+
+### A fifth private copy, invisible to the guard built to stop private copies
+
+`lib/ai/activity.ts` had `safeSearchTerm`, which handled both grammars correctly
+and privately. Every assertion in `ilike-patterns-are-escaped` missed it: the
+name is not `escapeLike`; the character class is `[\\%_]` and the double-escape
+scan looks for `[%_]`, one character apart; and the call is
+`.or(`…`feature.ilike.${like}`…`)`, which neither matcher can see because both
+require a **method**. The file whose header says "four private copies are why two
+previous fixes did not propagate" could not see the fifth.
+
+### Fix, and one option deliberately rejected
+
+`escapeOrValue`, composing `escapeLike` and mapping the three grammar characters
+to a space. Quoting the value (`col.ilike."a,b"`) would preserve the term exactly
+and was rejected: the in-memory Supabase splits an or-expression on every
+top-level comma without modelling quotes, so a quoted value would work in
+production and break every test exercising it — shipping behaviour the repository
+cannot test. `activity.ts` drops its private copy for it; behaviour is
+byte-identical and its four existing tests pass unchanged.
+
+### A false accusation, caught before it shipped
+
+The private-copy scan's first draft matched any character class containing `%`
+and `_`, and its first finding was wrong. `lib/services/search/index.ts`
+**neutralises** those characters — `replace(/[%_,()"\\]/g, ' ')` — a different
+and perfectly good strategy for a search box, already that service's single
+definition, and nothing `escape-like.ts` offers. Flagging it would have demanded
+a change that makes the code worse. The rule now requires a backslash-*quoting*
+replacement, which is the thing there must be exactly one of.
+
+**Calibration.** Reverting `activity.ts` to the documented rule *correctly
+applied* — `escapeLike` alone — fails both new rules naming the file. That is the
+strongest calibration available here: the guard fires on code that follows the
+repository's written instruction.
+
+---
+
+## Verification (Q28–Q29)
+
+**14,135 tests green** under both `TZ=UTC` and `TZ=America/Los_Angeles` (four
+shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
+`npm run build` exits 0. Every new guard proven to bite by reverting its fix.
+
+---
+
+## Q30 — MEDIUM: two paged reads without a total order, one of them a benchmark band that vanishes
+
+`lib/network/benchmarks-server.ts` · `app/(app)/admin/marketing/push/actions.ts` ·
+`tests/a-paged-read-needs-a-total-order.test.ts`
+
+`lib/supabase/read-all.ts` states the rule precisely: give a paged query "an
+`.order()` that is unique — a primary key, not the `family_id` being filtered on
+— or pages can repeat and skip rows." `.range(from, to)` is a separate request
+with a separately planned sort, so a key that is not a **total** order lets a
+page boundary move inside a run of equal values: the row at offset 1,000 in the
+first query can sit at 999 in the second and never be returned at all.
+`lib/blog/posts.ts` measured its own exposure — "717 of the published rows share
+a `published_at` with another row".
+
+### The sweep, and the eight that were fine
+
+Forty-nine paged reads. Thirty-nine order by `id`. Of the other ten:
+
+| site | ordering | verdict |
+|---|---|---|
+| blog posts, journey events, sync calendar events, benchmarks | explicit tiebreak, reason in source | correct |
+| `checkout_sessions.session_id` | `UNIQUE` (0051) | correct |
+| `family_model_dirty.family_id` | `primary key` (0134) | correct |
+| `network_consent.family_id` | `primary key` (0132) | correct |
+| `network_contributions.family_id` | `primary key` (0135) | correct |
+| `marketing_suppressions.email` | `PRIMARY KEY` (0021) | correct |
+| `network_aggregates` | one column short of its own key | **defect** |
+| `push_devices` | `user_id`, not unique | **latent defect** |
+
+Each uniqueness claim was read out of the migration that declares it rather than
+inferred from the column's name. **Eight of ten would have been false
+accusations.**
+
+### One column short of the table's own key
+
+0135 declares `unique (scope, cohort_key, metric, value)`.
+`readBenchmarkAggregates` orders by `cohort_size, cohort_key, metric` and pins
+`scope` with `.eq`. The tiebreak was added deliberately and for exactly the right
+reason — "`cohort_size` is far from unique, so it also needs a tiebreak for two
+pages not to overlap or skip" — and stopped one column short.
+
+A metric's `value` rows **are** its bands, so every metric is a tie group of
+several. A dropped band is not a shorter benchmark, it is a different one. Fixed
+by appending `.order('value')`, completing the key the table already declares.
+
+### One that is latent, and says so
+
+`push_devices` is "one row per physical device" (0035), so `user_id` repeats for
+anyone with a phone and a laptop. This one is **not** a live bug and the source
+now records why: only rows inside a tie group can be permuted, so the set of
+distinct `user_id` values is invariant, and `selectPushRecipients` dedupes to
+exactly that set. Calling it a live audience bug would have been the more
+dramatic claim and the false one.
+
+It is still worth the one word. The moment that read grows a second column — a
+`device_key`, a per-device count, a platform breakdown — the dropped row becomes
+precisely the audience bug the comment three lines above it claims to have fixed.
+
+### The guard models the rule the way a reviewer applies it
+
+A paged read is totally ordered when its `.order()` columns **together with the
+columns an `.eq()` pins to a constant** contain a declared unique key. The pinned
+half is not a loophole — it is exactly why the benchmarks read looked fine while
+being one column short, since `scope` is fixed for every row it can return and
+cannot break a tie, but the other three members of the key then all have to be in
+the order. `.gte()` and `.in()` deliberately do not count, and that distinction is
+calibrated against the benchmarks read's own `.gte('cohort_size', FLOOR)`.
+
+The registry cites the migration line that declares each key — an assumption
+about uniqueness is the one thing this file exists to stop — and an entry for a
+table nothing pages any more fails too.
+
+### Clean negatives from the same pass
+
+Recorded rather than left unsaid: every `unstable_cache` use is global marketing
+content rather than family-scoped; the only module-level mutable cache is the
+in-process rate limiter; all three webhook routes verify against the **raw** body
+with `constructEvent` or HMAC + `timingSafeEqual`; the Stripe price→plan chain
+throws on a missing `priceId` before it can compare `undefined` against an unset
+env var; six private constant-time comparisons all compare fixed-length digests,
+where the length pre-check `secret-equals.ts` warns about leaks nothing; and the
+three `Promise.all` batches containing writes turn out to be two reads, a
+per-element `.catch`, and an idempotent batched update.
+
+**Verified:** 14,142 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
+`npm run build` exits 0. Both fixes proven to bite by reverting them.
+
+---
+
+## Q31 — LOW: thirty-four English strings reach six languages untranslated, and the catalogue test checks only the other direction
+
+`tests/every-complete-catalogue-is-complete.test.ts` · `lib/i18n/messages/*.json`
+
+`tests/i18n-catalogue-integrity.test.ts` checks **orphans** — a key a locale
+carries that English no longer has — and never the reverse. The reverse is the
+direction a reader notices: a key English has and a locale does not is a sentence
+that comes out in the wrong language.
+
+Parity **is** enforced, but one namespace at a time, in whichever feature test
+somebody remembered to write it in — `contactTimeline.`, `filesHubModule.`,
+photos, contacts. That is coverage by memory, and it has the gap you would
+predict.
+
+### The measurement
+
+Thirty-four English keys are absent from all six complete catalogues — the
+**same** thirty-four in each, which is the signature of one batch of copy that
+shipped and never reached translation.
+
+| namespace | keys | parity test |
+|---|---:|---|
+| `quickCapture.` | 11 | none |
+| `actions.` | 9 | partial (photos, contacts) |
+| `roleSurface.` | 6 | none |
+| `trialPaywallGate.` | 4 | none |
+| `commandBar.` | 2 | none |
+| `displayComfort.` | 2 | none |
+
+### What it is NOT
+
+They do not render as raw keys, and one of the new rules **proves** that rather
+than asserting it. `getMessages` seeds every merge with `{ ...enUS }` — "en-US is
+the root of every chain and is therefore never listed" — so a missing key
+resolves to the English string. A German reader gets the quick-capture sheet, the
+command bar, the density settings and the trial paywall in English inside an
+otherwise German product. Degraded, not broken.
+
+That distinction is worth the paragraph, because the alarming version of this
+finding is exactly what `lib/i18n/translate.ts` would produce if its assumption
+were wrong. It ends `messages[key] ?? key` with **no** English fallback,
+deliberately: holding en-US in the client chunk measured 244 KB gzip and 62% of
+the marketing home page's first-load JS. Its header claims that by the time it
+runs, a key the catalogue lacks "was never going to be found in the browser
+either". Checked: true, because the merge happens on the server. The new rule
+pins it so it stays true.
+
+### Two more checked and not defects
+
+The four zero-key catalogues — `en-GB`, `es-MX`, `es-US`, `fr-CA` — are
+**overlays** carrying only what diverges. `en-GB` is one even though
+`FALLBACK_CHAIN` does not list it, because en-US is the implicit root of every
+merge; the guard exempts each by name with what it overlays, so the exemption is
+a claim rather than an oversight. And `getRawMessages`, which reads like a helper
+written for a parity test nobody wrote, turns out to have fourteen callers.
+
+### What ships is not the translations
+
+Writing German, Spanish, French, Italian, Dutch and Portuguese product copy that
+nobody here can read back is worse than leaving the gap visible — it is the same
+"16 labels + 66 selects need copy in eleven locales" already filed as an owner
+decision. What ships is the **ratchet**: a repo-wide parity rule with the
+thirty-four recorded as a backlog that may only SHRINK. A new English key without
+its six translations fails, naming the key and its English text; a key translated
+everywhere fails until it is removed from the list; a key deleted from English
+fails until it is removed. Both directions proven by planting each case and
+watching the right rule name it.
+
+**Verified:** 14,153 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+## Q32 — LOW: the admin digest's window is wall-clock, so a failed run drops a day (FILED, not fixed)
+
+`app/api/cron/admin-digest/route.ts`
+
+`const since = new Date(Date.now() - 24 * 60 * 60 * 1000)` on a `30 12 * * *`
+schedule. The window comes from when the run happens rather than from what was
+last delivered, which gives two symptoms from one cause: a run that fails is
+never made up, because the next window begins after the failed one ended; and a
+retry inside the same day re-sends, because nothing records that one already
+went.
+
+**Severity is LOW, and precisely why.** The rows are not lost.
+`lib/feedback/notify.ts` writes `admin_notifications` independently of any
+email, and the /admin pages render that table directly — its own comment calls
+that feed "where a super admin finds out at all". A dropped digest loses the
+**push**, not the information, and the failure shows up as a 502 in the cron
+log. Recipients are super admins; no family, money or safety path depends on it.
+
+**Fix, specified.** Persist a high-water mark (`last_digested_at` on a singleton
+row, or a one-row `admin_digest_runs` table), set it after a successful send, and
+derive `since` from it with the 24h window as the floor for a first run. A missed
+day then rolls into the next digest and a same-day retry becomes a no-op.
+
+**Why it is filed rather than fixed, stated so it can be overridden.** The fix
+needs persisted state, i.e. a migration. This branch has already hit ten
+migration-number collisions and two other Claude workers are auditing this
+codebase concurrently, so a new migration number from here is the most likely
+thing to collide — for the least valuable change on the board. No bodge was
+applied instead: widening to 48h would stop the loss but make every digest
+double-count a day, and this audit does not trade one silent wrongness for
+another.
+
+### The rest of the cron surface is retry-safe
+
+24 scheduled jobs, checked for what a second run would repeat. The pattern is
+near-universal and correct — a side effect gated behind a state flip a retry
+cannot re-match:
+
+| cron | guard |
+|---|---|
+| `wallet-allowance` | compare-and-swap claim; the loser matches zero rows |
+| `close-auctions` | settles in an RPC, re-reads only `status = 'available'` |
+| `guardian-learning` | 60-day lookback on a daily schedule, so a failure self-heals |
+| every notification path | `notify()`'s duplicate guard |
+
+`notify()` is the choke point and it holds: it reads existing rows, filters
+already-notified recipients, and **fails the call** when that read errors rather
+than shipping a duplicate storm. Its dedupe read is an unbounded `select()` —
+the Q25 shape — and it cannot bite here, because the set it builds is of
+`user_id`s for one family, so even a `db-max-rows` prefix still contains every
+distinct recipient.
+
+Outbound HTTP carries timeouts: the four server-side `fetch(` calls with no
+signal at the call site are all false positives — three browser beacons in
+`lib/marketing/visitor.ts`, and a Supabase `global.fetch` wrapper in
+`lib/blog/posts.ts` that spreads `init` through and preserves a caller's signal.
+
+---
+
+## Q33 — MEDIUM: M-023 is a two-sided invariant enforced on one side
+
+`public/sw.js` · `lib/auth/route-access.ts` ·
+`tests/a-cacheable-page-must-stay-public.test.ts`
+
+**No live defect.** `/` and `/offline` are genuinely public today, checked rather
+than assumed: `app/(marketing)/page.tsx`, `app/(marketing)/layout.tsx`,
+`app/layout.tsx` and `app/offline/page.tsx` hold zero session reads and zero
+redirects between them.
+
+The gap is in what is *enforced*. `public/sw.js` states the invariant in its
+header — "authenticated HTML is NEVER written to Cache Storage. Cached pages
+persist unencrypted after logout and would be served offline to whoever next
+opens the app on a shared/family device" — and
+`tests/mobile-sw-auth-cache.test.ts` enforces it with six assertions: the
+precache list, the navigation allowlist, the version bump, the library cache,
+the API/auth exclusion, the offline fallback. **Every one of them is about the
+service worker.** None is about the pages on its allowlist, and the invariant is
+only true if those pages are public.
+
+### Why the unenforced half is the sharper one
+
+```js
+fetch(request).then((res) => { if (CACHEABLE_NAV.has(url.pathname)) c.put(request, res.clone()) })
+```
+
+`fetch` **follows redirects** and `cache.put` keys on the **original** request.
+So the day `/` starts forwarding a signed-in visitor to `/dashboard` — an
+ordinary product change, and the first thing most apps do — the worker writes
+the dashboard's HTML into Cache Storage *under the key `/`*, where it survives
+logout and is handed to the next person who opens the app offline on that
+device. Every existing assertion still passes, and the invariant comment still
+sits in the file saying the opposite.
+
+### The guard
+
+Four rules over the allowlist parsed out of `sw.js` itself rather than restated:
+
+1. every cacheable path is on `PUBLIC` and absent from `PROTECTED`;
+2. every cacheable path names the files that render it — so a path added to
+   `APP_SHELL` fails until somebody says what renders it, which is the moment to
+   notice it is not a marketing page;
+3. no file in a cacheable render chain reads the session or calls `redirect(`;
+4. the matcher is calibrated against the real spellings.
+
+The redirect half of rule 3 is deliberate: a page that merely **forwards** a
+signed-in visitor leaks exactly as much as one that renders their data, because
+the worker follows it.
+
+**Both failure modes proven.** Adding `/dashboard` to `APP_SHELL` fires rules 1
+and 2 by name. Adding the realistic change to `app/(marketing)/page.tsx` —
+`createServer()`, `auth.getUser()`, `redirect('/dashboard')` — fires rule 3.
+
+**A calibration miss of my own, recorded.** The first probe for that second case
+added only `import { redirect } from 'next/navigation'`, and the guard did not
+fire. That was the probe being wrong, not the guard — the matcher requires
+`redirect(`, and an unused import is not a redirect. The lesson is the one this
+audit keeps relearning: a probe that does not reproduce the real change proves
+nothing. Caught this time before it was written down as a pass.
+
+**Verified:** 14,158 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, and the existing `mobile-sw-auth-cache` suite passes
+alongside it.
+
+---
+
+## Q34 — MEDIUM: push is the third subsystem that dies silently, and the health guard only ever checked one direction
+
+`lib/health/status.ts` · `lib/server/push.ts` ·
+`tests/health-feature-secrets.test.ts`
+
+**Thread attribution first.** `FEATURE_ENV` and its guard are a thread
+`audit/claude-4.md` has been working — they raised `RESEND_API_KEY`. Their note
+still reads "RESEND_API_KEY still absent from FEATURE_ENV"; it is present now, so
+that line is stale. Recorded here rather than corrected there, because it is
+their file. This is the completeness extension, not a re-report.
+
+### The asymmetry
+
+`tests/health-feature-secrets.test.ts` carries twelve assertions and every one
+runs **outbound**: what is listed is really read, is env-only, is not
+admin-settable. None runs **inbound** — nothing checks that a secret which meets
+the criteria is listed. That is the direction a subsystem dies in, and it is the
+same shape as Q31, where orphaned catalogue keys were guarded and missing ones
+were not. It has cost this codebase twice now.
+
+### The gap
+
+`VAPID_PRIVATE_KEY` and `FCM_SERVER_KEY` gate web push and native iOS/Android
+push. Both meet FEATURE_ENV's own stated test exactly:
+
+```ts
+if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
+if (!fcmConfigured() || !d.token)                  { result.skipped++; continue; }
+```
+
+**Skipped, not failed.** The caller receives `{ sent: 0, skipped: N, failed: 0 }`
+and reports itself clean while no push has left the building — precisely the
+`RESEND_API_KEY` shape, where an absence reads as success rather than as an
+error.
+
+And env-only, with no stored fallback. Contrast the AI keys, which FEATURE_ENV
+deliberately excludes because `lib/ai/provider.ts` reads
+`cfg.openaiKey ?? process.env.OPENAI_API_KEY`, so a deployment configured in the
+admin console has no env var and a working assistant. No equivalent exists for
+the push keys anywhere in `app/`, `lib/` or the migrations.
+
+The product already knows this state exists —
+`admin/marketing/push/page.tsx` tells an operator delivery is "skipped until keys
+are set". `/api/health` was the one place that did not.
+
+### Fix and guard
+
+Both added to `FEATURE_ENV` with the mechanism recorded in the source. All twelve
+pre-existing assertions pass unchanged against the additions — the existing guard
+independently confirming both are genuinely read and genuinely env-only.
+
+The new rule is the missing direction: a closed list of subsystem gates, each
+carrying its subsystem and the mechanism that makes its failure silent, asserted
+to be contained in `FEATURE_ENV`; a source check that the push paths really do
+increment `skipped` rather than `failed` (if that changed, these two would stop
+belonging); and the admin-fallback exclusion test applied to them. Dropping both
+from `FEATURE_ENV` fails it, naming each gate and how it dies.
+
+**Verified:** 14,162 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, `npm run build` exits 0.
+
+---
+
+## Q35 — MEDIUM: a cap that rose with the load it was meant to resist
+
+`app/api/assistant/route.ts` · `lib/server/rate-limit.ts` ·
+`lib/server/request-rate-limit.ts` · `tests/assistant-bridge.test.ts`
+
+**Thread boundary first.** `audit/claude-3.md` inventoried which routes *have* a
+rate limit. This is the different question — **which** limiter, and whether the
+cap survives horizontal scale.
+
+`lib/server/rate-limit.ts` says it of itself, in its first two lines:
+
+> "Lightweight in-memory rate limiter (fixed window) for API routes. Good for a
+> single instance / dev; swap for Upstash Redis in multi-instance prod."
+
+Every warm lambda holds its own `buckets` Map, so on a serverless platform a cap
+of 30/min is really 30/min **per instance** — and load is what spawns instances.
+The ceiling rose with the pressure it existed to resist.
+
+### The site that made a claim it did not keep
+
+```
+// Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
+// endpoint to test guessed tokens at speed.
+```
+
+A stated security property, implemented with the limiter documented as not
+holding across instances. The repo already knows the right pattern for this exact
+shape: `/api/ai/gift`, also public and model-backed, uses the durable limiter
+with "limit via Postgres so the cap holds under horizontal scale", and
+`enforceRequestRateLimit` composes both — the in-process check as a cheap fast
+path, then the Postgres count. Swapped to that; the service client was already a
+synchronous constructor in the file, so it moves up four lines.
+
+### Severity is MEDIUM and the token is why
+
+`lib/assistant/link-token.ts` mints `randomBytes(32)` — 256 bits. Guessing was
+never the live risk whatever the cap. So this is **not a hole being closed**: it
+is a stated property being made true, and a public model-backed endpoint getting
+a cap that is one number rather than one number times however many instances
+happen to be warm. Claiming a brute-force fix here would be the more dramatic
+finding and the false one.
+
+### Seven other sites, deliberately left
+
+`assistant/alexa`, `recipes/search`, `blog/search-index`, `mkt/consent`,
+`exit-intent/resolve`, `dashboard/library/actions`, `library/media/[itemId]` all
+call the bare limiter. At none of them is the cap the primary control — the
+authenticated ones key on `ctx.user.id`, the public ones front cheap reads rather
+than spend. Sweeping them in would assert an urgency that is not there.
+
+### A guard whose mechanism was wrong for the second time
+
+`tests/assistant-bridge.test.ts` asserts the limiter runs before the token
+lookup by comparing `indexOf('rateLimit(\`assistant')` against
+`indexOf('await resolveAssistantLink(')`. After the swap the property still held
+— the call is still first — but the literal no longer matched
+`enforceRequestRateLimit(supabase, \`assistant:…`, so it failed on **spelling**.
+Its own comment already records an earlier version of the same mistake: "the
+first attempt compared the first occurrence of each name … so it measured import
+order".
+
+Re-anchored on the KEY, which is what makes a call *the* rate limit for this
+route and does not move when the implementation behind it does. The assertion is
+untouched — moving the limiter after the lookup still fails it, "expected 3245 to
+be less than 3162". Third instance of this family in this audit, after `readAll(`
+vs `readAll<Row>(` and `useDialogBehavior(` vs `useDialogBehavior<T>(`.
+
+**Verified:** 14,162 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, `npm run build` exits 0.
+
+---
+
+## Q36 — Q32 CORRECTED: the admin digest double-sends every day, not on a rare retry
+
+`scripts/cron-dispatch.mjs` · `vercel.json` · `app/api/cron/admin-digest/route.ts`
+· `tests/a-mirrored-cron-must-be-idempotent.test.ts`
+
+**This corrects my own earlier severity assessment.** Q32 was filed as LOW on the
+reasoning that a duplicate digest requires a retry and retries are rare. That
+reasoning was wrong, and what disproves it was in the repository the whole time.
+
+### Two schedulers drive the same 24 routes, deliberately
+
+Vercel's Hobby plan refuses anything more frequent than daily, so `vercel.json`
+carries daily-safe schedules "so production deploys on any plan" while the real
+cadences live in `SCHEDULES` and are driven every five minutes by
+`.github/workflows/cron-dispatch.yml`. The lists are **mirrored on purpose** —
+the same header says that on Pro you "copy SCHEDULES below" into vercel.json and
+disable the workflow — and `tests/cron-dispatch.test.ts` already guards that
+mirror in both directions.
+
+### The mirror rests on one sentence
+
+> "The routes are idempotent and CRON_SECRET-gated (lib/server/cron-auth.ts), so
+> a Vercel daily run and a GitHub run of the same route never conflict."
+
+True of the routes Q32 checked, for verified reasons — `wallet-allowance`'s
+compare-and-swap claim, `close-auctions`' status predicate, `notify()`'s
+duplicate guard. **False for `admin-digest`**, whose two schedules are the
+identical `30 12 * * *`: both dispatches land in the same minute, both compute
+`Date.now() - 24h`, both find the same activity, both send. Every super admin
+receives two identical emails daily. 20 of 24 routes fire from both sources at
+the same minute; this is the one where that is not benign.
+
+### What does not change
+
+Severity stays MEDIUM rather than climbing further. The rows are still written
+independently of the email and the /admin pages still read that table, so this is
+duplicate notification traffic to super admins — not lost or wrong data. The fix
+is still the one Q32 specified (a persisted high-water mark, hence a migration)
+and is still deferred for the stated reason: ten prior migration-number
+collisions, two other audit workers live on this codebase. What changes is that
+the deferral should now be weighed against a defect that fires **daily** rather
+than one waiting on a retry.
+
+### Guard, and a guard I discarded
+
+`a-mirrored-cron-must-be-idempotent` keeps a backlog of routes that break the
+dispatcher's claim, and it may only shrink. It pins the dispatcher's sentence
+verbatim so a rewrite forces a re-read, and requires each entry to still
+double-fire at the identical minute **and** still lack a dedupe — so the entry
+fails the moment either is resolved. Proven on both exits: simulating the fix
+fails it ("now carries a dedupe mechanism — remove it"); moving Vercel's schedule
+off the dispatcher's fails it ("the duplicate is gone, remove the entry").
+
+The obvious alternative — a dedupe-marker scan across all 24 routes — was tried
+and discarded. Ten routes show no marker in their own `route.ts` because the
+mechanism lives in a lib they call, so it would have opened with nine false
+accusations. Narrow and true beat broad and wrong.
+
+**Verified:** 14,168 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+## Q37 — MEDIUM: a late GitHub tick drops a cron firing, and nothing records it
+
+`scripts/cron-dispatch.mjs` · `tests/a-late-tick-drops-a-cron.test.ts`
+
+The dispatcher's window is anchored to when it **ran**, not to when it was
+**due**:
+
+```js
+for (let back = 0; back < tickMinutes; back += 1) {
+  const t = new Date(now.getTime() - back * 60_000);
+  if (matchesAt(parsed, t)) { due.push(route); break; }
+}
+```
+
+GitHub's scheduled workflows are best-effort and routinely late. A tick due at
+09:00 that starts at 09:07 searches (09:02, 09:07]; a route scheduled for 09:00
+is not in it. Nothing errors and nothing retries — the next tick's window starts
+later still, so that firing is gone.
+
+### Demonstrated, not argued
+
+Through the script's own dry run:
+
+| invocation | routes dispatched |
+|---|---|
+| `--at 09:00Z` | marketing, marketing-social, journey-recovery, close-auctions, ai-runs, family-routines |
+| `--at 09:07Z` | marketing, close-auctions, ai-runs |
+
+`journey-recovery`, `marketing-social` and `family-routines` silently dropped.
+
+### Who it actually costs
+
+1,107 firings per weekday depend solely on a GitHub tick landing within five
+minutes — but most are frequent routes whose next occurrence is minutes away, so
+a lost slot costs minutes. The exposure is the **sparse** ones, where the next
+chance is hours: `checkout-abandoned`, `library-feeds` and `marketing-providers`
+(every six hours, and Vercel schedules **none** of those minutes),
+`provider-sync` (5 of 6), `journey-recovery` (2 of 3), `autopilot-scan` and
+`model-refresh` (1 of 2 each).
+
+### The redundancy cuts both ways
+
+Q36 recorded that `vercel.json` mirrors all 24 routes, and that this is what makes
+`admin-digest` double-send. **The same mirror is what protects the daily jobs
+here** — Vercel fires at the right minute whatever GitHub does. It does not
+protect a firing Vercel has no schedule for, which is precisely the sparse set.
+
+### Why this is pinned rather than fixed
+
+No clean stateless fix exists, and each option was checked rather than asserted:
+
+- widening the window makes a daily route fire several times a day, which also
+  multiplies the `admin-digest` duplicate from Q36;
+- anchoring to the tick boundary still misses a tick GitHub **dropped** rather
+  than delayed, which it also does under load;
+- the robust fixes are persisted catch-up state, or the end state the
+  dispatcher's own header names — "On Vercel Pro the original per-minute
+  schedules can go back into vercel.json and this workflow can be disabled".
+
+That is an owner's trade-off, not mine to pick.
+
+**Guard.** The new file runs the real `dueRoutes` at both times and asserts the
+drop, names the sparse routes Vercel does not cover, and checks the frequent ones
+really are frequent enough to self-heal — so their exclusion is reasoned rather
+than assumed. It tracks reality rather than freezing a number: raising
+`TICK_MINUTES` to 15 makes the drop disappear and fails the test.
+
+**Recorded — my own mistake.** The first version would not parse: I wrote cron
+expressions inside a JSDoc block, and `*/5` contains `*/`, which terminates the
+comment. Same family as the import insertion that split a `useState` earlier in
+this audit — right about the content, wrong about the syntax around it.
+
+**Verified:** 14,172 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12.
+
+---
+
+## Q38 — LOW: the production migration workflow ran two scripts its `paths:` filter did not list
+
+`.github/workflows/supabase-production-migrations.yml` ·
+`tests/a-paths-filter-must-list-what-it-gates.test.ts`
+
+A `paths:` filter decides when a push re-runs a workflow, so anything the
+workflow depends on has to be in it. A missing dependency does not fail — the
+workflow simply does not run, which is the quietest way for a gate to stop
+gating.
+
+This is the workflow that runs `supabase db push --yes` against **production**.
+Its filter already named nine scripts plus the workflow itself, `package.json`
+and `supabase/migrations/**` — the intent is unambiguous. Two had drifted out:
+
+| script | what it gates |
+|---|---|
+| `scripts/audit-supabase-queries.mjs` | the step whose own comment says it catches "a query naming a column or table the release does not create … fails only at runtime, as an empty page" |
+| `scripts/verify-marketing-runtime-remote.mjs` | the marketing runtime readiness report |
+
+Push a fix to either alone and production was never re-verified with the fixed
+gate, until some other listed file happened to change.
+
+**Severity is LOW for its blast radius, not its mechanism.** It delays
+verification rather than corrupting anything, and the next migration push re-runs
+everything. It is recorded because the filter's whole purpose is completeness,
+and a list that is 9-of-11 complete reads as complete.
+
+**Fix.** Both added. Adding to `paths:` can only make the workflow run *more*
+often, never less, so the change carries no behavioural risk — worth saying
+plainly, since this file touches production. The reverse direction was checked
+and is clean: no entry names a script the workflow has stopped running.
+
+**Guard.** A rule over every workflow that declares a `paths:` filter — one
+without a filter runs on every push and has nothing to drift. Each must list
+every `scripts/*.mjs` it runs, directly or through an npm script, and must not
+list one it no longer runs. The npm-script resolver is calibrated against a real
+entry so the rule cannot pass by resolving nothing, and a separate case pins that
+this workflow still contains `supabase db push --yes`, since otherwise the rules
+would quietly stop being about production.
+
+**Verified:** 14,177 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, workflow YAML still parses.
+
+---
+
+## Q39 — Every sub-daily cron cadence is an intention nothing keeps
+
+**Severity: CRITICAL.** The scheduling architecture splits into two tables:
+`vercel.json` carries daily-safe schedules so production deploys on Hobby, and
+`scripts/cron-dispatch.mjs` `SCHEDULES` holds what its own header calls "the
+real cadences", driven by a workflow that "ticks every five minutes". The
+workflow does not tick every five minutes, and no test in the repository could
+have noticed, because none can observe whether GitHub delivered a scheduled
+event.
+
+**Measured, not inferred.** `cron-dispatch.yml` has produced 95 runs in its
+entire life — numbered 1 to 95, contiguous, `max(run_number) == total_count`, so
+nothing was pruned — from 2026-09-05T08:35:40Z to 2026-09-18T23:23:18Z. Over
+those 13.62 days a `*/5` schedule requests **3,922** ticks and received **95**:
+a **2.4% delivery rate**, a mean interval of **209 minutes** against the 5
+requested, a **minimum** observed gap of **104 minutes**, and **zero** of 83
+consecutive pairs at the requested cadence. The workflow, the dispatcher and
+`vercel.json` are byte-identical on `main`, and scheduled runs fire only from the
+default branch, so these are production numbers.
+
+**What breaks.** The daily routes are safe: `vercel.json` mirrors all 24 and
+Vercel's scheduler fires. The damage is the fourteen routes whose real cadence
+is sub-daily and so has no Vercel equivalent, where the advertised cadence
+exceeds the guaranteed one by 2× to 288×. `close-auctions` is written every five
+minutes and guaranteed once a day, so an auction ending at 10:05 can stay open
+almost 24 hours. `family-routines` promises in its own comment that "a 17:00
+schedule fires at 17:00 and not at whatever hour a daily tick happens to land
+on", and fires at whatever hour a daily tick lands on. `ai-runs` parks work on a
+time budget expecting a 5-minute resume and gets ~24 hours. `autopilot-scan`'s
+18:30 pass and `model-refresh`'s 16:00 pass have no Vercel schedule at all and
+fired zero times in 13.6 days.
+
+**Mechanism.** Two things compound: GitHub's `schedule` event is best-effort and
+is being delivered at ~2%, and `dueRoutes` searches a fixed five-minute window
+anchored to when the dispatcher *ran*, so everything due during a 104–396 minute
+absence falls outside every window ever evaluated. Nothing errors — the window is
+empty. The first is not fixable here; the second is what turns a missing tick
+into a permanently lost firing.
+
+**Correction to earlier work in this audit.** `a-late-tick-drops-a-cron` found
+the mechanism and got the severity backwards, because it modelled a seven-minute
+delay rather than measuring one: it claimed frequent routes "self-heal in
+minutes" and that the sparse ones are what matter. Both are inverted. Corrected
+in place, with the refuted reasoning left visible.
+
+**Guard.** `a-cron-cadence-is-a-promise-nothing-keeps` computes each route's
+advertised cadence from `SCHEDULES` and its guarantee from `vercel.json`, pins
+all fourteen deficits *by size* rather than existence, proves the complement is a
+real partition, and names the worst-case wait each dependent route guarantees.
+Adding a route that needs sub-daily cadence without a scheduler that delivers one
+fails with the deficit named; giving a route a real scheduler removes it.
+Calibrated by perturbing each table in turn.
+
+**Coupled and currently hidden.** `callRoute` aborts every route at a hardcoded
+120 s and treats the abort as a failure, while six dispatched routes declare
+`maxDuration = 300` and three box their own work at 240–260 s. Those budgets are
+twice the deadline their only caller will wait. It is almost never exercised
+*because* delivery is broken — `provider-sync` was dispatched once in 13.6 days
+— so fixing the cadence arms it. The two must be resolved together.
+
+**Not fixed here, deliberately.** Remediation changes production scheduling and
+is an owner decision: Vercel Pro's native sub-daily crons (the end state the
+dispatcher's own header already names, and the only one that restores cadence);
+or a widened look-back window (cheap, safe for 23 of 24 routes since they are
+required to be idempotent, but it doubles down on `admin-digest`, which Q32/Q36
+established is not, and it restores coverage without restoring cadence); or
+persisted catch-up state. Until one is chosen, the fourteen routes should be read
+as daily. Full evidence, per-route delivery table and the deficit table are in
+`audit/claude-1.md`.
+
+**Verified:** 14,184 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, dispatcher still parses and workflow YAML still valid.
+
+---
+
+## Q40 — A successful slice spends the run's abandonment budget
+
+**Severity: HIGH.** `family_automation_runs.attempt` is read as a failure budget
+and written as a claim counter. `claim_ai_runs` pass 1 and
+`0263_dead_letter_reconcile` both spell it "abandoned"/"dead-letter", and
+`store.claimRun` refuses a claim at `attempt >= max_attempts`. But every claim
+increments it — the successful ones included — and nothing ever resets it.
+`parkForContinuation`, the path a healthy slice takes when it runs out of wall
+clock, clears the lease and leaves `attempt` where the claim put it.
+`max_attempts` defaults to 5.
+
+**Proven, not argued.** `tests/a-successful-slice-must-not-spend-a-retry.test.ts`
+drives the real `claimRun` against the in-memory PostgREST stand-in. Five healthy
+slices leave a run with `state: 'ready'`, no lease, no cancellation and no error
+— and the sixth claim is refused, silently: `ok` with `claimed: false`, which
+`continueRun` reports as `status: 'ready'`. Every human-initiated path (resume,
+the kick after an approval answer, a step re-run) goes through `claimRun`, so all
+of them stop working with no error and no state change. Five slices is ordinary:
+the per-run budget is 25 s inside an 85 s tick, and a run parks every time it
+needs a human.
+
+Two further consequences. The cron's claiming pass has **no** attempt ceiling —
+only `claimRun` does — so the two claim paths disagree, and that inconsistency is
+the only thing preventing total deadlock. And once the ceiling is passed, the
+first genuine worker death dead-letters the run as "abandoned after the maximum
+number of attempts", which is false: it made progress five times and died once.
+That run-level `attempt` was never the retry mechanism is visible in the schema —
+per-step retries have their own column, `ai_plan_steps.max_retries`.
+
+**Calibrated both ways:** raising `max_attempts` makes the sixth claim succeed;
+adding `attempt: 0` to the park keeps the run claimable. So the ceiling is the
+cause and a reset is the shape of the fix.
+
+**Filed, not applied.** The fix is to reset `attempt` on park *only when the
+slice completed a step* — a bare reset would stop genuinely stuck runs from ever
+dead-lettering. That needs a this-slice delta and a proof that a no-progress run
+still terminates, which is more than a unilateral change to a concurrency-critical
+state machine should carry. The cheaper half — giving `claim_ai_runs` the same
+ceiling — is worse alone, since it converts "no human can resume this" into
+"nothing can". Both together, in that order.
+
+---
+
+## Q41 — The duplicate a plan actually produces, and the defence that cannot see it
+
+**Severity: MEDIUM.** `resolveIdempotencyKey` names the failure mode in its own
+comment — "the duplicate a plan actually produces is two steps creating the same
+thing" — and builds a run-scoped natural key to catch it. That branch is
+unreachable during plan execution: the function short-circuits on a supplied key,
+and the executor's only call site unconditionally supplies
+`stepIdempotencyKey(family, run, step, tool)`. A plan step never consults its
+tool's `idempotencyFrom`.
+
+Step-scoping is correct for its own purpose — `scopeKey` documents it as making a
+*retried step* idempotent, which it does. The gap is that it is the only key such
+a call gets, so retry-dedupe is delivered and same-thing-dedupe is not.
+
+Nothing else closes it. `savePlan` validates step keys, dependencies and cycles
+and never compares two steps' tool and input. `withIdempotency` uses `scopeKey`,
+which carries the step id too, so 0256's table-level unique index also sees two
+distinct keys and writes both rows.
+
+**Proven** in `tests/two-steps-that-do-the-same-thing.test.ts` against the real
+exported functions: two steps, same family, run, tool and intent, two different
+keys — at both the ledger and the service layer — while a retried step still
+collides with itself. Calibrated by removing the step id from each derivation in
+turn; both collapse the keys and fail.
+
+Impact is duplicate household rows. Gated on the planner emitting two
+content-identical steps, but the repo's own comment asserts that is what plans
+do, and the same class has landed before ("planning a meal twice left two dinners
+in one slot").
+
+**Filed, not applied.** The fix is for a run's tool call to honour both keys —
+the step key for retries, the natural key for siblings. The ledger's unique index
+is single-column, so that means a second reservation, or preferring the natural
+key where a tool defines one. The latter is probably right but changes retry
+semantics for every tool with a natural key, and proving that against the
+approval, replan and dead-letter paths is not a unilateral change.
+
+**Process note.** The near-miss entry immediately before this one deprioritised
+exactly this question as "prior that this is a defect is low". Following it
+anyway is what turned it into a finding; the refutation recorded there was about
+a different claim and still stands.
+
+---
+
+## Q42 — RLS filters a write; it does not refuse one. Twelve client paths reported success over records that were never touched
+
+**Severity: HIGH.** `delete from t where id = $1` under a policy the caller
+fails does not raise. Postgres removes the rows the policy admits — none — and
+PostgREST answers `error: null`. Every health, journal, behaviour, sleep and
+check-in module branched on `error` alone, so a blocked write and a successful
+one were the same observation:
+
+```ts
+const { error } = await sb.from('medications').delete().eq('id', m.id);
+if (error) { toastError(...); return; }
+success('Medication deleted');     // over a prescription still in the table
+```
+
+**This audit is what made it live.** These are not hypothetical policies. 0328
+made `medications` and `medication_schedules` manager-only; 0323 gives
+`health_visits`, `immunizations` and `care_log` Rule B, so the subject of a
+medical record may not erase it; 0330 makes a behaviour note its author's; 0331
+makes a journal nobody else's; 0324 scopes a safety check-in by `created_by`.
+Tightening the database turned a dormant client bug into a user-visible lie, and
+nothing in the client moved with it. A child pressing Delete on their own
+immunization record was told "Deleted" and the record stayed.
+
+**Twelve call sites across eight files**, all fixed: `medications-module`
+(delete, schedule delete, `toggleActive`, dose scope), `medical-records-module`
+(providers, policies), `immunizations-module`, `health-visits-module`,
+`behavior-module`, `journal-module`, `care-module`, `sleep-module`,
+`check-in-view`. Each now chains `.select('id').maybeSingle()` so an empty
+result is an answer rather than an absence, adds `.eq('family_id', familyId)` in
+the house style the §7 service layer already set, and reports honestly.
+`check-in-view` reported *nothing at all* on a silent no-op.
+
+**One new string, translated properly.** `actions.couldNotDeleteThatRecord` in
+all seven populated catalogues. The other four locale files are EMPTY regional
+variants that merge down a fallback chain (en-GB→en-US, es-MX/es-US→es-ES,
+fr-CA→fr-FR), so they inherit it — I first misread es-MX as an untranslated gap
+and checked rather than filing it.
+
+**The contrast worth keeping.** `locator-module` — the top-priority module and
+the most sensitive data in the product — has none of this, because every write
+goes through a server action that checks `isManager` in CODE before it queries.
+It refuses honestly instead of filtering silently. That is the pattern; the
+health modules are the exception.
+
+**Guard.** `tests/a-filtered-delete-is-not-a-deletion.test.ts` requires every
+client `.delete()` on a policy-gated table to ask which rows it removed and to
+scope by family, and checks the refusal string exists in every populated
+catalogue. Scoped by table on purpose: `medication_doses` is deliberately NOT
+listed, because 00261 gives it "Members can manage" and a policy that cannot
+bite makes the `.select()` prove nothing — the list has to mean "policies that
+bite" or it stops meaning anything. Calibrated three ways, all biting, including
+a deliberate break of its own matcher after a first calibration attempt silently
+failed to break anything and passed.
+
+**One existing guard had to be widened.** `sleep-module-write-boundary` pinned
+`const { error } =` exactly, and failed on a change that strengthened the very
+property it asks about. Now `/const \{ (data, )?error \} =/`, with the reason in
+the source. A test that breaks on destructuring is a test of formatting.
+
+**Verified:** 14,283 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run
+lint` exits 0 at budget 12.
+
+---
+
+## Q43 — The permission surface: a delegation that named a non-member, and a revoke that reported success over nothing
+
+**Severity: MEDIUM**, and deliberately not filed higher. Neither defect is a
+privilege escalation, which is worth saying plainly because both sit on the one
+page whose job is saying who may act for whom.
+
+**1. `createDelegationAction` took both member ids on trust.**
+`trust_delegations.from_member_id` and `to_member_id` reference
+`family_members(id)` with **nothing** tying either to `family_id` (0093:69-71).
+A member uuid from another household satisfies the foreign key, and the action
+set `family_id` from the session while taking both ids straight from its input.
+The row lands in the caller's own family naming someone who is not in it.
+
+It grants nothing, and I checked that rather than assuming it: `evaluateTrust`
+(`lib/trust/server.ts`) selects `to_member_id` filtered by `family_id` and
+matches it against members of that family, so a foreign id never matches, and
+`from_member_id` is not read by the evaluator at all. The defect is that the
+trust UI then renders a grant made BY a non-member. Now validated in code — both
+ids must be in the family before the insert.
+
+**2. `revokeDelegationAction` reported success over an update that matched
+nothing.** It issued the UPDATE and returned `ok: true` on `error === null`. An
+update matching no row is not an error, so revoking a delegation already
+revoked, belonging to another family, or gone told the manager the access was
+withdrawn. Now `.select('id').maybeSingle()`, and an empty result is a refusal.
+This is Q42's mechanism again, on the surface where it matters most.
+
+**Three modules audited and clean, which is the other half of the result.**
+`trust-activity-tab` performs no writes. `paperwork-module` routes everything
+through server actions that are family-scoped and throw on error, and
+`paperwork_items` is `is_family_member` for every operation — a policy that
+cannot filter a legitimate member, so silence there is not a lie.
+`voice-module` is the same: 0121 gives `voice_commands` `is_family_member`
+throughout, so its delete got family scoping in the house style but is NOT the
+Q42 class, and the table is correctly absent from that guard's list.
+
+**Guard.** `tests/a-delegation-names-two-members-of-this-family.test.ts` pins the
+in-code check, the verified revoke, the schema premise (no family-scoped
+constraint exists, so the code is the only thing standing there), and the
+evaluator's read — so if `from_member_id` ever starts being read, the impact
+assessment above fails rather than quietly going stale. Calibrated both ways.
+
+Its first schema assertion was wrong and had to be tightened: `/family_id.*
+from_member_id/s` is satisfied by the two columns merely being declared near
+each other, so it would have failed on a table that constrains nothing. It now
+looks for a composite foreign key or a CHECK naming both.
+
+**Verified:** 14,288 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.
+
+---
+
+## Q44 — Two sweeps that found nothing, and are worth the same as one that did
+
+After Q42 and Q43 the obvious move was to assume the same defect class was
+everywhere. It is not, and establishing that took more care than filing it
+would have.
+
+**Server actions: clean.** A first pass found **176** `delete`/`update` sites in
+`app/**` with no `.select()` — a number that would have made an alarming
+finding and a worthless one. Most are cron routes running as the service role,
+where RLS never applies, and most of the rest gate with `isManager` in code
+before they query, which makes the RLS filter unreachable. Narrowing to what can
+actually bite — session-client writes to a table whose policy filters some
+members — leaves **three** sites, all `allowance_rules` in
+`app/(app)/wallet/actions.ts`, and all three sit directly behind an explicit
+`isManager(ctx.active.role)` check. One already uses `.select()`. Nothing to fix.
+
+I built and then **discarded** a migration-derived list of "manager-gated
+tables" that returned 97 entries including `calendar_events`, `ai_messages` and
+junk like `_owner_delete`. It was sweeping array literals that merely sat near a
+`can_manage_family` string. A list that wrong is worse than no list, and filing
+against it would have produced a page of false accusations. The verified set I
+read directly from 0323/0324/0328/0330/0331 was used instead.
+
+**API routes: clean.** All **141** `app/api/**/route.ts` files carry a gate or
+are deliberately public. A first scan reported 26 ungated, which was wrong: my
+symbol list omitted `authenticateAI`, the helper the AI run-control routes use,
+so `/api/ai/runs/[id]/pause` and `/cancel` looked unauthenticated when they are
+not. Checking one before filing is what caught it. With the list corrected, four
+remain, and each is public by design: `build-info`, `blog/search-index`,
+`health`, and `exit-intent/resolve` — which is read-only, IP rate-limited at
+60/min, bounded-body, and slices every string input to 200 chars.
+
+**The point.** Both sweeps began with a number that looked like a finding (176,
+26) and both numbers were artefacts of a matcher, not of the code. The
+difference between an audit and a scanner is which of those two you report.
+
+**Verified:** 14,292 green under both timezones, tsc clean, lint 0 at 12.
+
+---
+
+## Q45 — Every write route is gated and bounded, and the list of gates now lives in the suite
+
+**Severity: INFO — no defect.** All 141 `app/api/**/route.ts` files hold. Every
+write route is gated on identity or on rate, and every one that reads a JSON
+body bounds it. The file exists because establishing that by hand took **four**
+attempts, each wrong in the same direction.
+
+| scan | reported | why it was wrong |
+|---|---|---|
+| 1 | 26 ungated | list omitted `authenticateAI` — the AI run pause/cancel routes |
+| 2 | 3 unprotected | list omitted `hasInternalSecret`, `getUserContext` |
+| 3 | 8 ungated | list omitted `validateTwilioSignature` — every Twilio callback |
+| 4 | 0 | — |
+
+A list of gate helpers that lives in someone's head gets shorter every time it
+is retyped. This codebase has fourteen of them, and a hand-written subset will
+keep producing confident false accusations about the routes that use the ones
+left out. The list is now derived from what the routes actually call, written
+down, and checked in both directions — a new gate has to be added here, and a
+name nothing uses fails as dead weight. That second assertion immediately caught
+two entries I had guessed (`requireAdmin`, `hasCronAuthorization`); no write
+route uses either.
+
+**Two categories, named rather than conflated.** A blog like, a contact form, an
+A/B beacon and the gift flow carry no identity **by design** — they are gated on
+RATE, which is the only gate available when the answer to "who is this" is
+"nobody yet". Earlier scans lumped these in with genuinely ungated routes. The
+guard now asserts the split: an identity gate, or public-and-rate-limited, and
+nothing with neither.
+
+**A calibration that failed to fail.** Renaming a call to
+`DISABLED_enforceRequestRateLimit` left the gate's name in the file, so
+`includes()` kept answering yes about a gate that no longer runs — the test
+passed when it should have caught the removal. Identifiers are now matched on
+word boundaries. Worth recording because the guard was *green and wrong* for the
+minutes between writing it and calibrating it, which is exactly the state a
+guard is supposed to make impossible.
+
+**What this does not claim.** Presence of a gate is not proof the gate is
+correct or covers every branch. It is the floor: a write route calling none of
+them is certainly wrong. Authority itself is asserted where it lives —
+`cron-auth`, `route-access-is-total`, and the RLS boundary probes.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.
+
+---
+
+## Q46 — The i18n scanner could not see the app's own toasts
+
+**Severity: MEDIUM.** The ungated-surface ratchet has been counting `app/` +
+`components/` since it was written, and its header warns in as many words about
+the failure that produced it: a surface measured by a scanner "that could not
+see copy in a data structure". The same thing was true again, of a different
+category — the application's own notification API.
+
+`scripts/i18n-scan.mjs` has patterns for JSX text, JSX props, object values,
+string arrays, `confirm`/`alert`/`prompt`, and a `toastPattern` that reads the
+destructured `useToast()` names per file. That last one is careful work and it
+was blind in three ways:
+
+1. **Parentheses.** `/\)\s*$/` in `NOT_COPY` catches `TEXT_PATTERN` slicing
+   through an expression — `) : isActive ? (` sits between a `>` and a `<`
+   exactly the way copy does — and it is right there. A **quoted literal cannot
+   be such a slice**: the quotes bound it exactly. Applied to one it only ever
+   hid real copy — *"Photo is too large (max 25 MB)"*, *"Item name is too long
+   (max 120 characters)"*, *"Split must total 100% (currently 40%)."* The three
+   bracket rules now apply only to undelimited matches.
+2. **Double quotes.** The pattern matched `'...'` alone.
+3. **Template literals** — how every interpolated message in this codebase is
+   written. They are now tested with their `${...}` holes stripped and reported
+   whole, so `${item.name}: lent out` counts as copy while `${a} ${b}` still
+   does not.
+
+**Measured both ways against the same tree**, the method this file's own header
+documents after an earlier wrong conclusion:
+
+| | |
+|---|---|
+| old scanner, tree today | 2,804 |
+| new scanner, tree today | **2,878** |
+| delta | **74, entirely the scanner** |
+
+Not one new hardcoded string was written. The old scanner also reads 2,804
+against the 2,812 it was set at, so the surface has *improved* by 8 since. The
+ceiling is raised to 2,878 with that proof recorded beside it, which the file
+requires — a stricter scanner is the only legitimate reason to raise it.
+
+**What this actually buys.** 74 user-facing strings across ~50 modules — *"Item
+name is too long"*, *"Photo is too large"*, *"Sent $X to Y"*, *"Login created
+for Z"* — were shipping English to eleven locales **and could not trip the
+ratchet**, so more could be added freely. They are now counted, and the next one
+fails the build.
+
+**Two clean results from the same sweep.** All 168 `useRealtimeQuery` call sites
+across every module destructure the read error *and* reference it — no module
+renders a failed read as an empty list. And my first pass at this finding
+counted 54 "hardcoded toasts" that were mostly `console.error` calls my regex
+had swept in; the real number came only after excluding them.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.
+
+---
+
+## Q47 — Translating the 73 strings the scanner had been blind to
+
+Q46 taught the scanner to see the app's own toasts and raised the ratchet to
+2,878 to account for it. This is the follow-through: **49 of those 73 strings
+are now real catalogue keys** in all seven populated locales, and the ceiling
+comes down to **2,828** to match. A ratchet carrying slack above the real number
+is not a ratchet.
+
+**34 new keys**, each translated into de-DE, es-ES, fr-FR, it-IT, nl-NL and
+pt-PT rather than left as English placeholders — the four remaining locale files
+are empty regional variants that merge down a fallback chain, so they inherit.
+Grouped so one key serves several sites: `validation.titleTooLong` covers
+chores, goals and reminders; `wallet.addedAmountToChild` covers the dashboard,
+the child detail view and the gift view; `modules.fileTooLargeNamed` covers
+documents and trip memories.
+
+Translation was done with the target language's own conventions, not word
+substitution — French takes `Mo` for megabytes, German and Spanish take the
+non-breaking `max.` abbreviation with a space before the unit, and the quotation
+marks follow each locale (`„…“`, `«…»`, `“…”`).
+
+**The types caught a latent bug the template literals had been hiding.**
+Converting `` `Synced ${json.synced} events` `` to a parameterised key failed to
+compile: `json.synced` is `number | undefined`. A template literal renders that
+as the string "undefined" — *"Synced undefined events"* — silently. The same was
+true of `res.entities` and `res.edges` in the graph module. All three now
+default to 0. Three real defects surfaced purely by giving the copy a type,
+which is an argument for the whole exercise.
+
+**24 remain, and they are a different problem.** Every one embeds pluralisation
+in the source — `${n} mission${n === 1 ? '' : 's'}` — or calls a function inside
+the hole. English plural-by-suffix does not survive translation: German, French
+and Italian inflect differently, and Slavic-style multi-form plurals need more
+than two branches. Converting those honestly needs plural-aware keys, not a
+placeholder, so they are left for a pass that adds that support rather than
+being papered over with a key that is only correct in English.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12, catalogue integrity green across 58 assertions.
+
+---
+
+## Q48 — Merging 112 commits of main, and what the guards found in them
+
+CI had been silent on this branch for 31 check-ins. The cause was not the
+scheduler: **a conflicted PR produces no `pull_request` workflow run at all.**
+GitHub builds those runs against `refs/pull/<n>/merge`, and when that ref cannot
+be built nothing is created — silently, with no failed run to look at.
+`mergeable_state: "dirty"` is the diagnostic, and one `pull_request_read` call
+would have shown it at any point. So the fix was to merge `origin/main`, which
+had moved 112 commits ahead.
+
+16 conflicts. Where main had done the same work better, main won: its
+`loadPushCampaignAudience` replaces my paged device read with keyset pagination
+over a unique key, bounded row and request budgets, and — the part that matters
+— an **incomplete read becomes a refusal** instead of a smaller audience. Its
+`changedNothing(rows)` applies my Q42 readback across six write paths rather
+than one. Its receipt-backed `attemptUrgentDelivery` replaces my
+`filed.inserted &&` gate with something strictly stronger (see below). Where my
+side carried a fix main lacked, I re-applied it on top: `appBaseUrl()` in the
+four webhook routes it had reverted to a raw `process.env` read, the
+`useDismissOnEscape` binding, the translated quick-capture toast, and family
+scoping on the `voice_commands` delete.
+
+`lib/supabase/guardian-tables.ts` needed the opposite treatment. main's new
+Guardian modules import it, but this branch **deleted** it deliberately: the
+eight `guardian_*` tables are now declared in `database.types.ts`, and that file
+was 190 lines of hand-rolled row shapes wired as
+`from<K>(relation: K): ReturnType<T['from']>` — types that enforced nothing.
+Restoring it to satisfy the imports would have undone that. So the five
+importers were converted to the generated types instead, and **typecheck
+immediately found four things the cast layer had been hiding**: a `status:
+string` where the column is a seven-value union, a `comm_type: string` against
+`GuardianCommType`, and two `GuardianRoutingMode` values passed as bare strings
+in an E2E fixture. The scenario table there now takes the column's own union, so
+a mode this schema never had is a compile error rather than a discarded update.
+
+### What the guards caught in 112 commits of someone else's work
+
+Every one of these was found by a test written in an earlier pass, and each is
+recorded with the calibration that proves the test would have failed without the
+fix.
+
+**A `.in()` list at exactly the limit it was meant to stay under.**
+`lib/marketing/push-audience.ts` used one constant, `PAGE_SIZE = 200`, for both
+the row page and the id list handed to `.in('id', chunk)`. A PostgREST filter
+travels in the query string; `lib/supabase/chunked-in.ts` puts a UUID at roughly
+40 bytes and caps a batch at 100 because that "keeps the longest URL near 4 KB,
+well inside the common 8 KB limit". 200 ids is ~7.4 KB of request line — the
+limit itself rather than a margin under it. And here an over-long request line is
+not a slow read: this module turns an incomplete read into a throw, so the whole
+campaign stops, at exactly the audience size that makes it matter. Split into
+`ID_CHUNK = 100`, and main's own execution test updated to expect it, with the
+reason stated in the assertion.
+
+**A guard that had stopped seeing the read it was written for.** The same move
+took `marketing_suppressions` out of `tests/a-paged-read-needs-a-total-order`,
+because that scanner only knew `readAll(...).range(...)` and the new module uses
+keyset pagination. The registry would have shrunk because a read MOVED, not
+because it stopped needing a unique key — and the total-order requirement is
+identical for keyset paging: the cursor is a VALUE, so two rows sharing it means
+`.gt(k, cursor)` skips whichever the previous page did not reach. The scanner now
+recognises both shapes.
+
+*And the first spelling of that widening was wrong, which is worth recording.*
+Matching `.order(k).limit(n)` near any `.gt(` reported five innocent bounded
+reads as paged, including `blog_posts` ordered by `published_at` beside an
+unrelated date filter. Requiring the `.gt()` to name the **same column** and
+carry a cursor is what makes the signature actually keyset pagination. A guard
+that names innocent call sites gets exemptions bolted onto it until it means
+nothing.
+
+**Two writes on health tables left tenancy to RLS alone.**
+`components/modules/medical-records-module.tsx` updated and deleted
+`health_providers` and `insurance_policies` by `id` with a `.select('id')`
+readback but no `.eq('family_id', …)`. The readback is the half that tells you
+whether anything happened; the scope is the half that decides whose row it was.
+Both added.
+
+**A stale secret in the health report.** `FEATURE_ENV` still named
+`FCM_SERVER_KEY` after main retired that endpoint for FCM v1 and APNs. A list
+that names a retired secret reports a subsystem as configured while its real
+credential is unset — the original defect one indirection later. Replaced with
+`FCM_PRIVATE_KEY` and `APNS_PRIVATE_KEY`, the two credentials
+`nativePushConfigured()` actually gates on.
+
+**Three new cron routes at a 288× cadence deficit.** `contact-center-urgent`,
+`guardian-sms-recovery` and `social-publish` each ask for every five minutes
+against a once-daily `vercel.json` guarantee. The two recovery sweeps are the
+sharpest entries in that whole table: they exist to re-drive an urgent
+escalation or an inbound text whose first attempt did not land, so a once-a-day
+floor means the worst case for a message a family is waiting on is a day.
+
+**Two credentials shipped without documentation.** `X_CLIENT_ID` and
+`X_CLIENT_SECRET` are read by `lib/social/x-oauth.ts` and appeared in no
+`.env.example` block. Both require `SYNC_TOKEN_KEY` as the documented 32-byte
+key rather than a legacy passphrase, which is now written down beside them.
+
+### Three of my own scanners were wrong, in the same way
+
+`process.env.NAME` is one spelling of an environment read. `privateKeyEnv(name)`
+in `lib/server/native-push.ts` is another: it indexes `process.env` by argument
+so one function can undo the literal `\n` a PEM picks up when pasted into a
+dashboard field. Two guards matched only the dotted form, and so reported
+`FCM_PRIVATE_KEY` and `APNS_PRIVATE_KEY` as **read nowhere** — one of them
+recommending that a working `.env.example` line be deleted.
+
+The fix is not one scanner tuned to split the difference. The two directions of
+the `.env.example` guard need **different** matchers, because a false positive
+means something different in each: demanding documentation for a name that is
+only a string in a table, versus deleting a template line that is read on every
+native push. So the "everything read is documented" direction stays on the
+spelling it can be sure about, and the "nothing offered goes unread" direction
+accepts the indirect one. Each errs toward not making a wrong accusation.
+
+The third was `tests/a-secret-is-compared-in-constant-time`, which flagged
+`signature.toString('base64url') !== parts[1]` — a canonicalisation check that
+rejects a non-canonical base64url spelling, sitting immediately beside the
+`timingSafeEqual` that does the actual comparison. It was asking the code to
+replace a round-trip check with a comparison it already makes. A line that
+already compares in constant time is no longer reported, and the one genuine
+`===` on a bearer token (both sides values the same browser already holds) is an
+explicit exemption with its reason — checked for non-vacuity, so it cannot
+outlive the line it excuses.
+
+### A calibration that passed with the fix removed
+
+The first version of the new `destination()` assertion sliced from
+`'guardian_member_profiles'` to a `return` found relative to
+`result.data.length > 1`. Deleting the guard removed that anchor, `indexOf`
+answered -1, the slice collapsed, and every `toContain` was satisfied by text
+from elsewhere in the file — so reverting the fix did not fail the test. **An
+anchor that disappears with the code it locates cannot bound the region that
+code lives in.** Re-sliced by function boundary; it now fails when the guard
+goes.
+
+### The escalation receipt, and why the test changed shape rather than relaxing
+
+`tests/inbound-escalation-fires-once` pinned `filed.inserted &&` on three
+contact-centre routes. main replaced that with a durable receipt in
+`ai_tool_calls`, keyed on the provider reference, advanced through a CAS
+transition to `dispatching`. That is strictly stronger, and the reason is worth
+stating: `filed.inserted` only covers a redelivery that finds the row already
+there. It says nothing about a crash **between** the insert and the SMS — the
+next delivery then sees `inserted: false` and skips an escalation that never
+happened, the same flag failing in the opposite direction. The test now pins the
+receipt: only a `queued` phase reaches the send, the claim precedes the send, the
+notification is tracked on the receipt, the key is the provider ref rather than
+the row it files, and **no route sends an urgent SMS of its own**.
+
+### A fixture that made every case vacuous
+
+`tests/middleware-assistant-boundary` was returning 429 for every case. main
+moved the assistant's rate limit from the in-process `buckets` Map to a durable
+Postgres counter — correctly, since "every warm lambda holds its own Map" made
+the stated 30/minute cap really 30/minute *per instance*, a ceiling that rose
+with the pressure it was meant to resist. The limiter **fails closed**, and the
+test's fetch stub asserted that every request was for `assistant_links`, so the
+limiter's RPC threw and each case got a 429 instead of testing authorization at
+all. The stub now answers it, deliberately outside the `reads` ledger — a per-IP
+counter is neither family data nor keyed by the token — and the file gained the
+assertion it was missing: the cap is settled **before** the token lookup, so the
+endpoint cannot be used to test guessed tokens at speed. One call on
+`/api/assistant`, none on the Alexa route, which still caps in process only.
+
+### A ratchet held rather than raised
+
+main's restructured habits modal re-introduced three `<label>` elements naming
+nothing — a colour swatch row, a cadence row and a weekday row, each a SET of
+buttons rather than one control. `tests/a-group-of-controls-needs-a-name` is
+`toBeLessThanOrEqual(16)` and the count was 19. Raising the bound is what that
+test's own comment forbids, so the three were wired to their captions with
+`labelledGroup` and `<span>`, exactly as the worked example does. Back to 16.
+
+**Verified:** all four shards green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` — 17,096 tests — tsc clean, lint 0 errors, migration
+ledger 345 files with no collision.
+
+**Three failures remain, and they are this container, not the code.**
+`.nvmrc` now declares Node 24.21.0 and `package.json` requires `>=24.21.0 <25`;
+this container runs 22.22.2, and only Node 22 is installed here.
+`tests/node-version-is-pinned` asserts that mismatch directly, and
+`tests/stream-cancellation-runtime` pins the fix from Node PR62040 for the
+internal controller error when a client cancellation and a late SSR write
+interleave. CI resolves its Node from `node-version-file: .nvmrc`, so all three
+run on 24 there. They are reported rather than skipped, because a test that is
+red for a known reason is worth more than one quietly excluded.
+
+---
+
+## Q49 — CI ran, and failed on the check I had measured with the wrong command
+
+The merge restored CI. `Database (migration replay · RLS boundary probes)`,
+`Mobile (Expo)` and `finance-operation-sql` came back green on the first run.
+`Typecheck · Lint · Test · Build` failed in 40 seconds, at the **Lint** step,
+having printed nothing but warnings.
+
+**The gate is a warning budget, not an error gate:**
+`"lint": "next lint --max-warnings=12"`. I had checked it with
+`npm run lint | grep -c 'Error:'`, read the `0`, and called it clean. The exit
+code was 1 the whole time, and the merged tree carried 14 warnings against a
+budget of 12. Counting the output of a command is not the same as running it —
+and the cost was a red CI run on the merge I had just declared verified.
+
+Raising the budget is what a budget forbids, so two went away, and both were
+real rather than cosmetic:
+
+**`components/modules/documents-module.tsx` — a keyboard user could not upload a
+document at all.** The drop zone is a `<div onClick={() => input.click()}>` and
+the real `<input type="file">` beside it is `className="hidden"`. There is no
+other path: no visible control, nothing focusable, so the upload simply does not
+exist without a mouse. `role="button"` + `tabIndex={0}` + `openOnKey` is the
+fallback `lib/ui/a11y.ts` already documents for a div that has to stay a div,
+with `aria-label` taken from copy the zone already renders and a visible
+focus ring.
+
+**`components/modules/meals-module.tsx` — a dismissal with no keyboard path.**
+The "More" menu's click-away backdrop is a full-screen div, and the sibling
+pattern in `components/admin/user-security-actions.tsx` explains exactly how to
+treat one: `aria-hidden="true"`, the rule disabled with its reason, **and Escape
+bound** — because the comment claiming "the keyboard path is Escape" is only
+true if something binds it. `useDismissOnEscape(moreOpen, …)` is that something.
+Silencing the rule without it would have been the failure this audit keeps
+finding: a promise the markup does not keep.
+
+10 warnings now, and `npm run lint` exits 0 — the gate as CI runs it, not as I
+grepped it. Every other step the failed job never reached was then run locally in
+CI's own order: `npm audit --omit=dev --audit-level=moderate` 0
+vulnerabilities, migration filename audit 345 files, Supabase query audit
+(491 tables, 91 functions, 146 routes, everything resolves), marketing asset
+audit, `i18n:gate` clean across all eight declared surfaces, `npm run build`
+exit 0, `npm run typecheck` exit 0.
+
+## Q50 — A plural is not a suffix
+
+227 places in `app/`, `components/` and `lib/` spelled a plural as
+
+```ts
+`${n} mission${n === 1 ? '' : 's'}`
+```
+
+That is not English being interpolated into a template. It is English **grammar
+compiled into the source**, and no translation can undo it. Three distinct ways
+it is wrong once the string leaves English, each measured against
+`Intl.PluralRules` at run time rather than asserted from memory:
+
+- **The boundary moves.** French puts 0 in the singular (`0 mission`); English
+  does not (`0 missions`). Even a two-form language is not the *same* two forms,
+  and `n === 1` encodes English's boundary specifically.
+- **The number of forms changes.** Polish takes three (`1 plik` / `2 pliki` /
+  `5 plików`); Arabic takes six. A two-branch ternary cannot reach a third form
+  whatever the translation says.
+- **The word inflects rather than gaining a letter.** German `1 Aufgabe` /
+  `2 Aufgaben`, Italian `1 missione` / `2 missioni`. A translator handed
+  `mission` plus `s` has nowhere to put the answer.
+
+So: `pluralCategory()` and `pluralize()` in `lib/i18n/translate.ts`, built on
+`Intl.PluralRules` — the CLDR table, already in the runtime, zero bytes shipped.
+The catalogue holds one key per category (`security.openAlerts.one`,
+`security.openAlerts.other`, and `zero`/`two`/`few`/`many` for a language that
+needs them), `usePlural()` exposes it to client components and `getPlurals()` to
+server ones, and the count is interpolated **formatted for the locale** because
+a phrase that translates its words while leaving `1,234` in American digit
+order is only half translated.
+
+**The English fallback split is preserved exactly.** `pluralize` takes an
+optional `fallback` catalogue; `lib/i18n/messages.ts` passes the English one so a
+lagging translation reads as English on the server, and client code passes
+nothing — holding that catalogue in the browser is the 244 KB gzip that
+`lib/i18n/translate.ts` exists to have removed. The whole chain is tried in the
+active locale **before** any of it is tried in English, because a language that
+has `other` but not `many` should use its own `other`, not English's `many`.
+
+**The first draft of the primitive's own doc comment was wrong, and the test
+caught it.** It claimed an unsupported locale falls back to `other`. It does
+not: a *well-formed* tag the runtime has no data for (`zz`, `xx-YY`) does not
+throw at all — `Intl` resolves it to the default and
+`resolvedOptions().locale` reports `en-US`, so an unknown language silently gets
+**English** plural boundaries. Only a *malformed* tag (`''`, `'en_US'` with an
+underscore) throws, which is what the catch is for. The guard against the first
+case is `LOCALES`, not this function, and the test now asserts every locale this
+product ships really has plural data rather than resolving to a single category.
+
+**First batch converted, with translations in all seven populated locales:** ten
+new plural keys (twenty values each round of forms) across `inventory`,
+`security` and `declutter`. Translated with each language's own morphology
+rather than by substitution — `{count} Gegenstand` / `{count} Gegenstände`,
+`{count} oggetto` / `{count} oggetti`, `{count} objeto perderá su ubicación.` /
+`{count} objetos perderán su ubicación.` — and the singular reworded where
+English's plural hid a grammatical error of its own: *"1 item will lose **their**
+location"* is now *"its"*.
+
+**213 remain, behind a ratchet at 227 that only comes down.** Not zero, and the
+reason is that the remainder is not the same work. The clean cases are one phrase
+with one count. The rest assemble a **sentence** from two or three counted
+fragments —
+
+```
+`“Plan this week” turns your ${n} zone${…} into ${m} short mission${…}, …`
+```
+
+— and a sentence assembled from translated fragments is its own translation
+defect, because word order is not a property a language lets the caller choose.
+Those need one key for the whole sentence with `{zones}` and `{missions}` holes
+fed by `plural()`: a rewrite of the copy, not a mechanical substitution. Filed
+as that rather than papered over with a key that is only correct in English.
+
+The ratchet is calibrated in both directions — it fails when a suffix ternary is
+added, and separately when one of the converted modules regresses, so the two
+cannot cancel out in an aggregate.
+
+**Verified:** 17,111 tests green (four shards), the two changed shards re-run
+under `TZ=America/Los_Angeles`, `npm run lint` exit 0 at 10 warnings against a
+budget of 12, `npm run typecheck` exit 0, `npm run build` exit 0, `i18n:gate`
+clean across eight surfaces, catalogue integrity green across all seven
+populated locales.
+
+---
+
+## Q51 — The locator module: a switch that says ARMED over a row nothing changed
+
+First of the Section C modules, and picked first because it is the one where
+being wrong is not cosmetic: live location, and the geofence that tells a parent
+when a child arrives somewhere.
+
+The **reads** are sound. Three `useRealtimeQuery` fetchers, all
+`.eq('family_id', familyId)`, all on tables whose row count is bounded by the
+household (one position per member, a family's places) except
+`location_events`, which is explicitly `.limit(120)`. Nothing here can reach
+PostgREST's `db-max-rows` and answer short without saying so.
+
+The **writes** all go through server actions returning `{ ok, error }`, and every
+call site branches on `res.ok`. That part was already right. What was not:
+
+**All three `family_places` writes branched on `error` alone.** RLS filters a
+write; it does not refuse one. `update family_places set geofence_enabled = true
+where id = $1 and family_id = $2` under a predicate no row satisfies updates the
+rows the predicate admits — none — and PostgREST answers `error: null`. So the
+action returned `{ ok: true }` for a write that changed nothing.
+
+The `.eq('family_id')` on all three already closes the cross-family case, so
+this is not a tenancy hole. What is left is a **stale id**, which on a shared
+family surface is the ordinary case rather than the exotic one: two parents on
+the locator page at once, one deletes a place, the other toggles it.
+
+Ranked by what the lie costs:
+
+- **`setGeofenceEnabled`** — the switch flips to armed, the family believes an
+  arrival alert is watching a child, and it will never fire. Nothing else in the
+  product would say so.
+- **`deletePlace`** — "Place deleted", over a place still on the map.
+- **`savePlace`** — an edit reported as saved and not saved.
+
+All three now `.select('id')` and refuse on an empty result, through the same
+`changedNothing(rows)` predicate spelled exactly as the trust surface spells it,
+so a reader who has seen one recognises the other.
+
+**And the module was translated until something went wrong.** Ten toasts beside
+`tr(...)` calls shipped English literals: `'Failed to update location'`,
+`'Failed'` four times, `` `Shared — you're at ${res.place}` ``,
+`'Location shared'`, `'Place updated'`, `'Place added'`, and a
+`window.confirm(`Delete "${p.name}"?`)`. A product whose success path is
+translated and whose failure path is not is a product that speaks your language
+right up until the moment you need it to. Ten keys, seven locales.
+
+**Filed rather than fixed:** `updateMyLocation` logs and swallows a failed
+`location_events` insert (`console.error`, then continues and reports success).
+Failing the whole action would discard the position too, which is worse, so
+logging is defensible — but the person is told "Shared — you're at Home" with no
+hint that the arrival event the family's history and alerts are built on was
+never written. The honest shapes are a queued retry or a distinct partial
+result; both are product decisions, so both are filed rather than guessed at.
+
+**Verified:** `tests/a-geofence-that-reports-armed-is-armed.test.ts` — eight
+assertions covering the readback, the family scope, the manager gate and the
+catalogue keys on all three writes, calibrated by removing the geofence guard and
+watching it name that action. 17,119 tests, 17,116 green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`; the three failures are this container's Node 22 against
+the declared 24.21.0. Lint exit 0, typecheck exit 0, i18n gate clean, catalogue
+integrity green across seven locales.
+
+---
+
+## Q52 — The guard was scoped to one verb, so the fix stopped one statement short
+
+The health modules, and a finding about the audit itself.
+
+`tests/a-filtered-delete-is-not-a-deletion.test.ts` covered `.delete()` on
+nineteen gated tables. It did not cover `.update(`. RLS treats the two
+**identically** — it filters both rather than refusing either — and the
+consequence was the same defect sitting two lines from its own fix, in the same
+function, three times over:
+
+```ts
+// immunizations-module.tsx, before
+const { error } = form.id
+  ? await supabase.from('immunizations').update(row).eq('id', form.id)   // ← no scope, no readback
+  : await supabase.from('immunizations').insert({ ...row, family_id: familyId, ... });
+...
+async function remove(id: string) {
+  // `.select('id')` is the whole point: RLS filters a DELETE rather than
+  // refusing it … 0323 makes immunizations a Rule B table …
+  const { data, error } = await createClient().from('immunizations').delete()
+    .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+```
+
+The reasoning was written down, cited the migration by number, explained why the
+subject of a medical record may not erase it — and then applied to the DELETE and
+not to the UPDATE, which the same policy filters for the same reason. A guard
+scoped to one verb is what let that read as finished.
+
+Widening it to `.update(` found **six** sites across five modules:
+
+| module | table | policy that bites |
+|---|---|---|
+| `immunizations-module` | `immunizations` | 0323 Rule B — the subject may not rewrite a medical fact |
+| `health-visits-module` | `health_visits` | 0323 Rule B |
+| `health-module` (`resolveSymptom`) | `symptom_logs` | 0307 Rule A — a log about a member is that member's to correct |
+| `health-module` (`deleteSymptom`) | `symptom_logs` | 0307 Rule A |
+| `behavior-module` | `behavior_logs` | 0330 — a behaviour note is its author's |
+| `care-module` | `care_log` | 0323 Rule B |
+| `journal-module` | `journal_entries` | 0331 — a journal is nobody else's |
+
+`symptom_logs` is the one worth naming: 0307's own revert probe is *"a child
+rewrote a sibling's symptom log"*, so a filtered write here is the **designed**
+outcome of a policy this audit shipped, not a theoretical one — and both the
+resolve and the delete reported success over a row they never touched.
+
+All seven now carry `.eq('family_id', …)` and `.select('id')`, and refuse on an
+empty result. The two are separate and both are needed: a readback over an
+unscoped predicate reports success for a write that really did land — on another
+household's row. `.insert(` is deliberately left alone, because RLS **refuses**
+an insert with an error rather than filtering it away, so branching on `error` is
+correct there and a readback would prove nothing.
+
+`.insert(` also now has that exclusion written into the guard, so the next pass
+does not add it for symmetry and start demanding a readback that means nothing.
+
+**And the same half-translated pattern as the locator, in all five modules.** The
+success toasts were English literals sitting beside `t(...)` calls: `'Record
+updated'`, `'Immunization added'`, `'Visit updated'`, `'Visit added'`,
+`'Updated'`, `'Logged'`, `'Entry updated'`, `'Care logged'`, `'Entry saved'`,
+`'Entry added'`. Eleven keys, seven locales. The pattern is consistent enough
+across locator and the health modules to be worth stating as a rule: **the paths
+a module was written for are translated, and the paths it falls back to are not.**
+
+**Verified:** the widened guard asserts both verbs are really covered
+(`new Set(verbs)` equals `{delete, update}`), so a future pass cannot quietly
+lose one; calibrated by removing the scope from `journal-module`'s update and
+watching it named by file and table. 17,116 of 17,119 green under both `TZ=UTC`
+and `TZ=America/Los_Angeles`, lint exit 0, typecheck exit 0, i18n gate clean
+across all eight declared surfaces.
+
+---
+
+## Q53 — The list of gated tables was 19. The database says 92.
+
+`tests/a-filtered-delete-is-not-a-deletion.test.ts` enforces a client rule: on a
+table whose RLS filters some members' writes, a write must be family-scoped and
+must read the row back, because RLS FILTERS rather than refuses and PostgREST
+answers `error: null` either way.
+
+The rule was right. The **list** it was applied to was hand-written, so it
+lagged every migration that added to it — 19 tables against the 92 the catalog
+actually reports. Q52 found six sites the list had never covered; this is the
+measurement that explains why there were six, and finds the rest.
+
+### Three attempts to derive it from the migration text, and why the third failure is the interesting one
+
+1. **A non-greedy `\((.*?)\)`** truncated every predicate at its first inner
+   parenthesis, so a policy reading `using (EXISTS (SELECT 1 FROM …))` was
+   classified on the fragment `EXISTS (SELECT 1 FROM …`.
+2. **Matching `auth.uid`** classed the *inlined* spelling of plain family
+   membership as a restriction, putting `concierge_plans`, `trip_plans`,
+   `reminder_lists` and the relationship tables on a list they do not belong on.
+   Both of those are ordinary bugs; a balanced-paren extractor fixed them.
+3. **The third failure is structural.** A large share of these policies are
+   generated inside PL/pgSQL loops:
+
+   ```sql
+   execute format('create policy %1$s_mng_update on public.%1$I for update
+                   to authenticated using (public.can_manage_family(family_id))', t);
+   ```
+
+   The table is a loop variable. It appears nowhere in the `create policy` text,
+   so **no scanner over `*.sql` can enumerate these at all** — which is exactly
+   why the list was hand-written in the first place, and why it drifted.
+
+### So it is measured where it can be measured
+
+`docs/audit/gated-write-tables-check.sql` queries `pg_policies` on a database
+with all 345 migrations applied — the job `Database (migration replay · RLS
+boundary probes)` already builds one. There the policy exists, its predicate is
+normalised by the catalog, and `permissive` says whether it is ORed or ANDed.
+
+The classification needs both halves, and the calibration proved both on a real
+database with a synthetic table:
+
+| policy shape | classified | why |
+|---|---|---|
+| only a narrowing permissive policy | **filters** | nothing lets a plain member through |
+| a plain permissive policy alongside it | does not filter | PERMISSIVE policies are **ORed** |
+| plus a narrowing RESTRICTIVE policy | **filters** | RESTRICTIVE policies are **ANDed** |
+
+A first draft of the calibration "passed" twice — on `calendar_events` and
+`medications` — and both times the classification was right and my test case was
+wrong: `calendar_events` already has a plain permissive UPDATE policy, and
+`medications` already carries restrictive guards. A calibration that cannot change
+the answer proves nothing about the code.
+
+The vitest guard now **reads its list out of the probe**, so there is one copy of
+the data: the probe asserts it against the live catalog, the guard applies it to
+the client, and a migration that narrows a new table fails the probe with the
+table named and the two files to change.
+
+### 33 live sites, all fixed
+
+Replacing 19 tables with 92 turned a passing guard into one naming 33 real sites
+across 20 files. Twenty-one already read the row back and needed only
+`.eq('family_id', …)`. Twelve needed both. Ranked by what being wrong costs:
+
+**`marketplace-module`'s `remove` is data loss, not a wrong toast.** 0154's
+delete policy is seller-scoped. A filtered delete answers `error: null`, and the
+very next statement removes the listing's photo from storage — so removing
+someone else's listing left the listing in place, **destroyed its picture**, and
+said "Removed".
+
+**`settings-module`'s member edit changes a ROLE.** `fm_update` (0211) is
+manager-gated, and the handler ends in `window.location.reload()` — so a
+non-manager saw "Member updated" and then the old role, with nothing saying why.
+Its sibling `removeMember`, and `family-module`'s removal modal, had the same
+shape: a soft delete that hid the row until the next read put it back.
+
+The rest — `documents` (three modules), `bills`, `financial_accounts`,
+`family_credentials`, `renewals`, `rides`, `opportunities`, `trips`/`trip_items`,
+`driving_trips`, `nutrition_logs`, `ai_conversations`, `family_communications`,
+`notifications` — are the same fix at lower stakes.
+
+### One place the rule genuinely does not apply, and how the guard learned it
+
+`notifications-module`'s `markAllRead` is `update … .eq('family_id', f).eq('is_read',
+false)`, and its existing comment already says the right thing: *"Zero rows here is
+NORMAL — nothing was unread."* A readback cannot tell that from a refusal, so
+demanding one would add a check whose result nobody can judge — worse than no
+check, because it reads as covered.
+
+The distinguishing feature is checkable: a write naming one row by `.eq('id', …)`
+touches exactly one row, so empty means refused; a write filtered by a set does
+not. The guard now requires the readback only for the first, and that rule has its
+own calibration so the exemption cannot widen.
+
+### A stub narrower than the builder it stands in for
+
+`tests/files-hub-localization.test.ts` died in all seven locales with
+`update(...).eq(...).eq is not a function`: its `chainEq` helper modelled ONE
+filter. It chains now, as PostgREST does — and the two assertions that read
+`toHaveBeenLastCalledWith('id', 'file-1')` now assert **both** filters rather than
+being retargeted at whichever is last, so the family scope the fix added is pinned
+rather than merely tolerated.
+
+**Verified:** 54/54 boundary probes pass with the new one in the glob, run twice;
+the new probe calibrated in all three policy shapes and in both drift directions
+(a table added, a table widened). 17,118 of 17,121 tests green (the three are this
+container's Node 22 against the declared 24.21.0). Lint exit 0 at 10 of 12
+warnings, typecheck exit 0, i18n gate clean across eight surfaces, Supabase query
+audit 491 tables / 91 functions / 146 routes, migration ledger 345 files.
+
+---
+
+## Q54 — The guard only looked in `components/`. The same policies filter the server.
+
+Q53 measured which tables' RLS can filter a member's write, and applied the rule
+to `components/`. That was the wrong boundary: a **server action or route handler
+on the RLS-bound client** (`createServer()`) is filtered by exactly the same
+policies. Only the SERVICE client is exempt, because it bypasses RLS entirely — a
+write through it is never filtered, so the rule has nothing to say about it.
+
+Extending the scan to `app/` and `lib/` found **22 more sites**, all fixed.
+
+### Three matcher defects found by running it
+
+Each was found by reading what the scan reported, not by the scan passing.
+
+**A 320-character window cut multi-line chains short.** Six writes that already
+carry `.eq('family_id', …)` on a continuation line were reported as leaving
+tenancy to RLS. The window is bounded by the **statement** now (a PostgREST chain
+ends at its `;`), because a guard that names innocent call sites is how exemptions
+get bolted on until it means nothing.
+
+**A file-level client check is too coarse.** `app/(app)/dashboard/assistants/actions.ts`
+writes through `admin = createServiceClient()` beside RLS-bound reads, so the file
+matched and the write did not belong to the rule at all. The client is decided at
+the **call site** now, by collecting which local names hold a service client. The
+calibration for it is the one that matters: swapping that file's
+`createServiceClient()` for `createServer()` makes the site appear, so the
+exemption is keyed to the client rather than being a blanket pass.
+
+**`family_id` is not the only ownership predicate.** `push_devices` is one row per
+physical device and its policy (0035) is device-owner-scoped, so `.eq('user_id',
+user.id)` is the RIGHT predicate there and `family_id` would be the wrong one, not
+a stricter one. The same is true of `library_progress`, `user_preferences`,
+`blog_post_saves` and `feedback_votes`. The scope rule accepts either now.
+
+### The money paths, where a silent no-op is not cosmetic
+
+Two of these are **rollbacks whose only trace is a `console.error`** — and an RLS
+filter raises no error, so the one case worth logging never logged:
+
+- **`runDueAllowancesAction`'s schedule rollback.** If the wallet credit fails, the
+  rule's `next_run_on` must go back. A filtered rollback leaves the rule advanced
+  with the credit never made, so the child is **skipped for a whole period** and
+  nothing in the product says so.
+- **`requestSpendAction`'s approval rollback.** Its own comment says why: *"A held
+  debit without its approval row can never be resolved."* A filtered cancel leaves
+  exactly that in the ledger — `requires_parent_approval` with no approval row
+  that could ever resolve it.
+
+And `toggleAllowanceRuleAction` reported "paused" over a rule the nightly cron
+would still pay — the same table as CRITICAL 2, one layer up from the policy that
+fixed it.
+
+`hub-actions.ts`'s delete already had the family predicate on all five branches
+with a comment explaining why ("a delete action should never depend on policy
+drift"); this is the other half of that same thought, and all five branches read
+back now.
+
+### The approval stamps, where a comment already made the argument
+
+`concierge/actions.ts` stamps `approval_requests` after executing or dismissing a
+plan, and logs on failure. The decline stamp carries this comment:
+
+> 0093's CHECK allows pending|approved|rejected|… and decided_by references
+> family_members(id), not auth.users — the previous 'declined' + user id never
+> satisfied either, so this stamp **had always failed and only logged**.
+
+That is the argument for the readback, made about a different mechanism. A CHECK
+violation *raises*, which is eventually how someone noticed. An RLS filter raises
+nothing at all, so the same stamp silently not landing would not even reach that
+log. Both stamps read back now, as do both `family_automation_runs` status writes
+— a filtered "executed" leaves the run `pending`, and the plan can be applied
+twice.
+
+`lib/family/actions.ts`'s `resolveAutomationRun` is the sharpest of that group:
+`logAudit` runs unconditionally afterwards, so a filtered write **wrote an audit
+entry for an approval that never happened**. The log and the table disagreeing is
+worse than either being wrong alone.
+
+### Three more English strings on refusal paths
+
+`lib/family/actions.ts`'s manager refusal (`'Only parents and adults can approve
+automations.'`), `marketplace/actions.ts`'s lifecycle error (`` `Can't go from
+${order.status} to ${status}` ``) and the ai-chat title path. The pattern now holds
+across **nine** modules and two server-action files, which is enough to state it
+plainly: *the path a file was written for is translated, and the path it falls back
+to is not.*
+
+### Two more stubs narrower than the builder they stand in for
+
+`tests/concierge-run-write-boundary.test.ts` offered no `.select()` and returned
+`data: null` for every update, so it could express only two outcomes. The action
+now has three — error, zero rows, changed — and the stub takes `updateRows`, with a
+**new case for the filtered write**: zero rows and `error: null`, which is the
+defect the file's own header describes, one layer down from the one it fixed.
+
+Two assertions in the wallet tests pinned spellings rather than properties, and
+both were repointed rather than retargeted:
+
+- `wallet-money-action-boundaries` pinned `.eq('status',
+  'requires_parent_approval');` **with the semicolon**, so adding `.select('id')`
+  after it failed a test about rolling back for a reason that had nothing to do
+  with rolling back.
+- `wallet-allowance-persistence` pinned the rollback's exact declaration line.
+
+Both now assert the rollback's property AND the readback, so they are stronger than
+before rather than merely passing.
+
+**Verified:** 17,120 of 17,123 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`; 54/54 boundary probes; `npm run build` exit 0; typecheck
+exit 0; lint exit 0 at 10 of 12 warnings; i18n gate clean across eight surfaces;
+Supabase query audit clean. The three remaining failures are this container's Node
+22.22.2 against the declared 24.21.0 — CI resolves Node from `.nvmrc` and the same
+suite passed there.
+
+---
+
+## Q55 — The route guard was named for writes, so 56 reads were never examined
+
+`tests/a-write-route-is-gated-and-bounded.test.ts` filtered its scan to
+`POST|PUT|PATCH|DELETE`. There are **146 route files and 56 GET handlers**, and
+none of them was checked for a gate.
+
+The asymmetry is not defensible on these tables: a write with no gate lets a
+stranger *change* something, and a read with no gate lets them *see* it — and what
+they would see is one family's calendar, documents or health records.
+
+**Four data-reading GETs have no identity gate, and all four are public by
+design.** So the list is the point of the rule rather than an exception to it:
+each is named with the capability that stands in for a session, and a fifth
+appearing now fails until someone writes down which it is.
+
+| route | what stands in for a session |
+|---|---|
+| `blog/like` | the durable `bubaly_vid` visitor id, one like per (post, visitor) by unique constraint, IP rate-limited — and it reads `blog_posts`, published marketing copy, not family data |
+| `blog/unsubscribe` | the UUID token in a digest email's link. Requiring a session would break the only flow it exists for |
+| `marketing/unsubscribe` | the same, rendering an HTML page because a person clicked it from their inbox |
+| `sync/feeds/[token]` | an unguessable capability slug; Apple Calendar and Outlook cannot sign in. Its own header records that **nothing issues a token yet**, so every request is a 404 today, and `tests/a-capability-nothing-can-issue.test.ts` goes red the moment a writer appears |
+
+The exemption list is checked in three directions, and the third is the one that
+matters: an entry whose file moved, whose GET went away, **or which has since been
+gated**. A stale exemption is a hole the next edit falls into.
+
+### The gate list was missing the gate 24 routes use — and a check was stopping it being added
+
+`hasCronAuthorization` was absent from `GATES`. The gap was invisible while the
+file looked only at writes, because **every cron route is a GET**: 24 scheduled
+jobs, all gated in the code, none of them gated by this test.
+
+And adding it failed a different assertion — *"the gate list is not padded with
+entries nothing uses"* — which scanned `writeRoutes` only. No write route uses the
+cron secret, so the anti-padding rule **would have rejected the fix for the gap
+beside it.** That is how the omission survived: not an oversight anyone had to
+repeat, but a guard actively refusing the correction. It scans every route now,
+which is what `GATES` serving both rules requires.
+
+**Verified:** 17,123 of 17,126 tests green; calibrated in both directions — a new
+ungated GET reading `medications` is named by path, and gating one of the four
+public routes fails the file until its entry is removed. Lint exit 0, typecheck
+exit 0.
+
+---
+
+## Q56 — Reconciling the ledger with the work, against the master brief
+
+The owner re-issued the master brief this file is built on (the "Final Production
+Audit" prompt: permanent IDs for every feature, a status per ID, counts kept
+accurate, a Final Regression block at the bottom). Read against it, Q48–Q55 had a
+gap: they were appended as narrative, and **the ledger rows those fixes touched
+still said ⬜ NOT STARTED**. The control document described the application less
+accurately than the commits did. This section closes that.
+
+### Sixty-one rows moved, and none of them to PASS
+
+Each file or server action changed by a Q48–Q55 fix was resolved to its ledger
+row — components and libraries by path, server actions by function name, API
+routes by method and URL — and moved ⬜ → 🔄 **only if it was still ⬜**, so no row
+owned by another cycle was touched. Every moved row records its severity, the
+guard that verifies it, the fix, the retest and the Q section.
+
+**None is marked 🛠 FIXED + PASS.** The brief is explicit: *"A feature is only
+COMPLETE when its full user workflow has been verified"* and *"Never mark
+something PASS because a fix merely looks correct."* These fixes are verified by
+calibrated guards and the unit suite, and by a replayed database for the RLS
+half, but none has been exercised end to end in a browser. 🔄 with the evidence
+written down is the honest state.
+
+Two mapping hazards were checked, not assumed:
+
+- **`deleteRuleAction` exists twice** — Guardian's and the marketing
+  personalisation admin's. The first match was the wrong one; the Guardian row is
+  the one adjacent to its own `toggleRuleAction`.
+- **A diff-hunk walk attributed a change to `setLocationSharing`** because a
+  helper was inserted above `savePlace`. It was not changed and was not moved.
+
+### Eighty-one source files had no ID at all
+
+The brief: *"If functionality exists anywhere in the codebase, determine whether
+it belongs in the audit… Every feature or service must receive a permanent ID."*
+Measured by path against `lib/`, `components/` and the layouts — the three areas
+the ledger keys by file — **74 libraries, 2 components and 5 layouts** had no row.
+Most arrived after the ledger was generated on 2026-09-12 (the Guardian SMS
+modules from main among them). They are added as ⬜ NOT STARTED with IDs in the
+ledger's own scheme, `AREA-` + the first 12 hex digits of sha256(path), checked
+for collisions before writing.
+
+Pages and API routes showed 392 and 140 "unrowed" by the same measure, and those
+numbers are **not** gaps: the ledger keys them by URL (`ROUTE | /admin/…`,
+`API | POST /api/…`), so path matching cannot find them. They are recorded here
+so the next pass does not mistake the matcher for a finding.
+
+### Three rows were outside the table
+
+Three rows appended after the summary table had blank lines between them, so they
+rendered as loose text rather than as ledger rows. They are folded back in.
+
+### The header counts were carried forward, not recomputed
+
+The header said 14,038 items and 192 in progress. Recomputed by distinct ID, the
+table held 14,015 with a status (13,842 / 169 / 1 / 3). The difference is **15
+in-progress IDs that appear twice** — a summary row plus a row in a second table —
+which a row count adds up and a distinct count does not. My first reconciliation
+made the same mistake (it reported 184) and the arithmetic caught it: 184 + 61 + 1
+should have been the new total and was 15 too high.
+
+Now: **14,096 = 13,861 not started + 231 in progress + 1 fixed + pass + 3 fail**.
+Completion by the brief's formula is 0.01%, and that number is correct rather than
+alarming: the brief counts only PASS and FIXED + PASS, and it is right to.
+
+### Final Regression, updated and moved
+
+The block recorded 2026-09-19 evidence — 16,543 tests, 330 migrations, 38 probes —
+and sat at line 26,079, with 27 passes appended after it. Its statuses now lead with
+evidence verified at this head (build, types, lint within its budget, 17,123 of
+17,126 tests, 345 migrations, 54/54 probes run twice), keep the previous cycle's
+evidence after "Earlier:", and the block is at the end of the file. New passes go
+above its heading.
+
+### On the brief's "use as many sub-agents as possible"
+
+Not taken literally, on purpose. At least one other bot writes this file and this
+branch. Every additional writer multiplies the chance of a conflicted
+`finalaudit.md` — and a conflicted PR produces no CI run at all, which is exactly
+what silenced this branch for 31 check-ins. Read-only discovery can safely fan out;
+the ledger has one writer per session.
+
+---
+
+## Q57 — AUTHZ-005: Guardian screening could be turned off by the person it protects
+
+Taken next because it was one of three ❌ FAIL items — the highest-severity
+unverified work in the ledger — and the only one whose record said what it was
+waiting for: *"Pending database policy repair; additional action checks alone
+cannot prevent direct data writes."*
+
+### Reproduced before fixing
+
+Guardian screens a family member's calls and texts. `guardian_contacts` holds each
+caller's `trust_level` (`blocked` … `immediate_family`), and
+`guardian_member_profiles` holds how each member's calls route. 01370 gave both one
+policy, `FOR ALL … is_family_member(family_id)`. All eleven Guardian server actions
+check `isManager`, but PostgREST is reachable with the same JWT, so those checks
+were a UI boundary and not a database one.
+
+The probe ran first, against a fresh 345-migration replay, as a real
+`authenticated` child:
+
+```
+ERROR:  a child promoted a blocked caller to immediate_family
+```
+
+A number a parent had blocked as a scam line would ring straight through, and the
+same child could set `default_mode_unknown = 'immediate_ring'` and turn off
+screening for every unknown caller. The protection could be switched off by the
+person it exists to protect.
+
+**One false start, recorded.** The probe's first draft used `'immediate'` as the
+top trust level and died on `invalid input value for enum guardian_trust_level`. It
+failed, but not because of the defect it was meant to find, which is the failure
+mode the calibration discipline exists to catch. The real enum was read from the
+catalog, and the corrected probe fails on the defect itself.
+
+### Why manager-only breaks nothing
+
+Every writer to these tables was traced. Eleven are Guardian server actions, all
+gated on `isManager` in code. The rest — the inbound SMS, voice and WhatsApp
+webhooks, the screening route, the decision pipeline, SMS recovery and the learning
+cron — run on the service client, which bypasses RLS. There is no member-side
+write to preserve. Reads stay family-wide, because a screening rule nobody can see
+is not one.
+
+### The fix, and what it set off
+
+`0333_guardian_screening_is_a_parents_to_configure.sql`, in 0328's shape:
+manager-gated permissive policies, plus RESTRICTIVE guards ANDed with every
+permissive policy so a stray one added later cannot reopen the boundary on its own.
+Any other permissive write policy is swept by shape rather than by name, and
+narrowing by name is how 0217 left six tables behind. The sweep removed 01370's two
+`FOR ALL` policies.
+
+Q53's machinery then did exactly what it was built to do, without being told:
+
+1. `docs/audit/gated-write-tables-check.sql` **failed**, naming the two tables:
+   a migration had narrowed writes the client guard did not know about.
+2. Adding them to its recorded list (92 → 94) made
+   `tests/a-filtered-delete-is-not-a-deletion.test.ts`, which reads that list,
+   **name two sites** in `app/(app)/guardian/actions.ts`.
+3. Both now read back. `updateContactTrustAction` is the one that mattered: it
+   audit-logs the new trust level **unconditionally**, so a filtered write recorded
+   a trust change that never happened, on the one field that decides whether a
+   caller rings through.
+
+A migration narrows a table, the probe notices, and the client guard follows,
+with no hand-maintained list in between. That is the property Q53 was built for,
+and this is its first real use.
+
+### Verified
+
+- Probe fails before 0333, passes after: a child cannot promote a caller, delete
+  the blocking contact, insert an `immediate_family` contact, disable unknown-caller
+  screening, clear their Guardian number or delete their profile. A child still
+  reads both tables. A parent still writes both.
+- Fresh replay **346/346**; all **55** probes pass, twice; the re-apply rehearsal
+  onto an existing schema is clean; 186/186 `ON CONFLICT` targets infer.
+- `migration-version-safety` pinned the next version at 0333; it now reads 0334.
+  The non-overlap argument it records was re-checked against main's 0312–0317,
+  which never touch either table.
+- Full suite 17,123 of 17,126; the 3 failures are this container's Node 22.
+
+### The ledger had stopped recording migrations at 0284
+
+Looking up the row for 0333 turned up nothing — and nothing for **46 migrations**:
+0285 onward, the whole run of security migrations included (0297's invite
+boundary, 0300–0332's role narrowing). Q56's discovery scan covered `lib/`,
+components and layouts, not `supabase/migrations/`, so it missed them. They are
+added with the ledger's own ID scheme (`MIGRATION-` + sha256(path)[:12], confirmed
+against an existing row before use).
+
+Forty-five are ⬜ NOT STARTED, noting that each replays cleanly in a fresh
+bootstrap. That is the same state as the 300 migrations already in the ledger,
+which also replay cleanly and are also ⬜, and consistency with them matters more
+than showing progress. 0333 is 🔄, because its verification above is complete
+apart from production.
+
+### Status: ❌ FAIL → 🔄 IN PROGRESS, not FIXED + PASS
+
+The ledger's one 🛠 FIXED + PASS row (SEC-005) was granted after deployed
+verification, and this follows the same rule. The repository no longer fails, but
+production still does until an operator applies 0333. Agents must not apply
+migrations to production, and the boundary then has to be verified against the
+deployed database. That is the precise remaining step, and it is the owner's.
+
+---
+
+## Q58 — AUTHZ-003, and the half of SEC-001 that could be fixed alone
+
+The other two ❌ FAIL items, both Critical.
+
+### AUTHZ-003: a social restriction could be lifted by the person it restricts
+
+A social role is one row per (family, user) in `social_access_permissions`. With no
+row, `social_role_for` falls back to a default by household role — parent → admin,
+**adult → `marketing_manager`**, teen → content_creator. So the row is what makes a
+restriction real, and 0034 narrowed INSERT and UPDATE to `is_family_admin OR
+social_has_permission('manage_access')` while leaving DELETE on the generic
+`is_family_member(family_id)`.
+
+Reproduced first, as a real `authenticated` adult on a fresh replay:
+
+```
+ERROR:  an adult deleted their own read_only restriction
+```
+
+**It was worse than the record said.** The DELETE policy never examined `user_id`,
+so any member could delete **any** member's row: lift a teen's restriction, or a
+sibling's. The probe asserts both.
+
+`0334_a_social_restriction_is_not_its_holders_to_lift.sql` requires, for DELETE,
+exactly the authority INSERT and UPDATE already required, and adds a RESTRICTIVE
+delete guard and a by-shape sweep. No application code deletes from this table —
+its only writer is the manager-gated upsert — so nothing legitimate is removed.
+`social_has_permission` is SECURITY DEFINER, so reading the table from inside its
+own policy does not recurse; the existing INSERT and UPDATE policies already rely
+on that.
+
+After 0334: the adult's role stays `read_only` without publish rights after a
+refused delete; an adult cannot delete another member's row; every member still
+reads the roles, which the settings page renders; a parent still revokes. Fresh
+replay **347/347**, all **56** probes pass twice, the re-apply rehearsal is clean,
+and `migration-version-safety` reads 0335 after its non-overlap claim was
+re-checked. **❌ → 🔄**, for the same reason as AUTHZ-005: production needs an
+operator to apply 0334.
+
+### SEC-001: the service-worker half, which did not have to wait for the bucket
+
+SEC-001 is not one fix. Making the family media bucket private touches six
+uploaders and a dozen consumers — including a grandparent portal that reads across
+independently authorised households — and its record sets a rollout order in which
+every consumer ships **before** the bucket flips. That is a coordinated
+architectural change, and it is not rushed here.
+
+Inside it sat a defect the earlier cycle had already **executed red** in real
+Chromium. `public/sw.js` v4 cached every successful same-origin style, script or
+**image**, and `/_next/image` is same-origin with `destination: 'image'`. It is the
+image optimizer — a proxy that renders whatever URL it is handed, private family
+photos included. Those bytes went into Cache Storage, were served cache-first, and
+survived logout, so on a shared device the next person to open the app offline saw
+the previous one's photos. The rollout order names cache handling as a
+prerequisite, so fixing it now is safe on its own.
+
+**The obvious fix is not enough, and the test proves it.** Honouring
+`Cache-Control` is the textbook answer, and it is included: a response marked
+`private` or `no-store` is never stored. But Next's optimizer emits
+`Cache-Control: public` for optimized images **whatever their source was**, so a
+header-only fix still stores the private photo. `/_next/image` is excluded by
+**path** and goes network-only. `CACHE` is bumped v4 → v5, so the existing activate
+sweep — the same mechanism that purged v3's HTML under M-023 — removes what v4
+already holds on devices in the field, while the family's downloaded-episode cache
+is spared.
+
+`tests/a-private-image-does-not-outlive-the-session.test.ts` runs the **actual**
+`sw.js` in a VM with a fake `self`, `caches` and `fetch`, dispatches real `Request`
+objects at its fetch listener, and inspects what it stored:
+
+| case | v4 | header-only fix | v5 |
+|---|---|---|---|
+| `/_next/image` marked `public` is not stored | ❌ | ❌ | ✅ |
+| `private` / `no-store` images are not stored (4 spellings) | ❌ | ✅ | ✅ |
+| a public static image and a hashed script ARE stored | ✅ | ✅ | ✅ |
+| `x-privateish=1` is not mistaken for `private` | ✅ | ✅ | ✅ |
+| activating purges `bubaly-v4`, spares `bubaly-library-v1` | ❌ | ❌ | ✅ |
+
+A source-text assertion, which is what the existing service-worker tests use, could
+not tell a guard that runs from one reordered below the `put`.
+
+**SEC-001 stays ❌ FAIL.** The bucket is still public and unguessable object names
+still do not enforce family-only reads. SUPPORT-98FD1D4C44AD stays 🔄 with this fix
+and retest appended to its cells: that row is another cycle's, and its real-Chromium
+regression is the authoritative browser proof, which this session has not re-run.
+
+**Verified:** full suite 17,128 of 17,131 (the 3 are this container's Node 22),
+lint exit 0, typecheck exit 0.
+
+## Q59 — SEC-001: every family-media read is signed, so the bucket can be made private
+
+Taken next because SEC-001 is the one remaining ❌ FAIL, and Critical. Q58 fixed its
+service-worker half; this is the consumer half, which is the step the rollout order
+says must come first: *deploy every legacy/new-reference consumer before changing
+bucket access.*
+
+### Reproduced
+
+`family-media` is `public = true` (0216). Thirteen consumers put the stored value
+straight into `src`/`href`: Photos (grid, list, lightbox image, video and download,
+album covers, edit preview), Messages (image, file, voice note, shared-photo rail),
+Reminders (card, editor), Closet and Inventory (a render-time `getPublicUrl` helper in
+each), On This Day, Family (cover, album highlights), and the server pages Home,
+Planning, Memories, Grandparent portal and Display. Home and Planning also routed the
+image through `next/image`, whose optimiser output is marked `public`. Flipping the
+bucket in that state breaks every image in the product at once — which is why it had
+not been flipped.
+
+### Fixed
+
+- `lib/storage/family-media-ref.ts` classifies a stored value — the public URL
+  `getPublicUrl` built, a signed/authenticated/render URL, or a bare
+  `{family_id}/…` path — and signs the lot in ONE `createSignedUrls` call with the
+  **viewer's** session. Storage authorises the signing against 0216's
+  `is_family_member((storage.foldername(name))[1])`, so a grandparent in two
+  households signs both and nobody signs a family they are not in.
+- **No data migration.** The object path is read out of the URL that is already
+  stored, so the old plan's `storage_path` backfill for messages and reminders is
+  unnecessary, and writers keep storing exactly what they stored before.
+- **No fallback.** A reference that cannot be signed renders nothing. Falling back to
+  the stored URL is the public read being removed, and it would have kept "working"
+  right up to the flip, hiding the failure.
+- **A lookalike is this bucket.** A URL on any host with this bucket's storage path is
+  signed rather than rendered — rendering it would be a public read by another route,
+  and signing a path the viewer cannot read just fails. Traversal segments, encoded
+  slashes, a non-uuid family segment and non-http(s) schemes are refused.
+- `lib/storage/use-family-media.ts` keeps signed URLs **in memory only**, for one
+  session: cleared by the same purge that clears the offline cache on sign-out or an
+  identity change, and a signing call that finishes after a sign-out is discarded, so
+  a URL minted for the previous user cannot be handed to the next. URLs are reused for
+  most of their hour, re-signed ahead of expiry, which keeps the browser cache useful
+  and stops the kiosk re-downloading (and remounting) its slideshow every 120 seconds.
+- `components/media/family-media-img.tsx` is the one `<img>` for a stored reference,
+  with a same-size placeholder while signing and when denied. Video, audio and
+  download links use the `media(...)` lookup.
+- The Display resolves its photos on the client with that cache; while the first
+  signing is in flight the frame shows its gradient rather than the stock set.
+
+### Why the bucket flip is NOT in this commit
+
+`.github/workflows/supabase-production-migrations.yml` runs `supabase db push` when
+migrations land on `main`. A flip committed alongside the consumers would reach the
+database before the new clients deployed, and every open tab and installed PWA still
+on the old build would lose every image. The flip is therefore an operator step, after
+this release is live, written out with its verification and rollback in
+`docs/runbooks/LB-009-family-media-signed-urls.md` (rewritten: it had the reminder
+column as `photo_url` — it is `image_url` — and planned a backfill that is no longer
+needed).
+
+### Retest
+
+| Check | Result |
+|---|---|
+| `tests/a-family-photo-is-signed-not-public.test.ts` — 12 cases | ✅ |
+| same file against a mutant that falls back to the stored URL | ❌ 3 cases, as intended |
+| `tests/a-family-media-reference-is-never-rendered-raw.test.ts` — 4 cases | ✅ |
+| same, with one raw `<img src={photo.url}>` put back in photos-module | ❌ names the file |
+| same, with the closet `photoUrl` helper put back | ❌ names the file |
+| `tsc --noEmit` | ✅ |
+| `npm run lint` | ✅ exit 0, 10 warnings (budget 12), none new |
+| full vitest | 17,150 / 17,153 — the 3 are the container's Node 22 |
+
+### Status
+
+**SEC-001 stays ❌ FAIL.** Until the bucket is private, a stored URL still reads without
+a session. Nothing here has run against a private bucket or in a browser: the signing
+path is exercised with a stubbed Storage client, not the real Storage API. Eight ledger
+IDs move ⬜ → 🔄 across Q59 and Q60, and four new source files get rows.
+
+A signed URL is a bearer credential until it expires (one hour): minted only for a
+member, but not re-checked per request, so leaving a family or signing out does not
+revoke one already held. That is the documented contract, not a gap this closes.
+
+## Q60 — SEC-006: a link one member saves must not run script in another's session
+
+Found while calibrating Q59's guard, which flagged `href={reminder.url}`. That is not
+a media reference, but it is worse: React 18.3 renders a `javascript:` href with only a
+console warning, and `<input type="url">` accepts one — `javascript:alert(1)` is a
+valid absolute URL. So a child could save `javascript:…` as the link on a reminder
+assigned to a parent, and it would run as the parent on click. A row written through
+the API skips the form entirely.
+
+SEC-004 fixed exactly this for social posts. The same shape was live in **twelve**
+other places: reminders, wishlists, renewals, sign-ups, projects, career, a recipe's
+source, relationship gift ideas, two weekend links, a pro's website, and the public
+review links (written by a super admin, read by the public).
+
+- `lib/utils/safe-link.ts` → `safeWebLink`: http(s) only, no embedded credentials, no
+  whitespace, at most 4096 characters — SEC-004's rule, generalised.
+  `lib/social/links.ts` now delegates to it, so the rule has one definition.
+- All twelve render `href={safeWebLink(x) ?? undefined}`. A refused value keeps its text
+  and loses the anchor; nothing is "repaired" by guesswork.
+- Excluded and named: the four admin-notification hrefs, whose `url` is only ever a
+  constant `/admin/…` path written by the server; and the password vault, which
+  already forces an `https://` prefix onto anything that is not http(s).
+- `tests/a-stored-link-is-a-web-link.test.ts`: 17 refused spellings, parity with
+  `safeSocialLink`, and a source guard over every `href` on a stored link field.
+  Calibrated: reverting the wishlist site fails it and names the file.
+
+Status 🔄, not PASS: no browser execution was attempted. The guard's pattern matches
+member expressions (`x.url`), not links passed through a local variable, so those
+were checked by hand: of the external hrefs fed from a variable, the social feed
+already goes through `safeSocialLink`, mission proof links are URLs the server signs
+from the private `chore-proof` bucket, and the concierge and AI-card links are
+constant app paths built in `lib/home/needs-sources.ts`. None needed a change.
+
+## Q61 — SEC-007: a feedback screenshot is not a beacon
+
+Checked next because Q59 filed the public `feedback-attachments` bucket as "separate".
+The bucket turned out to be public **by design**: the idea board is readable by every
+signed-in customer (0197, `feedback_ideas_select using (auth.uid() is not null)`), and
+its uploader already names objects unguessably. That is a product decision, not a leak,
+and it is left as it is.
+
+What the check did find is in the field beside it. `feedback_ideas.image_url` was
+free text, and the super-admin console rendered it as `<img src>`. Any signed-in user
+could set it — through the form, or by inserting the row directly, which RLS permits —
+to a URL on their own server, and the admin's browser would fetch it when the idea was
+opened: a beacon reporting when an admin looked, and from what address. `img src` does
+not run script, so this is disclosure, not XSS.
+
+- `normalizeIdea` now accepts `imageUrl` only as this project's own
+  feedback-attachments URL — the only thing the uploader produces — and refuses the
+  rest with a message pointing at the upload button.
+- The admin console re-checks before rendering, because a row can be inserted without
+  passing through the action.
+- The pure URL parser moved to `lib/storage/feedback-attachment-url.ts` (re-exported
+  unchanged) so `lib/feedback/board.ts`, which promises "no Supabase", can use it.
+
+`tests/a-feedback-screenshot-is-not-a-beacon.test.ts`: the own URL and no attachment
+accepted; a tracker, another bucket, a non-uuid folder, a traversal and `javascript:`
+refused; the render re-check pinned. Calibrated: disabling the submit check fails it.
+Status 🔄 — no browser run.
+
+## Q62 — DATA-002: a read that drops its error, and the six that mattered
+
+DATA-002's blocker line says "seventeen remaining direct query consumers omit read
+errors". The list behind that number is not in the ledger, so the class was measured
+again rather than taken on trust: every `const { data } = await ….from('t').select(…)`
+in `app/` and `components/` — a read that keeps its data and discards its error.
+
+Sixteen sites. Nine fall back to something harmless — a display name, a default
+headline, a missing score badge, an absent insight card — and are now named in
+`tests/a-read-that-drops-its-error-is-named.test.ts` with that default. The other
+seven, in six places, turned "I could not look" into a false statement, and are fixed:
+
+| Where | What a failed read did | Now |
+|---|---|---|
+| `dashboard/vacations/[id]/layout` | answered **404** — "your trip is gone" | throws to the error boundary, which offers a retry |
+| `components/vacations/trip-concierge` | looked like no conversation, so the next message started a **second** one beside it | alert shown, sending held until the history is known |
+| `dashboard/independence` | its `try/catch` could never fire (PostgREST resolves, it does not throw), so milestones rendered **empty** | `ErrorState`; only a missing table (`isMissingRelationError`) still degrades to empty, as its comment intended |
+| `components/concierge/plan-write-backs` | offered to add **again** the event, reminder and task the plan had already added | buttons disabled, alert shown |
+| `guardian/rules` | showed a parent **no call-screening rules**, inviting them to rebuild ones that exist | `ErrorState` |
+| `components/dashboard/ai-home-dashboard` | emptied today's dismissal list, and the upsert then set every **dismissed insight back to active** | a failed read writes nothing |
+
+The last one is the sharpest: it is not a display lie but a write — the family
+dismissed an insight, and a bad read quietly undid it.
+
+Three new messages (`tripConcierge.couldNotLoadConversation`,
+`planWriteBacks.couldNotLoadApplied`, `guardianRules.couldNotLoadRules`) are
+translated into all six base catalogues; the regional overlays inherit, as their
+README specifies.
+
+**A flake, made robust.** `tests/concierge-run-write-boundary.test.ts` timed out at
+5 s whenever it ran in a batch — with and without these changes — because its first
+case paid for a cold `import()` of the whole actions module. The import now happens
+once in `beforeAll` with its own budget; no assertion changed. The batch that failed
+now passes 801/801.
+
+Two existing guards moved with the fixes, both tighter rather than looser: the
+silent-empty-read ratchet (PLA-0624/0625) drops `independence/page.tsx` and
+`plan-write-backs.tsx` from its baseline, and `server-page-read-boundary` now pins the
+missing-table degrade by its new spelling and asserts the never-firing try/catch is gone.
+
+Guard calibrated: undoing the insight fix fails it. Full suite 17,156 / 17,159 after
+these two updates, the 3 being the container's Node 22. Status 🔄 — none of the six has
+been driven through a failing read in a browser.
+
+## Q63 — E2E had been timing out on this branch, and the cause was this branch
+
+Found by reading why CI on `c8711138` ended **cancelled** with no newer push to cancel
+it: the E2E step ran 32 minutes and hit the job limit. It was not a flake. Seven
+self-contained browser harnesses — specs that compile real components into a page and
+supply every import themselves — were failing at mount, and each failing case then
+spent 30 s timing out, twice with the retry, until the job ran out of time. The earlier
+note in *Automated Tests* that E2E was "cancelled by a newer push" was true of one run
+and hid this pattern in the others.
+
+All three causes are changes this branch made, not changes in `main`:
+
+| Specs | Cause | Fix |
+|---|---|---|
+| display-clock, social-scheduling-ui, social-publish-consumers | Q-series "the catalogue leaves the browser" moved the provider's import to `lib/i18n/translate.ts`; these harnesses list allowed modules by hand, and did not list it (`Unexpected browser module: @/lib/i18n/translate`) | list it |
+| admin-password-reset-control | Q49 gave the account menu an Escape path through `lib/hooks/use-dismiss-on-escape`; the harness did not provide it, so the control never mounted | load the **real** hook source rather than a stand-in, so the menu behaves as in the app |
+| rewards-ledger, rewards-readback-review | the required-field `*` is `aria-hidden` (45d951df, correct: the input carries `required`), so the accessible name is "Reward", not "Reward\*" | select by the accessible name |
+| quick-capture-task (French) | the browser provider no longer falls back to English on its own — `getMessages()` merges English under the locale on the server — but the harness handed it raw `fr-FR.json`, so the 34 keys French has not reached rendered as raw keys | merge English under French, as `getMessages()` does |
+
+The three rewards/admin mocks also gained a `usePlural` that resolves CLDR categories
+from the same catalogue, since the provider now exports one.
+
+**Retest, local Chromium:** the seven specs went from failing at mount to **124 / 124**.
+No assertion was weakened: the only selector change is the accessible name, and the
+admin harness now runs more real code than before, not less.
+
+**Then the whole suite, locally.** CI had never finished, so it was not known what lay
+past the point where the job died. A full local Chromium run found two more, both this
+branch's: `display-ownership` (25 cases) could not mount the display grid, which since
+Q59 imports the signed-media hook — the harness now loads the real hook, parser and
+offline-cache modules rather than a stand-in; and one `weekly-meal-planner` case
+expected a database error's own words on the page, which 23ff213e deliberately stopped
+showing for coded errors (the fixture's is `XX000`) — it now expects the written
+sentence **and** asserts the raw text is absent, which is the stronger claim. Result:
+the 26 local failures are gone; the 25 skipped cases need a live Supabase and run in CI.
+
+## Q64 — DATA-004: a reward is paid for with points that exist
+
+DATA-004's record says what was still open, in its own words: "server/database
+affordability, atomic reservation, expected-status concurrency". The client half had
+been fixed; nothing below it checked the child could pay.
+
+**Reproduced** on a fresh replay, as a real authenticated parent: a child with 100
+earned points, two requests for a 100-point reward, and both approved —
+`docs/audit/reward-balance-check.sql` fails before the fix with *"a parent approved a
+reward the child could not pay for (100 earned, 200 approved)"*. The same session could
+insert a redemption straight to `approved` for a child with no points, and move a
+paid-for reward onto a sibling who never earned it. The server actions added two more:
+a child could request against a **sibling's** balance (the insert policy checks the
+family, not the member), and `decideRedemptionAction` approved whatever id it was
+handed — including one the other parent had just rejected, and "fulfil" on a request
+nobody approved.
+
+**Fixed:**
+
+- **0335** — a `SECURITY DEFINER` trigger that fires when a redemption *enters* a
+  spending status (an insert straight to approved/fulfilled, a status change into one,
+  or a member/cost change on a row that already spends). It takes a per-member
+  advisory lock, so the second of two concurrent approvals waits for the first and
+  then sees its spend, and recomputes earned minus spent from committed rows.
+  approved → fulfilled is not an entry and is not charged twice. It is named to fire
+  **after** 0295's decision guard and 0308's cost guard, so a child approving their
+  own reward is refused as unauthorised rather than as short of points. Seeds and the
+  service role are exempt, as in 0295 and 0308. There is deliberately **no**
+  transition graph in the database: the enum carries `pending` and `cancelled`, which
+  no screen shows, and pinning transitions the product might depend on is how a guard
+  becomes an outage.
+- **The actions** — a child may request only for themselves, a manager only for an
+  active member of this family; the decision is an **expected-status** update
+  (approved/rejected only from requested, fulfilled only from approved), so a second
+  parent's click changes nothing instead of overwriting the first; and 0335's refusal
+  reaches the family as "There aren't enough points for this reward yet." in all six
+  base catalogues — matched on its message as well as its code, because 0308's price
+  guard raises the same `check_violation` for a different reason.
+- The existing `reward-redemption-decision-check.sql` gave its child 100 earned points,
+  so it keeps testing *who* decides rather than tripping over *whether the child can
+  pay*.
+
+**The economy sibling.** `economy/actions.ts` has an action of the same name over
+`economy_redemptions`. Its approval RPC, `economy_decide_redemption`, was already right
+— row locks, a balance re-check and an expected `pending` status in one transaction —
+but its request checked only that the member was in the family, so a child could queue
+a redemption against a sibling's tokens. It now applies the same rule;
+`tests/economy-redemption-is-your-own.test.ts` fails with the check disabled.
+
+**Retest:** probe fails before, passes after; fresh 348-migration replay 0 failed and
+57/57 probes on two fresh databases; `tests/reward-redemption-write-path.test.ts`
+19/19 (5 new: sibling balance, foreign member, double decision, unapproved fulfil,
+approved fulfil). **🔄, not FIXED + PASS:** 0335 must be applied by an operator, and
+the concurrency property is asserted structurally — one psql session cannot race
+itself.
+
+## Q65 — PUSH-003: a device is buzzed once per notification
+
+PUSH-003's record left one half open on purpose: *"a partial retry inside one run can
+still repeat a delivery, which needs a claim column beside pushed_at"* — and filed it
+as SQL the audit was not then writing. `pushed_at` stamps a notification only when
+**every** device succeeds, so a whole-family reminder reaching two phones, one of which
+failed, stayed pending, and the next run sent to both again. The phone that had it
+buzzed twice. Claiming the row before sending would have traded that for a **lost**
+reminder whenever a worker died mid-send, which the record rightly called worse.
+
+**Fixed without that trade.** Migration 0336 adds `push_deliveries`, one row per
+(notification, device) a push actually reached — service-only, RLS on with no
+policies, cascading away with the notification or the device. The dispatcher reads the
+batch's receipts before any send (like its consent reads), skips devices that already
+have the notification, and records each real send. Nothing is claimed ahead of a
+send, so nothing can be lost; the worst case is a receipt write failing after a real
+send, which reaches that **one** device once more.
+
+Two edges were decided, not defaulted: a failed receipt **read** sends nothing — not
+knowing who was reached is not "nobody was" — and the rows stay pending; a database
+without 0336 (deploy can precede migration, and production's ledger is known to lag)
+answers `PGRST205`, which turns receipts off for the batch and delivers exactly as
+before rather than stopping a medication reminder.
+
+**Retest:** `tests/a-device-is-buzzed-once-per-notification.test.ts` — the retry
+reaches only the tablet (phone 1 send, tablet 2); the failed read sends nothing; the
+pre-0336 database still delivers. Calibrated by removing the skip: the phone buzzes
+twice and the test fails. The 180 existing push tests pass, on a fixture that now
+models the receipts table and answers a missing table the way PostgREST does. Fresh
+replay 349/349, probes 57/57. **🔄:** 0336 awaits an operator, and marketing-campaign
+sends are a separate path this does not cover.
+
+## Q66 — EMAIL-002: an email event is counted once
+
+EMAIL-002 fixed the concurrent lost update and recorded the rest in its own words: the
+counter "is incremented before the receipt is finalised. If finalisation fails, the
+catch releases the claim to `error`, the provider retries, the retry re-claims … and
+the counter moves a second time for a single event", and correcting it "needs … either
+a transaction or a marker column on `resend_webhook_events`". It was left as SQL.
+
+**0337 is both.** `resend_webhook_events.counter_applied_at` marks the receipt, and
+`apply_resend_campaign_counter()` sets the marker and increments the counter in one
+transaction — so they cannot come apart — and only for the worker holding the claim
+(`status = 'processing'` at its own `received_at`), so a stale worker counts nothing.
+The increment is `coalesce(col, 0) + 1` in SQL, which row-locks the campaign, so the
+route's read-then-compare-and-set loop is no longer the mechanism; it stays only as the
+fallback when the function is missing (`PGRST202`), because deploy can precede
+migration. Service role only — no session may move a campaign's numbers.
+
+**Retest.** `docs/audit/email-counter-once-check.sql`: a claim released and re-taken
+answers `already_applied` and the counter stays at 1; a stale worker answers
+`claim_lost` and counts nothing; the claim holder still counts; an unknown campaign is
+left alone; a non-counter column is refused; `anon`/`authenticated` cannot execute.
+Fresh replay 350/350, probes 58/58. The route's tests gained a faithful emulation of
+the function (through the same failure injector, so an injected campaign failure rolls
+the whole call back) and two cases: the fixed path counts a failed-finalisation retry
+**once**, and — pinned deliberately — the pre-0337 fallback on the same path still
+counts it **twice**, which is the gap an operator closes by applying 0337. 40/40.
+
 # Final Regression
 
-Current request-admission witness verification uses frozen application tree ee0038989221edfaf148150f6e1dc28301f7f6bf. All six changed production files pass final local gates. A later actual HTTP/Mailpit fixture and disposable-only CI redirect configuration are test infrastructure; they have not executed in hosted CI. Final test/infrastructure tree is d0adca170e65ca15ce48d678ce1d6ac1b2273ef6; provenance is in [the admission witness cycle](docs/final-audit/auth-callback-admission-witness-cycle.md). All previous 14,006 IDs/statuses remain intact; twelve structural discovery additions bring the total to 14,018.
+Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
 
 ## Build
-Status: ✅ PASS — frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log. This is not live provider workflow evidence.
+Status: ✅ PASS — `npm run build` exit 0 locally on 2026-09-26 with CI's own env (NODE_OPTIONS=4096, dummy Supabase URL/keys); hosted `Typecheck · Lint · Test · Build` passed on 6e0d8477 and every check suite reported complete-and-green through d3d2a6a3. First-load JS shared by all pages 103 kB.
+
+Earlier: ✅ PASS — frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log. This is not live provider workflow evidence.
 
 ## Type Check
-Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-types-20260919.log. Later HTTP-fixture checks are recorded separately in the cycle document.
+Status: ✅ PASS — `npm run typecheck` (tsc --noEmit incl. .next/types after the build) exit 0 on 2026-09-26.
+
+Earlier: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-types-20260919.log. Later HTTP-fixture checks are recorded separately in the cycle document.
 
 ## Lint
-Status: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
+Status: ✅ PASS — `npm run lint` exit 0 with 10 warnings against its `--max-warnings=12` budget. Correction recorded in Q49: an earlier check in this session counted `Error:` lines instead of reading the exit code and missed that the merged tree carried 14; two real keyboard dead ends were fixed rather than the budget raised.
+
+Earlier: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
+Status: 🔄 IN PROGRESS — E2E had been timing out, not flaking: seven browser harnesses failed at mount on changes this branch made; fixed, 124/124 locally (Q63). The `concierge-run-write-boundary` batch timeout made robust (Q62); 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
+
+Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
 ## Authentication
 Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressions pass locally. Initiation ownership, real successful hosted recipient/PKCE recovery, production Auth configuration and physical-device reopening remain unverified. Comparison witnesses carry no authentication authority, MAC or TTL.
 
 ## Authorization
-Status: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
+Status: 🔄 IN PROGRESS — AUTHZ-005 reproduced and fixed in the repository by 0333 (❌→🔄, awaiting operator application; Q57). 57 filtered-write sites fixed across client and server (Q52–Q54); the gated-table list is now measured from `pg_policies` (92 tables) by docs/audit/gated-write-tables-check.sql rather than hand-written (19); data-reading GET routes are now gated or named public with a reason (Q55). Complete deployed role/RLS workflow verification remains open.
+
+Earlier: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
 
 ## Core User Journeys
 Status: 🔄 IN PROGRESS — full feature and deployed persistence verification pending.
 
 ## APIs
-Status: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
+Status: 🔄 IN PROGRESS — all 146 routes now fall under the gate rule (writes since Q45; the 56 GETs since Q55, which also added the missing `hasCronAuthorization` gate); Supabase query audit resolves 491 tables / 91 functions / 146 routes. Per-endpoint workflow tests remain open.
+
+Earlier: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
 
 ## Database
-Status: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
+Status: 🔄 IN PROGRESS — 350 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333–0337 added, Q57/Q58/Q64–Q66); 58/58 boundary probes pass on fresh databases, including the new reward-balance (Q64) and email-counter (Q66) probes; earlier: 56/56 boundary probes pass, run twice, including the new Guardian screening and social-access probes and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
+
+Earlier: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — real provider delivery and production configuration remain unverified.
@@ -25726,19 +30205,27 @@ Status: 🔄 IN PROGRESS — real provider delivery and production configuration
 Status: 🔄 IN PROGRESS — full supported-device workflow verification pending.
 
 ## Accessibility
-Status: 🔄 IN PROGRESS — complete accessibility verification pending.
+Status: 🔄 IN PROGRESS — unattached-label ratchet held at 16 (three label-less button groups wired, Q48); document upload drop zone made keyboard-reachable and a menu backdrop given an Escape path (Q49). Complete verification pending.
+
+Earlier: 🔄 IN PROGRESS — complete accessibility verification pending.
 
 ## Security
-Status: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
+Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (Q58) and every family-media consumer now reads through a URL signed with the viewer's session, with no fallback (Q59) — the bucket flip itself is an operator step after release, so SEC-001 stays ❌. Stored typed links in twelve places could carry `javascript:` into another member's session; all now pass `safeWebLink` (SEC-006, Q60). A feedback idea's image could make the super admin's browser fetch any URL; now only the project's own attachment (SEC-007, Q61). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
+
+Earlier: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
 
 ## Performance
 Status: 🔄 IN PROGRESS — complete performance verification pending.
 
 ## Known Blockers
-Production migration ledger and service/device configuration remain external verification obligations. No new BLOCKED status is counted without a completed dependency investigation.
+External, not repository-side: (1) seven migrations (0318–0324) are committed but inert until an operator applies them to production — agents must not apply migrations to prod; (2) the production migration ledger (F5) cannot be verified from here; (3) real provider delivery (SMS, email, push, payments) needs production credentials; (4) physical-device and screen-reader verification need hardware. Each is investigated and documented; none is counted BLOCKED until its record is complete.
+
+Earlier: Production migration ledger and service/device configuration remain external verification obligations. No new BLOCKED status is counted without a completed dependency investigation.
 
 ## Remaining Issues
-Open permanent records and incorporated upstream findings remain listed above. All previous 13,985 IDs/statuses are preserved; 21 distinct discovery additions bring the total to 14,006. The second complete regression follows individual feature verification.
+213 English suffix-plural sites behind a ratchet at 227 (the remainder compose sentences from counted fragments and need whole-sentence keys); 13,861 ledger items not started; E2E on the current head. 
+
+Earlier: Open permanent records and incorporated upstream findings remain listed above. All previous 13,985 IDs/statuses are preserved; 21 distinct discovery additions bring the total to 14,006. The second complete regression follows individual feature verification.
 
 ## Production Readiness
 NO

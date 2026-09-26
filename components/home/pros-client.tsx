@@ -15,6 +15,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Contractor = Tables<'home_contractors'>;
 const tradeLabel = (v: string | null) => TRADES.find((t) => t.value === v)?.label ?? v ?? '';
@@ -99,7 +100,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
               <div className="mt-3 flex flex-wrap gap-2">
                 {c.phone && <a href={`tel:${c.phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" />{' '}{tr('prosClient.call')}</a>}
                 {c.email && <a href={`mailto:${c.email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Mail className="h-3.5 w-3.5" />{' '}{tr('prosClient.email')}</a>}
-                {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" />{' '}{tr('prosClient.site')}</a>}
+                {c.website && <a href={safeWebLink(c.website) ?? undefined} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" />{' '}{tr('prosClient.site')}</a>}
                 <button onClick={() => start(async () => { await deleteContractorAction(c.id); })} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </Card>

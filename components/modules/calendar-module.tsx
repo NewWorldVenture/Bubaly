@@ -26,6 +26,7 @@ import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activatable } from '@/lib/ui/a11y';
 
 type Event = Tables<'calendar_events'>;
 
@@ -206,6 +207,25 @@ export function CalendarModule() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
   const [memberMenu, setMemberMenu] = useState(false);
+
+  // Escape closes either filter menu.
+  //
+  // This is the keyboard half of the click-outside scrim below. The scrim is a
+  // mouse affordance and is `aria-hidden`, which is honest — but `aria-hidden`
+  // also silences the two lint rules that were pointing at it, so without this
+  // the menus would have had NO keyboard dismissal at all and nothing left to
+  // say so. A keyboard user could open one and then only get out of it by
+  // choosing something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!catMenu && !memberMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setCatMenu(false);
+      setMemberMenu(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [catMenu, memberMenu]);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   // Per-member / per-category visibility (the image's Calendars + Show toggles).
   const [hiddenMembers, setHiddenMembers] = useState<Set<string>>(new Set());
@@ -371,7 +391,7 @@ export function CalendarModule() {
         return;
       }
       if (json.error) throw new Error(json.error);
-      success(`Synced ${json.synced} events`); void refresh();
+      success(tr('modules.syncedEvents', { count: json.synced ?? 0 })); void refresh();
     } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }
@@ -546,7 +566,12 @@ export function CalendarModule() {
                 </button>
                 {catMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
+                    {/* A click-outside scrim, not a control: there is nothing here to
+                        activate, so it gets no role and no tab stop — an invisible
+                        full-screen layer in the tab order would be worse than the
+                        mouse-only dismiss it replaces. The keyboard equivalent is
+                        Escape, handled on the menu itself. */}
+                    <div aria-hidden className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
                     <div className="absolute right-0 z-20 mt-1 max-h-64 w-44 overflow-y-auto rounded-xl border border-border bg-elevated shadow-lg">
                       {(['all', 'general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const).map(c => (
                         <button key={c} onClick={() => { setFilterCategory(c); setCatMenu(false); }}
@@ -569,7 +594,12 @@ export function CalendarModule() {
                 </button>
                 {memberMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
+                    {/* A click-outside scrim, not a control: there is nothing here to
+                        activate, so it gets no role and no tab stop — an invisible
+                        full-screen layer in the tab order would be worse than the
+                        mouse-only dismiss it replaces. The keyboard equivalent is
+                        Escape, handled on the menu itself. */}
+                    <div aria-hidden className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
                     <div className="absolute right-0 z-20 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-border bg-elevated p-1.5 shadow-lg">
                       <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('calendar.calendars')}</p>
                       {calendarRows.map((row) => {
@@ -615,7 +645,7 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+              <div key={`${e.id}-${e.starts_at}`} {...activatable(() => setSelected(e))} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
@@ -634,7 +664,7 @@ export function CalendarModule() {
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div key={`${e.id}-${e.starts_at}`} {...activatable(() => setSelected(e))} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
@@ -682,7 +712,7 @@ export function CalendarModule() {
                     {/* All-day events */}
                     <div className="mt-1 w-full space-y-0.5 px-1">
                       {col.allDay.map(e => (
-                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                        <div key={`${e.id}-${e.starts_at}`} {...activatable(() => setSelected(e))} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                           {e.title}
                         </div>
                       ))}
@@ -727,7 +757,7 @@ export function CalendarModule() {
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
+                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} {...activatable(() => setSelected(e))}
                             className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                             title={e.title}>
                             <div className="flex items-start justify-between gap-1">
@@ -811,7 +841,7 @@ export function CalendarModule() {
                   {label} &bull; {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
                 {events.map(e => (
-                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                  <div key={`${e.id}-${e.starts_at}`} {...activatable(() => setSelected(e))} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (

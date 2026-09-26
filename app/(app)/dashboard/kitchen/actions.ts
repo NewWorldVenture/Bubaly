@@ -6,6 +6,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
 import type { SubScore } from '@/lib/food/score';
@@ -86,7 +87,9 @@ export async function snapshotFoodScoreAction(input: {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The family's day: `snapshot_date` is upserted, so an evening score written
+  // under the host's day lands on tomorrow and collides with tomorrow's real one.
+  const today = todayKeyFor(ctx);
   const { error } = await supabase
     .from('family_food_scores')
     .upsert(

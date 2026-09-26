@@ -7,6 +7,15 @@ import { readFileSync } from 'node:fs';
 // dropped the dialog role, focus trap, Escape handling, focus restore, or the
 // mobile safe-area/bottom-sheet layout would regress a11y everywhere at once.
 // This locks the WAI-ARIA dialog contract + the mobile layout at the source.
+//
+// The behaviour half now lives in `lib/a11y/use-dialog-behavior.ts`, extracted
+// so the photo lightbox — full-bleed black chrome, deliberately not a `<Modal>`
+// — gets the same contract from the same definition instead of a second copy.
+// These assertions FOLLOW the code into that file rather than being relaxed to
+// accommodate it: every property asserted before is asserted now, against
+// whichever file carries it, and `BEHAVIOUR` plus `SRC` together are exactly
+// what `Modal` renders. An extraction that dropped a property fails here, in
+// the same test, with the same message.
 const SRC = readUiSource('components/ui/modal.tsx');
 // The dialog BEHAVIOUR moved to a hook so overlays that cannot take Modal's
 // chrome can still keep the promise `aria-modal` makes. The contract did not
@@ -34,7 +43,12 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
 
   it('closes on Escape and traps Tab focus within the dialog', () => {
     expect(HOOK).toMatch(/e\.key === 'Escape'/);
-    expect(HOOK).toMatch(/onClose\(\)/);
+    // `onCloseRef.current?.()` counts, and is the correct form. The handler is
+    // held in a ref so the trap effect does not depend on its identity — 92 call
+    // sites pass an inline arrow, and depending on it rebuilt the trap on every
+    // keystroke and threw the caret back to the first field. See
+    // tests/a-dialog-does-not-steal-the-caret.
+    expect(HOOK).toMatch(/onCloseRef\.current\?\.\(\)|onClose\(\)/);
     expect(HOOK).toMatch(/e\.key !== 'Tab'/);
     expect(HOOK).toMatch(/preventDefault\(\)/);
     // a defined focusable set is what makes the trap real
@@ -54,7 +68,9 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
   it('keeps the trap for a dialog that has no close (a gate is still modal)', () => {
     // A paywall or lock screen passes no `onClose`: Escape does nothing and the
     // trap still holds. `aria-modal` has to be true even with nothing to close.
-    expect(HOOK).toMatch(/if \(onClose\) onClose\(\)/);
+    // Same property, current spelling: optional-chaining the ref is exactly
+    // "call it only if the caller supplied one".
+    expect(HOOK).toMatch(/onCloseRef\.current\?\.\(\)|if \(onClose\) onClose\(\)/);
   });
 
   it('gives the icon-only close control an accessible name', () => {

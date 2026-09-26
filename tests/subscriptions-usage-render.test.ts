@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubLike } from '@/lib/finance/subscriptions';
 import { usd } from '@/lib/finance/splits';
@@ -41,7 +41,7 @@ afterEach(() => {
 describe('subscription usage presentation', () => {
   it('shows unknown usage with a correction action and no asserted waste or savings', () => {
     state.subs = [sub('No recorded date'), sub('Omitted date', { last_used: undefined }), sub('Blank date', { last_used: '' })];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(html.match(/usage unknown; Edit to add last use/g)).toHaveLength(3);
     expect(reviewCost(html)).toBe(usd(0));
     expect(html).toContain('title="Mark used today"');
@@ -57,7 +57,7 @@ describe('subscription usage presentation', () => {
       sub('Impossible date', { last_used: '2026-02-30' }),
       sub('Future date', { last_used: '2026-06-25' }),
     ];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(html.match(/last-use date is invalid; Edit to correct/g)).toHaveLength(2);
     expect(html).toContain('last-use date is in the future; Edit to correct');
     expect(html).not.toContain('last recorded use');
@@ -74,7 +74,7 @@ describe('subscription usage presentation', () => {
       sub('Paused', { status: 'paused', last_used: '2026-01-01' }),
       sub('Canceled', { status: 'canceled', last_used: '2026-01-01' }),
     ];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(reviewCost(html)).toBe(usd(1500));
     expect(html.match(/review usage<\/span>/g)).toHaveLength(2);
     expect(html.match(/last recorded use/g)).toHaveLength(5);

@@ -29,6 +29,15 @@ import {
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export type KitchenData = {
+  /**
+   * The FAMILY's calendar day, computed on the server from `families.timezone`.
+   *
+   * Passed down rather than recomputed here so "expires today" means the same
+   * day on this card as it does in the summary counts that were computed
+   * server-side — and so it does not quietly become the DEVICE's day, which is
+   * a third answer again for a parent travelling.
+   */
+  todayKey: string;
   tonight: string | null;
   upcoming: { date: string; mealType: string; dish: string }[];
   pantrySummary: { total: number; expiringSoon: number; expired: number; lowStock: number };
@@ -143,7 +152,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
           ) : (
             <div className="space-y-1.5">
               {data.expiring.map((e, i) => {
-                const st = expiryStatus(e.expires_at);
+                const st = expiryStatus(e.expires_at, data.todayKey);
                 return (
                   <div key={i} className="flex items-center justify-between rounded-xl border border-border bg-bg/40 px-3 py-2">
                     <span className="text-sm font-medium">{e.name}</span>
@@ -286,7 +295,7 @@ function LeftoverSection({ data, onAdd }: { data: KitchenData; onAdd: () => void
       ) : (
         <div className="space-y-1.5">
           {data.leftovers.map((l) => {
-            const u = leftoverUrgency(l.useBy);
+            const u = leftoverUrgency(l.useBy, data.todayKey);
             return (
               <div key={l.id} className="flex items-center gap-2 rounded-xl border border-border bg-bg/40 px-3 py-2">
                 <div className="min-w-0 flex-1">

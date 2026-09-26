@@ -21,8 +21,23 @@ const HOUR = 3_600_000;
 /** Count-only query → number (0 on any error, so a missing table never breaks the page). */
 type CountResult = { value: number; error: unknown | null };
 
+/**
+ * TEN of the fifteen reads in this page's batch go through here, and until now
+ * this bare `await q` was what made them unsettled. A Supabase builder rejects
+ * only on a transport failure — DNS, TCP, TLS, a timed-out fetch — and inside
+ * Promise.all one rejection rejects the batch, so a single unreachable table
+ * took the whole page to the error boundary while the four settle()d reads
+ * beside it were written to survive exactly that.
+ *
+ * It is worth naming why no sweep found this: the other unsettled batches in
+ * this repo were spotted by looking for a bare `supabase.from(` inside a
+ * Promise.all. Here the call sites all read `count(supabase.from(...))`, which
+ * looks wrapped, and the thing that fails to settle is one `await` in a helper
+ * three dozen lines away. settle()'s SettledFallback already carries
+ * `count: null`, so it lands in the shape this function returns.
+ */
 async function count(q: PromiseLike<{ count: number | null; error: unknown }>): Promise<CountResult> {
-  const { count: n, error } = await q;
+  const { count: n, error } = await settle(q);
   return { value: n ?? 0, error: error ?? null };
 }
 

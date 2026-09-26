@@ -22,8 +22,12 @@ export function isMissingTableError(error: unknown): boolean {
 
 /**
  * Turn a Supabase error (or any thrown value) into a short, human message.
- * Never returns an empty string. Falls back to the raw message, then a
- * generic line.
+ * Never returns an empty string.
+ *
+ * An unclassified error falls back to the caller's `fallback`, NOT to the raw
+ * string — see the note at the bottom of the function. The one exception is an
+ * error with no Postgres code, which the application threw itself and whose
+ * message was written for a person to read.
  */
 export function describeDbError(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
   if (!error) return fallback;
@@ -75,11 +79,38 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
     return 'Network problem — check your connection and try again.';
   }
 
-  return raw.trim() || fallback;
+  // Everything above is a message this file WROTE. What is left is the raw
+  // string as the database phrased it, and the ten shapes matched above are not
+  // the only shapes there are: an enum coercion, a numeric overflow, a
+  // function-not-found and a provider error re-thrown as an Error all fall
+  // through here. Returning them hands out schema — type names, column names,
+  // constraint names, function signatures — to anyone who can make a query
+  // fail. On the AI paths it goes further: `lib/ai/tools/*` put this string into
+  // `fail(...)`, which reaches the model's context as well as the browser.
+  //
+  //   insert … status = 'bogus'
+  //     → invalid input value for enum redemption_status: "bogus"
+  //
+  // is the whole grammar of a type, from one failed write.
+  //
+  // The distinction that matters is not "raw" but WHO WROTE IT. An error the
+  // application threw itself — `throw new Error('Pick a date first')` — has no
+  // Postgres code and its message was written for a person, so it is still the
+  // best thing to show. Anything carrying a code came from the database or a
+  // provider, and its message was written for whoever maintains the schema.
+  if (!code) return raw.trim() || fallback;
+  return fallback;
 }
 
 /** Describe an error for a server-action/API response without exposing
- * unclassified database or provider details to the browser or model. */
+ * unclassified database or provider details to the browser or model.
+ *
+ * Since `describeDbError` stopped returning coded raw strings this is a
+ * narrower thing than it was: it now only catches the CODELESS unclassified
+ * error — an `Error` the application threw that says nothing a person can act
+ * on. Still worth having on a response boundary, and still the right default
+ * there; it is no longer the only thing standing between a Postgres string and
+ * the browser. */
 export function describeActionError(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
   const described = describeDbError(error, fallback);
   const raw = typeof error === 'object' && error !== null

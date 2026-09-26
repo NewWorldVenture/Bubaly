@@ -5,7 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { REWARD_MODE_LABELS } from '@/lib/chores/logic';
-import { createChoreAction } from '../actions';
+import { MissionForm } from './mission-form';
 import { PlanGenerator } from './plan-generator';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -32,7 +32,7 @@ export default async function NewMissionPage() {
 
       <Card>
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4 text-brand-text" /> {t('missionsNew.createAMission')}</h2>
-        <form action={createChoreAction} className="grid gap-3 sm:grid-cols-2">
+        <MissionForm className="grid gap-3 sm:grid-cols-2">
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>{t('missionsNew.title')}</span><input name="title" required className={inputCls} placeholder={t('missionsNew.eGMakeYourBed')} /></label>
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>{t('missionsNew.instructions')}</span><input name="instructions" className={inputCls} placeholder={t('missionsNew.howToDoItWell')} /></label>
 
@@ -79,7 +79,7 @@ export default async function NewMissionPage() {
           <label className={labelCls}><span className={spanCls}>{t('missionsNew.iconEmoji')}</span><input name="icon" maxLength={4} className={inputCls} placeholder="🧹" /></label>
 
           <div className="sm:col-span-2"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Sparkles className="h-4 w-4" /> {t('missionsNew.createMission')}</button></div>
-        </form>
+        </MissionForm>
       </Card>
     </div>
   );

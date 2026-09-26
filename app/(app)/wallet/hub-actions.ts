@@ -13,6 +13,7 @@
 // answers with a sentence instead, and says out loud what the file header used
 // to get wrong.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
@@ -137,7 +138,7 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
     status: TXN_STATUS.includes(String(input.status)) ? String(input.status) : 'posted',
     category: str(input.category, 40) || null,
     account_id: typeof input.account_id === 'string' && input.account_id ? input.account_id : null,
-    date: typeof input.date === 'string' && input.date ? input.date : new Date().toISOString().slice(0, 10),
+    date: typeof input.date === 'string' && input.date ? input.date : todayKeyFor(ctx),
     created_by: ctx.user.id,
   });
   return error ? actionFailure('add the transaction', t('hubActions.couldNotAddTheTransaction'), error) : { ok: true };
@@ -158,15 +159,23 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
   // never depend on policy drift to avoid cross-family targeting.
+  // Every branch reads the row back. The comment above already explains why the
+  // family predicate is on all five ("a delete action should never depend on
+  // policy drift"), and this is the other half of the same thought: 0218/0220
+  // narrow writes on `transactions` and `financial_accounts`, and RLS FILTERS a
+  // delete rather than refusing it — so a removal the policy blocked answered
+  // `error: null` and this action reported `{ ok: true }` over a row still there.
   const result = input.table === 'wallet_cards'
-    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
     : input.table === 'wallet_passes'
-      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
       : input.table === 'wallet_rewards'
-        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
         : input.table === 'financial_accounts'
-          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
-          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  const { error } = result;
-  return error ? actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error) : { ok: true };
+          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
+          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+  const { data: rows, error } = result;
+  if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
+  return { ok: true };
 }

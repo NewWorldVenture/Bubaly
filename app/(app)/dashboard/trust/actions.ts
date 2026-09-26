@@ -268,6 +268,22 @@ export async function createDelegationAction(input: {
   const domains = input.domains.filter(d => isDomain(d) && d !== 'all');
 
   const supabase = await createServer();
+
+  // Both ids must belong to THIS family. `trust_delegations` references
+  // `family_members(id)` with nothing tying either column to `family_id`
+  // (0093:69-71), so a uuid from another household satisfies the foreign key
+  // and lands in this family's table. It grants nothing — `evaluateTrust`
+  // matches `to_member_id` against members of this family only, and never reads
+  // `from_member_id` — but it renders in the trust UI as a grant made BY
+  // someone who is not in the household, on the one surface whose job is saying
+  // who may act for whom.
+  const { data: named, error: namedError } = await supabase
+    .from('family_members').select('id')
+    .eq('family_id', ctx.active.familyId)
+    .in('id', [input.fromMemberId, input.toMemberId]);
+  if (namedError) return actionFailure(namedError, t('actions.couldNotCreateThatDelegation'));
+  if ((named ?? []).length !== 2) return { ok: false, error: t('actions.delegateToADifferentMember') };
+
   const { error: e } = await supabase.from('trust_delegations').insert({
     family_id: ctx.active.familyId,
     from_member_id: input.fromMemberId, to_member_id: input.toMemberId,

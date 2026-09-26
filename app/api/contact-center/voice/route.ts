@@ -12,11 +12,12 @@ import {
 } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult } from '@/lib/contact-center/server';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+const BASE_URL = appBaseUrl();
 const MAX_BODY = 64 * 1024;
 
 function twiml(body: string): NextResponse {

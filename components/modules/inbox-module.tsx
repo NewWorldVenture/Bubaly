@@ -120,9 +120,15 @@ export function InboxModule() {
   async function markRead(comm: Comm) {
     if (comm.status !== 'unread') return;
     const supabase = createClient();
-    const { error: readError } = await settle(
-      supabase.from('family_communications').update({ status: 'read' }).eq('id', comm.id));
+    // 00900's comms_family_update narrows writes here, and RLS FILTERS an UPDATE
+    // rather than refusing it — so `error: null` does not mean the receipt landed.
+    // This one only logs either way, deliberately: an unrecorded read receipt is
+    // not worth a toast at the person. The readback is what makes the log TRUE.
+    const { data: readRows, error: readError } = await settle(
+      supabase.from('family_communications').update({ status: 'read' })
+        .eq('id', comm.id).eq('family_id', familyId).select('id'));
     if (readError) console.error('[inbox] read receipt write failed', { message: readError.message });
+    else if (!readRows || readRows.length === 0) console.error('[inbox] read receipt changed no row', { id: comm.id });
     void refreshComms();
   }
 
@@ -130,9 +136,14 @@ export function InboxModule() {
     if (busyId) return;
     setBusyId(comm.id);
     const supabase = createClient();
-    const { error } = await supabase.from('family_communications').update({ status: 'archived' }).eq('id', comm.id);
+    const { data: rows, error } = await supabase.from('family_communications')
+      .update({ status: 'archived' }).eq('id', comm.id).eq('family_id', familyId).select('id');
     setBusyId(null);
     if (error) { toastError(describeDbError(error)); return; }
+    // A message that is still in the inbox must not vanish from the list: the
+    // row below is what hides it, and a filtered write left it hidden until the
+    // next read brought it back with no explanation.
+    if (!rows || rows.length === 0) { toastError(tr('actions.couldNotUpdateThatMessage')); return; }
     if (selected?.id === comm.id) setSelected(null);
     void refreshComms();
   }
@@ -446,9 +457,11 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       // The toast below says the reply was logged to the thread. If this write
       // is dropped the thread never moves to 'replied', and the sentence is
       // wrong about the thing it is describing.
-      const { error: statusError } = await settle(
-        supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id));
+      const { data: statusRows, error: statusError } = await settle(
+        supabase.from('family_communications').update({ status: 'replied' })
+          .eq('id', comm.id).eq('family_id', familyId).select('id'));
       if (statusError) console.error('[inbox] reply status write failed', { message: statusError.message });
+      else if (!statusRows || statusRows.length === 0) console.error('[inbox] reply status changed no row', { id: comm.id });
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }

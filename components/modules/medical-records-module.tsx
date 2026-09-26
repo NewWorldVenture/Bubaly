@@ -136,7 +136,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     // update/delete, so it matches nothing and succeeds. `.select('id')` asks
     // for the rows back, which is the only way to tell.
     const { data: rows, error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).eq('family_id', familyId).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
@@ -147,7 +147,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
 
   async function deleteProvider(id: string) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
@@ -186,7 +186,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: policyForm.notes || null,
     };
     const { data: rows, error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).eq('family_id', familyId).select('id')
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
@@ -197,7 +197,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
 
   async function deletePolicy(id: string) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));

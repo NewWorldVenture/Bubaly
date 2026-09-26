@@ -32,13 +32,33 @@ import type { Messages } from '@/lib/i18n/messages';
  *
  * Every other scope includes this, because everything renders inside it.
  */
-export const ROOT_CHROME_SCOPE = ['error', 'globalError', 'root'] as const;
+export const ROOT_CHROME_SCOPE = [
+  'error', 'globalError', 'root',
+  // Shared chrome that renders under EVERY surface: the toast host, the brand
+  // logo, the language picker and the modal primitive. They were missing from
+  // every scope, and nothing noticed because `translate` fell back to the whole
+  // English catalogue — the fallback that shipped 244 KB gzip to every visitor.
+  'language', 'logo', 'modal', 'toast',
+] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'blogBlogSearch', 'blogTableOfContents', 'fFormRenderer', 'faqTabs',
   'formRenderer', 'handledProof', 'pricingValue', 'subscribe', 'tableOfContents',
+  // The chrome the marketing LAYOUT renders — the skip link, the header and its
+  // navigation, the consent manager, the exit-intent overlay, the back-to-top
+  // button, the service-worker notice. Every one of these was missing, because
+  // `app/(marketing)/layout.tsx` was never scanned: the entry glob was
+  // `app/(marketing)/**​/layout.tsx`, and git's `**` requires at least one path
+  // segment, so it matched nothing at all.
+  'backToTop', 'consentManager', 'exitIntent', 'marketing', 'nav', 'registerSw',
+  'skipLink',
+  // …and the page content the same gap hid: the contact form, the AI showcase,
+  // the pricing page's own namespaces, the blog's share buttons.
+  'aiShowcase', 'blogShareButtons', 'contact', 'contactForm', 'contactTopic',
+  'planOutcomes', 'pricingContent', 'pricingPricingContent', 'shareButtons',
+  'socialProof', 'switching', 'trustStrip',
 ] as const;
 
 /** Sign-in, sign-up and the consent screens. */
@@ -46,6 +66,8 @@ export const AUTH_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'kidLogin', 'legalConsent', 'login', 'loginForm', 'oauthButtons',
   'phoneAuth', 'signup', 'signupForm',
+  // The phone field's own labels, reached through components/ui/phone-input.tsx.
+  'phoneInput',
   // Password recovery, sign-out and step-up reach the auth surface as client
   // components too. Without these namespaces their strings are not shipped, and
   // this scope's whole failure mode — per tests/i18n-client-scope.test.ts — is
@@ -59,6 +81,8 @@ export const AUTH_SCOPE = [
 export const PUBLIC_LINK_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'publicGift', 'publicGiftForm', 'reviewForm', 'reviewsNewReviewForm',
+  // /join renders the invite acceptance flow.
+  'joinInvite',
 ] as const;
 
 /**

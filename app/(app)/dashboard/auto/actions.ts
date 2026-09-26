@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -12,7 +13,15 @@ type Client = SupabaseClient<Database>;
 
 async function ctx() {
   const c = await requireUserContext();
-  return { familyId: c.active.familyId, userId: c.user.id, supabase: await createServer() };
+  return {
+    familyId: c.active.familyId,
+    userId: c.user.id,
+    supabase: await createServer(),
+    // The family's day, for defaulting a date column. `new Date()` formatted as
+    // a day key is the HOST's day, so a record logged at 6pm in California was
+    // dated tomorrow.
+    todayKey: todayKeyFor(c),
+  };
 }
 function str(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -166,12 +175,12 @@ export async function deleteRentalAction(id: string) {
 // ── Service log ───────────────────────────────────────────────────────────────
 export async function saveAutoServiceAction(fd: FormData) {
   const t = await getTranslations();
-  const { familyId, userId, supabase } = await ctx();
+  const { familyId, userId, supabase, todayKey } = await ctx();
   const vehicleId = str(fd, 'vehicle_id');
   const mileage = num(fd, 'mileage');
   const { error } = await supabase.from('auto_service_records').insert({
     family_id: familyId, vehicle_id: vehicleId, title: str(fd, 'title') ?? 'Service',
-    service_date: str(fd, 'service_date') ?? new Date().toISOString().slice(0, 10),
+    service_date: str(fd, 'service_date') ?? todayKey,
     provider: str(fd, 'provider'), cost: num(fd, 'cost'), mileage, description: str(fd, 'description'),
     next_due_on: str(fd, 'next_due_on'), next_due_mileage: num(fd, 'next_due_mileage'), created_by: userId,
   });

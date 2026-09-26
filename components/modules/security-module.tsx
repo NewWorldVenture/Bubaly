@@ -14,13 +14,14 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SECURITY_KINDS, SECURITY_SEVERITIES, severityMeta, sortEvents, summarizeSecurity, type EventLike } from '@/lib/home/security';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'home_security_events'>;
 const blank = () => ({ kind: 'alert', severity: 'info', title: '', detail: '', occurred_at: new Date().toISOString().slice(0, 16) });
 
 export function SecurityModule() {
   const tr = useTranslations();
+  const plural = usePlural();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -34,6 +35,8 @@ export function SecurityModule() {
       .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
       .order('occurred_at', { ascending: false }).limit(1000),
   });
+
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [tab, setTab] = useState<'all' | 'open' | 'resolved'>('all');
@@ -70,11 +73,24 @@ export function SecurityModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.title.trim()) return;
-    const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
-    const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(tr('securityModule.logged')); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.title.trim()) return;
+      const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
+      const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(tr('securityModule.logged')); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggleResolved(ev: Event) {
     const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
@@ -99,7 +115,7 @@ export function SecurityModule() {
       <div className={`flex items-center gap-3 rounded-2xl border p-4 ${stats.allClear ? 'border-success/30 bg-success/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
         {stats.allClear ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-amber-500" />}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">{stats.allClear ? 'All clear' : `${stats.open} open alert${stats.open === 1 ? '' : 's'}`}</p>
+          <p className="font-semibold">{stats.allClear ? 'All clear' : plural('security.openAlerts', stats.open)}</p>
           <p className="text-xs text-muted">{stats.openCritical} {tr('security.critical')} {stats.openWarning} {tr('security.warning')} {stats.total} {tr('security.totalLogged')}</p>
         </div>
         {/* 14-day activity strip */}
@@ -176,7 +192,7 @@ export function SecurityModule() {
             <Field label={tr('security.detail')}>{(id) => <Textarea id={id} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('security.cancel')}</Button>
-              <Button type="submit">{tr('security.logIt')}</Button>
+              <Button type="submit" loading={saving}>{tr('security.logIt')}</Button>
             </div>
           </form>
         </Modal>

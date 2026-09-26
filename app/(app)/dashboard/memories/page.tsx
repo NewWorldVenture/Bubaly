@@ -17,6 +17,7 @@ import {
 } from '@/lib/memories/memories';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { getTranslations } from '@/lib/i18n/server';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 export const metadata: Metadata = { title: 'Memories' };
 export const dynamic = 'force-dynamic';
@@ -141,8 +142,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     <Link href="/dashboard/photos" className="group w-[200px] shrink-0 overflow-hidden rounded-2xl border border-border bg-surface/40">
       <div className="h-28 w-full">
         {album.cover_url
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={album.cover_url} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+          ? <FamilyMediaImg src={album.cover_url} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
           : <div className="grid h-full w-full place-items-center bg-elevated text-muted"><Camera className="h-7 w-7" /></div>}
       </div>
       <div className="p-3">
@@ -167,8 +167,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((p) => (
           <div key={p.id} className="relative overflow-hidden rounded-xl border border-border bg-surface/40">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={p.thumbnail_url ?? p.url ?? ''} alt={p.caption ?? ''} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
+            <FamilyMediaImg src={p.thumbnail_url ?? p.url} alt={p.caption ?? ''} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
             {p.media_type === 'video' && <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white"><Video className="h-3.5 w-3.5" /></span>}
           </div>
         ))}
@@ -200,8 +199,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                   {strip.length > 0 && (
                     <div className="grid grid-cols-5 gap-2">
                       {strip.slice(0, 5).map((p) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={p.id} src={p.thumbnail_url ?? p.url ?? ''} alt="" loading="lazy" decoding="async" className="h-20 w-full rounded-lg object-cover" />
+                        <FamilyMediaImg key={p.id} src={p.thumbnail_url ?? p.url} alt="" loading="lazy" decoding="async" className="h-20 w-full rounded-lg object-cover" />
                       ))}
                     </div>
                   )}
@@ -272,8 +270,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <Link key={a.id} href="/dashboard/photos" className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border bg-surface/40">
                         <div className="relative h-40 w-full">
                           {a.cover_url
-                            // eslint-disable-next-line @next/next/no-img-element
-                            ? <img src={a.cover_url} alt={a.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                            ? <FamilyMediaImg src={a.cover_url} alt={a.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
                             : <div className="grid h-full w-full place-items-center bg-elevated text-muted"><Camera className="h-8 w-8" /></div>}
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                             <p className="truncate text-sm font-semibold text-white">{a.name}</p>
@@ -331,8 +328,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
               <div className="grid grid-cols-3 gap-2">
                 {onThisDay.slice(0, 6).map((m) => (
                   <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-elevated">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.thumbnail_url || m.url || ''} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
+                    <FamilyMediaImg src={m.thumbnail_url || m.url} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
                     <span className="absolute bottom-1 left-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold text-white">{m.label}</span>
                   </div>
                 ))}

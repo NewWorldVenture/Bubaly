@@ -6,7 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, todayKeyFor } from '@/lib/services/scope';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -64,7 +64,11 @@ export async function POST(req: Request) {
   const recipeNames = (recipesRes.data ?? []).map((r) => r.name);
   const pantry = pantryRes.data ?? [];
   const pantryItems = pantry.map((p) => p.name);
-  const expiringItems = expiringSoon(pantry, 7).map((p) => p.name).slice(0, 15);
+  // The family's day, not the host's: "expiring within a week" computed
+  // against a UTC midnight shifted the whole window a day for the last seven
+  // hours of every Californian day, so the chef urged using food that was
+  // fine and stayed quiet about food that was not.
+  const expiringItems = expiringSoon(pantry, 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 15);
 
   // Busy evenings (events after 4pm) become "keep it quick" signals.
   const dayShort = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });

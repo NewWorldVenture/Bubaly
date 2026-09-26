@@ -1,6 +1,7 @@
 // lib/guardian/pipeline.ts — Communication Decision Pipeline.
 // Orchestrates: ID → Trust → Risk → Intent → Urgency → Context → Rules → AI Decision → Action
 
+import type { GuardianRoutingMode } from '@/lib/database.types';
 import type { TrustLevel } from './trust';
 import { TRUST_LEVELS, explainTrustDecision } from './trust';
 import { evaluateRules, buildRuleContext, type GuardianRule } from './rules';
@@ -8,13 +9,9 @@ import { detectScamFromText, type ScamType } from './scam';
 import { applySeasonalBoost } from './seasonal';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type RoutingMode =
-  | 'immediate_ring'
-  | 'immediate_ai_summary'
-  | 'ai_handle_first'
-  | 'voicemail_first'
-  | 'silent_handling'
-  | 'blocked';
+// Same reason as TrustLevel: `guardian_routing_mode` is a Postgres enum, and a
+// second hand-written copy of it is a copy that can disagree.
+export type RoutingMode = GuardianRoutingMode;
 
 export const ROUTING_MODE_LABELS: Record<RoutingMode, string> = {
   immediate_ring: 'Ring Immediately',

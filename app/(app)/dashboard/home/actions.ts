@@ -3,13 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
 
 async function ctx() {
   const c = await requireUserContext();
-  return { familyId: c.active.familyId, userId: c.user.id, supabase: await createServer() };
+  return {
+    familyId: c.active.familyId,
+    userId: c.user.id,
+    supabase: await createServer(),
+    // The family's day, for defaulting a date column. `new Date()` formatted as
+    // a day key is the HOST's day, so a record logged at 6pm in California was
+    // dated tomorrow.
+    todayKey: todayKeyFor(c),
+  };
 }
 
 function str(fd: FormData, k: string): string | null {
@@ -107,14 +116,14 @@ export async function deleteContractorAction(id: string) {
 // ── Service records ─────────────────────────────────────────────────────────
 export async function saveServiceRecordAction(fd: FormData) {
   const tr = await getTranslations();
-  const { familyId, userId, supabase } = await ctx();
+  const { familyId, userId, supabase, todayKey } = await ctx();
   const assetId = str(fd, 'asset_id');
   const serviceDate = str(fd, 'service_date');
   const { error } = await supabase.from('home_service_records').insert({
     family_id: familyId,
     asset_id: assetId,
     title: str(fd, 'title') ?? 'Service',
-    service_date: serviceDate ?? new Date().toISOString().slice(0, 10),
+    service_date: serviceDate ?? todayKey,
     provider: str(fd, 'provider'),
     cost: num(fd, 'cost'),
     description: str(fd, 'description'),
@@ -180,7 +189,7 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
 
   if (rows.length === 0) return { ok: true, created: 0 };
   const { error } = await supabase.from('maintenance_tasks').insert(rows);
-  if (error) return { ok: false, created: 0, error: error.message };
+  if (error) return { ok: false, created: 0, error: describeActionError(error) };
   revalidatePath('/dashboard/home');
   revalidateAsset(assetId);
   return { ok: true, created: rows.length };

@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RulesEditor } from '@/components/guardian/rules-editor';
 import { Zap, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Routing Rules · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -14,9 +14,8 @@ export default async function RulesPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
-  const { data: rules } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  const { data: rules, error: rulesError } = await supabase.from('guardian_routing_rules')
     .select('id, name, description, priority, is_active, ai_suggested, condition_trust_levels, condition_time_start, condition_time_end, condition_days_of_week, condition_contexts, condition_caller_pattern, action_routing_mode')
     .eq('family_id', familyId)
     .order('priority', { ascending: true });
@@ -36,9 +35,16 @@ export default async function RulesPage() {
         </div>
       </div>
 
-      <RulesEditor
-        rules={(rules ?? []) as unknown as Parameters<typeof RulesEditor>[0]['rules']}
-      />
+      {/* A failed read is not "no rules": showing the empty editor told a parent
+          their call screening had nothing configured, and invited them to rebuild
+          rules that already exist. */}
+      {rulesError ? (
+        <ErrorState message={t('guardianRules.couldNotLoadRules')} />
+      ) : (
+        <RulesEditor
+          rules={(rules ?? []) as unknown as Parameters<typeof RulesEditor>[0]['rules']}
+        />
+      )}
     </div>
   );
 }

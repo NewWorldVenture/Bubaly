@@ -155,7 +155,7 @@ async function fixture(page: Page): Promise<Fixture> {
       '@/lib/supabase/auth': { requireUserContext: async () => ({ user: session.user, active: { familyId, role, member: app().selfMember } }) },
       '@/lib/i18n/server': { getTranslations: async () => key => messages[key] ?? key },
       'next/cache': { revalidatePath() {} },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key, usePlural: () => (key, count, params) => Object.entries({ ...(params || {}), count }).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), messages[key + '.' + new Intl.PluralRules('en-US').select(count)] ?? messages[key + '.other'] ?? key) },
       '@/components/ui/toast': { useToast: () => ({ success: message => p.toasts.push({ kind: 'success', message }), error: message => p.toasts.push({ kind: 'error', message }) }) },
       '@/components/ui/avatar': { Avatar: () => null }, '@/components/ai/ai-insight': { AiInsight: () => null },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
@@ -194,7 +194,7 @@ test.afterEach(async ({ page }) => { expect(await page.evaluate(() => window.__r
 
 async function startCreate(page: Page, title = 'Review reward') {
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill(title);
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill(title);
 }
 async function successfulToasts(page: Page) {
   return page.evaluate(() => window.__rewardsReadbackReview.toasts.filter(toast => toast.kind === 'success'));
@@ -232,7 +232,7 @@ test('newer failed readback preserves a failed-write draft without creating a de
   state.mode.rewards = 'fail'; await page.evaluate(() => window.__rewardsReadbackReview.online());
   await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
   delete state.mode.rewards; await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Review reward');
+  await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toHaveValue('Review reward');
   expect(await successfulToasts(page)).toEqual([]);
   state.failMutation = false; await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0); expect(await successfulToasts(page)).toHaveLength(1);
@@ -266,7 +266,7 @@ for (const reopen of [false, true]) test(`a retained new-reward submit cannot cr
   expect(state.rows.rewards.filter(row => row.title === 'Review reward')).toHaveLength(1);
   expect(state.writes).toHaveLength(1); expect(await successfulToasts(page)).toHaveLength(1);
   if (reopen) {
-    await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Current review draft');
+    await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toHaveValue('Current review draft');
     await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(state.rows.rewards.filter(row => row.title === 'Current review draft')).toHaveLength(1);
@@ -280,5 +280,5 @@ test('a canceled form cannot submit its old fields after another form opens', as
   await startCreate(page, 'Current review draft');
   await page.evaluate(() => window.__rewardsReadbackReview.capturedSubmit()); await finish(page);
   expect(state.writes).toEqual([]);
-  await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Current review draft');
+  await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toHaveValue('Current review draft');
 });

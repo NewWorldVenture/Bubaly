@@ -24,6 +24,10 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
   const { success, error: toastError } = useToast();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // A failed history read is NOT "no conversation yet": sending then would start
+  // a second conversation beside the one that failed to load, and the first
+  // would look lost. So sending waits until the history is known.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -32,10 +36,12 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
   useEffect(() => {
     (async () => {
       const sb = createClient();
-      const { data: convo } = await sb.from('vacation_ai_conversations').select('id').eq('family_id', familyId).eq('vacation_id', vacationId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      const { data: convo, error: convoError } = await sb.from('vacation_ai_conversations').select('id').eq('family_id', familyId).eq('vacation_id', vacationId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      if (convoError) { setLoadFailed(true); return; }
       if (convo) {
         setConversationId(convo.id);
-        const { data: msgs } = await sb.from('vacation_ai_messages').select('role, content').eq('conversation_id', convo.id).order('created_at', { ascending: true });
+        const { data: msgs, error: msgsError } = await sb.from('vacation_ai_messages').select('role, content').eq('conversation_id', convo.id).order('created_at', { ascending: true });
+        if (msgsError) { setLoadFailed(true); return; }
         setMessages((msgs ?? []).filter((m) => m.role === 'user' || m.role === 'assistant') as Msg[]);
       }
     })();
@@ -44,7 +50,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   async function send(text: string) {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || loadFailed) return;
     setBusy(true);
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setInput('');
@@ -63,7 +69,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'build', vacationId }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Build failed');
-      else success(`Added ${data.added.activities} activities, ${data.added.items} itinerary items, ${data.added.budget} budget lines, ${data.added.packing} packing items`);
+      else success(t('trips.conciergeAdded', { activities: data.added.activities, items: data.added.items, budget: data.added.budget, packing: data.added.packing }));
     } catch { toastError(t('tripConcierge.networkError')); }
     setBuilding(false);
   }
@@ -78,7 +84,9 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       <TripConfirmationImport vacationId={vacationId} />
 
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
-        {messages.length === 0 ? (
+        {loadFailed ? (
+          <p role="alert" className="py-6 text-center text-sm text-danger">{t('tripConcierge.couldNotLoadConversation')}</p>
+        ) : messages.length === 0 ? (
           <div className="py-6 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-brand-text/60" />
             <p className="mt-2 text-sm text-muted">{t('tripConcierge.yourPersonalTravelAgentAskAnything')}</p>
@@ -100,9 +108,9 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex items-center gap-2">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('tripConcierge.askYourConcierge')} disabled={busy}
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('tripConcierge.askYourConcierge')} disabled={busy || loadFailed}
           className="h-11 flex-1 rounded-xl border border-border bg-surface/60 px-4 text-sm focus-ring" />
-        <Button type="submit" size="icon" loading={busy} disabled={!input.trim()}><Send className="h-4 w-4" /></Button>
+        <Button type="submit" size="icon" loading={busy} disabled={!input.trim() || loadFailed}><Send className="h-4 w-4" /></Button>
       </form>
     </div>
   );

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import Link from 'next/link';
 import {
   Calendar as CalendarIcon, CheckSquare, BellRing, StickyNote, FolderLock,
@@ -198,7 +198,8 @@ export default async function PlanningPage() {
                   const src = p.thumbnail_url || p.url;
                   return (
                     <span key={p.id} className="relative aspect-square overflow-hidden rounded-lg bg-elevated">
-                      {src ? <Image src={src} alt={tr('planning.familyMoment')} fill sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
+                      <FamilyMediaImg src={src} alt={tr('planning.familyMoment')} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover"
+                        fallback={<span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>} />
                     </span>
                   );
                 })}

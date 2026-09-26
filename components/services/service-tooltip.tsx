@@ -73,6 +73,15 @@ export function ServiceTooltip({ label, description, children }: {
   const hide = useCallback(() => setPos(null), []);
 
   return (
+    // A SUPPRESSION, and a false positive. This div is not a control: it wraps
+    // whatever `children` it is given and delegates that child's events, which
+    // is why it has no role and no name. The keyboard path the rule asks for is
+    // already here and two lines below the mouse one — `onFocusCapture` /
+    // `onBlurCapture`, so the tooltip appears when the wrapped control is
+    // TABBED to, not only when it is hovered. Giving the wrapper a role or a
+    // tabIndex would put a second, nameless stop in the tab order in front of
+    // the real control.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       ref={ref}
       onMouseEnter={show}

@@ -97,7 +97,7 @@ export function LanguageModule() {
     const minutes = Math.max(1, Math.round(reviewedCount / 4));
     const { error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${reviewedCount} cards reviewed`, practiced_on: isoDate(new Date()), created_by: userId });
     if (error) return toastError(describeDbError(error));
-    success(`${reviewedCount} cards reviewed · ${minutes} min logged`);
+    success(tr('modules.cardsReviewed', { count: reviewedCount, minutes }));
     setReviewedCount(0);
   }
 
@@ -115,7 +115,7 @@ export function LanguageModule() {
   async function addStarterDeck() {
     if (!goal) return;
     const deckCards = starterDeck(goal.language_code);
-    if (!deckCards.length) return toastError(`No starter deck for ${goal.language_label} yet — add cards by hand.`);
+    if (!deckCards.length) return toastError(tr('modules.noStarterDeck', { language: goal.language_label }));
     const have = new Set(myCards.map((c) => c.term.toLowerCase()));
     const fresh = deckCards.filter((c) => !have.has(c.term.toLowerCase()));
     if (!fresh.length) return toastError(tr('languageModule.theStarterDeckIsAlready'));
@@ -123,7 +123,7 @@ export function LanguageModule() {
     const { error } = await createClient().from('vocab_cards').insert(fresh.map((c) => ({ family_id: familyId, goal_id: goal.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: isoDate(new Date()), created_by: userId })));
     setAdding(false);
     if (error) return toastError(describeDbError(error));
-    success(`${fresh.length} starter cards added`);
+    success(tr('modules.starterCardsAdded', { count: fresh.length }));
   }
 
   async function deleteSession(s: Session) {

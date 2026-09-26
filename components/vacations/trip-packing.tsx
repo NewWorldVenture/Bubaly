@@ -54,6 +54,8 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   const packed = items.filter((i) => i.packed).length;
   const pct = items.length ? Math.round((packed / items.length) * 100) : 0;
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -85,7 +87,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
+    if (error) toastError(error.message); else success(tr('trips.addedSuggestedItems', { count: toAdd.length }));
   }
 
   async function toggle(it: PackItem) {
@@ -94,11 +96,24 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   }
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.name.trim()) return;
-    const listId = await ensureMasterList();
-    const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-    if (error) toastError(error.message); else success(tr('tripPacking.added'));
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.name.trim()) return;
+      const listId = await ensureMasterList();
+      const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
+      if (error) toastError(error.message); else success(tr('tripPacking.added'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function remove(id: string) {
     const { error } = await createClient().from('vacation_packing_items').delete().eq('id', id);
@@ -157,7 +172,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('tripPacking.cancel')}</Button>
-              <Button type="submit">Add</Button>
+              <Button type="submit" loading={saving}>Add</Button>
             </div>
           </form>
         </Modal>

@@ -14,7 +14,7 @@ const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
@@ -64,8 +64,12 @@ const list: Row = { id: listId, family_id: familyId, name: 'To-Do', archived_at:
 test.use({ timezoneId: 'UTC' });
 
 async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 'sheet' | 'shell' = 'sheet'): Promise<Fixture> {
-  const catalogue = locale === 'en-US' ? messages : Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')))
-    .filter(([key]) => /^(quickCapture\.|captureShell\.|documentLink\.|toast\.|auth\.cache|states\.|modal\.)/.test(key)));
+  // Merged over English, as lib/i18n/messages.ts getMessages() does for the real
+  // provider: the browser provider no longer falls back on its own (that
+  // fallback was the 244 KB English catalogue in every page's JS), so a key the
+  // French catalogue has not reached yet renders in English, not as a raw key.
+  const catalogue = locale === 'en-US' ? messages : { ...messages, ...Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')))
+    .filter(([key]) => /^(quickCapture\.|captureShell\.|documentLink\.|toast\.|auth\.cache|states\.|modal\.)/.test(key))) };
   const held = new Map<Table, Array<() => Promise<void>>>(), pendingWrites: Array<() => Promise<void>> = [];
   const state: Fixture = {
     rows: { todo_lists: [{ ...list }], todo_items: [], journey_events: [] },

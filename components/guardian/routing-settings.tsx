@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Shield, Phone, Zap, Volume2, BellOff, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { ROUTING_MODE_LABELS, ROUTING_MODE_DESCRIPTIONS, type RoutingMode } from '@/lib/guardian/pipeline';
@@ -101,6 +101,12 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
   };
 
   const [form, setForm] = useState<Profile>(profile ?? defaults);
+  // Three captions that pointed at nothing; every name is already in the
+  // catalogue, so this is wiring, not copy.
+  const uid = useId();
+  const personaNameId = `${uid}persona`;
+  const greetingId = `${uid}greeting`;
+  const voicemailId = `${uid}voicemail`;
 
   function setMode(trust: TrustLevel, mode: RoutingMode) {
     const field = TRUST_TO_FIELD[trust];
@@ -188,8 +194,9 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
         <div className="space-y-4">
           <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.aiAssistantName')}</label>
+              <label htmlFor={personaNameId} className="mb-1.5 block text-sm font-medium">{tr('routingSettings.aiAssistantName')}</label>
               <input
+                id={personaNameId}
                 value={form.ai_persona_name}
                 onChange={e => setForm(p => ({ ...p, ai_persona_name: e.target.value }))}
                 placeholder={tr('routingSettings.bubaly')}
@@ -198,8 +205,9 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
               <p className="mt-1 text-xs text-muted">{tr('routingSettings.howTheAiIntroducesItselfTo')}</p>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.customGreeting')}</label>
+              <label htmlFor={greetingId} className="mb-1.5 block text-sm font-medium">{tr('routingSettings.customGreeting')}</label>
               <textarea
+                id={greetingId}
                 value={form.ai_greeting_template ?? ''}
                 onChange={e => setForm(p => ({ ...p, ai_greeting_template: e.target.value }))}
                 placeholder={`Hello! You've reached the [Family] family. I'm ${form.ai_persona_name}, the AI assistant for ${member.display_name}. How can I help?`}
@@ -207,8 +215,9 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">{tr('routingSettings.voicemailGreeting')}</label>
+              <label htmlFor={voicemailId} className="mb-1.5 block text-sm font-medium">{tr('routingSettings.voicemailGreeting')}</label>
               <textarea
+                id={voicemailId}
                 value={form.voicemail_greeting ?? ''}
                 onChange={e => setForm(p => ({ ...p, voicemail_greeting: e.target.value }))}
                 placeholder={`You've reached ${member.display_name}. Please leave a message.`}

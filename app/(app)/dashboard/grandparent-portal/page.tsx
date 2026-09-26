@@ -12,6 +12,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 export const metadata: Metadata = { title: 'Grandparent Portal' };
 export const dynamic = 'force-dynamic';
@@ -196,8 +197,9 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {digest.recentPhotos.map((p, i) => (
               <div key={i} className="overflow-hidden rounded-2xl border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={p.caption ?? t('dashboardGrandparentPortal.photo')} className="aspect-square w-full object-cover" />
+                {/* Signed with the viewer's session, which Storage authorises per
+                    household — so a grandparent in two families sees both (SEC-001). */}
+                <FamilyMediaImg src={p.url} alt={p.caption ?? t('dashboardGrandparentPortal.photo')} className="aspect-square w-full object-cover" />
                 {p.caption && (
                   <div className="p-2">
                     <p className="truncate text-xs">{p.caption}</p>

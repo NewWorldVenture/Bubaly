@@ -60,8 +60,16 @@ export function CheckInView() {
   }
 
   async function remove(id: string) {
-    const { error } = await createClient().from('safety_check_ins').delete().eq('id', id);
-    if (error) toastError(error.message);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0324 establishes a check-in's "self" by created_by as well as member_id,
+    // so another member's check-in is filtered out rather than refused. This
+    // path previously reported NOTHING at all on a silent no-op.
+    const { data, error } = await createClient().from('safety_check_ins').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(error.message); return; }
+    if (!data) toastError(t('actions.couldNotDeleteThatRecord'));
   }
 
   return (

@@ -137,7 +137,7 @@ export function ShoppingModule() {
     e.preventDefault();
     const name = addingText.trim();
     if (!name || !activeListId) return;
-    if (name.length > 120) { toastError('Item name is too long (max 120 characters)'); return; }
+    if (name.length > 120) { toastError(t('validation.itemNameTooLong', { max: 120 })); return; }
     return run('add-item', async () => {
       // Through the service, which skips a name already on this list under
       // `normalizeName` — case, a trailing plural 's' and spacing are not
@@ -471,7 +471,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     if (loading) return;
     const trimmed = name.trim();
     if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
-    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
+    if (trimmed.length > 80) { toastError(t('validation.listNameTooLong', { max: 80 })); return; }
     if (!familyId) { toastError(t('shoppingModule.noActiveFamilyReloadAnd')); return; }
     setLoading(true);
     try {
@@ -543,7 +543,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     if (loading) return;
     const trimmed = name.trim();
     if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
-    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
+    if (trimmed.length > 80) { toastError(t('validation.listNameTooLong', { max: 80 })); return; }
     setLoading(true);
     try {
       const supabase = createClient();

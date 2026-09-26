@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import Link from 'next/link';
 import {
   Plus, Calendar as CalendarIcon, CheckSquare, UtensilsCrossed, MoreHorizontal,
@@ -160,10 +160,14 @@ export default async function HomePage() {
   const todayStart = new Date(dayBounds.start);
   const todayEnd = new Date(dayBounds.end);
   const todayIso = todayKey;
-  const week = weekStrip(now);
+  const week = weekStrip(todayKey);
   const weekStartIso = week[0].date;
   const weekEndIso = week[6].date;
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // The first of the month in the FAMILY's zone. `now.getFullYear()/getMonth()`
+  // are the host's, so for a household west of UTC the month rolled over on the
+  // last afternoon of the previous one, and "this month" spent a few hours
+  // reporting the wrong month's finances.
+  const monthStart = new Date(zonedDayBoundsMs(`${todayKey.slice(0, 7)}-01`, tz).start);
 
   const [
     { data: members, count: memberCount, error: membersError },
@@ -728,7 +732,7 @@ export default async function HomePage() {
         {/* Family Finances */}
         <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
-          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
+          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long', timeZone: tz })}</p>
           <div className="mt-3 flex items-center gap-4">
             <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
             <div className="flex-1 space-y-2 text-sm">
@@ -751,9 +755,11 @@ export default async function HomePage() {
                 const when = new Date(p.taken_at || p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
-                    {src
-                      ? <Image src={src} alt={p.caption ?? 'Family memory'} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover transition group-hover:scale-105" />
-                      : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-6 w-6" /></span>}
+                    {/* Signed per viewer, not the stored public URL, and not through the
+                        optimizer, whose output is marked public (SEC-001). */}
+                    <FamilyMediaImg src={src} alt={p.caption ?? 'Family memory'} loading="lazy" decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105"
+                      fallback={<span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-6 w-6" /></span>} />
                     <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white">{when}</span>
                   </Link>
                 );

@@ -17,6 +17,10 @@ const sources = Object.fromEntries([
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
   'components/ui/widget-boundary.tsx',
+  // The display resolves its photos through the signed-media hook (SEC-001).
+  // Loaded as real source: this spec's photo list is empty, so it signs
+  // nothing, but the grid must mount with the real hook in place.
+  'lib/storage/use-family-media.ts', 'lib/storage/family-media-ref.ts', 'lib/offline/cache.ts',
 ].map((file) => [file, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -105,6 +109,9 @@ test.beforeEach(async ({ page }) => {
         if (id === '@/lib/display/tiles') return load('lib/display/tiles.ts');
         if (id === './setup-card') return load('components/display/setup-card.tsx');
         if (id === '@/components/ui/widget-boundary') return load('components/ui/widget-boundary.tsx');
+        if (id === '@/lib/storage/use-family-media') return load('lib/storage/use-family-media.ts');
+        if (id === './family-media-ref') return load('lib/storage/family-media-ref.ts');
+        if (id === '@/lib/offline/cache') return load('lib/offline/cache.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
         throw new Error('Unexpected import ' + id);
       };

@@ -3,7 +3,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { formatPhone } from './phone';
 
 type Client = SupabaseClient<Database>;
@@ -198,7 +197,7 @@ async function verifyCompletion(client: Client, receipt: GuardianSmsReceipt, sig
   const { input, communicationId, decision } = receipt;
   if (!decision) return unavailable();
   const [communication, callback] = await Promise.all([
-    request(signal, () => withGuardianTables(client).from('guardian_communications').select(COMM_COLUMNS, { count: 'exact' })
+    request(signal, () => client.from('guardian_communications').select(COMM_COLUMNS, { count: 'exact' })
       .eq('id', communicationId).eq('family_id', input.familyId).limit(2).retry(false).abortSignal(signal)),
     request(signal, () => client.from('guardian_callback_events').select('event_id,callback_type,status,error,received_at,processed_at', { count: 'exact' })
       .eq('event_id', input.smsSid).limit(2).retry(false).abortSignal(signal)),

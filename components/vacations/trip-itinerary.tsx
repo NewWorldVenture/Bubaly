@@ -68,6 +68,8 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     { hasYoungChildren },
   ), [items, dayById, hasYoungChildren]);
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blankItem> | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,25 +82,38 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
+    if (error) toastError(error.message); else success(t('trips.addedDays', { count: toAdd.length }));
   }
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
-    const row = {
-      day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
-      title: form.title.trim(), location: form.location.trim() || null,
-      start_time: form.start_time || null, end_time: form.end_time || null,
-      cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
-      booked: form.booked, notes: form.notes.trim() || null,
-    };
-    const { error } = form.id
-      ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id)
-      : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId });
-    if (error) return toastError(error.message);
-    success(form.id ? 'Saved' : 'Added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
+      const row = {
+        day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
+        title: form.title.trim(), location: form.location.trim() || null,
+        start_time: form.start_time || null, end_time: form.end_time || null,
+        cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
+        booked: form.booked, notes: form.notes.trim() || null,
+      };
+      const { error } = form.id
+        ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id)
+        : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId });
+      if (error) return toastError(error.message);
+      success(form.id ? 'Saved' : 'Added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeItem(id: string) {
@@ -196,7 +211,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
             <Field label={t('tripItinerary.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('tripItinerary.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

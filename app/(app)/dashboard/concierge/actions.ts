@@ -212,22 +212,35 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // already in concierge_plan_actions), so surfacing this failure lets the
   // manager safely retry rather than leaving the run stuck "pending" with the
   // plan already applied — which would look like the approval did nothing.
-  const { error: runErr } = await sb.from('family_automation_runs').update({
+  // RLS FILTERS this update rather than refusing it, so `error: null` did not mean
+  // the run's status moved. Everything below treats the run as executed, so a
+  // filtered write leaves it `pending` and the plan can be applied a second time.
+  const { data: runRows, error: runErr } = await sb.from('family_automation_runs').update({
     status: 'executed', summary, result: { steps: applied } as never,
     approved_by: ctx.user.id, approved_at: new Date().toISOString(),
-  }).eq('id', runId).eq('family_id', familyId);
+  }).eq('id', runId).eq('family_id', familyId).select('id');
+  if (!runErr && (!runRows || runRows.length === 0)) {
+    console.error('[concierge] executed-run status update changed no row', { runId, familyId });
+    return { ok: false, error: t('actions.appliedThePlanButCould') };
+  }
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
 
   if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
+    // The log is the only trace this stamp leaves, and a FILTERED update raises
+    // no error — so the one case worth logging never logged. The comment on the
+    // sibling stamp below records that an earlier version "had always failed and
+    // only logged"; a readback is what makes that discoverable rather than a thing
+    // someone notices months later.
+    const { data: apprRows, error: apprErr } = await sb.from('approval_requests').update({
       // decided_by references family_members(id) (0093), not auth.users.
       status: 'approved', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
       executed_at: new Date().toISOString(), execution_result: summary,
-    }).eq('id', meta.approval_id).eq('family_id', familyId);
+    }).eq('id', meta.approval_id).eq('family_id', familyId).select('id');
     if (apprErr) console.error('[concierge] approval stamp after execution failed', { approvalId: meta.approval_id, familyId, error: apprErr });
+    else if (!apprRows || apprRows.length === 0) console.error('[concierge] approval stamp after execution changed no row', { approvalId: meta.approval_id, familyId });
   }
 
   revalidatePath(PATH);
@@ -247,8 +260,13 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
-  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
-    .eq('id', runId).eq('family_id', ctx.active.familyId);
+  const { data: dismissRows, error: dismissErr } = await sb.from('family_automation_runs')
+    .update({ status: 'dismissed' })
+    .eq('id', runId).eq('family_id', ctx.active.familyId).select('id');
+  if (!dismissErr && (!dismissRows || dismissRows.length === 0)) {
+    console.error('[concierge] dismiss-run status update changed no row', { runId, familyId: ctx.active.familyId });
+    return { ok: false, error: t('actions.couldNotDismissThatRun') };
+  }
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
@@ -256,14 +274,19 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
   if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
+    const { data: apprRows, error: apprErr } = await sb.from('approval_requests').update({
       // 0093's CHECK allows pending|approved|rejected|modified|expired|cancelled
       // and decided_by references family_members(id), not auth.users — the
       // previous 'declined' + user id never satisfied either, so this stamp had
       // always failed and only logged.
       status: 'rejected', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
-    }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId);
+    }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId).select('id');
+    // That comment is the whole argument for the readback. The CHECK violation it
+    // describes DID raise an error, which is why it was eventually noticed; an RLS
+    // filter raises nothing at all, so the same stamp silently not landing would
+    // not even reach this log.
     if (apprErr) console.error('[concierge] approval decline stamp failed', { approvalId: meta.approval_id, familyId: ctx.active.familyId, error: apprErr });
+    else if (!apprRows || apprRows.length === 0) console.error('[concierge] approval decline stamp changed no row', { approvalId: meta.approval_id, familyId: ctx.active.familyId });
   }
 
   revalidatePath(PATH);
@@ -299,10 +322,15 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
   }
 
   if (existing?.id) {
-    const { error } = await sb.from('trust_policies')
+    // The dial that decides whether Bubaly executes plans on its own. The comment
+    // above already says "Reporting the failure is the honest outcome — the dial
+    // did not move"; a filtered UPDATE is exactly that case with no error to
+    // report, so the readback is what keeps that sentence true.
+    const { data: rows, error } = await sb.from('trust_policies')
       .update({ effect, enabled: true })
-      .eq('id', existing.id).eq('family_id', familyId);
-    if (error) return { ok: false, error: error.message };
+      .eq('id', existing.id).eq('family_id', familyId).select('id');
+    if (error) return { ok: false, error: describeActionError(error) };
+    if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
   } else {
     const { error } = await sb.from('trust_policies').insert({
       family_id: familyId, name: AUTOPILOT_POLICY_NAME,
@@ -320,9 +348,9 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
         .update({ effect, enabled: true })
         .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
         .eq('is_system', true).eq('enabled', true);
-      if (retryError) return { ok: false, error: retryError.message };
+      if (retryError) return { ok: false, error: describeActionError(retryError) };
     } else if (error) {
-      return { ok: false, error: error.message };
+      return { ok: false, error: describeActionError(error) };
     }
   }
 

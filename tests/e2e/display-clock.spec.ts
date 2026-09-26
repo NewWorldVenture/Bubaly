@@ -10,7 +10,7 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const sources = Object.fromEntries([
   'components/display/ambient-clock.tsx', 'components/display/photo-frame.tsx',
   'lib/display/ambient.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));

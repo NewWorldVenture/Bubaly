@@ -5,6 +5,15 @@ import { selectPushRecipients } from '@/lib/marketing/push';
 
 type DB = SupabaseClient<Database>;
 const PAGE_SIZE = 200;
+// A PostgREST `.in()` filter travels in the QUERY STRING, so the id list is
+// bounded separately from the row page. lib/supabase/chunked-in.ts settled on
+// 100 ids per request because that "keeps the longest URL near 4 KB, well
+// inside the common 8 KB limit"; reusing PAGE_SIZE here would put ~200 UUIDs at
+// roughly 40 bytes each into one request line, which is the 8 KB limit itself
+// rather than a margin under it. Past it the read comes back `URI too long`,
+// and this module turns an incomplete read into a refusal — so the whole
+// campaign would stop, at exactly the audience size that makes it matter.
+const ID_CHUNK = 100;
 const MAX_READ_ROWS = 50_000;
 const MAX_READ_REQUESTS = 1_000;
 // Match the existing marketing email audience's conservative address format.
@@ -59,8 +68,8 @@ export async function loadPushCampaignAudience(supabase: DB): Promise<string[]> 
 
   const uniqueIds = [...userIds];
   const emailByUser: Record<string, string | null> = Object.create(null);
-  for (let offset = 0; offset < uniqueIds.length; offset += PAGE_SIZE) {
-    const chunk = uniqueIds.slice(offset, offset + PAGE_SIZE);
+  for (let offset = 0; offset < uniqueIds.length; offset += ID_CHUNK) {
+    const chunk = uniqueIds.slice(offset, offset + ID_CHUNK);
     const wanted = new Set(chunk);
     const profiles = await readPages(cursor => {
       let query = supabase.from('profiles').select('id, email')

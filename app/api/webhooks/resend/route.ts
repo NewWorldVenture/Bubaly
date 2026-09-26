@@ -54,6 +54,12 @@ function verify(body: string, headers: Headers, nowMs = Date.now()): boolean {
  */
 const COUNTER_ATTEMPTS = 8;
 
+/** PostgREST's answer for a function the database does not have (yet). */
+function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST202' || error.code === '42883'
+    || /could not find the function/i.test(error.message ?? '');
+}
+
 const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
   'email.opened': 'opens',
   'email.clicked': 'clicks',
@@ -161,6 +167,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (field && campaignId) {
+      // Once per EVENT (0337): the database marks this receipt and increments the
+      // counter in one transaction, and only for the worker holding the claim. A
+      // retry of an event that was counted — finalisation failed, the claim was
+      // released, the provider sent it again — finds the marker and counts
+      // nothing, which is the double count EMAIL-002 left open. The increment is
+      // done in SQL, so the concurrent lost update below cannot happen either.
+      const { data: outcome, error: counterRpcError } = await supabase.rpc('apply_resend_campaign_counter', {
+        p_svix_id: svixId, p_received_at: receivedAt, p_campaign_id: campaignId, p_field: field,
+      });
+      if (!counterRpcError) {
+        // Another worker took the claim since; it owns the event now.
+        if (outcome === 'claim_lost') throw new Error('Counter persistence failed');
+      } else if (!isMissingFunctionError(counterRpcError)) {
+        throw new Error('Counter persistence failed');
+      } else {
+      // A database without 0337 keeps the compare-and-set loop — correct under
+      // concurrency, though a failed finalisation can still count an event twice.
+      //
       // Read-modify-write loses an event whenever two land for the same campaign
       // at once: both workers read 5, both write 6, and one open or click never
       // happened as far as the campaign is concerned. The claim above serialises
@@ -190,6 +214,7 @@ export async function POST(req: NextRequest) {
       // Losing every attempt is sustained contention, not a missing campaign, so
       // fail the claim and let the provider retry rather than drop the event.
       if (campaignExists && !applied) throw new Error('Counter persistence failed');
+      }
     }
 
     // Engagement workflows retain their existing best-effort contract. Their

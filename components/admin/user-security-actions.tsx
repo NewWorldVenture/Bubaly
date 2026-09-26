@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { useRouter } from 'next/navigation';
 import { MoreHorizontal, Ban, ShieldCheck, KeyRound } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
@@ -12,6 +13,7 @@ export function UserSecurityActions({ userId, email, banned }: { userId: string;
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [busy, setBusy] = useState(false);
   const [resetState, setResetState] = useState<'idle' | 'pending' | 'accepted' | 'uncertain'>('idle');
   const [resetMessage, setResetMessage] = useState<string | null>(null);
@@ -104,7 +106,10 @@ export function UserSecurityActions({ userId, email, banned }: { userId: string;
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. A click anywhere
+              dismisses the menu; the keyboard path is Escape, bound above. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <button onClick={sendReset} disabled={busy || resetState !== 'idle'} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated disabled:opacity-50">
               <KeyRound className="h-4 w-4" /> {t('userSecurityActions.sendPasswordReset')}

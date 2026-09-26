@@ -29,8 +29,13 @@ export default async function MarketplaceStorePage() {
     .maybeSingle();
 
   const [{ count: followers }, { data: reviews }, { data: myListings }] = await Promise.all([
+    // The BRANCH is settled, not the ternary: settle(cond ? a : b) does not
+    // typecheck, because Promise<A> | Promise<B> is not PromiseLike<A | B>.
+    // Two of this batch's three reads were already settled and this one was
+    // not, which is the same mixed batch the other pages had — one unreachable
+    // table costing the page rather than costing its own number.
     store
-      ? sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id)
+      ? settle(sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id))
       : Promise.resolve({ count: 0 } as { count: number | null }),
     settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId).limit(500)),
     settle(sb.from('marketplace_listings')

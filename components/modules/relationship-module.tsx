@@ -21,9 +21,11 @@ import { cn } from '@/lib/utils/cn';
 import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -58,7 +60,7 @@ const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 1
 
 export function RelationshipModule() {
   const t = useTranslations();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
 
   const { data: dates, loading: dl, error: de } = useRealtimeQuery<RDate>({
@@ -113,13 +115,21 @@ export function RelationshipModule() {
   const giftSummary = useMemo(() => summarizeGifts((gifts ?? []).map((g) => ({ status: g.status, price_cents: g.price_cents }))), [gifts]);
   const visibleGifts = useMemo(() => (gifts ?? []).filter((g) => giftFilter === 'all' || g.status === giftFilter), [gifts, giftFilter]);
 
+  // The FAMILY's day, not this device's — the same answer the server-rendered
+  // home dashboard gives for the same anniversary, and the right one for a
+  // partner reading this from another timezone.
+  const todayKey = useMemo(
+    () => dayKeyIn(new Date(), family?.timezone || 'UTC'),
+    [family?.timezone],
+  );
   const upcoming = useMemo(() => upcomingDates(
     (dates ?? []).map((d): RelDate => ({
       id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date,
       recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status,
     })),
+    todayKey,
     { withinDays: 365 },
-  ), [dates]);
+  ), [dates, todayKey]);
 
   const partnerName = profile?.partner_name?.trim()
     || (profile?.partner_member_id ? members.find((m) => m.id === profile.partner_member_id)?.display_name : null)
@@ -236,7 +246,7 @@ export function RelationshipModule() {
       price_cents: w.price != null ? Math.round(w.price * 100) : null, source: 'wishlist', wishlist_item_id: w.id, status: 'idea',
     });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`Added “${w.title}” to gift ideas`);
+    success(t('modules.addedToGiftIdeas', { title: w.title }));
   }
 
   // ── Profile ──
@@ -477,7 +487,7 @@ export function RelationshipModule() {
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
-                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
+                  {g.url && <a href={safeWebLink(g.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'

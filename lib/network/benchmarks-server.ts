@@ -63,6 +63,16 @@ export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
   // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows — and
   // `cohort_size` is far from unique, so it also needs a tiebreak for two pages
   // not to overlap or skip.
+  //
+  // `value` completes it. The tiebreak above was added for the right reason and
+  // stopped one column short of this table's own key: 0135 declares
+  // `unique (scope, cohort_key, metric, value)`, and `scope` is pinned by the
+  // `.eq` here, so (cohort_key, metric) alone leaves one tie group per metric —
+  // and a metric's value BANDS are exactly what those rows are, so every metric
+  // has several. Without `value` the order is not total, and `.range()` is a
+  // separately planned sort: the boundary can move inside a tie group and drop
+  // a band with no error. A missing band is not a shorter benchmark, it is a
+  // different one.
   const { rows: data, error } = await readAll((from, to) => sb.from('network_aggregates')
     .select('scope, cohort_key, metric, value, count, cohort_size, computed_at')
     .eq('scope', 'benchmarks')
@@ -70,6 +80,7 @@ export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
     .order('cohort_size', { ascending: false })
     .order('cohort_key')
     .order('metric')
+    .order('value')
     .range(from, to), { max: 2000 });
   if (error) {
     console.error('[benchmarks] aggregate read failed', error);

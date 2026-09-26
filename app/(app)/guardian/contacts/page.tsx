@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
 import { Users, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
@@ -15,7 +14,6 @@ export default async function ContactsPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   // The second read was already settled and the first was not, which made the
   // batch reject on a transport failure — DNS, TCP, TLS, a timed-out fetch —
@@ -24,10 +22,12 @@ export default async function ContactsPage() {
   // lib/supabase/settle.ts. Settling both means one unreachable table costs its
   // own list, not the page.
   const [{ data: contacts }, { data: members }] = await Promise.all([
-    // The `as ReturnType<typeof supabase.from>` cast erases the row type, so
-    // settle's inference has nothing to carry through — the shape is named here
-    // instead. The page already re-casts at the consumption site below.
-    settle<{ data: unknown[] | null }>((db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+    // Settled per main, and without the cast: this branch declared the eight
+    // Guardian tables in database.types.ts, so `guardian_contacts` has a real
+    // row type now. Main named the shape by hand only because the
+    // `as ReturnType<typeof supabase.from>` cast erased it — with the cast gone,
+    // settle's inference carries the row type through on its own.
+    settle(supabase.from('guardian_contacts')
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
       .order('name', { ascending: true })),

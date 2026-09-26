@@ -26,6 +26,14 @@ export type RedemptionResult = { ok: true; id: string } | { ok: false; error: st
 /** The three a parent decides — the same set migration 0295 guards. */
 export type RedemptionDecision = 'approved' | 'rejected' | 'fulfilled';
 
+/**
+ * 0335's refusal. Matched on its message as well as its code, because 0308's
+ * price guard raises the same check_violation for a different reason.
+ */
+function isShortOfPoints(error: { code?: string; message?: string }): boolean {
+  return error.code === '23514' && /not enough points/i.test(error.message ?? '');
+}
+
 function revalidate() {
   for (const path of PATHS) revalidatePath(path);
 }
@@ -62,9 +70,27 @@ export async function requestRedemptionAction(input: {
     if (rewardError) return { ok: false, error: describeActionError(rewardError, t('actions.thatRewardIsNotAvailable')) };
     if (!reward) return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
 
+    // Whose points these are. A child asks for themselves; a manager may ask on
+    // behalf of anyone in the family, and nobody may spend a member of another
+    // family. The insert policy checks the family, not the member, so without
+    // this a child could queue a request against a sibling's balance.
+    if (!isManager(ctx.active.role) && input.forMemberId !== ctx.active.member.id) {
+      return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
+    }
+    const { data: member, error: memberError } = await supabase
+      .from('family_members')
+      .select('id')
+      .eq('id', input.forMemberId)
+      .eq('family_id', ctx.active.familyId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (memberError) return { ok: false, error: describeActionError(memberError, t('actions.thatRewardIsNotAvailable')) };
+    if (!member) return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
+
     // A manager redeeming for THEMSELVES takes it; everything else queues. The
     // role is resolved here, from the session, and no longer asserted by the
-    // caller.
+    // caller. Whether the points are there is the database's to say (0335):
+    // an instant redemption the member cannot pay for is refused at the insert.
     const instant = isManager(ctx.active.role) && input.forMemberId === ctx.active.member.id;
     const decidedAt = instant ? new Date().toISOString() : null;
 
@@ -82,7 +108,10 @@ export async function requestRedemptionAction(input: {
       })
       .select('id')
       .single();
-    if (error) return { ok: false, error: describeActionError(error, t('actions.thatRewardIsNotAvailable')) };
+    if (error) {
+      if (isShortOfPoints(error)) return { ok: false, error: t('actions.notEnoughPointsForThisReward') };
+      return { ok: false, error: describeActionError(error, t('actions.thatRewardIsNotAvailable')) };
+    }
 
     revalidate();
     return { ok: true, id: data.id };
@@ -107,6 +136,12 @@ export async function decideRedemptionAction(input: {
     return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
   }
 
+  // The only moves the product makes. Written as an expected-status update, so
+  // a decision on a row that has since moved — approved by the other parent,
+  // withdrawn by the child — changes nothing instead of overwriting it, and a
+  // reward cannot be fulfilled without ever having been approved.
+  const from = input.decision === 'fulfilled' ? 'approved' : 'requested';
+
   try {
     const supabase = await createServer();
     const { data, error } = await supabase
@@ -118,9 +153,14 @@ export async function decideRedemptionAction(input: {
       })
       .eq('id', input.id)
       .eq('family_id', ctx.active.familyId)
+      .eq('status', from)
       .select('id')
       .maybeSingle();
-    if (error) return { ok: false, error: describeActionError(error, t('actions.thatRewardIsNotAvailable')) };
+    if (error) {
+      // 0335 refuses an approval the member's points cannot cover.
+      if (isShortOfPoints(error)) return { ok: false, error: t('actions.notEnoughPointsForThisReward') };
+      return { ok: false, error: describeActionError(error, t('actions.thatRewardIsNotAvailable')) };
+    }
     if (!data) return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
 
     revalidate();

@@ -268,13 +268,18 @@ export async function saveAllowanceRuleAction(input: {
   // Schedule from the family's calendar day: a parent setting up an allowance
   // on Sunday evening in California would otherwise have it dated from Monday.
   const next = nextRunDate(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), input.cadence);
-  const { error } = input.id
+  // RLS FILTERS an UPDATE rather than refusing it, so `error: null` did not mean
+  // a rule changed — an id another parent had already deleted was reported as
+  // saved. The INSERT needs no readback: RLS refuses an insert with an error.
+  const { data: rows, error } = input.id
     ? await supabase.from('allowance_rules')
         .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
-        .eq('id', input.id).eq('family_id', familyId)
+        .eq('id', input.id).eq('family_id', familyId).select('id')
     : await supabase.from('allowance_rules')
-        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
+        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
+        .select('id');
   if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
+  if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -286,9 +291,12 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan5') };
   const supabase = await createServer();
-  const { error } = await supabase.from('allowance_rules')
-    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // A switch reporting "paused" over a rule the nightly cron will still pay is
+  // the sharpest shape of this on the money surface.
+  const { data: rows, error } = await supabase.from('allowance_rules')
+    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatAllowance'));
+  if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotUpdateThatAllowance') };
   revalidatePath('/wallet/allowance');
   return { ok: true };
 }
@@ -362,9 +370,16 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
-        const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
-          .eq('id', rule.id).eq('family_id', familyId);
+        // The log below is the only trace this rollback leaves, and a FILTERED
+        // update raises no error — so without the readback the one case worth
+        // logging never logged. An un-rolled-back schedule means the rule stays
+        // advanced while the credit failed, and the child is skipped for a whole
+        // period with nothing in the product saying so.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('allowance_rules')
+          .update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
+          .eq('id', rule.id).eq('family_id', familyId).select('id');
         if (rollbackError) console.error('[wallet allowances] schedule rollback failed', rollbackError);
+        else if (!rolledBack || rolledBack.length === 0) console.error('[wallet allowances] schedule rollback changed no row', { ruleId: rule.id, familyId });
         return { ok: false, error: res.error, ranCount, paidCents };
       }
       ranCount++;
@@ -497,9 +512,10 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan11') };
   const supabase = await createServer();
-  const { error } = await supabase.from('gift_payments')
-    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
+  const { data: rows, error } = await supabase.from('gift_payments')
+    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotDismissThatGift'));
+  if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotDismissThatGift') };
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -523,11 +539,12 @@ export async function saveBabysitterAction(input: {
   const familyId = ctx.active.familyId;
 
   if (input.id) {
-    const { error } = await supabase.from('babysitter_profiles').update({
+    const { data: rows, error } = await supabase.from('babysitter_profiles').update({
       name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null,
-    }).eq('id', input.id).eq('family_id', familyId);
+    }).eq('id', input.id).eq('family_id', familyId).select('id');
     if (error) return actionFailure(error, t('actions.couldNotUpdateThatBabysitter'));
+    if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotUpdateThatBabysitter') };
   } else {
     const { error } = await supabase.from('babysitter_profiles').insert({
       family_id: familyId, name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
@@ -545,9 +562,10 @@ export async function archiveBabysitterAction(input: { id: string }): Promise<Re
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan12') };
   const supabase = await createServer();
-  const { error } = await supabase.from('babysitter_profiles')
-    .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: rows, error } = await supabase.from('babysitter_profiles')
+    .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotArchiveThatBabysitter'));
+  if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotArchiveThatBabysitter') };
   revalidatePath('/wallet/babysitters');
   return { ok: true };
 }
@@ -770,10 +788,17 @@ export async function requestSpendAction(input: {
       // A held debit without its approval row can never be resolved. Cancel the
       // hold before returning the insert failure so it stays out of the ledger.
       if (debit.txnId) {
-        const { error: rollbackError } = await supabase.from('wallet_transactions')
+        // Same shape as the allowance rollback: the log is the only trace, and a
+        // filtered update raises nothing. A held debit whose cancel did not land
+        // sits in the ledger as `requires_parent_approval` with no approval row
+        // that could ever resolve it — the comment above says exactly why that
+        // must not happen quietly.
+        const { data: cancelled, error: rollbackError } = await supabase.from('wallet_transactions')
           .update({ status: 'cancelled' })
-          .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval');
+          .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval')
+          .select('id');
         if (rollbackError) console.error('[wallet spend] approval rollback failed', rollbackError);
+        else if (!cancelled || cancelled.length === 0) console.error('[wallet spend] approval rollback changed no row', { txnId: debit.txnId, familyId });
       }
       return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'));
     }

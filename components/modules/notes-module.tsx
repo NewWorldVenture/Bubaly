@@ -22,6 +22,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { openOnKey, stopAnd } from '@/lib/ui/a11y';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -264,8 +265,9 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
           const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
           const totalCheck = checklist ? note.body!.split('\n').filter((l) => /^\[[ x]\]/i.test(l.trim())).length : 0;
           return (
-            <div key={note.id} onClick={() => onOpen(note)}
-              className="group flex cursor-pointer items-center gap-4 px-4 py-3 hover:bg-elevated/30 transition">
+            <div key={note.id} role="button" tabIndex={0} onClick={() => onOpen(note)}
+              onKeyDown={(e) => openOnKey(e, () => onOpen(note))}
+              className="group flex cursor-pointer items-center gap-4 px-4 py-3 hover:bg-elevated/30 transition focus-ring">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
@@ -276,12 +278,12 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               </div>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
-              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition">
+                <button onClick={stopAnd(() => onTogglePin(note))} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
-                <button onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
-                <button onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
+                <button onClick={stopAnd(() => onDuplicate(note))} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
+                <button onClick={stopAnd(() => { if (confirm('Delete?')) onDelete(note.id); })} className="rounded p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -307,9 +309,10 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
         const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
         const totalCheck = checklist ? note.body!.split('\n').filter((l) => /^\[[ x]\]/i.test(l.trim())).length : 0;
         return (
-          <div key={note.id} onClick={() => onOpen(note)}
+          <div key={note.id} role="button" tabIndex={0} onClick={() => onOpen(note)}
+            onKeyDown={(e) => openOnKey(e, () => onOpen(note))}
             className={cn(
-              'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5',
+              'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5 focus-ring',
               color.bg, color.ring,
             )}>
             {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}
@@ -341,11 +344,11 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 <Clock className="h-2.5 w-2.5" />
                 {fmtRelative(note.updated_at)}
               </div>
-              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 coarse:opacity-100 transition">
+                <button onClick={stopAnd(() => onTogglePin(note))} className="rounded p-1 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
-                <button onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
+                <button onClick={stopAnd(() => { if (confirm('Delete?')) onDelete(note.id); })} className="rounded p-1 text-muted hover:text-danger">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>

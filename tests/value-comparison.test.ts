@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { renderTranslated } from './helpers/render-translated';
 import { annualListPriceCents, compareEstimatedTimeValue } from '@/lib/metric/value';
 import { BASIC_ANNUAL_CENTS, BASIC_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
 
@@ -86,7 +87,7 @@ describe('family value read boundary', () => {
 
 describe('estimate presentation', () => {
   it('exposes the run-only basis, editable hourly assumption, list price, and undated exclusions', () => {
-    const html = renderToStaticMarkup(createElement(ValueComparisonSummary, { result: { state: 'available', completedRuns: 2, undatedCompletedRuns: 3, annualListCents: 11988 }, onRetry: vi.fn() }));
+    const html = renderTranslated(createElement(ValueComparisonSummary, { result: { state: 'available', completedRuns: 2, undatedCompletedRuns: 3, annualListCents: 11988 }, onRetry: vi.fn() }));
     expect(html).toContain('2 recorded plan completions in the last 7 days');
     expect(html).toContain('24 modeled minutes');
     expect(html).toContain('type="number"');
@@ -98,7 +99,7 @@ describe('estimate presentation', () => {
     expect(html).toContain('reminders are excluded');
   });
   it('separates a real zero week from unavailable and ineligible results', () => {
-    const render = (result: Parameters<typeof ValueComparisonSummary>[0]['result']) => renderToStaticMarkup(createElement(ValueComparisonSummary, { result, onRetry: vi.fn() }));
+    const render = (result: Parameters<typeof ValueComparisonSummary>[0]['result']) => renderTranslated(createElement(ValueComparisonSummary, { result, onRetry: vi.fn() }));
     expect(render({ state: 'available', completedRuns: 0, undatedCompletedRuns: 0, annualListCents: 11988 })).toContain('$0.00');
     expect(render({ state: 'unavailable' })).toContain('Try again');
     expect(render({ state: 'unavailable' })).not.toContain('$0.00');

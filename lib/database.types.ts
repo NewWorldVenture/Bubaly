@@ -178,6 +178,17 @@ export type SocialRoleEnum =
   | 'owner' | 'admin' | 'marketing_manager' | 'social_manager'
   | 'content_creator' | 'approver' | 'analyst' | 'read_only';
 
+export type GuardianTrustLevel =
+  | 'immediate_family' | 'close_family' | 'trusted_friend' | 'known_contact'
+  | 'unknown' | 'suspected_spam' | 'blocked';
+export type GuardianRoutingMode =
+  | 'immediate_ring' | 'immediate_ai_summary' | 'ai_handle_first'
+  | 'voicemail_first' | 'silent_handling' | 'blocked';
+export type GuardianCommType =
+  | 'call_inbound' | 'call_outbound' | 'sms_inbound' | 'sms_outbound'
+  | 'whatsapp_inbound' | 'whatsapp_outbound' | 'email_inbound';
+export type GuardianContext = 'normal' | 'driving' | 'meeting' | 'sleeping' | 'vacation' | 'do_not_disturb';
+
 type Stamps = { created_at: string; updated_at: string };
 
 /** Helper to assemble a Tables entry from its Row + the insertable/updatable shapes.
@@ -1229,8 +1240,8 @@ export interface Database {
       >;
       // ── Health ──────────────────────────────────────────────
       health_metrics: T<
-        { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_at: string },
-        { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string },
+        { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string; created_by?: string | null },
         Partial<{ type: MetricType; value: number; unit: string | null; recorded_at: string }>
       >;
       health_visits: T<
@@ -1786,7 +1797,7 @@ export interface Database {
         Partial<{ reason: string; campaign_id: string | null }>
       >;
       resend_webhook_events: T<
-        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
+        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null; counter_applied_at: string | null },
         { svix_id: string; event_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null },
         Partial<{ event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null }>
       >;
@@ -1794,6 +1805,46 @@ export interface Database {
         { event_id: string; callback_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
         { event_id: string; callback_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null },
         Partial<{ callback_type: string; status: string; received_at: string; processed_at: string | null; error: string | null }>
+      >;
+      guardian_contacts: T<
+        { id: string; family_id: string; name: string | null; phone: string | null; email: string | null; notes: string | null; avatar_url: string | null; trust_level: GuardianTrustLevel; trust_override: boolean; member_id: string | null; spam_score: number; is_verified: boolean; verified_at: string | null; total_calls: number; total_sms: number; last_contact_at: string | null; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name?: string | null; phone?: string | null; email?: string | null; notes?: string | null; avatar_url?: string | null; trust_level?: GuardianTrustLevel; trust_override?: boolean; member_id?: string | null; spam_score?: number; is_verified?: boolean; verified_at?: string | null; total_calls?: number; total_sms?: number; last_contact_at?: string | null; created_by?: string | null },
+        Partial<{ name: string | null; phone: string | null; email: string | null; notes: string | null; avatar_url: string | null; trust_level: GuardianTrustLevel; trust_override: boolean; member_id: string | null; spam_score: number; is_verified: boolean; verified_at: string | null; total_calls: number; total_sms: number; last_contact_at: string | null }>
+      >;
+      guardian_member_profiles: T<
+        { id: string; family_id: string; member_id: string; guardian_phone: string | null; default_mode_immediate: GuardianRoutingMode; default_mode_close: GuardianRoutingMode; default_mode_trusted: GuardianRoutingMode; default_mode_known: GuardianRoutingMode; default_mode_unknown: GuardianRoutingMode; default_mode_suspected_spam: GuardianRoutingMode; default_mode_blocked: GuardianRoutingMode; context_overrides: Json; ai_persona_name: string; ai_greeting_template: string | null; emergency_always_ring: boolean; voicemail_greeting: string | null; current_context: GuardianContext | null; is_active: boolean } & Stamps,
+        { id?: string; family_id: string; member_id: string; guardian_phone?: string | null; default_mode_immediate?: GuardianRoutingMode; default_mode_close?: GuardianRoutingMode; default_mode_trusted?: GuardianRoutingMode; default_mode_known?: GuardianRoutingMode; default_mode_unknown?: GuardianRoutingMode; default_mode_suspected_spam?: GuardianRoutingMode; default_mode_blocked?: GuardianRoutingMode; context_overrides?: Json; ai_persona_name?: string; ai_greeting_template?: string | null; emergency_always_ring?: boolean; voicemail_greeting?: string | null; current_context?: GuardianContext | null; is_active?: boolean },
+        Partial<{ guardian_phone: string | null; default_mode_immediate: GuardianRoutingMode; default_mode_close: GuardianRoutingMode; default_mode_trusted: GuardianRoutingMode; default_mode_known: GuardianRoutingMode; default_mode_unknown: GuardianRoutingMode; default_mode_suspected_spam: GuardianRoutingMode; default_mode_blocked: GuardianRoutingMode; context_overrides: Json; ai_persona_name: string; ai_greeting_template: string | null; emergency_always_ring: boolean; voicemail_greeting: string | null; current_context: GuardianContext | null; is_active: boolean }>
+      >;
+      guardian_routing_rules: T<
+        { id: string; family_id: string; member_id: string | null; name: string; description: string | null; is_active: boolean; priority: number; condition_contact_id: string | null; condition_trust_levels: string[] | null; condition_time_start: string | null; condition_time_end: string | null; condition_days_of_week: number[] | null; condition_contexts: string[] | null; condition_caller_pattern: string | null; action_routing_mode: GuardianRoutingMode; action_notify_members: string[] | null; created_by: string | null; ai_suggested: boolean; approved_by: string | null; approved_at: string | null } & Stamps,
+        { id?: string; family_id: string; member_id?: string | null; name: string; description?: string | null; is_active?: boolean; priority?: number; condition_contact_id?: string | null; condition_trust_levels?: string[] | null; condition_time_start?: string | null; condition_time_end?: string | null; condition_days_of_week?: number[] | null; condition_contexts?: string[] | null; condition_caller_pattern?: string | null; action_routing_mode?: GuardianRoutingMode; action_notify_members?: string[] | null; created_by?: string | null; ai_suggested?: boolean; approved_by?: string | null; approved_at?: string | null },
+        Partial<{ member_id: string | null; name: string; description: string | null; is_active: boolean; priority: number; condition_contact_id: string | null; condition_trust_levels: string[] | null; condition_time_start: string | null; condition_time_end: string | null; condition_days_of_week: number[] | null; condition_contexts: string[] | null; condition_caller_pattern: string | null; action_routing_mode: GuardianRoutingMode; action_notify_members: string[] | null; ai_suggested: boolean; approved_by: string | null; approved_at: string | null }>
+      >;
+      guardian_communications: T<
+        { id: string; family_id: string; member_id: string | null; contact_id: string | null; comm_type: GuardianCommType; direction: 'inbound' | 'outbound'; from_number: string | null; to_number: string | null; from_name: string | null; body: string | null; summary: string | null; sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' | 'suspicious' | null; trust_level_at_time: GuardianTrustLevel | null; routing_mode_used: GuardianRoutingMode | null; routing_rule_id: string | null; ai_decision_reason: string | null; scam_detected: boolean; scam_type: string | null; scam_confidence: number | null; call_duration_secs: number | null; call_recording_url: string | null; twilio_call_sid: string | null; twilio_sms_sid: string | null; status: 'received' | 'screening' | 'handled' | 'escalated' | 'blocked' | 'missed' | 'failed'; started_at: string; ended_at: string | null; created_at: string },
+        { id?: string; family_id: string; member_id?: string | null; contact_id?: string | null; comm_type: GuardianCommType; direction: 'inbound' | 'outbound'; from_number?: string | null; to_number?: string | null; from_name?: string | null; body?: string | null; summary?: string | null; sentiment?: 'positive' | 'neutral' | 'negative' | 'urgent' | 'suspicious' | null; trust_level_at_time?: GuardianTrustLevel | null; routing_mode_used?: GuardianRoutingMode | null; routing_rule_id?: string | null; ai_decision_reason?: string | null; scam_detected?: boolean; scam_type?: string | null; scam_confidence?: number | null; call_duration_secs?: number | null; call_recording_url?: string | null; twilio_call_sid?: string | null; twilio_sms_sid?: string | null; status?: 'received' | 'screening' | 'handled' | 'escalated' | 'blocked' | 'missed' | 'failed'; started_at?: string; ended_at?: string | null },
+        Partial<{ member_id: string | null; contact_id: string | null; summary: string | null; body: string | null; sentiment: 'positive' | 'neutral' | 'negative' | 'urgent' | 'suspicious' | null; ai_decision_reason: string | null; scam_detected: boolean; scam_type: string | null; scam_confidence: number | null; call_duration_secs: number | null; call_recording_url: string | null; status: 'received' | 'screening' | 'handled' | 'escalated' | 'blocked' | 'missed' | 'failed'; ended_at: string | null }>
+      >;
+      guardian_screening_sessions: T<
+        { id: string; family_id: string; communication_id: string | null; twilio_call_sid: string; caller_number: string | null; caller_name_stated: string | null; turn: number; status: 'active' | 'escalated' | 'resolved' | 'timed_out'; messages: Json; ai_intent: string | null; ai_urgency: 'low' | 'medium' | 'high' | 'emergency' | null; ai_risk: 'safe' | 'suspicious' | 'likely_scam' | 'definite_scam' | null; final_action: 'transfer' | 'voicemail' | 'hang_up' | 'notify' | null; resolution_summary: string | null } & Stamps,
+        { id?: string; family_id: string; communication_id?: string | null; twilio_call_sid: string; caller_number?: string | null; caller_name_stated?: string | null; turn?: number; status?: 'active' | 'escalated' | 'resolved' | 'timed_out'; messages?: Json; ai_intent?: string | null; ai_urgency?: 'low' | 'medium' | 'high' | 'emergency' | null; ai_risk?: 'safe' | 'suspicious' | 'likely_scam' | 'definite_scam' | null; final_action?: 'transfer' | 'voicemail' | 'hang_up' | 'notify' | null; resolution_summary?: string | null },
+        Partial<{ communication_id: string | null; caller_number: string | null; caller_name_stated: string | null; turn: number; status: 'active' | 'escalated' | 'resolved' | 'timed_out'; messages: Json; ai_intent: string | null; ai_urgency: 'low' | 'medium' | 'high' | 'emergency' | null; ai_risk: 'safe' | 'suspicious' | 'likely_scam' | 'definite_scam' | null; final_action: 'transfer' | 'voicemail' | 'hang_up' | 'notify' | null; resolution_summary: string | null }>
+      >;
+      guardian_suggestions: T<
+        { id: string; family_id: string; suggestion_type: 'new_rule' | 'update_trust' | 'update_routing' | 'block_contact' | 'flag_scam'; title: string; reasoning: string; evidence: Json | null; proposed_contact_id: string | null; proposed_trust_level: GuardianTrustLevel | null; proposed_rule_data: Json | null; status: 'pending' | 'approved' | 'dismissed' | 'auto_dismissed'; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null; expires_at: string; created_at: string },
+        { id?: string; family_id: string; suggestion_type: 'new_rule' | 'update_trust' | 'update_routing' | 'block_contact' | 'flag_scam'; title: string; reasoning: string; evidence?: Json | null; proposed_contact_id?: string | null; proposed_trust_level?: GuardianTrustLevel | null; proposed_rule_data?: Json | null; status?: 'pending' | 'approved' | 'dismissed' | 'auto_dismissed'; reviewed_by?: string | null; reviewed_at?: string | null; review_note?: string | null; expires_at?: string },
+        Partial<{ status: 'pending' | 'approved' | 'dismissed' | 'auto_dismissed'; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null; expires_at: string }>
+      >;
+      guardian_escalations: T<
+        { id: string; family_id: string; communication_id: string | null; escalation_type: 'emergency_call' | 'medical' | 'police' | 'fire' | 'child_safety' | 'urgent_personal'; severity: 'high' | 'critical'; description: string; caller_number: string | null; notified_member_ids: string[] | null; push_sent: boolean; sms_sent: boolean; call_attempted: boolean; acknowledged_by: string | null; acknowledged_at: string | null; escalated_at: string; created_at: string },
+        { id?: string; family_id: string; communication_id?: string | null; escalation_type: 'emergency_call' | 'medical' | 'police' | 'fire' | 'child_safety' | 'urgent_personal'; severity?: 'high' | 'critical'; description: string; caller_number?: string | null; notified_member_ids?: string[] | null; push_sent?: boolean; sms_sent?: boolean; call_attempted?: boolean; acknowledged_by?: string | null; acknowledged_at?: string | null; escalated_at?: string },
+        Partial<{ push_sent: boolean; sms_sent: boolean; call_attempted: boolean; acknowledged_by: string | null; acknowledged_at: string | null }>
+      >;
+      guardian_audit_log: T<
+        { id: string; family_id: string; actor_user_id: string | null; actor: 'ai' | 'parent' | 'system'; action: string; entity_type: string | null; entity_id: string | null; detail: Json | null; created_at: string },
+        { id?: string; family_id: string; actor_user_id?: string | null; actor: 'ai' | 'parent' | 'system'; action: string; entity_type?: string | null; entity_id?: string | null; detail?: Json | null },
+        never
       >;
       crm_contacts: T<
         { id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; company: string | null; lead_status: string; lifecycle_stage: string; lead_source: string | null; family_id: string | null; owner_id: string | null; notes: string | null; created_by: string | null } & Stamps,
@@ -2143,6 +2194,12 @@ export interface Database {
         { id: string; user_id: string; family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; device_key: string; user_agent: string | null; enabled: boolean; last_seen_at: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
         { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
         Partial<{ family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; user_agent: string | null; enabled: boolean; last_seen_at: string; updated_by: string | null; metadata: Json }>
+      >;
+      // Per-device push receipts (migration 0336): service role only.
+      push_deliveries: T<
+        { notification_id: string; device_id: string; delivered_at: string },
+        { notification_id: string; device_id: string; delivered_at?: string },
+        Partial<{ delivered_at: string }>
       >;
 
       // ---- Home & Maintenance command center (migration 0036) ----
@@ -2716,6 +2773,10 @@ export interface Database {
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
+      // 0332: the one door onto medical_profiles that is NOT manager-or-self.
+      // Returns (member_id, allergies) and nothing else, and RAISES rather than
+      // returning zero rows to a non-member, so the callers' fail-closed guards fire.
+      family_allergies: { Args: { p_family_id: string }; Returns: { member_id: string; allergies: string | null }[] };
       // Executor lease (0250): returns the ids it just leased. service_role only.
       claim_ai_runs: { Args: { p_limit?: number; p_lease_seconds?: number }; Returns: string[] };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
@@ -2742,6 +2803,8 @@ export interface Database {
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
+      // 0337: mark + increment in one transaction, for the claim holder only.
+      apply_resend_campaign_counter: { Args: { p_svix_id: string; p_received_at: string; p_campaign_id: string; p_field: string }; Returns: string };
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };
       marketplace_complete_handoff: { Args: { p_order_id: string; p_code: string }; Returns: Json };

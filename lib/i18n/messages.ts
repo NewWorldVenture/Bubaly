@@ -7,6 +7,7 @@
 // untranslated product, not a broken one.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { interpolate, pluralize as basePluralize, type Messages } from '@/lib/i18n/translate';
 
 import deDE from '@/lib/i18n/messages/de-DE.json';
 import enGB from '@/lib/i18n/messages/en-GB.json';
@@ -23,7 +24,7 @@ import ptPT from '@/lib/i18n/messages/pt-PT.json';
 /** The English catalogue's keys are the contract; every other catalogue is a
  *  partial of it, so a translation can lag without breaking the build. */
 export type MessageKey = keyof typeof enUS;
-export type Messages = Record<string, string>;
+export type { Messages };
 
 const CATALOGUES: Record<LocaleCode, Messages> = {
   'en-US': enUS,
@@ -114,21 +115,35 @@ export function getRawMessages(locale: LocaleCode): Messages {
 }
 
 /**
- * Look up `key` and substitute `{name}` placeholders.
+ * Look up `key`, fall back to English, and substitute `{name}` placeholders.
  *
- * Interpolation is deliberately dumb — a single pass over `{token}` — because
- * catalogue values are our own content, never visitor input, and anything
- * cleverer (nested expressions, function calls in strings) turns a translation
- * file into an execution surface.
+ * This is the SERVER-SIDE translate: it holds the English catalogue as a
+ * fallback, which is exactly why client code must not import it. The
+ * interpolation itself lives in `lib/i18n/translate.ts`, which imports no
+ * catalogue at all, and `components/i18n/locale-provider.tsx` imports THAT —
+ * otherwise the 13,458-key English catalogue is retained into the root
+ * layout's client chunk and downloaded by every page (244 KB gzip, 62% of the
+ * marketing home page's first-load JS; see that module's header).
  */
 export function translate(
   messages: Messages,
   key: string,
   params?: Record<string, string | number>,
 ): string {
-  const template = messages[key] ?? SOURCE_MESSAGES[key] ?? key;
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, token: string) =>
-    Object.prototype.hasOwnProperty.call(params, token) ? String(params[token]) : match,
-  );
+  return interpolate(messages[key] ?? SOURCE_MESSAGES[key] ?? key, params);
+}
+
+/**
+ * The server-side pluraliser, with the same English fallback as `translate`
+ * above and for the same reason: a counted phrase a translation has not reached
+ * yet should read as English, not as `inventory.overdueLoans`.
+ */
+export function pluralize(
+  messages: Messages,
+  locale: string,
+  key: string,
+  count: number,
+  params?: Record<string, string | number>,
+): string {
+  return basePluralize(messages, locale, key, count, params, SOURCE_MESSAGES);
 }

@@ -26,10 +26,20 @@ const ROOT = process.cwd();
 export const GATED_SURFACES = {
   // The language control itself.
   'i18n-ui': ['components/i18n'],
-  // The authenticated app chrome — top bar, account menu, sidebar, mobile nav.
-  // Every signed-in page renders this, so a regression here is visible on all
-  // of them at once.
-  'app-shell': ['components/app/app-shell.tsx'],
+  // The authenticated app chrome — top bar, account menu, sidebar, mobile nav,
+  // the quick-capture sheet and the ⌘K bar. Every signed-in page renders this,
+  // so a regression here is visible on all of them at once.
+  //
+  // This is the DIRECTORY and not app-shell.tsx alone, and the difference was a
+  // real escape. `scanPaths` walks the filesystem, not the import graph, so
+  // naming the one file gated the one file: app-shell.tsx was clean while the
+  // two components it renders on line 398-399 shipped ten English strings —
+  // "Task / Note / Event / Shopping", "e.g. Pack lunches", "Undo" — to every
+  // non-English family on all 354 signed-in pages, and the gate reported the
+  // surface clean. A comment promising "the app chrome" has to be gated as the
+  // app chrome; a file list can only ever be as current as the last person who
+  // remembered to extend it.
+  'app-shell': ['components/app'],
   // The public marketing header, on every unauthenticated page.
   'marketing-header': ['components/marketing/site-header.tsx'],
   // The public marketing site: every page under (marketing) and every component
@@ -133,15 +143,22 @@ const NOT_COPY = [
   // Bracket punctuation at either end means we sliced through an expression,
   // not a sentence: `) : isActive ? (` sits between a `>` and a `<` exactly the
   // way copy does. Prose in this product never starts or ends on a bracket.
-  /^\s*[)\]}]/,
-  /[([{]\s*$/,
-  /\)\s*$/,
+
   // The leaks that survived all of the above, each one seen in this repo. They
   // are grouped by the signal rather than by the file, because the file changes
   // and the signal does not: prose in this product never contains a logical
   // operator, a strict comparison, a snake_case identifier, a line comment or a
   // method call, and never OPENS on `:`, `=` or `,` — those are all fragments of
   // an expression that happened to sit between a `>` and a `<`.
+  // A TYPE ANNOTATION. `void; pinned: Set` is the destructured-parameter
+  // annotation in free-tier-sidebar.tsx, and it surfaced the moment the
+  // app-shell surface was widened from one file to the directory — a true
+  // positive for the widening and a false positive for the scanner. The signal
+  // is an identifier followed by `:` and a TYPE, which prose does not do.
+  // Measured the way every rule in this block was: replayed against all 13,480
+  // English strings already in the catalogue, which are copy by construction.
+  // It excludes ZERO of them, so it costs nothing and the price is not implied.
+  /\b\w+:\s*(?:Set|Map|Record|Promise|Array|ReadonlyArray|string|number|boolean|void|unknown|never)\b/,
   /&&|\|\|/,                    // `todayStr && i.due_date`
   /===|!==/,                    // `( items.length === 0 ?`
   // snake_case. Every rule in this block was measured the only way that proves
@@ -431,7 +448,18 @@ function toastPattern(source) {
     }
   }
   if (!names.size) return null;
-  return new RegExp(`\\b(?:${[...names].join('|')})\\(\\s*'([^'\\\\\\n]{3,})'`, 'g');
+  // All three quoting styles. Matching only `'...'` meant a toast written with
+  // double quotes or as a template literal was invisible — and a template
+  // literal is how every interpolated message in this codebase is written, so
+  // "Photo is too large", "${item.name}: lent out" and 40 more were never
+  // counted. The template branch captures the literal text; the `${...}` holes
+  // inside it are left alone, and a string that is ONLY a hole fails
+  // `looksLikeCopy` on its own.
+  const n = [...names].join('|');
+  return new RegExp(
+    `\\b(?:${n})\\(\\s*(?:'([^'\\\\\\n]{3,})'|"([^"\\\\\\n]{3,})"|\`([^\`\\\\]{3,}?)\`)`,
+    'g',
+  );
 }
 // A JSX text node: between > and <, no braces (those are expressions, not copy).
 //
@@ -462,11 +490,31 @@ const INVARIANT = (() => {
   }
 })();
 
-export function looksLikeCopy(raw) {
+/**
+ * Rules that detect a SLICE THROUGH AN EXPRESSION, not a string that is not
+ * copy. They belong to `TEXT_PATTERN`, which cuts between a `>` and a `<` with
+ * no delimiter, so `) : isActive ? (` arrives looking exactly like prose.
+ *
+ * They do NOT apply to a quoted literal. The quotes bound the string exactly —
+ * it cannot be a fragment of something larger — and applying these to one hid
+ * real copy for as long as the toast pattern has existed. `/\)\s*$/` alone hid
+ * every message that ends on a parenthetical: "Photo is too large (max 25 MB)",
+ * "Item name is too long (max 120 characters)", "Split must total 100%
+ * (currently 40%)." Each shipped English to eleven locales while the ratchet
+ * counted the surface and did not see them.
+ */
+const SLICE_ARTEFACTS = [
+  /^\s*[)\]}]/,
+  /[([{]\s*$/,
+  /\)\s*$/,
+];
+
+export function looksLikeCopy(raw, delimited = false) {
   const s = raw.trim();
   if (INVARIANT.has(s)) return false;
   if (s.length < 3) return false;
   if (NOT_COPY.some((re) => re.test(s))) return false;
+  if (!delimited && SLICE_ARTEFACTS.some((re) => re.test(s))) return false;
   if (!/[a-zA-Z]/.test(s)) return false;
   // Two or more words, or one substantial capitalised word.
   const words = s.split(/\s+/).filter(Boolean);
@@ -499,7 +547,15 @@ export function scanFile(file) {
   const findings = [];
   const seen = new Set();
 
-  const push = (value, index) => {
+  // `delimited` marks a string that came from a QUOTED literal rather than from
+  // a slice between `>` and `<`. The bracket rules in NOT_COPY exist to catch
+  // TEXT_PATTERN cutting through an expression — `) : isActive ? (` sits
+  // between a `>` and a `<` exactly the way copy does. A quoted literal cannot
+  // be such a slice: the quotes bound it exactly. Applying those rules to one
+  // hid real copy, and `/\)\s*$/` alone hid every toast that ends on a
+  // parenthetical — "Photo is too large (max 25 MB)", "Item name is too long
+  // (max 120 characters)", and 20 more like them.
+  const push = (value, index, delimited = false, testAs = null) => {
     // Collapse the indentation JSX leaves around a text node so `\n   New
     // family\n` and ` New family ` are recognised as the same string, and undo
     // the source's own string escapes: `'another family\\'s data'` is the JS
@@ -507,7 +563,14 @@ export function scanFile(file) {
     // the escaped form put a literal `family\\'s` into 29 catalogue values, which
     // is what every locale would then have rendered.
     const text = value.replace(/\\(['"\\])/g, '$1').replace(/\s+/g, ' ').trim();
-    if (!looksLikeCopy(text)) return;
+    // A template literal is tested on its PROSE and reported whole. Its
+    // `${...}` holes carry braces, which `NOT_COPY` rejects on sight — correct
+    // for a JSX slice, wrong here, where the holes are interpolation and the
+    // words around them are the copy. Testing the stripped form and reporting
+    // the original keeps the rule and still hands a human the real string to
+    // lift into the catalogue.
+    const probe = testAs === null ? text : testAs.replace(/\\(['"\\])/g, '$1').replace(/\s+/g, ' ').trim();
+    if (!looksLikeCopy(probe, delimited)) return;
     const key = `${text}@${index}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -533,7 +596,16 @@ export function scanFile(file) {
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);
   const toasts = toastPattern(source);
-  if (toasts) for (const m of source.matchAll(toasts)) push(m[1], m.index ?? 0);
+  // `delimited: true` — a quoted literal cannot be a slice through an
+  // expression, so the bracket rules in SLICE_ARTEFACTS do not apply to it.
+  if (toasts) {
+    for (const m of source.matchAll(toasts)) {
+      const text = m[1] ?? m[2] ?? m[3];
+      if (!text) continue;
+      const isTemplate = m[3] !== undefined;
+      push(text, m.index ?? 0, true, isTemplate ? text.replace(/\$\{[^}]*\}/g, ' ') : null);
+    }
+  }
 
   return findings;
 }

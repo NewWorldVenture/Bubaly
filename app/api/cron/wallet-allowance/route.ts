@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
     const { rows: rules, error } = await readAll((from, to) => supabase
       .from('allowance_rules')
-      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on')
+      .select('id, family_id, child_wallet_id, amount_cents, cadence, split, next_run_on, last_run_on, created_by')
       .eq('is_active', true)
       .lte('next_run_on', today)
       .order('id')
@@ -51,6 +51,28 @@ export async function GET(req: NextRequest) {
 
     // Resolve each family's plan once to gate the Basic+ feature.
     const families = Array.from(new Set((rules ?? []).map((r) => r.family_id)));
+
+    // Who wrote the rule. 0298 makes allowance_rules manager-only in the
+    // database, which is the real boundary; this is the second lock on the
+    // same door, because THIS is the code that turns a row into money. It runs
+    // as the service role and bypasses RLS, so a rule written before 0298
+    // reaches a database — or after any future policy drift — would still be
+    // paid. A rule whose author is not an active manager of its family is not
+    // paid, and says so in the response rather than being silently dropped.
+    const authorKeys = new Set<string>();
+    if (families.length > 0) {
+      const { data: managers, error: managersError } = await supabase
+        .from('family_members')
+        .select('family_id, user_id, role, is_active')
+        .in('family_id', families)
+        .in('role', ['parent', 'adult'])
+        .eq('is_active', true);
+      if (managersError) throw managersError;
+      for (const m of managers ?? []) {
+        if (m.user_id) authorKeys.add(`${m.family_id}:${m.user_id}`);
+      }
+    }
+    let skippedUnauthored = 0;
     const planByFamily = new Map<string, string | null>();
     if (families.length > 0) {
       // Batched for the same reason the read above pages. The rules read is
@@ -77,6 +99,15 @@ export async function GET(req: NextRequest) {
     let skippedFree = 0;
     let failed = 0;
     for (const rule of rules ?? []) {
+      // A rule with no author predates the column or was written by the service
+      // role; those are the seed/migration path and stay payable. A rule that
+      // names an author who is not an active manager of that family does not.
+      if (rule.created_by && !authorKeys.has(`${rule.family_id}:${rule.created_by}`)) {
+        console.warn('[wallet-allowance] skipped a rule whose author is not an active manager', { ruleId: rule.id });
+        skippedUnauthored++;
+        continue;
+      }
+
       const tier = walletTierForPlanLevel(planLevel(planByFamily.get(rule.family_id) ?? null));
       if (!walletFeatureEnabled(tier, 'allowances')) { skippedFree++; continue; }
 
@@ -156,8 +187,15 @@ export async function GET(req: NextRequest) {
       paid++;
     }
 
+    // Both sides of the merge: main's failed-count and 502 (one bad rule must
+    // not end the platform's run, and the run must not report ok when it did),
+    // plus this branch's skippedUnauthored (a rule whose author is not an
+    // active manager is not paid, and says so rather than vanishing).
     const ok = failed === 0;
-    return NextResponse.json({ ok, due: (rules ?? []).length, paid, skippedFree, failed }, { status: ok ? 200 : 502 });
+    return NextResponse.json(
+      { ok, due: (rules ?? []).length, paid, skippedFree, skippedUnauthored, failed },
+      { status: ok ? 200 : 502 },
+    );
   } catch (err) {
     console.error('Allowance cron error:', err);
     return NextResponse.json({ error: t('walletAllowance.allowanceRunFailed') }, { status: 500 });

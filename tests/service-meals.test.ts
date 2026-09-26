@@ -52,7 +52,15 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  // `foodProfile` reads allergies through the `family_allergies` RPC (0332), not
+  // a select on `medical_profiles`. Logged as `rpc:<name>` with its arguments in
+  // `filters`, so a test can assert which family was asked about.
+  const rpc = (name: string, args: Record<string, unknown> = {}) => {
+    const call: Call = { table: `rpc:${name}`, kind: 'select', filters: { ...args } };
+    calls.push(call);
+    return Promise.resolve(respond(call, calls.length - 1));
+  };
+  return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T12:00:00Z');
@@ -383,7 +391,7 @@ describe('foodProfile', () => {
             ],
             error: null,
           };
-        case 'medical_profiles':
+        case 'rpc:family_allergies':
           return { data: [{ member_id: 'm2', allergies: 'Peanuts, tree nuts; none' }], error: null };
         case 'family_favorites':
           return { data: [{ member_id: 'm1', kind: 'meal', name: 'Taco night' }, { member_id: null, kind: 'recipe', name: 'Lasagna' }], error: null };

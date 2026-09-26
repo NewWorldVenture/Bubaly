@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useId, useMemo, useRef, useState, useTransition } from 'react';
 import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
+import { labelledGroup } from '@/lib/ui/a11y';
 import {
   STATUS_META, FILTERABLE_STATUSES, CATEGORY_META, CATEGORY_ORDER, IMPACT_META, IMPACT_ORDER,
   AUDIENCE_META, AUDIENCE_ORDER, KIND_META, KIND_ORDER, statusMeta, categoryMeta, impactMeta, kindMeta, sortIdeas, searchIdeas, toggleVote,
@@ -65,13 +66,29 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
   const field = 'w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm outline-none transition focus:border-brand';
   const label = 'mb-1.5 block text-xs font-semibold text-muted';
+  // Every caption in this form was a styled <label> pointing at nothing: read
+  // aloud on its own, then silence when focus reached the control it named. The
+  // names all already exist on screen, so this is wiring, not copy — the two
+  // rows that are not single controls (the idea/bug buttons, the uploader) get
+  // `labelledGroup`, which points a group at the caption already above it.
+  const uid = useId();
+  const kindId = `${uid}kind`;
+  const titleId = `${uid}title`;
+  const problemId = `${uid}problem`;
+  const bodyId = `${uid}body`;
+  const categoryId = `${uid}category`;
+  const impactId = `${uid}impact`;
+  const audienceId = `${uid}audience`;
+  const attachmentId = `${uid}attachment`;
 
   return (
     <form onSubmit={submit} className="space-y-4">
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</label>
-        <div className="grid grid-cols-2 gap-2">
+        {/* A <span>, not a <label>: this names a PAIR of buttons, and a label
+            is for one control. `labelledGroup` points the group at it. */}
+        <span id={kindId} className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</span>
+        <div {...labelledGroup(kindId)} className="grid grid-cols-2 gap-2">
           {(['idea', 'bug'] as FeedbackKind[]).map((k) => {
             const active = kind === k;
             const Icon = k === 'bug' ? Bug : Lightbulb;
@@ -90,43 +107,45 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
         </div>
       </div>
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.title')}</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
+        <label htmlFor={titleId} className={label}>{t('feedbackFeedbackBoard.title')}</label>
+        <input id={titleId} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
           placeholder={isBug ? 'A short summary of what’s broken' : 'A quick, memorable summary'} className={field} />
       </div>
       <div>
-        <label className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
-        <input value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
+        <label htmlFor={problemId} className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
+        <input id={problemId} value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
           placeholder={isBug ? 'When I tap X, Y happens instead of…' : 'Today, I struggle with…'} className={field} />
       </div>
       <div>
-        <label className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
+        <label htmlFor={bodyId} className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
+        <textarea id={bodyId} value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
           placeholder={isBug ? 'Device, what you expected, anything else that helps us fix it.' : 'Describe how it might work — even a rough sketch helps.'} className={cn(field, 'resize-y')} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.category')}</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
+          <label htmlFor={categoryId} className={label}>{t('feedbackFeedbackBoard.category')}</label>
+          <select id={categoryId} value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
             {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.impact')}</label>
-          <select value={impact} onChange={(e) => setImpact(e.target.value)} className={field}>
+          <label htmlFor={impactId} className={label}>{t('feedbackFeedbackBoard.impact')}</label>
+          <select id={impactId} value={impact} onChange={(e) => setImpact(e.target.value)} className={field}>
             {IMPACT_ORDER.map((i) => <option key={i} value={i}>{IMPACT_META[i].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.forYouOrOthers')}</label>
-          <select value={audience} onChange={(e) => setAudience(e.target.value)} className={field}>
+          <label htmlFor={audienceId} className={label}>{t('feedbackFeedbackBoard.forYouOrOthers')}</label>
+          <select id={audienceId} value={audience} onChange={(e) => setAudience(e.target.value)} className={field}>
             {AUDIENCE_ORDER.map((a) => <option key={a} value={a}>{AUDIENCE_META[a].label}</option>)}
           </select>
         </div>
       </div>
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</label>
-        <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
+        <span id={attachmentId} className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</span>
+        <div {...labelledGroup(attachmentId)}>
+          <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3 pt-1">
         <span className="text-xs text-muted">{t('feedbackFeedbackBoard.allFieldsOptionalExceptATitle')}</span>

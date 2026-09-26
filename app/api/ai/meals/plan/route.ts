@@ -4,7 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, todayKeyFor } from '@/lib/services/scope';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import {
   buildCandidates, buildPlannerSystem, buildPlannerUser, parsePlan, refParts,
@@ -89,7 +89,9 @@ export async function POST(req: Request) {
       logDatabaseFailure('pantry read', pantryError);
       return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));
     }
-    expiring = expiringSoon(pantry ?? [], 7).map((p) => p.name).slice(0, 12);
+    // The family's day — see the chef route. A window computed from the
+    // host's midnight planned meals around the wrong week's expirations.
+    expiring = expiringSoon(pantry ?? [], 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 12);
   }
 
   // Busy nights ------------------------------------------------------------

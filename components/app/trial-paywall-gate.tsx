@@ -70,12 +70,12 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         <div className="mt-6 space-y-3">
           <PlanRow
             icon={<Crown className="h-5 w-5 text-yellow-400" />}
-            name="Family Basic" price={`${fmt(BASIC_ANNUAL_CENTS)}/yr`} tagline="The best family organizer on earth."
+            name={t('trialPaywallGate.familyBasic')} price={`${fmt(BASIC_ANNUAL_CENTS)}/yr`} tagline={t('trialPaywallGate.basicTagline')}
             busy={busy === 'basic_annual'} onClick={() => checkout('basic_annual')} featured
           />
           <PlanRow
             icon={<Sparkles className="h-5 w-5 text-violet-400" />}
-            name="Family+" price={`${fmt(PLUS_ANNUAL_CENTS)}/yr`} tagline="Your family’s AI Chief of Staff."
+            name={t('trialPaywallGate.familyPlus')} price={`${fmt(PLUS_ANNUAL_CENTS)}/yr`} tagline={t('trialPaywallGate.plusTagline')}
             busy={busy === 'plus_annual'} onClick={() => checkout('plus_annual')}
           />
         </div>

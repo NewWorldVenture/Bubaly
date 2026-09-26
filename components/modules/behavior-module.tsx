@@ -45,6 +45,8 @@ export function BehaviorModule() {
       .order('occurred_at', { ascending: false }).limit(1000),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [ai, setAi] = useState<{ loading: boolean; insight: string; tips: string[] } | null>(null);
@@ -64,28 +66,55 @@ export function BehaviorModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      category: form.category.trim() || 'general',
-      note: form.note.trim() || null,
-      points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
-      occurred_at: new Date(form.occurred_at).toISOString(),
-    };
-    const { error } = form.id
-      ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
-      : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Logged');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        category: form.category.trim() || 'general',
+        note: form.note.trim() || null,
+        points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
+        occurred_at: new Date(form.occurred_at).toISOString(),
+      };
+      // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+      // not rewrite comes back `error: null` with nothing changed. See
+      // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+      // predicate bounds the write to one household and `.select('id')` makes
+      // the empty result an answer. An INSERT needs neither — RLS refuses one
+      // with an error instead of filtering it away.
+      const { data, error } = form.id
+        ? await supabase.from('behavior_logs').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (!data || data.length === 0) return toastError(tr('actions.couldNotSaveThatRecord'));
+      success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
-    const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(tr('behaviorModule.deleted'));
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0330 makes a behaviour note the property of whoever WROTE it.
+    const { data, error } = await createClient().from('behavior_logs').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(describeDbError(error)); return; }
+    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
+    success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {
@@ -252,7 +281,7 @@ export function BehaviorModule() {
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('behavior.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>
         </Modal>

@@ -29,6 +29,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { formatMealDay, mealWeek } from '@/lib/meals/week';
 import type { Ingredient, PlanSlot } from '@/lib/services/meals';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
@@ -86,6 +87,11 @@ export function MealsModule() {
   const [newMealOpen, setNewMealOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // The backdrop below dismisses this menu with a click and cannot be reached by
+  // keyboard at all, so Escape is the keyboard path — bound here rather than
+  // implied, which is the difference between an accessible dismissal and a lint
+  // rule silenced with a comment that promises one.
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [recipeSearch, setRecipeSearch] = useState('');
   const [dinnerIdx, setDinnerIdx] = useState(0);
   const [addingPlan, setAddingPlan] = useState(false);
@@ -336,7 +342,11 @@ export function MealsModule() {
                   </Button>
                   {moreOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                      {/* Presentational: no content, no name, nothing to focus. A
+                          click anywhere dismisses the menu; the keyboard path is
+                          Escape, bound where `moreOpen` is declared. */}
+                      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                      <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                         <button onClick={() => { setMoreOpen(false); setAutoPlanOpen(true); }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface">

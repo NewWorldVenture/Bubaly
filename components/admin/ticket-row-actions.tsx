@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { MoreHorizontal, CheckCircle, XCircle, RefreshCw, User } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { resolveTicketAction, closeTicketAction, reopenTicketAction } from '@/app/(app)/admin/support-tickets/actions';
@@ -9,6 +10,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 export function TicketRowActions({ ticketId, status }: { ticketId: string; status: string }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [isPending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
 
@@ -39,7 +41,10 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. A click anywhere
+              dismisses the menu; the keyboard path is Escape, bound above. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {status !== 'resolved' && status !== 'closed' && (
               <button

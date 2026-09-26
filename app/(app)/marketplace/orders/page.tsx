@@ -9,6 +9,7 @@ import type { HandoffStatus, HandoffRole, LocationKind } from '@/lib/marketplace
 import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
+import { todayKeyFor } from '@/lib/services/scope';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
@@ -40,6 +41,10 @@ export default async function MarketplaceOrdersPage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
   const now = new Date();
+  // "Due today" is the family's day, not the server's. On a UTC host that is 5pm
+  // in California, so this page spent the last seven hours of every day calling
+  // an item due today "Overdue by 1 day".
+  const todayKey = todayKeyFor(ctx, now);
   const dataWarnings: string[] = [];
 
   const { data: orders, error: ordersError } = await sb
@@ -145,8 +150,8 @@ export default async function MarketplaceOrdersPage() {
             const role = o.buyer_member === selfId ? 'buyer' : 'seller';
             const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
             const fee = o.amount_cents > 0 ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
-            const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, now);
-            const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, now);
+            const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, todayKey);
+            const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, todayKey);
             return (
               <li key={o.id} className="rounded-xl border border-border bg-surface/60 p-4">
                 <div className="flex flex-wrap items-center gap-2">

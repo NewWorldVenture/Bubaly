@@ -9,6 +9,7 @@ import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { logWalletAudit } from '@/lib/server/audit';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -303,8 +304,17 @@ export async function bucketBalanceCents(supabase: DB, params: {
     .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
   if (bucketError) return { bucketId: null, available: 0, error: walletFailure(bucketError, 'Could not load the wallet bucket.') };
   if (!bucket?.id) return { bucketId: null, available: 0, error: 'The wallet bucket is unavailable.' };
-  const { data: txns, error: transactionError } = await supabase.from('wallet_transactions')
-    .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  // readAll, not a bare select, for the reason the tombstone above gives: this
+  // total is what stops a wallet overdrawing, and a summed prefix is a wrong
+  // number that looks like a right one. PostgREST answers an unbounded select
+  // with at most db-max-rows and says nothing, and `.order('id')` is required
+  // because an unordered paged read can repeat or skip rows between pages.
+  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>((from, to) => supabase
+    .from('wallet_transactions')
+    .select('direction, amount_cents, status')
+    .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
+    .order('id')
+    .range(from, to));
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
   const available = (txns ?? []).reduce(
     (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,

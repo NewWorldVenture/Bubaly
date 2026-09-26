@@ -29,6 +29,7 @@ declare
   parent_mid uuid;
   child_mid  uuid;
   red        uuid;
+  chore      uuid;
   blocked    boolean;
   n          int;
 begin
@@ -39,6 +40,12 @@ begin
   values (fam, parent_uid, 'Parent', 'parent', true) returning id into parent_mid;
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (fam, child_uid, 'Child', 'child', true) returning id into child_mid;
+  -- The child has EARNED the 100 points step 6 spends. Since 0335 a reward
+  -- cannot be approved with points that do not exist, and this probe is about
+  -- WHO decides, not whether the child can pay — reward-balance-check.sql is.
+  insert into public.chores (family_id, title) values (fam, 'Dishes') returning id into chore;
+  insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
+  values (fam, chore, child_mid, 'approved', 100);
 
   -- ── As the child ─────────────────────────────────────────────────────────
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
