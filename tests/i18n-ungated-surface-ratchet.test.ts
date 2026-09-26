@@ -65,7 +65,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // Then to 2,802 as the Guardian dashboard was localized as a whole: its
 // status contexts, call statuses, stat tiles, heading and both toasts.
-const CEILING = 2802;
+//
+// Then to 2,800 with the care log: its type labels (chips, entries, picker)
+// now come from the catalogue rather than an English constant in lib/.
+const CEILING = 2800;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

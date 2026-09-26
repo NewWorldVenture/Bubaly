@@ -20,7 +20,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   sortByRecent, hoursSinceLastContact, isContactOverdue, averageWellbeing,
-  groupByDay, entriesInLastDays, CARE_LOG_TYPE_LABELS,
+  groupByDay, entriesInLastDays,
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
@@ -50,8 +50,17 @@ function toLocalInput(iso: string): string {
 
 const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
 
+// Log-type labels as catalogue keys (I18N-002); CARE_LOG_TYPE_LABELS in
+// lib/care/log.ts stays the English source for anything that is not a screen.
+const CARE_TYPE_KEYS: Record<CareLogType, string> = {
+  check_in: 'careModule.logTypeCheckIn', visit: 'careModule.logTypeVisit', call: 'careModule.logTypeCall',
+  meal: 'careModule.logTypeMeal', medication: 'careModule.logTypeMedication',
+  appointment: 'careModule.logTypeAppointment', incident: 'careModule.logTypeIncident', note: 'careModule.logTypeNote',
+};
+
 export function CareModule() {
   const tr = useTranslations();
+  const typeLabel = (type: string) => (type in CARE_TYPE_KEYS ? tr(CARE_TYPE_KEYS[type as CareLogType]) : type);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -127,7 +136,7 @@ export function CareModule() {
       occurred_at: new Date().toISOString(), logged_by: selfMember?.id ?? null, created_by: userId,
     });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`${CARE_LOG_TYPE_LABELS[type]} logged`);
+    success(tr('careModule.typeLogged', { type: typeLabel(type) }));
   }
 
   async function remove(e: CareEntry) {
@@ -143,7 +152,7 @@ export function CareModule() {
   const sinceLabel = hrsSince == null ? 'No contact logged' : hrsSince < 1 ? 'Just now' : hrsSince < 24 ? `${hrsSince}h ago` : `${Math.floor(hrsSince / 24)}d ago`;
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load care log'} />;
+  if (error) return <ErrorState message={typeof error === 'string' ? error : tr('careModule.failedToLoadCareLog')} />;
 
   return (
     <div>
@@ -201,7 +210,7 @@ export function CareModule() {
               return (
                 <button key={type} onClick={() => quickLog(type)}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-surface/50 border border-border text-fg/80 hover:text-fg hover:border-brand/40 transition">
-                  <Icon className={cn('h-4 w-4', TYPE_ACCENT[type])} /> {CARE_LOG_TYPE_LABELS[type]}
+                  <Icon className={cn('h-4 w-4', TYPE_ACCENT[type])} /> {typeLabel(type)}
                 </button>
               );
             })}
@@ -233,7 +242,7 @@ export function CareModule() {
                             <div className="flex-1 min-w-0 flex items-start justify-between gap-3 pb-1">
                               <div className="min-w-0">
                                 <div className="text-sm font-medium text-fg flex items-center gap-2 flex-wrap">
-                                  {CARE_LOG_TYPE_LABELS[e.log_type]}
+                                  {typeLabel(e.log_type)}
                                   <span className="text-xs text-muted font-normal">{fmtTime(e.occurred_at)}</span>
                                   {e.wellbeing != null && (
                                     <span className="inline-flex items-center gap-0.5 text-xs text-rose-300">
@@ -268,7 +277,7 @@ export function CareModule() {
             <Field label={tr('care.type')}>
               {(id) => (
                 <Select id={id} value={form.log_type} onChange={(e) => setForm((f) => ({ ...f, log_type: e.target.value as CareLogType }))}>
-                  {(Object.keys(CARE_LOG_TYPE_LABELS) as CareLogType[]).map((t) => <option key={t} value={t}>{CARE_LOG_TYPE_LABELS[t]}</option>)}
+                  {(Object.keys(CARE_TYPE_KEYS) as CareLogType[]).map((type) => <option key={type} value={type}>{typeLabel(type)}</option>)}
                 </Select>
               )}
             </Field>
