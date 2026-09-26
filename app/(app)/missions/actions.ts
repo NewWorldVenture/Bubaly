@@ -225,7 +225,10 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       await finalizeApproval(service, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
-      const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
+      // The payout above ran as the service role, so its repair does too: a
+      // half-applied approval may have left the row 'approved', which the
+      // child's own session may no longer change (0348).
+      const { error: fallbackAssignmentError } = await service.from('chore_assignments').update({ status: 'submitted' })
         .eq('id', assignmentId).eq('family_id', familyId).select('id').single();
       if (fallbackAssignmentError) console.error('[chore state] parent-review fallback failed', fallbackAssignmentError);
       return { ok: false, error: t('actions.couldNotFinishTheChore2') };
