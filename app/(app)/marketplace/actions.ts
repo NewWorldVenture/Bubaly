@@ -141,7 +141,11 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
-    return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
+    // The screen offers only the next steps from the status it shows, so an
+    // illegal step means that status is stale (someone else moved the order).
+    // Said so in the viewer's language, and without echoing `status`, which the
+    // caller supplies. (I18N-002)
+    return { ok: false, error: t('marketplace.orderStepNoLongerAvailable') };
   }
 
   const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);

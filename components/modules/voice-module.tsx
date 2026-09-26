@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { CaptureSaveError, saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
 import { useJourney } from '@/lib/analytics/use-journey';
-import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
+import { classifyVoiceCommand } from '@/lib/voice/command-router';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables, Insertable } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -66,8 +66,17 @@ export function VoiceModule() {
   return <VoiceCaptureSession key={JSON.stringify([familyId, userId])} />;
 }
 
+// Route confirmations from the catalogue (I18N-002); describeRoute() in lib/
+// stays the English source for non-screen uses.
+const ROUTE_KEYS: Record<string, string> = {
+  task: 'voiceModule.routeTask', note: 'voiceModule.routeNote',
+  event: 'voiceModule.routeEvent', shopping: 'voiceModule.routeShopping',
+};
+
 function VoiceCaptureSession() {
   const tr = useTranslations();
+  const routeLabel = (kind: string) => (ROUTE_KEYS[kind] ? tr(ROUTE_KEYS[kind]) : kind);
+  const withItems = (route: string, count: number) => (count > 1 ? tr('voiceModule.routeWithItems', { route, count }) : route);
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
@@ -137,7 +146,7 @@ function VoiceCaptureSession() {
       if (!isCurrent()) return;
       let undoState: 'ready' | 'pending' | 'done' | 'uncertain' = 'ready';
       success(
-        `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
+        withItems(routeLabel(route.kind), res.count),
         { label: 'Undo', onClick: async () => {
           if (undoState !== 'ready') return;
           undoState = 'pending';
@@ -285,7 +294,7 @@ function VoiceCaptureSession() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
                     <p className="text-xs text-muted">
-                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
+                      {failed ? tr('voiceModule.captureFailed') : withItems(routeLabel(kind), c.action_count)} · {ago(c.created_at)}
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} disabled={running || Boolean(uncertainHref)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}
