@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 // job is finding them — and /dashboard/family-access said a family has no kid
 // logins and offered to create them, about an access-control record.
 //
-// This is a RATCHET for the rest. Fourteen remain; most are display lists where
+// This is a RATCHET for the rest. Eleven remain (three were closed on main: family activity and Guardian contacts and settings); most are display lists where
 // an empty render is a display bug rather than a false claim, and each needs its
 // own translated error string, which is a translation task rather than a code
 // one. Listing them stops a fifteenth appearing while they are worked down.
@@ -32,10 +32,7 @@ const TRACKED = new Set([
   'app/(app)/dashboard/moments/page.tsx',
   'app/(app)/dashboard/social-feed/page.tsx',
   'app/(app)/dashboard/social/content-studio/page.tsx',
-  'app/(app)/family/activity/page.tsx',
   'app/(app)/feedback/page.tsx',
-  'app/(app)/guardian/contacts/page.tsx',
-  'app/(app)/guardian/settings/page.tsx',
   'app/(app)/marketplace/insights/page.tsx',
   'app/(app)/marketplace/questions/page.tsx',
   'app/(app)/marketplace/store/page.tsx',
@@ -44,7 +41,13 @@ const TRACKED = new Set([
 
 // Any mention of an error is enough to clear the ratchet: this measures "did the
 // author consider the failure at all", not the shape of the handling.
-const LOOKS_AT_THE_ERROR = /\.error\b|Error\b\s*\?\?|\berror:\s*\w+Error/;
+//
+// The fourth alternative is a bare destructured `error` tested directly —
+// `const [{ data, error }] = await settleAll(...)` then `{error ? <ErrorState`.
+// Main's Guardian pages handle their reads exactly that way, and the first
+// three alternatives cannot see it, so they read as droppers when the merge
+// brought them in.
+const LOOKS_AT_THE_ERROR = /\.error\b|Error\b\s*\?\?|\berror:\s*\w+Error|\berror \?/;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

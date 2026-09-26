@@ -4,6 +4,8 @@
 // the money math stays deterministically unit-testable. Cents are integers;
 // account balances arrive as dollars (numeric) and are converted once.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export interface AccountLite { balance: number } // dollars
 export interface CardLite { available_cents: number }
 export interface RewardLite { unit: string; balance: number; value_cents: number }
@@ -44,19 +46,28 @@ export function walletOverview(
   };
 }
 
-/** Format integer cents as USD with cents always shown ($8,245.50). */
-export function fmtUsd(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
+/**
+ * Integer cents as USD with cents always shown. The LOCALE is the reader's; the
+ * CURRENCY stays the money's own — a family's wallet is in dollars whichever
+ * language they read, so de-DE renders "8.245,50 $" and never euros.
+ */
+export function fmtUsd(cents: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format((cents ?? 0) / 100);
 }
 
 /** Format a dollars value (numeric account balance) as USD. */
-export function fmtDollars(n: number): string {
-  return fmtUsd(dollarsToCents(n));
+export function fmtDollars(n: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return fmtUsd(dollarsToCents(n), locale);
 }
 
-/** Grouped integer count with locale separators (2,850). */
-export function fmtCount(n: number): string {
-  return new Intl.NumberFormat('en-US').format(Math.round(n ?? 0));
+/**
+ * Grouped integer count. The comment already said "locale separators" and the code
+ * pinned en-US, so a German reader saw "2,850" where their own grouping is "2.850"
+ * — the separator and the decimal mark are SWAPPED between those two conventions,
+ * which is the one case where a wrong separator can be read as a different number.
+ */
+export function fmtCount(n: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale).format(Math.round(n ?? 0));
 }
 
 export interface TxnLike {
@@ -71,9 +82,9 @@ export function txnSignedCents(t: TxnLike): number {
   return t.type === 'income' ? cents : -cents;
 }
 
-export function fmtSignedUsd(cents: number): string {
+export function fmtSignedUsd(cents: number, locale: LocaleCode = DEFAULT_LOCALE): string {
   const sign = cents >= 0 ? '+' : '-';
-  return `${sign}${fmtUsd(Math.abs(cents))}`;
+  return `${sign}${fmtUsd(Math.abs(cents), locale)}`;
 }
 
 export const ACCOUNT_KIND_META: Record<string, { label: string; tint: string }> = {
@@ -89,8 +100,8 @@ export const CARD_BRAND_LABEL: Record<string, string> = {
   visa: 'VISA', mastercard: 'Mastercard', amex: 'Amex', discover: 'Discover', other: 'Card',
 };
 
-export function fmtTxnDate(iso: string): string {
+export function fmtTxnDate(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }

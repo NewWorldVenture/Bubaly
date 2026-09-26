@@ -76,7 +76,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
         cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
       };
       // See immunizations-module: the earlier fix reached the DELETE below and not
-      // this UPDATE, and RLS filters the two the same way. 0323 gives health_visits
+      // this UPDATE, and RLS filters the two the same way. 0366 gives health_visits
       // the same Rule B treatment, so a blocked edit answered `error: null` and was
       // reported as saved.
       const { data, error } = form.id
@@ -95,7 +95,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
     // See immunizations-module: RLS filters a DELETE instead of refusing it, so
     // without `.select('id')` a blocked removal is indistinguishable from a
-    // successful one. 0323 gives health_visits the same Rule B treatment.
+    // successful one. 0366 gives health_visits the same Rule B treatment.
     const { data, error } = await createClient().from('health_visits').delete()
       .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
     if (error) { toastError(describeDbError(error)); return; }
@@ -170,8 +170,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
                   <div className="flex shrink-0 gap-1">
-                    <button onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    <button aria-label={t('a11y.edit')} onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
               </li>

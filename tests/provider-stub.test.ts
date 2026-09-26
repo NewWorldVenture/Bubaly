@@ -132,8 +132,16 @@ describe('routing', () => {
 
   it('returns the real provider otherwise', async () => {
     vi.stubEnv('AI_PROVIDER_STUB', '0');
-    expect(await resolveProviderForTask('plan')).toBeInstanceOf(OpenAIProvider);
-    expect(await resolveProvider()).toBeInstanceOf(OpenAIProvider);
+    // The intent is "not the stub", and `toBeInstanceOf(OpenAIProvider)` was a
+    // proxy for it. BH-01 wraps the real provider in a retry delegate, so the
+    // class changed while the intent did not. Both halves are asserted directly
+    // now, which is stronger than the instanceof was: `id` is the contract every
+    // caller actually reads, and the stub is excluded by name rather than by
+    // implication.
+    for (const p of [await resolveProviderForTask('plan'), await resolveProvider()]) {
+      expect(p.id).toBe('openai');
+      expect(p).not.toBeInstanceOf(ScriptedProvider);
+    }
   });
 });
 

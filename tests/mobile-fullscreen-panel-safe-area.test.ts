@@ -18,7 +18,17 @@ describe('mobile full-screen detail panels clear the safe area on all sides', ()
   for (const [name, file] of Object.entries(panels)) {
     it(`${name} (${file}) pads all four safe-area insets with lg resets`, () => {
       const src = fs.readFileSync(file, 'utf8');
-      const shell = src.split('\n').find((l) => l.includes('fixed inset-0 z-50 bg-background')) ?? '';
+      // Anchor on the STRUCTURE of the takeover, not on its background class. The
+      // anchor used to read `fixed inset-0 z-50 bg-background`, and `bg-background`
+      // names a colour this theme never defined — so the panel had no background at
+      // all, and fixing that silently unhooked this test: `.find` returned
+      // undefined, `shell` became '', and all six assertions failed on a file that
+      // had not changed in the way they check. A guard should not depend on a
+      // neighbouring class it says nothing about.
+      const shells = src.split('\n').filter((l) => l.includes('fixed inset-0 z-50'));
+      expect(shells, `${file} should hold exactly one full-screen takeover shell`).toHaveLength(1);
+      const shell = shells[0];
+      expect(shell).toMatch(/\bbg-(bg|surface|elevated)\b/);
       expect(shell).toContain('pt-[var(--safe-top)]');
       expect(shell).toContain('pb-[var(--safe-bottom)]');
       expect(shell).toContain('pl-[var(--safe-left)]');

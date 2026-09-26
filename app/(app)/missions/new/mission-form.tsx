@@ -21,18 +21,31 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 export function MissionForm({ className, children }: { className?: string; children: React.ReactNode }) {
   const t = useTranslations();
   const [error, setError] = useState<string | null>(null);
+  // In flight, the fields and the page's SubmitButton are disabled together, so
+  // a second press cannot create the mission twice. The SubmitButton the page
+  // passes in already reads useFormStatus; this holds for anything else in
+  // `children` too, and it is visible to the form-in-flight guard, which reads
+  // one file at a time and cannot see a button that arrives as a child.
+  const [pending, setPending] = useState(false);
 
   return (
     <>
       <form
         className={className}
         action={async (formData) => {
+          if (pending) return;
+          setPending(true);
           setError(null);
-          const result = await createChoreAction(formData);
-          if (!result.ok) setError(result.error ?? t('submitForm.somethingWentWrongTryAgain'));
+          try {
+            const result = await createChoreAction(formData);
+            if (!result.ok) setError(result.error ?? t('submitForm.somethingWentWrongTryAgain'));
+          } finally {
+            setPending(false);
+          }
         }}
       >
-        {children}
+        {/* `contents` keeps the fields as direct grid items of the form. */}
+        <fieldset disabled={pending} className="contents">{children}</fieldset>
       </form>
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
     </>

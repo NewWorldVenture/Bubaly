@@ -8,9 +8,33 @@ test.beforeEach(async ({ page }) => {
   if (await rejectCookies.isVisible()) await rejectCookies.click();
 });
 
-test('the mobile menu becomes usable when its client code is ready', async ({ context }) => {
-  const slowPage = await context.newPage();
-  await slowPage.setViewportSize({ width: 390, height: 844 });
+// The slow page gets a context of its OWN, and that is the whole of this note.
+//
+// It used to be `context.newPage()`, sharing the context — and therefore the
+// HTTP cache — with the page `beforeEach` has already loaded `/` on. A script
+// served from that warm cache never reaches the network layer, so the route
+// below is never invoked and `heldScripts` stays 0:
+//
+//   [pixel] the mobile menu becomes usable when its client code is ready
+//   expect(received).toBeGreaterThan(expected)   Expected: > 0   Received: 0
+//
+// which reads as "the page shipped no JavaScript" and is really "the hold never
+// engaged". It has failed this way on `main` too, on [ipad], so it is not one
+// branch's problem; it is a warm cache deciding whether the test tests anything.
+//
+// A fresh context is cold, so every `/_next/static/*.js` request goes through
+// the route. Nothing else changes: the scripts are still held, and every
+// assertion below is the one that was there before.
+test('the mobile menu becomes usable when its client code is ready', async ({ browser, baseURL }, testInfo) => {
+  // The project's own `use` is carried over — userAgent, deviceScaleFactor,
+  // isMobile and the rest — because `context.newPage()` used to inherit them
+  // and a fresh context does not. The viewport is then overridden exactly as
+  // `setViewportSize` used to, so the only difference from before is the cold
+  // cache.
+  const slowContext = await browser.newContext({
+    ...testInfo.project.use, baseURL, viewport: { width: 390, height: 844 },
+  });
+  const slowPage = await slowContext.newPage();
   let releaseScripts!: () => void;
   const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
   let heldScripts = 0;
@@ -41,7 +65,7 @@ test('the mobile menu becomes usable when its client code is ready', async ({ co
     await expect(toggle).toBeFocused();
   } finally {
     releaseScripts();
-    await slowPage.close();
+    await slowContext.close();
   }
 });
 

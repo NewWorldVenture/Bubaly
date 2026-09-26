@@ -8,7 +8,7 @@ import { dispatchPendingPushes } from '@/lib/server/push';
  * `pushed_at` stamps a notification only when every device succeeds. A
  * whole-family notice reaching two phones, one of which fails, stayed pending —
  * and the next run sent to BOTH again, so the phone that already had it buzzed
- * twice. 0336's per-device receipt makes the retry reach only the device that
+ * twice. 0379's per-device receipt makes the retry reach only the device that
  * missed it, without claiming anything ahead of a send (so a worker dying
  * mid-batch still loses nothing).
  */
@@ -79,7 +79,7 @@ describe('a device is buzzed once per notification', () => {
     expect(f.tables.notifications[0].pushed_at).toBeNull();
   });
 
-  it('a database without 0336 keeps delivering, as it did before', async () => {
+  it('a database without 0379 keeps delivering, as it did before', async () => {
     // Deploy can precede migration: the missing table is not a reason to stop
     // pushing a medication reminder.
     const f = fixture({ withReceipts: false });

@@ -108,8 +108,45 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
     .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
   if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
 
+  // WHOSE password this sets is decided by `family_members`, never by
+  // `child_logins` — and the two have to agree.
+  //
+  // `child_logins`' write policy is named "Managers manage child_logins" and
+  // predicated on `is_family_member(family_id)`, so until 0299 is applied EVERY
+  // member of the household can UPDATE that table. This line used to read
+  // `row.user_id` from it and hand that straight to
+  // `admin.auth.admin.updateUserById` under the service role. So a child pointed
+  // their own row's `user_id` at a PARENT's auth user, asked that parent to reset
+  // their PIN — "I forgot it", an ordinary request — and the reset set the
+  // PARENT's account password to deriveChildPassword(secret, childUsername, pin),
+  // a value the child chose. Child to parent takeover, with the parent's own hand
+  // on the button.
+  //
+  // `family_members` writes are already `can_manage_family`, so its `user_id` is
+  // the trustworthy side of the mapping. Deliberately not "fall back to the
+  // member row": a DISAGREEMENT is evidence of tampering, so it refuses and says
+  // so. And a manager is refused outright — `createChildLoginAction` cannot give
+  // a login to a member who already has a `user_id`, and a manager always has
+  // one, so no legitimate reset is ever blocked by this.
+  const { data: member, error: memberError } = await admin.from('family_members')
+    .select('id, family_id, role, user_id').eq('id', input.memberId).maybeSingle();
+  if (memberError) {
+    console.error('[child-login] member lookup failed during PIN reset', memberError);
+    return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
+  }
+  if (!member || member.family_id !== ctx.active.familyId || !member.user_id) {
+    return { ok: false, error: t('childLoginActions.loginNotFound') };
+  }
+  if (isManager(member.role) || member.user_id !== row.user_id) {
+    console.error('[child-login] refusing a PIN reset whose target does not match the member row', {
+      memberId: input.memberId, familyId: ctx.active.familyId,
+      roleIsManager: isManager(member.role), userIdMatches: member.user_id === row.user_id,
+    });
+    return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
+  }
+
   const password = deriveChildPassword(sec, row.username, input.pin);
-  const { error } = await admin.auth.admin.updateUserById(row.user_id, { password });
+  const { error } = await admin.auth.admin.updateUserById(member.user_id, { password });
   if (error) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
 
   // A parent reset should also lift any brute-force lockout on that username, so

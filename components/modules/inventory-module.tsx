@@ -5,6 +5,7 @@ import {
   PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -21,23 +22,28 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
-import { familyMediaPath } from '@/lib/storage/family-media';
+import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
 type Move = Tables<'inventory_moves'>;
 
-const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const moneyIn = (locale: LocaleCode) => (cents: number) => `$${(cents / 100).toLocaleString(locale, { maximumFractionDigits: 0 })}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 export function InventoryModule() {
+  const locale = useLocale();
+  const money = moneyIn(locale.code);
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const plural = usePlural();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -86,7 +92,7 @@ export function InventoryModule() {
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the inventory?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: item.name }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.itemRemoved'));
@@ -114,7 +120,7 @@ export function InventoryModule() {
 
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
-    if (!confirm(`${tr('inventory.deleteLocationNamed', { name: location.name })}${count ? ` ${plural('inventory.itemsWillLoseLocation', count)}` : ''}`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: location.name }), body: count ? tr('inventory.itemsLoseLocation') : tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.locationDeleted'));

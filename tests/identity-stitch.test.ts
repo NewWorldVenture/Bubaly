@@ -29,4 +29,10 @@ describe('shouldCarryConsent', () => {
     expect(shouldCarryConsent('noop')).toBe(true);
     expect(shouldCarryConsent('fork')).toBe(false);
   });
+
+  it('never carries consent on an undecided stitch (a read it rests on failed)', () => {
+    // An allowlist, not "anything but fork": a stitch that could not read the
+    // visitor row has not established that this device is the signer's.
+    expect(shouldCarryConsent('unknown')).toBe(false);
+  });
 });

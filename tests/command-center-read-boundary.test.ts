@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 
 const page = fs.readFileSync('app/(app)/dashboard/command-center/page.tsx', 'utf8');
+const messages = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
 
 // This asserted that a failed read returns an error page. The property behind
 // that — a missing read must never pass silently as real data — is kept; the
@@ -30,7 +31,12 @@ describe('command center read boundary', () => {
   it('names them on screen instead of blanking the page', () => {
     expect(page).toContain('PartialReadBanner');
     expect(page).toContain('failures={readFailures}');
-    expect(page).toContain('Some data could not be loaded:');
+    // The banner's sentence used to be a literal in this file and is now a
+    // catalogue key (I18N-006), so both halves are pinned: the page asks for the
+    // key, and the key still says what the literal said. Held end to end by
+    // tests/a-failed-read-names-itself-in-the-familys-language.test.ts.
+    expect(page).toContain("title={t('dashboardCommandCenter.someDataCouldNotBe')}");
+    expect(messages['dashboardCommandCenter.someDataCouldNotBe']).toBe('Some data could not be loaded:');
     expect(page).not.toContain('return <ErrorState');
   });
 });

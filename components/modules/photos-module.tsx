@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
 import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
@@ -26,8 +26,8 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { galleryStep } from '@/lib/ui/gallery';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { galleryStep } from '@/lib/ui/gallery';
 import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -69,19 +69,6 @@ export function PhotosModule() {
 
   const [activeAlbum, setActiveAlbum] = useState<Album | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
-  const lightboxOpen = lightboxIdx !== null;
-  // C2-01: this overlay is a modal dialog in every respect except that it said
-  // so nowhere. It had no role, no `aria-modal`, no Escape, no focus move-in, no
-  // focus trap and no scroll lock — its only dismissal was a backdrop click, so
-  // a keyboard or screen-reader user could open a photo and had no way out and
-  // no way to reach the controls. Same contract as `<Modal>`, from the same
-  // hook; the chrome stays full-bleed black rather than becoming a titled panel,
-  // which is why this is not simply swapped for `<Modal>`.
-  const lightboxRef = useRef<HTMLDivElement>(null);
-  const closeLightbox = useCallback(() => setLightboxIdx(null), []);
-  useDialogBehavior(lightboxRef, lightboxOpen, { onClose: closeLightbox });
-  const lightboxLabelId = useId();
-  const lightboxCaptionId = useId();
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -182,6 +169,30 @@ export function PhotosModule() {
     setUploadOpen(false);
   }
 
+  // ── Lightbox dialog behaviour ─────────────────────────────
+  // The lightbox covers the screen and had no key handling at all, so a keyboard
+  // user who reached it could not leave it: Escape did nothing and the only way
+  // out was clicking the backdrop. WCAG 2.1.2 No Keyboard Trap. It matters more
+  // now that the grid and list tiles that open it are themselves operable.
+  //
+  // Escape, the Tab trap, the scroll lock and focus restore are all the shared
+  // dialog behaviour, so they come from the one helper that implements them —
+  // the same one components/ui/modal.tsx and every bespoke overlay delegates to
+  // — rather than a window listener that handled the first and none of the rest.
+  // `lightboxIdx !== null` is the real open condition, not a literal `true`: the
+  // element is only rendered while it is open.
+  //
+  // What it deliberately does NOT do is declare aria-modal. The attribute tells
+  // assistive technology the rest of the page is inert, and the rule this
+  // codebase settled on is that only the shared Modal says it — a photo viewer
+  // cannot take that component's chrome (a title bar and a max-w-lg panel over a
+  // full-bleed image), and the grandfathered list of overlays that say it
+  // themselves may only shrink. The behaviour the attribute promises is
+  // implemented here regardless; what is left out is the CLAIM, not the trap.
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const closeLightbox = useCallback(() => setLightboxIdx(null), []);
+  useDialogBehavior(lightboxRef, lightboxIdx !== null, { onClose: closeLightbox });
+
   // ── Drag & drop ───────────────────────────────────────────
   useEffect(() => {
     const el = dropRef.current;
@@ -276,7 +287,7 @@ export function PhotosModule() {
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
-            {key === 'favorites' && <span className="ml-1 rounded-full bg-current/10 px-1.5 text-[10px]">
+            {key === 'favorites' && <span className="ml-1 rounded-full bg-fg/10 px-1.5 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
           </button>
@@ -360,10 +371,18 @@ export function PhotosModule() {
               {photos.map((photo, idx) => {
                 const isVideo = photo.media_type === 'video';
                 return (
-                <div key={photo.id} role="button" tabIndex={0}
-                  className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40 focus-ring"
-                  onClick={() => setLightboxIdx(idx)}
-                  onKeyDown={(e) => openOnKey(e, () => setLightboxIdx(idx))}>
+                <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
+                  onClick={() => setLightboxIdx(idx)}>
+                  {/* The tile's onClick stays for the mouse — the hover overlay sits
+                      above this button and swallows the click, which then bubbles to
+                      the tile as before. This button is what a keyboard reaches and
+                      what a screen reader announces. It wraps only the media, so the
+                      overlay's favourite and edit buttons stay siblings rather than
+                      descendants of a role with presentational children. It carries
+                      an explicit name because a photo has no visible text label. */}
+                  <button type="button" onClick={() => setLightboxIdx(idx)}
+                    aria-label={tr('photosModule.openMedia', { name: photo.caption ?? tr(isVideo ? 'photos.video' : 'photosModule.photo') })}
+                    className="focus-ring block w-full">
                   {isVideo ? (
                     <div className="flex aspect-video w-full cursor-pointer items-center justify-center bg-black/80">
                       <Play className="h-10 w-10 text-white/70" />
@@ -374,6 +393,7 @@ export function PhotosModule() {
                       loading="lazy" decoding="async"
                       fallback={<div className="aspect-square w-full bg-surface/40" />} />
                   )}
+                  </button>
                   {/* Video badge */}
                   {isVideo && (
                     <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
@@ -411,9 +431,13 @@ export function PhotosModule() {
             /* List */
             <div className="overflow-hidden rounded-2xl border border-border">
               {photos.map((photo, idx) => (
-                <div key={photo.id} role="button" tabIndex={0} onClick={() => setLightboxIdx(idx)}
-                  onKeyDown={(e) => openOnKey(e, () => setLightboxIdx(idx))}
-                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0 focus-ring">
+                <div key={photo.id} onClick={() => setLightboxIdx(idx)}
+                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
+                  {/* Same split as the grid tile; here the row already shows the
+                      caption or the media type as text, so the button takes its name
+                      from its contents and needs no aria-label. */}
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(idx); }}
+                    className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left">
                   {photo.media_type === 'video' ? (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/80">
                       <Play className="h-5 w-5 text-white/70" />
@@ -425,6 +449,7 @@ export function PhotosModule() {
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
                     <p className="text-xs text-muted">{relativeDate(photo.created_at)}</p>
                   </div>
+                  </button>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
                   <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
                     aria-label={tr(photo.is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}>
@@ -439,96 +464,78 @@ export function PhotosModule() {
 
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
-        // This is a SUPPRESSION and worth reading as one, not a fix.
-        //
-        // The rule wants a keydown handler beside the backdrop click. The
-        // correct keyboard affordance for dismissing a dialog is ESCAPE, and it
-        // is bound — with the focus trap and focus restore — by
-        // `useDialogBehavior` on `lightboxRef` below. The rule cannot see into
-        // a hook, so it reports a dialog that is already keyboard-closable.
-        //
-        // Binding Enter or Space here instead would be actively WRONG: inside a
-        // dialog those keys belong to whatever has focus, so the lightbox would
-        // close every time someone activated the next or previous button.
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events
-        <div
-          ref={lightboxRef}
-          role="dialog"
-          aria-modal="true"
-          // Named by what is already on screen — the "3 / 20" counter plus the
-          // caption when there is one — rather than by a new string in eleven
-          // locales. Numbers and the caption are the photo's own words, so the
-          // name is translated by construction.
-          aria-labelledby={photos[lightboxIdx].caption ? `${lightboxLabelId} ${lightboxCaptionId}` : lightboxLabelId}
-          tabIndex={-1}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)] outline-none"
-          // Only a click on the backdrop ITSELF closes. Guarding here rather
-          // than stopping propagation in a child is what lets the media wrapper
-          // below go back to being a plain container: it carried an onClick for
-          // no reason except to undo this one.
-          onClick={(e) => { if (e.target === e.currentTarget) setLightboxIdx(null); }}>
-          {/* Nav */}
-          {lightboxIdx > 0 && (
-            <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) - 1); }}
-              aria-label={tr('photos.previousPhoto')}
-              className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-          )}
-          {lightboxIdx < photos.length - 1 && (
-            <button onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i ?? 0) + 1); }}
-              aria-label={tr('photos.nextPhoto')}
-              className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          )}
-
-          {/* Media */}
-          <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
-            {photos[lightboxIdx].media_type === 'video' ? (
-              <video
-                src={media(photos[lightboxIdx].url) ?? undefined}
-                controls
-                autoPlay
-                playsInline
-                className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
-              />
-            ) : (
-              <FamilyMediaImg src={photos[lightboxIdx].url} alt={photos[lightboxIdx].caption ?? ''}
-                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl"
-                fallback={<div className="h-[50vh] w-[60vw] max-w-full rounded-2xl bg-white/10" />} />
+        <div className="fixed inset-0 z-50 pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
+          {/* The backdrop is its own element, aria-hidden, the way components/ui/
+              modal.tsx writes one. Clicking it closes the viewer as a mouse
+              convenience; it is not a tab stop and announces nothing, because
+              the keyboard's way out is Escape, which the dialog hook handles. */}
+          <div className="absolute inset-0 bg-black/95" onClick={closeLightbox} aria-hidden />
+          <div ref={lightboxRef} tabIndex={-1}
+            role="dialog" aria-label={tr('photosModule.photoViewer')}
+            className="relative flex h-full w-full items-center justify-center outline-none">
+            {/* Nav */}
+            {lightboxIdx > 0 && (
+              <button onClick={() => setLightboxIdx((i) => (i ?? 0) - 1)}
+                aria-label={tr('photos.previousPhoto')}
+                className="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
+                <ChevronLeft className="h-6 w-6" />
+              </button>
             )}
-            {/* Controls */}
-            <div className="mt-4 flex items-center gap-3 text-white">
-              <span id={lightboxLabelId} className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
-              {photos[lightboxIdx].caption && <p id={lightboxCaptionId} className="text-sm">{photos[lightboxIdx].caption}</p>}
-              <div className="ml-auto flex gap-2">
-                <a href={media(photos[lightboxIdx].url) ?? undefined} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
-                  aria-disabled={media(photos[lightboxIdx].url) ? undefined : true}
-                  onClick={(e) => { e.stopPropagation(); if (!media(photos[lightboxIdx].url)) e.preventDefault(); }}
-                  className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
-                  <Download className="h-4 w-4" />
-                </a>
-                <button onClick={() => toggleFavorite(photos[lightboxIdx])}
-                  aria-label={tr(photos[lightboxIdx].is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}
-                  className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
-                  <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
-                </button>
-                <button onClick={() => { if (confirm(tr('photosModule.deleteThisPhoto'))) deletePhoto(photos[lightboxIdx]); }}
-                  aria-label={tr('photos.deletePhoto')}
-                  className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+            {lightboxIdx < photos.length - 1 && (
+              <button onClick={() => setLightboxIdx((i) => (i ?? 0) + 1)}
+                aria-label={tr('photos.nextPhoto')}
+                className="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            )}
+
+            {/* Media */}
+            <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
+              {photos[lightboxIdx].media_type === 'video' ? (
+                <video
+                  src={media(photos[lightboxIdx].url) ?? undefined}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
+                />
+              ) : (
+                <FamilyMediaImg src={photos[lightboxIdx].url} alt={photos[lightboxIdx].caption ?? ''}
+                  className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl"
+                  fallback={<div className="h-[50vh] w-[60vw] max-w-full rounded-2xl bg-white/10" />} />
+              )}
+              {/* Controls */}
+              <div className="mt-4 flex items-center gap-3 text-white">
+                <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
+                {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
+                <div className="ml-auto flex gap-2">
+                  <a href={media(photos[lightboxIdx].url) ?? undefined} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                    aria-disabled={media(photos[lightboxIdx].url) ? undefined : true}
+                    onClick={(e) => { if (!media(photos[lightboxIdx].url)) e.preventDefault(); }}
+                    className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
+                    <Download className="h-4 w-4" />
+                  </a>
+                  <button onClick={() => toggleFavorite(photos[lightboxIdx])}
+                    aria-label={tr(photos[lightboxIdx].is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}
+                    className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
+                    <Heart className={cn('h-4 w-4', photos[lightboxIdx].is_favorite && 'fill-red-400 text-red-400')} />
+                  </button>
+                  <button onClick={() => { if (confirm(tr('photosModule.deleteThisPhoto'))) deletePhoto(photos[lightboxIdx]); }}
+                    aria-label={tr('photos.deletePhoto')}
+                    className="rounded-lg bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30 transition">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Close */}
-          <button onClick={() => setLightboxIdx(null)}
-            aria-label={tr('photos.close')}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
-            <X className="h-5 w-5" />
-          </button>
+            {/* Close */}
+            <button onClick={closeLightbox}
+              aria-label={tr('photos.close')}
+              className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-elevated text-fg hover:bg-elevated transition">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       )}
 

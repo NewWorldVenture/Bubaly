@@ -18,10 +18,10 @@ const ROOT = join(__dirname, '..');
  *   success('Medication deleted');      // over a prescription still in the table
  *
  * That is not hypothetical on these tables — it is the DESIGNED outcome of the
- * policies this audit shipped. 0328 made medications and medication_schedules
- * manager-only; 0323 gives health_visits, immunizations and care_log Rule B, so
- * the subject of a medical record may not erase it; 0330 makes a behaviour note
- * its author's; 0331 makes a journal nobody else's; 0324 scopes a safety
+ * policies this audit shipped. 0371 made medications and medication_schedules
+ * manager-only; 0366 gives health_visits, immunizations and care_log Rule B, so
+ * the subject of a medical record may not erase it; 0373 makes a behaviour note
+ * its author's; 0374 makes a journal nobody else's; 0367 scopes a safety
  * check-in by created_by. Tightening the database is what turned a dormant
  * client bug into a live one, and nothing in the client moved with it.
  *

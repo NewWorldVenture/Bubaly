@@ -11,6 +11,7 @@ import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 
@@ -408,7 +409,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       input_schema: { type: 'object', properties: {} },
       execute: async () => {
         const now = new Date();
-        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+        // The FAMILY's day end, not the server's. `setHours(23, 59, 59, 999)`
+        // ends the day in whatever zone this process runs in, which on Vercel
+        // is UTC — so "due today" for a family in Tokyo ran nine hours into
+        // their tomorrow, and for one in Los Angeles stopped seven hours before
+        // their midnight. The bound is used TWICE below (the reminder query and
+        // reminderAttention), and both had to move together: changing one and
+        // not the other is how a day key ends up meaning two things in one
+        // function, which is the defect this replaces.
+        const tz = ctx.tz || 'UTC';
+        const dayEndExclusiveMs = zonedDayBoundsMs(dayKeyInTz(now, tz), tz).end;
+        const todayEnd = new Date(dayEndExclusiveMs - 1);
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
@@ -424,7 +435,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         ]);
         const pendingError = [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos].find((result) => result.error)?.error;
         if (pendingError) return toolFailure('load pending decisions', pendingError);
-        const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now);
+        const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now, dayEndExclusiveMs);
         const nameByMember = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         const conflicts = detectConflicts((convEvents.data ?? []) as ConflictEvent[])
           .map((c) => ({ id: c.eventIds[0], assigneeName: nameByMember.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));

@@ -53,7 +53,7 @@ export function InsightHero({ insight }: { insight: { id: string; kind: string; 
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/12 to-violet-500/8 p-5">
+    <div className="relative overflow-hidden rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 to-violet-500/10 p-5">
       <div className="flex items-start gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <Icon className="h-5 w-5" />

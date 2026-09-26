@@ -15,7 +15,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
-import { usd } from '@/lib/finance/splits';
+import { usd as usdIn } from '@/lib/finance/splits';
 import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
   type SubLike,
@@ -26,7 +26,7 @@ import {
   candidateAlreadyTracked, subscriptionCandidateDraft, subscriptionReviewContextKey,
   type SubscriptionCandidate, type SubscriptionCandidateResponse, type SubscriptionReviewContext, type TrackedCandidateMatch,
 } from '@/lib/finance/subscription-candidates';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Sub = Tables<'subscriptions_tracked'>;
@@ -45,6 +45,9 @@ export function SubscriptionsModule() {
 
 export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
   const t = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId } = context;
   const { success, error: toastError } = useToast();
 

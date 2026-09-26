@@ -1,6 +1,6 @@
--- Behavioural proof for 0337: one Resend event moves a campaign counter once.
+-- Behavioural proof for 0380: one Resend event moves a campaign counter once.
 --
--- Before 0337 the webhook incremented the counter and THEN finalised the
+-- Before 0380 the webhook incremented the counter and THEN finalised the
 -- receipt; a failed finalisation released the claim, the provider retried, and
 -- the same event was counted twice. apply_resend_campaign_counter() marks the
 -- receipt and increments in one transaction, only for the claim holder.
@@ -13,6 +13,9 @@ declare
   n        int;
   refused  boolean;
 begin
+  -- Re-runnable: the suite is run twice.
+  delete from public.resend_webhook_events where svix_id like 'msg_counter_probe_%';
+  delete from public.marketing_email_campaigns where subject = 'Counter probe';
   insert into public.marketing_email_campaigns (subject)
     values ('Counter probe') returning id into campaign;
   insert into public.resend_webhook_events (svix_id, event_type, status, received_at)

@@ -7,6 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtMoney } from '@/lib/utils/format';
 import { createAdCampaign } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Ads', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,7 @@ export default async function AdsPage() {
             <select name="platform" className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
             <input name="objective" placeholder={t('adminMarketingAds.objectiveEGSignups')} className={inputCls} />
             <input name="budgetDollars" type="number" min="0" placeholder={t('adminMarketingAds.budget')} className={inputCls} />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAds.create')}</button>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAds.create')}</SubmitButton>
           </form>
         </Card>
       </div>

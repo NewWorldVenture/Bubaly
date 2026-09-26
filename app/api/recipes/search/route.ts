@@ -3,6 +3,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { searchAllProviders } from '@/lib/recipes/providers';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('search.unauthorized') }, { status: 401 }); }
 
-  const limit = rateLimit(`recipes:${ctx.user.id || clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  const limit = await enforceRequestRateLimit(createServiceClient(), `recipes:${ctx.user.id || clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limit.ok) return NextResponse.json({ error: t('search.slowDownAMomentAnd') }, { status: 429 });
 
   const q = (req.nextUrl.searchParams.get('q') ?? '').trim();

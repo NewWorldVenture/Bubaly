@@ -1,6 +1,7 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { translate } from '@/lib/i18n/translate';
+import { getMessages } from '@/lib/i18n/messages';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { localeContextValue } from './helpers/render-translated';
 import { MoveDateRecalculation } from '@/components/modules/move-date-recalculation';
 import {
   addMoveDays, isMoveDate, isMoveDatePreview, isMoveDateResult, moveDateContextKey,
@@ -14,6 +15,17 @@ const mocks = vi.hoisted(() => ({
   slots: [] as unknown[], cursor: 0, dirty: false, key: null as string | null,
   effects: [] as (() => void)[], cleanups: new Set<() => void>(),
   fetch: vi.fn(), uuid: vi.fn(), onClose: vi.fn(), onSaved: vi.fn(),
+  messages: {} as Record<string, string>,
+}));
+mocks.messages = getMessages('en-US');
+// The one context this harness must actually answer. `useContext` above stays
+// undefined for everything else, which is what the other hooks here expect.
+vi.mock('@/components/i18n/locale-provider', async (original) => ({
+  ...await original<typeof import('@/components/i18n/locale-provider')>(),
+  useTranslations: () => {
+    const messages = mocks.messages;
+    return (key: string, params?: Record<string, string | number>) => translate(messages, key, params);
+  },
 }));
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
@@ -38,16 +50,17 @@ vi.mock('react', async (original) => ({
   // invokes the component as a plain function, so there is no React dispatcher
   // and the real `useContext` throws.
   //
-  // It used to return `undefined` and let `useTranslations` fall back through
-  // `translate({}, key)` to SOURCE_MESSAGES, on the reasoning that this was
-  // "what a user would see if the provider were ever missing". Neither half of
-  // that holds any more: the fallback held the whole English catalogue, which is
-  // why it shipped 244 KB gzip into every page's JavaScript and had to go; and
-  // the provider is never missing, because `app/layout.tsx` wraps the entire
-  // tree. So the stub hands back a REAL context value carrying the real
-  // catalogue — closer to the app, and the assertions below go on reading the
-  // English words a person actually sees.
-  useContext: () => localeContextValue(),
+  // It used to return undefined and lean on `useTranslations`' own fallback:
+  // outside a provider it called `translate({}, key)`, which reached
+  // SOURCE_MESSAGES and rendered English. That fallback is gone — it was a
+  // static import of the catalogue, and the reason en-US shipped to the browser
+  // on 406 of 606 pages (PERF-001) — so undefined would now render raw keys.
+  //
+  // Returning undefined was never the honest stand-in anyway. The product
+  // always mounts this panel under a provider, so the harness should supply
+  // one; the module mock below does exactly that and leaves every other
+  // context reading undefined as before.
+  useContext: () => undefined,
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => {
     const index = mocks.cursor++;
     const slots = mocks.slots;

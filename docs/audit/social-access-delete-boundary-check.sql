@@ -1,4 +1,4 @@
--- Behavioural proof for 0334, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0319 (0377 on the audit branch, dropped as its duplicate at the merge), run as real `authenticated` sessions under RLS.
 --
 -- A social role is an explicit restriction OR an explicit grant, stored as one row
 -- per (family, user) in social_access_permissions. With no row, social_role_for
@@ -21,9 +21,9 @@ grant usage on schema public to authenticated;
 do $$
 declare
   fam        uuid := 'aaa50000-0000-4000-8000-00000000005a';
-  parent_uid uuid := 'a5000000-0000-4000-8000-000000000001';
-  adult_uid  uuid := 'a5000000-0000-4000-8000-000000000002';
-  teen_uid   uuid := 'a5000000-0000-4000-8000-000000000003';
+  parent_uid uuid := 'a5100000-0000-4000-8000-000000000001';
+  adult_uid  uuid := 'a5100000-0000-4000-8000-000000000002';
+  teen_uid   uuid := 'a5100000-0000-4000-8000-000000000003';
   adult_row  uuid;
   teen_row   uuid;
   n          int;
@@ -63,7 +63,7 @@ begin
     raise exception 'fixture: the adult should start read_only without publish (got %, %)', v_role, can_pub;
   end if;
 
-  -- 1. Cannot delete their own restriction. Before 0334: DELETE 1, and the role
+  -- 1. Cannot delete their own restriction. Before 0319: DELETE 1, and the role
   --    fell back to marketing_manager.
   delete from public.social_access_permissions where id = adult_row;
   get diagnostics n = row_count;

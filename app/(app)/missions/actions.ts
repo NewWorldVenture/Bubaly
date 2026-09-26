@@ -102,6 +102,11 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  // The zone an approval's day key is resolved in. It is read once, here, and
+  // threaded down: `applyCompletionRewards` takes it as a REQUIRED argument with
+  // no default, because a defaulted zone is a Greenwich answer wearing a
+  // family's name.
+  const tz = ctx.active.family.timezone || 'UTC';
   const assignmentId = str(formData, 'assignment_id');
   if (!assignmentId) return { ok: false, error: t('actions.missingAssignment') };
 
@@ -216,7 +221,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(service, { familyId, tz: scopeFromUserContext(ctx, supabase).tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
@@ -253,9 +258,15 @@ async function finalizeApproval(
   const reward = computeReward(rewardConfig(args.chore), args.score);
   const points = args.pointsOverride ?? reward.points;
   const cashCents = args.cashOverride ?? reward.cashCents;
+  // ONE instant for this approval. `approved_at` is a timestamptz — the moment —
+  // and the chore engine's day key is that same moment read on the family's wall
+  // clock. Reading the clock twice is how a row ends up carrying two times that
+  // disagree; `args.tz` is what turns the one instant into the family's day
+  // rather than Greenwich's.
+  const now = new Date();
 
   const { data: approvedAssignment, error: approvalError } = await supabase.from('chore_assignments').update({
-    status: 'approved', approved_at: new Date().toISOString(), approved_by: args.actorId,
+    status: 'approved', approved_at: now.toISOString(), approved_by: args.actorId,
     points_awarded: points, cash_awarded_cents: cashCents,
   }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).select('id').single();
   if (approvalError || !approvedAssignment) throw new Error('Could not save chore approval');
@@ -264,8 +275,7 @@ async function finalizeApproval(
     await applyCompletionRewards(supabase, {
       familyId: args.familyId, memberId: args.assignment.member_id as string,
       difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
-      // The streak is counted in the family's day; see lib/chores/server.ts.
-      tz: args.tz,
+      tz: args.tz, now,
     });
   } catch (error) {
     const { error: rollbackError } = await supabase.from('chore_assignments').update({
@@ -311,6 +321,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<{ ok:
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan') };
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  const tz = ctx.active.family.timezone || 'UTC';
   const submissionId = str(formData, 'submission_id');
   if (!submissionId) return { ok: false, error: t('actions.missingSubmission') };
 
@@ -332,8 +343,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<{ ok:
   }
   try {
     await finalizeApproval(supabase, {
-      familyId, tz: scopeFromUserContext(ctx, supabase).tz,
-      assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
   } catch (err) {

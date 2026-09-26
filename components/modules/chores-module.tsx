@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -30,11 +30,12 @@ import { requestRedemptionAction } from '@/app/(app)/dashboard/rewards/actions';
 import { formatCents } from '@/lib/wallet/ledger';
 import {
   topEarners, streaksByMember, groupByRecurrence, rewardsProgress, totalFamilyPoints,
-  pointsByMember, dueLabel, choreEmoji, isCompleted, RANK_MEDALS,
+  pointsByMember, dueLabel as dueLabelIn, choreEmoji, isCompleted, RANK_MEDALS,
   type AssignmentLike,
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -55,16 +56,18 @@ const DUE_TONE: Record<string, string> = {
   overdue: 'text-rose-400', today: 'text-amber-400', soon: 'text-amber-300', normal: 'text-muted', none: 'text-muted',
 };
 
-function timeAgo(iso: string | null): string {
+const timeAgoIn = (locale: LocaleCode) => (iso: string | null): string => {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
-}
+  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
+};
 
 export function ChoresModule() {
+  const locale = useLocale();
+  const timeAgo = timeAgoIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
@@ -209,6 +212,17 @@ export function ChoresModule() {
     if (!result.ok) return toastError(result.error);
     success(manager ? 'Reward redeemed!' : 'Redemption requested');
   }
+
+// The open row menu was dismissed by clicking anywhere on the page wrapper —
+  // a mouse-only dismissal. A keyboard user could open the menu and had no way
+  // to close it. The wrapper's onClick stays as the mouse convenience; Escape is
+  // the keyboard's equivalent, and neither is a control worth a tab stop.
+  useEffect(() => {
+    if (!menuFor) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuFor(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuFor]);
 
   if (loading) return <SkeletonList count={6} />;
   // The rewards read matters too: it is what the redemption list is priced
@@ -557,10 +571,13 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
   // the home page buckets the same instant with the family's zone — labelling
   // it against this device's instead made one chore "Tomorrow" here and
   // "Today" there for anyone whose phone is not set to the household's zone.
+  // The words and the date format follow the reader.
   const { family } = useApp();
   const tz = family?.timezone || 'UTC';
+  const locale = useLocale();
+  const dueLabel = (due: string | null) => dueLabelIn(due, dayKeyIn(new Date(), tz), tz, locale.code, tr);
   const member = memberById.get(a.member_id);
-  const due = dueLabel(a.due_at, dayKeyIn(new Date(), tz), tz);
+  const due = dueLabel(a.due_at);
   const status = STATUS_META[a.status] ?? STATUS_META.todo;
   const StatusIcon = status.icon;
   const done = isCompleted(a.status);
@@ -674,12 +691,13 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 }
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
+  const locale = useLocale();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
-        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Done'}</div>
+        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : 'Done'}</div>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {a.points_awarded ?? a.chore?.points ?? 0} pts</span>
     </div>

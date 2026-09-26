@@ -46,6 +46,12 @@ export function oversizeMessage(count: number): string | null {
  * randomUUID is 122 random bits. The fallback covers browsers without it (it is
  * unavailable on insecure origins) and still mixes in randomness rather than
  * leaning on the clock alone.
+ *
+ * The uploaded file's OWN extension rides along — `<uuid>.webp`, `<uuid>.HEIC` —
+ * because the public URL is what an <img>, a download and the operating system
+ * read the type from. A file that arrives without one keeps none: an invented
+ * `.jpg` would label a PDF or a video as a photo, and unguessable does not mean
+ * untyped. Both properties hold at once, which is the whole point of the helper.
  */
 export function familyMediaPath(familyId: string, folder: string, fileName: string): string {
   return `${familyId}/${folder}/${unguessableObjectName(fileName)}`;

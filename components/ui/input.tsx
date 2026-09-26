@@ -134,3 +134,9 @@ export function Field({
     </div>
   );
 }
+
+/** What a control needs to report its own state, for a render prop that wants it. */
+export type FieldAria = {
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
+};

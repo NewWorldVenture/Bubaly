@@ -228,21 +228,20 @@ describe('the endpoints refuse before they look anything up', () => {
   const alexa = readFileSync('app/api/assistant/alexa/route.ts', 'utf8');
 
   it('rate limits by IP before touching the token', () => {
-    // Otherwise the endpoint is a way to test guessed tokens at speed.
+    // Not because it stops token guessing — a link token is 32 CSPRNG bytes
+    // stored as a SHA-256, so the keyspace is that defence. Because every
+    // accepted request reads the family and calls a model, and the lookup is
+    // where that starts.
     //
     // Compared at the CALL sites. The first attempt compared the first
     // occurrence of each name, and `resolveAssistantLink` appears first in the
     // import block at the top of the file — so it measured import order and
     // would have failed no matter how the handler was written.
-    //
-    // Anchored on the KEY rather than the limiter's name, which is the second
-    // time this assertion's mechanism has been wrong while its question was
-    // right. It matched the literal `rateLimit(\`assistant`, so swapping the
-    // in-process limiter for the durable `enforceRequestRateLimit(supabase, …)`
-    // broke it even though the ordering it exists to protect was untouched.
-    // The key is what makes a call THE rate limit for this route, and it does
-    // not move when the implementation behind it does.
-    const limitIndex = generic.search(/RateLimit\([^)]*`assistant:|rateLimit\(`assistant:/);
+    // Matched on the KEY rather than the function name: the gate moved from the
+    // per-instance `rateLimit` to the durable `enforceRequestRateLimit` and this
+    // went red on a change that made it stronger. What must be true is that the
+    // limit for this route runs before the lookup, whichever limiter enforces it.
+    const limitIndex = generic.search(/[Rr]ate[Ll]imit\([^`]*`assistant:/);
     const lookupIndex = generic.indexOf('await resolveAssistantLink(');
     expect(limitIndex).toBeGreaterThan(-1);
     expect(lookupIndex).toBeGreaterThan(-1);

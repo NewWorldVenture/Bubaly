@@ -21,9 +21,10 @@ import type { Tables } from '@/lib/database.types';
 import {
   POLICY_TYPES, PREMIUM_FREQUENCIES, policyTypeMeta, frequencyMeta,
   annualPremium, renewalUrgency, upcomingRenewals, premiumByType,
-  insuranceSummary, fmtMoney, type RenewalUrgency,
+  insuranceSummary, fmtMoney as fmtPolicyMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -34,12 +35,23 @@ const URGENCY_STYLE: Record<RenewalUrgency, string> = {
   none: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+// A renewal date is midnight LOCAL on the stored day: reading the bare date as UTC
+// shows the day before to anyone west of Greenwich, which is why the 'T00:00:00' is
+// appended rather than parsed as-is. The locale is the reader's.
+function policyDate(d: string, locale: LocaleCode): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`)
+    .toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function InsuranceModule() {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Bound once per component so the twelve call sites below read unchanged. The
+  // amounts are whole dollars, so they go through the policies module's formatter
+  // rather than the cents one in lib/utils/format.ts.
+  const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
+  const fmtDate = (d: string) => policyDate(d, locale.code);
+
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -277,6 +289,13 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Bound once per component so the twelve call sites below read unchanged. The
+  // amounts are whole dollars, so they go through the policies module's formatter
+  // rather than the cents one in lib/utils/format.ts.
+  const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
+  const fmtDate = (d: string) => policyDate(d, locale.code);
+
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
   const u = renewalUrgency(policy.renewal_date);

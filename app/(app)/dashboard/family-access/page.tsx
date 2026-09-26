@@ -21,25 +21,23 @@ export default async function FamilyAccessPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [membersResult, loginsResult] = await settleAll([
+  const [{ data: members, error: membersError }, { data: logins, error: loginsError }] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),
   ]);
 
-  // `settleAll` hands back `{ data: null, error }` on a failed read, so
-  // destructuring `{ data }` alone turns an outage into an EMPTY PAGE. Here that
-  // page says a family has no kid logins and offers to create them — an
-  // access-control record, reported absent because a query failed. The kids page
-  // states the same principle about its own reads: a dropped error becomes a
-  // "reassuring-but-wrong" answer.
-  const accessError = membersResult.error ?? loginsResult.error;
-  if (accessError) {
-    console.error('[family-access] access read failed', accessError);
-    return <ErrorState message={t('root.somethingWentWrong')} />;
+  // A dropped child_logins error is not a blank row — it CHANGES WHAT THE PAGE
+  // OFFERS. `usernameByMember` drives the choice below between "reset this
+  // child's PIN" and "give this child a login", so an unread failure makes every
+  // existing login look absent and turns the whole list into create-a-login
+  // prompts for children who already have one. That is a write offered on the
+  // strength of a read that did not happen.
+  const readError = membersError ?? loginsError;
+  if (readError) {
+    console.error('[dashboard/family-access] access read failed', readError);
+    return <ErrorState message={t('familyAccess.couldNotLoadChildLogins')} />;
   }
-  const { data: members } = membersResult;
-  const { data: logins } = loginsResult;
 
   const usernameByMember = new Map((logins ?? []).map((l) => [l.member_id, l.username]));
 

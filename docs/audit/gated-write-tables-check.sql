@@ -12,7 +12,7 @@
 --
 -- Deriving it from the migration SQL was tried three times and cannot work. The
 -- third attempt failed STRUCTURALLY rather than by a bug: a large share of these
--- policies are generated inside PL/pgSQL loops, e.g. 0328 —
+-- policies are generated inside PL/pgSQL loops, e.g. 0371 —
 --
 --   execute format('create policy %1$s_mng_update on public.%1$I for update
 --                   to authenticated using (public.can_manage_family(family_id))', t);
@@ -50,28 +50,35 @@ do $$
 declare
   measured text[];
   recorded text[] := array[
-    -- Measured on a full 345-migration replay. A table joins this list when a
+    -- Measured on a full 374-migration replay (main 0001-0360 + PR #548).
+    -- A table joins this list when a
     -- migration narrows its UPDATE or DELETE; it leaves when one widens it. Do
     -- not edit by hand to make this probe pass — the probe IS the measurement,
     -- and a disagreement means the client guard's list needs the same change.
     'ai_conversations', 'ai_messages', 'allowance_rules', 'approval_requests',
-    'assistant_links', 'babysitter_payments', 'babysitter_profiles', 'behavior_logs',
-    'billing_customers', 'bills', 'budgets', 'call_logs', 'care_log', 'child_logins',
-    'child_wallets', 'currency_transactions', 'documents', 'driver_licenses',
-    'driving_trips', 'economy_redemptions', 'economy_rewards', 'emergency_sessions',
-    'event_rsvps', 'family_ai_settings', 'family_automation_rules',
-    'family_automation_runs', 'family_communications', 'family_credentials',
-    'family_currencies', 'family_facts', 'family_members', 'family_places',
+    'assistant_links', 'autopilot_suggestions', 'babysitter_payments',
+    'babysitter_profiles', 'behavior_logs', 'billing_customers', 'bills',
+    'budgets', 'call_logs', 'care_log', 'child_logins', 'child_wallets',
+    'compliance_disclosures', 'concierge_calls', 'currency_transactions',
+    'dashboard_layouts', 'documents', 'driver_licenses', 'driving_trips',
+    'economy_redemptions', 'economy_rewards', 'emergency_sessions', 'event_rsvps',
+    'family_ai_settings', 'family_automation_rules', 'family_automation_runs',
+    'family_communications', 'family_credentials', 'family_currencies',
+    'family_dashboard_settings', 'family_digital_twin_profiles',
+    'family_emergency_contacts', 'family_emergency_plans', 'family_facts',
+    'family_members', 'family_places', 'family_playbook_suggestions',
     'family_wallets', 'financial_accounts', 'front_desk_settings', 'gift_links',
     'gift_payments', 'grades', 'guardian_contacts', 'guardian_member_profiles',
-    'guardian_routing_rules', 'health_goals',
-    'health_metrics', 'health_providers', 'health_visits', 'home_briefs',
-    'immunizations', 'independence_milestones', 'insurance_policies', 'invest_holdings', 'invest_orders',
-    'invites', 'journal_entries', 'library_progress', 'location_events',
+    'guardian_routing_rules', 'guardian_suggestions', 'health_goals',
+    'health_metrics', 'health_providers', 'health_visits', 'home_assets',
+    'home_briefs', 'immunizations', 'independence_milestones',
+    'insurance_policies', 'invest_holdings', 'invest_orders', 'invites',
+    'journal_entries', 'library_progress', 'location_events',
     'marketplace_listing_shares', 'marketplace_listings', 'marketplace_offers',
     'marketplace_orders', 'marketplace_stores', 'medical_profiles',
-    'medication_schedules', 'medications', 'member_locations', 'notifications',
-    'nutrition_logs', 'onboarding_progress', 'opportunities', 'parent_approvals',
+    'medication_schedules', 'medications', 'member_locations',
+    'money_timeline_insights', 'notifications', 'nutrition_logs',
+    'onboarding_progress', 'opportunities', 'parent_approvals', 'pay_handles',
     'permission_grants', 'push_devices', 'renewals', 'rewards', 'rides',
     'safety_check_ins', 'savings_goals', 'screen_time_limits', 'sleep_checkins',
     'sleep_logs', 'social_access_permissions', 'social_account_tokens',

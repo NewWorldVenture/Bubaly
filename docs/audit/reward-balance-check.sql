@@ -1,7 +1,7 @@
--- Behavioural proof for 0335, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0378, run as real `authenticated` sessions under RLS.
 --
 -- A redemption spends points when it ENTERS 'approved' or 'fulfilled'. Before
--- 0335 nothing below the browser checked the member could pay: a parent could
+-- 0378 nothing below the browser checked the member could pay: a parent could
 -- approve a reward for a child with no points, approve two requests that
 -- together cost more than the balance, or move a paid-for reward onto a sibling.
 --
@@ -28,6 +28,14 @@ declare
   n          int;
 begin
   -- ── Fixture, written with no session (as a seed would be) ────────────────
+  -- Re-runnable: the suite is run twice, and a second run must not meet the
+  -- first run's rows (the pattern locator-write-boundary-check.sql uses).
+  delete from public.reward_redemptions where family_id = fam;
+  delete from public.rewards            where family_id = fam;
+  delete from public.chore_assignments  where family_id = fam;
+  delete from public.chores             where family_id = fam;
+  delete from public.family_members     where user_id in (parent_uid, child_uid, sib_uid);
+  delete from public.families           where id = fam;
   insert into public.families (id, name) values (fam, 'Balance') on conflict do nothing;
   insert into auth.users (id, email) values
     (parent_uid, 'bal-p@example.test'), (child_uid, 'bal-c@example.test'), (sib_uid, 'bal-s@example.test')

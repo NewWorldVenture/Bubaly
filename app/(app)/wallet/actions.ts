@@ -342,25 +342,32 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   let paidCents = 0;
   for (const rule of rules ?? []) {
     const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
-    // CLAIM the schedule, don't just advance it. `.lte('next_run_on', today)` is
-    // the exclusivity guard: two overlapping runs both read the rule as due, but
-    // only ONE update matches a row — the first flips next_run_on into the
-    // future, and the loser matches none and skips. Without the predicate this
-    // update always matched, so a double-click here (or a click racing the
-    // nightly cron, whose own claim IS predicated) credited the allowance twice.
+    // CLAIM the schedule, the same way app/api/cron/wallet-allowance/route.ts
+    // does. `.lte('next_run_on', today)` is the exclusivity guard: if two runs
+    // overlap, both read the rule as due, but only ONE update matches a row —
+    // the first flips next_run_on into the future and the loser matches zero.
     //
-    // This is the exact regression tests/allowance-cron-idempotency.test.ts was
-    // written to prevent — "so the claim can't regress to a blind
+    // Without it, this action advanced by id alone, so both runs got a row back
+    // and both credited. Raced on two connections against a replayed database:
+    // the cron shape paid 1,000 cents once, this shape paid 2,000 twice, same
+    // rule and same seconds. The docstring above already claims the two are
+    // idempotent with each other — that was only true if they never overlapped,
+    // and `components/wallet/allowance-view.tsx` is a plain button, so two tabs
+    // or a double-tap during the nightly cron is all it takes.
+    //
+    // This is also the exact regression tests/allowance-cron-idempotency.test.ts
+    // was written to prevent — "so the claim can't regress to a blind
     // (double-crediting) update" — on the sibling path that test does not cover.
+    //
+    // A loser is not an error: it means the period is already paid, so `continue`
+    // rather than actionFailure. `maybeSingle`, because `single` treats zero rows
+    // as a failure and that is exactly the case this now expects.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId)
-      .lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
-    // Not an error: another run already claimed this rule. Skipping is what
-    // stops the second credit.
-    if (!advancedRule) continue;
+    if (!advancedRule) continue; // another run claimed this rule — do not double-pay
 
     if (runs > 0) {
       const res = await creditChildWallet(supabase, {
@@ -686,14 +693,19 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
   const row = {
     family_id: familyId, child_wallet_id: input.childWalletId, handle, is_active: true, created_by: ctx.user.id,
   };
-  const { error } = input.id
-    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true }).eq('id', input.id).eq('family_id', familyId)
-    : await supabase.from('pay_handles').insert(row);
+  const { data: written, error } = input.id
+    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true })
+      .eq('id', input.id).eq('family_id', familyId).select('id')
+    : await supabase.from('pay_handles').insert(row).select('id');
   if (error) {
     // Unique-violation fallback (race with the check above).
     if (error.code === '23505') return { ok: false, error: t('actions.thatPayIdIsAlready') };
     return actionFailure(error, t('actions.couldNotClaimThatPay'));
   }
+  // 0324 makes Pay-IDs manager-written and RLS FILTERS an update rather than
+  // refusing it, so a rename it filtered answered `error: null` while the
+  // handle outsiders pay to stayed what it was.
+  if (!written?.length) return { ok: false, error: t('actions.couldNotClaimThatPay') };
 
   await logWalletAudit(supabase, {
     family_id: familyId, actor_user_id: ctx.user.id, action: 'pay_handle_claimed',
@@ -710,8 +722,11 @@ export async function releasePayHandleAction(input: { id: string }): Promise<Res
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
+  const { data: released, error } = await supabase.from('pay_handles').delete()
+    .eq('id', input.id).eq('family_id', familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotReleaseThatPay'));
+  // A filtered delete leaves the Pay-ID live and payable; say so.
+  if (!released?.length) return { ok: false, error: t('actions.couldNotReleaseThatPay') };
   revalidatePath('/wallet/gift');
   return { ok: true };
 }

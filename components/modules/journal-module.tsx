@@ -58,7 +58,7 @@ export function JournalModule() {
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
     // reports success over a record that is still there.
-    // 0331: a journal is the one thing nobody else writes, so a blocked delete
+    // 0374: a journal is the one thing nobody else writes, so a blocked delete
     // here is the expected outcome for anyone but its author.
     const { data, error: delErr } = await supabase.from('journal_entries').delete()
       .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
@@ -100,8 +100,8 @@ export function JournalModule() {
                     </div>
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
-                    <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.edit')} onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (
@@ -198,7 +198,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };
     // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
     // not rewrite comes back `error: null` with nothing changed. See
-    // 0331 makes a journal nobody
+    // 0374 makes a journal nobody
     // else's, and tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
     // predicate bounds the write to one household and `.select('id')` makes
     // the empty result an answer. An INSERT needs neither — RLS refuses one

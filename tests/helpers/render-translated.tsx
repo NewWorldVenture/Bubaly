@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { getMessages, translate } from '@/lib/i18n/messages';
@@ -28,6 +28,19 @@ export function renderTranslated(node: ReactElement, locale = DEFAULT_LOCALE): s
     <LocaleProvider locale={localeOrDefault(locale)} source="default" messages={getMessages(locale)}>
       {node}
     </LocaleProvider>,
+  );
+}
+
+/**
+ * The same provider as an ELEMENT, for a tree that must also sit inside another
+ * provider or be rendered by something other than renderToStaticMarkup. Main's
+ * half of this helper; the two branches wrote one each and they are merged here.
+ */
+export function withLocale(node: ReactNode, locale: string = DEFAULT_LOCALE): ReactElement {
+  return (
+    <LocaleProvider locale={localeOrDefault(locale)} source="default" messages={getMessages(localeOrDefault(locale).code)}>
+      {node}
+    </LocaleProvider>
   );
 }
 

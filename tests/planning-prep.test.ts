@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { generatePrepPlans, actionablePlans, type HorizonSignal } from '@/lib/planning/prep';
 
-const NOW = new Date('2026-07-06T12:00:00Z');
+// The FAMILY's day, not an instant. `generatePrepPlans` used to take a `now`
+// and slice its `toISOString()`, which answered Greenwich; it now takes the day
+// key its caller has already resolved in the family's zone. Every expectation
+// below is unchanged, because '2026-07-06' is exactly what the old call
+// produced for this instant — the contract these cases pin never involved a
+// clock, only a day.
+const TODAY = '2026-07-06';
 
 const signals: HorizonSignal[] = [
   { id: 'trip1', kind: 'trip', title: 'Beach Trip', date: '2026-07-27' },       // 21 days out
@@ -12,12 +18,12 @@ const signals: HorizonSignal[] = [
 
 describe('generatePrepPlans', () => {
   it('drops past-dated signals', () => {
-    const plans = generatePrepPlans(signals, NOW);
+    const plans = generatePrepPlans(signals, TODAY);
     expect(plans.some((p) => p.signalId === 'past')).toBe(false);
   });
 
   it('builds a titled, ordered plan per upcoming signal', () => {
-    const plans = generatePrepPlans(signals, NOW);
+    const plans = generatePrepPlans(signals, TODAY);
     expect(plans).toHaveLength(3);
     const trip = plans.find((p) => p.signalId === 'trip1')!;
     expect(trip.title).toBe('Get ready: Beach Trip');
@@ -29,7 +35,7 @@ describe('generatePrepPlans', () => {
   });
 
   it('computes each step due date as target minus lead days', () => {
-    const trip = generatePrepPlans([signals[0]], NOW)[0];
+    const trip = generatePrepPlans([signals[0]], TODAY)[0];
     const pack = trip.steps.find((s) => s.label.includes('Pack the night before'))!;
     expect(pack.leadDays).toBe(1);
     expect(pack.dueDate).toBe('2026-07-26'); // 27th minus 1
@@ -37,19 +43,19 @@ describe('generatePrepPlans', () => {
 
   it('marks steps whose lead window already opened as overdue', () => {
     // Beach trip in 21 days: the 30-day passport step opened 9 days ago → overdue.
-    const trip = generatePrepPlans([signals[0]], NOW)[0];
+    const trip = generatePrepPlans([signals[0]], TODAY)[0];
     const passport = trip.steps.find((s) => s.leadDays === 30)!;
     expect(passport.overdue).toBe(true);
     expect(trip.urgency).toBe('now'); // has an overdue step
   });
 
   it('flags near-term signals as urgent even without an overdue step', () => {
-    const doc = generatePrepPlans([signals[2]], NOW)[0]; // 4 days out
+    const doc = generatePrepPlans([signals[2]], TODAY)[0]; // 4 days out
     expect(doc.urgency).toBe('now');
   });
 
   it('classifies a far-off birthday as soon/later, not now', () => {
-    const bday = generatePrepPlans([signals[1]], NOW)[0]; // 57 days out
+    const bday = generatePrepPlans([signals[1]], TODAY)[0]; // 57 days out
     expect(bday.urgency).not.toBe('now');
   });
 
@@ -68,7 +74,7 @@ describe('generatePrepPlans', () => {
       { offset: 8, urgency: 'later' },
     ] as const)('is $urgency when the first step opens in $offset days', ({ offset, urgency }) => {
       const date = new Date(Date.UTC(2026, 6, 6 + leadDays + offset)).toISOString().slice(0, 10);
-      const plans = generatePrepPlans([{ id: kind, kind, title: 'Upcoming plan', date }], NOW);
+      const plans = generatePrepPlans([{ id: kind, kind, title: 'Upcoming plan', date }], TODAY);
       const plan = plans[0];
 
       expect(plan.urgency).toBe(urgency);
@@ -80,23 +86,23 @@ describe('generatePrepPlans', () => {
   });
 
   it('sorts plans by target date', () => {
-    const plans = generatePrepPlans(signals, NOW);
+    const plans = generatePrepPlans(signals, TODAY);
     for (let i = 1; i < plans.length; i++) {
       expect(plans[i - 1].targetDate <= plans[i].targetDate).toBe(true);
     }
   });
 
   it('handles an unknown/empty template kind without steps', () => {
-    const plans = generatePrepPlans([{ id: 'e', kind: 'event', title: 'Recital', date: '2026-07-09' }], NOW);
+    const plans = generatePrepPlans([{ id: 'e', kind: 'event', title: 'Recital', date: '2026-07-09' }], TODAY);
     expect(plans[0].steps.length).toBeGreaterThan(0); // event has a template
   });
 
   it('actionablePlans counts only urgency=now', () => {
-    const plans = generatePrepPlans(signals, NOW);
+    const plans = generatePrepPlans(signals, TODAY);
     expect(actionablePlans(plans)).toBe(2); // trip (overdue step) + passport (near)
   });
 
   it('returns nothing for no signals', () => {
-    expect(generatePrepPlans([], NOW)).toEqual([]);
+    expect(generatePrepPlans([], TODAY)).toEqual([]);
   });
 });

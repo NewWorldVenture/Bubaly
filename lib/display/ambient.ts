@@ -6,6 +6,8 @@
 // in tests/display-ambient.test.ts.
 import { displayDayKey, displayTimezone } from '@/lib/display/calendar';
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 // ── Day parts ────────────────────────────────────────────────────────────────
 export type DayPart = 'dawn' | 'morning' | 'afternoon' | 'evening' | 'night';
 
@@ -181,19 +183,38 @@ export function nowAndNext<T extends TimedEvent>(
   return { current, next };
 }
 
-/** Human countdown/time label for an event relative to `now`. */
-export function countdownLabel(startsAt: string, now: Date, timezone?: string): string {
-  const t = new Date(startsAt).getTime();
-  if (!Number.isFinite(t) || !Number.isFinite(now.getTime())) return '';
-  const diffMs = t - now.getTime();
+/**
+ * Human countdown/time label for an event relative to `now` — the Kitchen
+ * Display's Now/Next strip.
+ *
+ * FORWARD-facing, which is why it does not use the shared `fmtTimeAgo`: this says
+ * "in 15 min" and "Sat 3:00 PM", not "15m ago". The clock and the weekday take
+ * the locale; "Now" and "in {minutes} min" are copy, so they take a translator the
+ * caller supplies and fall back to English without one — the same contract
+ * `fmtRelative` uses for "Today" and "Tomorrow". The day comparison and both
+ * formatters take the family's timezone, so a late evening on the screen is not
+ * tomorrow because the server says so.
+ */
+export function countdownLabel(
+  startsAt: string,
+  now: Date,
+  timezone?: string,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const at = new Date(startsAt).getTime();
+  if (!Number.isFinite(at) || !Number.isFinite(now.getTime())) return '';
+  const diffMs = at - now.getTime();
   const diffMin = Math.ceil(diffMs / 60_000);
-  if (diffMs === 0) return 'Now';
-  if (diffMin > 0 && diffMin < 60) return `in ${diffMin} min`;
+  if (diffMs === 0) return t ? t('ambient.now') : 'Now';
+  if (diffMin > 0 && diffMin < 60) {
+    return t ? t('ambient.inNMin', { minutes: diffMin }) : `in ${diffMin} min`;
+  }
   const d = new Date(startsAt);
   const zone = timezone ? displayTimezone(timezone).timezone : undefined;
   const sameDay = zone ? displayDayKey(d, zone) === displayDayKey(now, zone) : d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: zone });
-  return sameDay ? time : `${d.toLocaleDateString('en-US', { weekday: 'short', timeZone: zone })} ${time}`;
+  const time = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone: zone }).format(d);
+  return sameDay ? time : `${new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: zone }).format(d)} ${time}`;
 }
 
 // ── Kitchen timers ───────────────────────────────────────────────────────────

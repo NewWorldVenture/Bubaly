@@ -7,6 +7,7 @@ import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
 import { SessionKeeper } from '@/components/auth/session-keeper';
 import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
+import { ConfirmProvider } from '@/components/ui/confirm';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
 // admin, family, missions, etc. It does two things: mounts the SessionKeeper so
@@ -23,7 +24,13 @@ import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   return (
     <ScopedLocaleProvider namespaces="all">
-      <AuthenticatedShell>{children}</AuthenticatedShell>
+      {/* Destructive actions ask here rather than in the root layout: every one
+          of them is behind this login, and mounting the dialog at the root would
+          put its strings (and the Modal's) in the scope every marketing page
+          ships. */}
+      <ConfirmProvider>
+        <AuthenticatedShell>{children}</AuthenticatedShell>
+      </ConfirmProvider>
     </ScopedLocaleProvider>
   );
 }

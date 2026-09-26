@@ -2,6 +2,7 @@
 // views. Transaction-type labels, signed display, day grouping and filtering.
 // No Supabase/React; the immutable ledger rows are the input.
 import type { WalletTxnType } from '@/lib/database.types';
+import { localDayKeyOf } from '@/lib/time/local-day';
 
 const TYPE_LABEL: Record<string, string> = {
   gift_received: 'Gift', parent_top_up: 'Top-up', allowance: 'Allowance', chore_reward: 'Chore reward',
@@ -45,7 +46,14 @@ export function filterTxns<T extends ActivityTxn>(txns: T[], f: ActivityFilter):
 export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: string; txns: T[] }> {
   const map = new Map<string, T[]>();
   for (const t of txns) {
-    const day = t.created_at.slice(0, 10);
+    // The READER's day, not Greenwich's. `.slice(0, 10)` on an ISO timestamp is
+    // the day at Greenwich, so a 21:00 Saturday transaction in Los Angeles was
+    // filed under Sunday — in a statement the family reads to reconcile their own
+    // week. Every caller of this is a CLIENT component, where the runtime IS the
+    // reader, so `localDayKeyOf` is the right answer and no zone has to be
+    // threaded; `lib/time/local-day.ts` exists for exactly this and carries no
+    // server-only import.
+    const day = localDayKeyOf(t.created_at) ?? t.created_at.slice(0, 10);
     const arr = map.get(day) ?? [];
     arr.push(t);
     map.set(day, arr);
@@ -99,8 +107,15 @@ export function toStatementCsv(txns: CsvTxn[]): string {
 
   const rows = txns.map((t) => {
     const iso = t.created_at;
-    const date = iso.slice(0, 10);
-    const time = iso.slice(11, 19) || '';
+    // Same defect one row over, and both halves of it: the CSV's DATE and its
+    // TIME were sliced straight out of the UTC string, so an exported statement
+    // disagreed with the screen it was exported from.
+    const local = new Date(iso);
+    const valid = !Number.isNaN(local.getTime());
+    const date = (valid ? localDayKeyOf(iso) : null) ?? iso.slice(0, 10);
+    const time = valid
+      ? `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}:${String(local.getSeconds()).padStart(2, '0')}`
+      : iso.slice(11, 19) || '';
     return [
       date,
       time,

@@ -68,41 +68,13 @@ const OVERLAYS: Record<string, string> = {
  * translations fails the first rule below; a key translated everywhere fails the
  * second until it is deleted from here.
  */
-const UNTRANSLATED: string[] = [
-  "actions.missingSubmission",
-  "actions.submissionNotFound",
-  "actions.couldNotApproveTryAgain",
-  "actions.couldNotAwardTheRewardTryAgain",
-  "actions.couldNotSaveThatDecision",
-  "actions.couldNotSendThatToAParent",
-  "actions.giveTheChoreATitle",
-  "actions.couldNotCreateTheChore",
-  "actions.couldNotAssignTheChore",
-  "quickCapture.task",
-  "quickCapture.note",
-  "quickCapture.event",
-  "quickCapture.shopping",
-  "quickCapture.egPackLunches",
-  "quickCapture.jotSomethingDown",
-  "quickCapture.egDentistAt3pm",
-  "quickCapture.egMilk",
-  "quickCapture.undo",
-  "quickCapture.itemsAdded",
-  "quickCapture.saved",
-  "commandBar.undo",
-  "commandBar.itemsAdded",
-  "displayComfort.auto",
-  "displayComfort.followYourRole",
-  "roleSurface.densityStandard",
-  "roleSurface.densityCozy",
-  "roleSurface.densityRelaxed",
-  "roleSurface.densityStandardDesc",
-  "roleSurface.densityCozyDesc",
-  "roleSurface.densityRelaxedDesc",
-  "trialPaywallGate.familyBasic",
-  "trialPaywallGate.familyPlus",
-  "trialPaywallGate.basicTagline",
-  "trialPaywallGate.plusTagline",];
+// EMPTY. The thirty-four this list held — the quick-capture sheet, the command
+// bar's undo, display comfort, the role-surface densities, the paywall's plan
+// names and taglines, and nine mission actions — were translated into all six
+// complete catalogues when main was merged (Q68), because main's
+// tests/an-empty-locale-says-it-is-a-placeholder.test.ts holds every
+// non-placeholder locale to the whole English key set with no backlog at all.
+const UNTRANSLATED: string[] = [];
 
 const COMPLETE = readdirSync(DIR)
   .filter((f) => f.endsWith('.json') && f !== 'en-US.json' && !OVERLAYS[f]);

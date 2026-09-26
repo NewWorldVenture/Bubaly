@@ -1,5 +1,7 @@
 // Weekend Planner display + option metadata. Pure, no deps.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 /** Mileage radius choices for the "near me" dropdown. */
 export const RADIUS_OPTIONS = [5, 10, 25, 50, 75, 100] as const;
 export type RadiusMiles = (typeof RADIUS_OPTIONS)[number];
@@ -31,12 +33,41 @@ export const PLAN_STATUSES: { value: 'interested' | 'going' | 'maybe' | 'passed'
 
 export const isValidZip = (zip: string): boolean => /^\d{5}$/.test(zip.trim());
 
-export const dollars = (cents: number | null | undefined): string =>
-  cents == null ? '' : `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+export const dollars = (cents: number | null | undefined, locale: LocaleCode = DEFAULT_LOCALE): string =>
+  cents == null
+    ? ''
+    : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 
-/** "$10–$45", "from $10", or "" when unknown. */
-export function priceRange(min: number | null | undefined, max: number | null | undefined): string {
+/**
+ * "$10–$45", "from $10", or "" when unknown.
+ *
+ * The amounts follow the reader; "from" and "up to" are copy, so they take a
+ * translator the caller supplies and fall back to English without one — the same
+ * contract `fmtRelative` uses for "Today" and "Tomorrow".
+ */
+export function priceRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string {
   if (min == null && max == null) return '';
-  if (min != null && max != null) return min === max ? dollars(min) : `${dollars(min)}–${dollars(max)}`;
-  return min != null ? `from ${dollars(min)}` : `up to ${dollars(max)}`;
+  if (min != null && max != null) {
+    return min === max ? dollars(min, locale) : `${dollars(min, locale)}–${dollars(max, locale)}`;
+  }
+  if (min != null) {
+    const price = dollars(min, locale);
+    return t ? t('weekend.priceFrom', { price }) : `from ${price}`;
+  }
+  const price = dollars(max, locale);
+  return t ? t('weekend.priceUpTo', { price }) : `up to ${price}`;
 }

@@ -78,7 +78,9 @@ describe('a read that drops its error is named, with why that is harmless', () =
     const writeBacks = src('components/concierge/plan-write-backs.tsx');
     expect(writeBacks).toMatch(/if \(error\) \{ setLoadFailed\(true\); return; \}/);
     expect(writeBacks).toMatch(/busy === o\.kind \|\| loadFailed/);
-    expect(src('app/(app)/guardian/rules/page.tsx')).toMatch(/\{rulesError \? \(\s*<ErrorState/);
+    // Main fixed the same read the same way and its spelling was kept at the
+    // merge; what is asserted is that the error decides what renders.
+    expect(src('app/(app)/guardian/rules/page.tsx')).toMatch(/\{error \? <ErrorState/);
     expect(src('components/dashboard/ai-home-dashboard.tsx')).toMatch(/const toUpsert = existingError \? \[\] : candidates/);
   });
 });

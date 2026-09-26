@@ -35,22 +35,22 @@ describe('the lightbox is a dialog, and says so', () => {
     // gone. The question is unchanged — does the lightbox take the SHARED
     // behaviour, and is it wired to the overlay?
     expect(SRC).toMatch(/from '@\/lib\/a11y\/use-dialog-behavior'/);
-    expect(SRC).toMatch(/useDialogBehavior\(lightboxRef, lightboxOpen,/);
+    expect(SRC).toMatch(/useDialogBehavior\(lightboxRef, lightboxIdx !== null,/);
     // The ref the hook hands back has to reach the overlay, or the trap has no
     // boundary and the hook is imported scenery.
     expect(SRC).toMatch(/ref=\{lightboxRef\}/);
   });
 
-  it('announces itself as a modal dialog with a name', () => {
+  it('announces itself as a dialog with a name, and does not claim aria-modal', () => {
+    // Main's rule, taken at the merge: only the shared Modal declares
+    // aria-modal, and the list of overlays that declare it themselves may only
+    // shrink. The Escape, trap and restore that the attribute promises are the
+    // hook's, above; what is left out is the CLAIM, not the behaviour. So this
+    // asserts the role and the name, and the absence.
     const overlay = SRC.slice(SRC.indexOf('ref={lightboxRef}'), SRC.indexOf('ref={lightboxRef}') + 600);
     expect(overlay).toMatch(/role="dialog"/);
-    expect(overlay).toMatch(/aria-modal="true"/);
-    // Named by the counter (and the caption when there is one) — both already on
-    // screen, so the name is translated by construction rather than by a new key
-    // in eleven locales.
-    expect(overlay).toMatch(/aria-labelledby=/);
-    expect(SRC).toMatch(/id=\{lightboxLabelId\}/);
-    expect(SRC).toMatch(/id=\{lightboxCaptionId\}/);
+    expect(overlay).not.toMatch(/aria-modal=/);
+    expect(overlay).toMatch(/aria-label=\{tr\('photosModule\.photoViewer'\)\}/);
   });
 });
 

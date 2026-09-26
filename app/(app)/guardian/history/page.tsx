@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { CallHistory } from '@/components/guardian/call-history';
+import { ErrorState } from '@/components/ui/states';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -23,14 +25,19 @@ export default async function HistoryPage({
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const { data: communications, count } = await supabase.from('guardian_communications')
+  // settleAll with one query rather than settle(): the Guardian tables are reached
+  // through a cast (`withGuardianTables`), and settle's single-value generic
+  // infers `unknown` from that builder while settleAll's tuple mapping keeps the
+  // response shape. Same guarantee either way — a transport rejection arrives as
+  // { data: null, error } instead of taking the page to the error boundary.
+  const [{ data: communications, count, error }] = await settleAll([supabase.from('guardian_communications')
     .select(
       'id, comm_type, direction, from_number, to_number, from_name, body, summary, sentiment, trust_level_at_time, routing_mode_used, ai_decision_reason, scam_detected, scam_type, scam_confidence, call_duration_secs, call_recording_url, status, started_at, ended_at',
       { count: 'exact' },
     )
     .eq('family_id', familyId)
     .order('started_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+    .range(offset, offset + pageSize - 1)]);
 
   const totalPages = Math.ceil((count ?? 0) / pageSize);
 
@@ -45,13 +52,19 @@ export default async function HistoryPage({
         </div>
         <div>
           <h1 className="text-xl font-bold leading-tight">{t('guardianHistory.communicationHistory')}</h1>
-          <p className="text-sm text-muted">{count ?? 0} total</p>
+          {/* No "0 total" on a failed read: the count is the claim. */}
+          <p className="text-sm text-muted">{error ? '—' : `${count ?? 0} total`}</p>
         </div>
       </div>
 
+      {/* A failed read used to render CallHistory's "No communications match your
+          filters" over a log that may be full of blocked scam calls — and invite
+          the reader to clear a filter that was never the problem. */}
+      {error ? <ErrorState message={t('guardianHistory.couldnTLoadTheCommunicationHistory')} /> : (
       <CallHistory
         communications={(communications ?? []) as unknown as Parameters<typeof CallHistory>[0]['communications']}
       />
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">

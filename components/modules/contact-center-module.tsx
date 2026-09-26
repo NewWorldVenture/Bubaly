@@ -22,6 +22,7 @@ import {
 } from '@/app/(app)/dashboard/contact-center/actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Channel = Tables<'family_contact_channels'> | null;
 
@@ -40,20 +41,16 @@ const SMS_REPLY_COPY = {
   failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
 } as const;
 
-function timeAgo(iso: string): string {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
 export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
   smsReplyStatuses?: Record<string, SmsReplyStatus>;
 }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader. The ladder this replaced ended in a
+  // bare toLocaleDateString(), which follows the BROWSER's locale rather than the
+  // family's Bubaly choice — a defect the 'en-US' scan could not see.
+  const { fmtTimeAgo } = useFormat();
+  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
   const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -91,7 +88,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
       {/* Identity cards */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Email */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2"><Mail className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.familyEmailAddress')}</h2></div>
           {email ? (
             <p className="text-lg font-semibold tracking-tight">{email}</p>
@@ -122,7 +119,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
         </div>
 
         {/* Phone */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2"><Phone className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.familyPhoneNumber')}</h2></div>
           {phone ? (
             <p className="text-lg font-semibold tracking-tight">{formatPhone(phone)}</p>
@@ -154,7 +151,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
 
       {/* AI concierge controls */}
       {canManage && (
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2"><Bot className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.aiConcierge')}</h2></div>
             <button
@@ -209,16 +206,16 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
               const outbound = m.direction === 'outbound';
               const replyCopy = m.channel === 'sms' ? SMS_REPLY_COPY[smsReplyStatuses[m.id] ?? 'unavailable'] : null;
               return (
-                <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-card p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
+                <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-surface/40 p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
                   <div className="flex items-start gap-3">
-                    <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}><Icon className="h-4.5 w-4.5" /></span>
+                    <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}><Icon className="h-[1.125rem] w-[1.125rem]" /></span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {outbound
                           ? <span className="text-[10px] font-bold uppercase tracking-wide text-muted">{t('contactCenter.conciergeReply')}</span>
                           : <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.emoji} {meta.label}</span>}
                         <span className="text-xs text-muted">{outbound ? `to ${formatPhone(m.to_addr) }` : `from ${m.from_addr ? formatPhone(m.from_addr) : 'unknown'}`}</span>
-                        <span className="ml-auto text-[11px] text-muted/70">{timeAgo(m.occurred_at)}</span>
+                        <span className="ml-auto text-[11px] text-muted/70">{fmtTimeAgo7(m.occurred_at)}</span>
                       </div>
                       <p className="mt-1 text-sm text-fg">{m.ai_summary || m.body}</p>
                       {replyCopy && (

@@ -1,5 +1,6 @@
 import 'server-only';
 import { readAll } from './read-all';
+import { settleAll } from '@/lib/supabase/settle';
 
 /**
  * Run an `.in(column, ids)` read in batches.
@@ -22,15 +23,21 @@ export async function readInChunks<Row, Err>(
   ids: readonly string[],
   read: (chunk: string[]) => PromiseLike<{ data: Row[] | null; error: Err | null }>,
   chunkSize = 100,
-): Promise<{ data: Row[]; error: Err | null }> {
+  // A settled transport rejection arrives as { message }, which is not the
+  // caller's `Err`. Widening the return says so rather than casting it away.
+): Promise<{ data: Row[]; error: Err | { message: string } | null }> {
   if (ids.length === 0) return { data: [], error: null };
 
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
 
-  const settled = await Promise.all(chunks.map((chunk) => read(chunk)));
+  // settleAll, not Promise.all: a TRANSPORT rejection (DNS, TCP, TLS, an
+  // aborted fetch) rejects the whole batch, and the caller's error branch never
+  // runs — the page renders its error boundary instead of its degraded view.
+  // Settling turns that into the { error } shape every caller already handles.
+  const settled = await settleAll(chunks.map((chunk) => read(chunk)));
   const data: Row[] = [];
-  let error: Err | null = null;
+  let error: Err | { message: string } | null = null;
   for (const result of settled) {
     if (result.error && !error) error = result.error;
     if (result.data) data.push(...result.data);
@@ -67,13 +74,22 @@ export async function readAllInChunks<Row, Err = { message: string }>(
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
 
-  const settled = await Promise.all(
+  const settled = await settleAll(
     chunks.map((chunk) => readAll<Row, Err>((from, to) => page(chunk, from, to))),
   );
 
   const data: Row[] = [];
   for (const result of settled) {
     if (result.error) return { data: null, error: result.error };
+    // `settleAll`'s transport fallback is shaped for a Supabase QUERY result —
+    // { data, count, error } — and carries no `rows`, so the union needs an
+    // explicit narrowing rather than truthiness on `error`. A fallback always
+    // has an error and is returned above; this guard is for the type system and
+    // for the impossible case, which is reported rather than silently treated
+    // as an empty chunk.
+    if (!('rows' in result)) {
+      return { data: null, error: { message: 'chunked read settled without rows' } };
+    }
     data.push(...result.rows);
   }
   return { data, error: null };

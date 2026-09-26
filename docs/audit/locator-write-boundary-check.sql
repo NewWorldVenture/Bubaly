@@ -1,4 +1,4 @@
--- Behavioural proof for 0324, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0335 (main) and 0367 together, run as real `authenticated` sessions under RLS.
 --
 -- `app/(app)/dashboard/locator/actions.ts:30` says "Strictly self-only — a
 -- member can only post their own location", and the server action keeps that
@@ -75,7 +75,7 @@ begin
     raise exception 'a child can no longer see the family map';
   end if;
 
-  -- 1. Cannot move a parent's dot. Before 0324 this was INSERT/UPDATE 1.
+  -- 1. Cannot move a parent's dot. Before 0335 this was INSERT/UPDATE 1.
   update public.member_locations set latitude = 0, longitude = 0 where member_id = parent_mid;
   get diagnostics n = row_count;
   if n <> 0 then
@@ -158,20 +158,30 @@ begin
     raise exception 'a child can no longer withdraw their own check-in (%)', n;
   end if;
 
-  -- ── As the PARENT: a manager still clears a trail and a stale dot ────────
+  -- ── As the PARENT: the trail is append-only for EVERY client (main's 0335) ─
+  -- This probe used to assert a manager could still clear a trail and remove a
+  -- stale dot. Main's 0335 decided otherwise — no client deletes a location
+  -- event, and a member deletes only their own dot — and no application path
+  -- deletes either, so the stricter rule is asserted here instead.
   reset role;
   perform set_config('request.jwt.claim.sub', parent_uid::text, true);
   set local role authenticated;
 
   delete from public.location_events where member_id = kid_mid;
   get diagnostics n = row_count;
-  if n <> 1 then
-    raise exception 'a parent can no longer clear a location trail (%)', n;
+  if n <> 0 then
+    raise exception 'a parent erased a child''s location trail (%) — the trail is append-only for every client', n;
   end if;
   delete from public.member_locations where member_id = kid_mid;
   get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'a parent removed a child''s dot (%) — a member deletes only their own', n;
+  end if;
+  -- …and still withdraws their own.
+  delete from public.member_locations where member_id = parent_mid;
+  get diagnostics n = row_count;
   if n <> 1 then
-    raise exception 'a parent can no longer remove a stale location row (%)', n;
+    raise exception 'a parent can no longer remove their own dot (%)', n;
   end if;
 
   reset role;

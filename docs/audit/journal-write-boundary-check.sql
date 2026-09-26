@@ -1,4 +1,4 @@
--- Behavioural proof for 0331, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0374, run as real `authenticated` sessions under RLS.
 --
 -- `journal_entries` had ONE policy — `FOR ALL using/with check
 -- (is_family_member(family_id))` — so every member of a household could read,
@@ -103,7 +103,7 @@ begin
 
   -- 4. Handing their own entry to the parent — the WITH CHECK half. USING
   --    admits the row (it is theirs); only a symmetric WITH CHECK refuses the
-  --    row it would become. This is 0327's lesson applied here.
+  --    row it would become. This is 0370's lesson applied here.
   begin
     update public.journal_entries set member_id = parent_mid where id = kid_entry;
     raise exception 'a child moved their own entry into a parent''s journal';
@@ -137,5 +137,5 @@ begin
   delete from public.family_members   where user_id in (parent_uid, kid_uid);
   delete from public.families         where id = fam;
 
-  raise notice '0331 journal write boundary: all assertions held';
+  raise notice '0374 journal write boundary: all assertions held';
 end $$;

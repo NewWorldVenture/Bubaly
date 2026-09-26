@@ -19,8 +19,12 @@ const EMOJI: Record<MomentCategory, string> = {
   school: '🎒', outdoors: '🌳', general: '🎯',
 };
 
-function fmtClock(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+// A second, local `fmtClock` — lib/moments/prep.ts has one too, and this one had
+// neither a locale nor a zone. It renders the "Leave by …" half of a push
+// notification, so with no `timeZone` it announced the server's clock: a 16:00
+// leave-by in Los Angeles arriving as "Leave by 11:00 PM".
+function fmtClock(iso: string, timeZone?: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) });
 }
 
 /**
@@ -33,6 +37,7 @@ export function imminentMomentNotices(
   members: BirthdayMember[],
   now: Date = new Date(),
   horizonHours = 36,
+  timeZone?: string,
 ): MomentNotice[] {
   const horizon = now.getTime() + horizonHours * 3600_000;
   const merged: MomentEvent[] = [...(events ?? []), ...upcomingBirthdayEvents(members ?? [], now, 1)];
@@ -43,10 +48,13 @@ export function imminentMomentNotices(
     // Timed events must still be ahead; all-day events count through their day.
     if (e.all_day ? t < now.getTime() - 86_400_000 : t < now.getTime()) continue;
 
-    const prep = buildMomentPrep(e, { now });
+    const prep = buildMomentPrep(e, { now, timeZone });
     if (prep.category === 'general') continue;
 
-    const leave = prep.leaveByISO ? `Leave by ${fmtClock(prep.leaveByISO)}` : null;
+    // Both of these reach a phone as a PUSH NOTIFICATION, so the clock and the
+    // "Tomorrow" have to be the family's, not the server's. lib/server/notifications.ts
+    // has resolved their zone 200 lines before it calls this.
+    const leave = prep.leaveByISO ? `Leave by ${fmtClock(prep.leaveByISO, timeZone)}` : null;
     const steps = prep.items.slice(0, 3).map((i) => i.label).join(' · ');
     const body = [leave, steps || null].filter(Boolean).join(' — ') || 'Open Moments for the prep list.';
 
@@ -54,7 +62,7 @@ export function imminentMomentNotices(
       at: t,
       notice: {
         relatedId: `moment:${e.id}:${e.starts_at.slice(0, 10)}`,
-        title: `${EMOJI[prep.category]} Get ready: ${e.title} · ${momentWhen(e.starts_at, e.all_day, now)}`,
+        title: `${EMOJI[prep.category]} Get ready: ${e.title} · ${momentWhen(e.starts_at, e.all_day, now, undefined, undefined, timeZone)}`,
         body,
       },
     });

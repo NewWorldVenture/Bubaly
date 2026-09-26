@@ -21,8 +21,14 @@
 //
 // Escaping does not break values that legitimately contain these characters:
 // verified in PostgreSQL 16, `'smit_h' ilike 'smit\_h'` is true.
+//
+// `*` is escaped too, and it is not a SQL wildcard: it is PostgREST's own
+// spelling of `%` in a like/ilike value, so a class written against the LIKE
+// grammar does not contain it. Main found both of its search sanitizers missing
+// it for exactly that reason (a search for `*` became `%%%%`); the rule lives
+// here so the next caller cannot miss it a third time.
 export function escapeLike(value: string): string {
-  return value.replace(/[%_\\]/g, (m) => `\\${m}`);
+  return value.replace(/[\\%_*]/g, (m) => `\\${m}`);
 }
 
 // A pattern inside `.or(...)` needs MORE than escapeLike, and that is the part

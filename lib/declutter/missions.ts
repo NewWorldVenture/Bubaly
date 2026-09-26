@@ -6,6 +6,7 @@
 // progress visible. No AI needed to plan; the AI coach adds motivation + order.
 
 import type { DeclutterMissionStatus, DeclutterZoneKind } from '@/lib/database.types';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export type MissionTemplate = { title: string; minutes: number; points: number };
 
@@ -104,7 +105,9 @@ export type PlannedMission = { day: string; dayLabel: string; zone: ZoneLike; te
  * at most `perDay` missions a day, assignees round-robin. Zones that already
  * have a planned mission this week are skipped so re-planning never duplicates.
  */
-export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds: string[], today: Date, perDay = 2): PlannedMission[] {
+export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds: string[], today: Date, perDay = 2, locale: LocaleCode = DEFAULT_LOCALE): PlannedMission[] {
+  // The day chip on a seven-day plan reads "Mon"/"Mo"/"lun." — the reader's.
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
   const weekStart = isoDate(today);
   const weekEnd = isoDate(new Date(today.getTime() + 6 * DAY_MS));
   const alreadyPlanned = new Set(existing.filter((m) => m.status === 'planned' && m.scheduled_for && m.scheduled_for >= weekStart && m.scheduled_for <= weekEnd).map((m) => m.zone_id));
@@ -119,7 +122,7 @@ export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds
       const dayIndex = Math.floor(slot / perDay);
       if (dayIndex > 6) return plan;
       const d = new Date(today.getTime() + dayIndex * DAY_MS);
-      plan.push({ day: isoDate(d), dayLabel: d.toLocaleDateString('en-US', { weekday: 'short' }), zone, template, assigneeId: memberIds.length ? memberIds[slot % memberIds.length] : null });
+      plan.push({ day: isoDate(d), dayLabel: weekday.format(d), zone, template, assigneeId: memberIds.length ? memberIds[slot % memberIds.length] : null });
       slot += 1;
     }
   }

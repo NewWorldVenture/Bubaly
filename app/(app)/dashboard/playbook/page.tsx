@@ -15,12 +15,15 @@ export default async function PlaybookPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   // R2: the playbook learns preferences; the graph shows how they connect.
   // Shared-read failures stay visible while the primary playbook remains usable.
   let reasoning = null;
   let reasoningError = false;
   try {
-    reasoning = await loadFamilyContext(supabase, ctx.active.familyId);
+    reasoning = await loadFamilyContext(supabase, ctx.active.familyId, tz);
   } catch (error) {
     reasoningError = true;
     console.error('[dashboard/playbook] reasoning context read failed', error);

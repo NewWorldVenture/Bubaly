@@ -113,15 +113,17 @@ export function ScanModule() {
       />
 
       <div
-        role="button" tabIndex={0}
         // The same activation photos-module's drop zone already uses: a zone you
         // can click to open the file picker must be openable from a keyboard.
-        onKeyDown={(e) => { if (!scanning && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
         onClick={() => !scanning && fileRef.current?.click()}
+        onKeyDown={(e) => { if (!scanning && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
+        role="button"
+        tabIndex={scanning ? -1 : 0}
+        aria-disabled={scanning}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (!scanning) onFile(e.dataTransfer.files?.[0] ?? null); }}
         className={cn(
-          'flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/40 p-10 text-center transition hover:border-brand/50',
+          'focus-ring flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/40 p-10 text-center transition hover:border-brand/50',
           scanning && 'pointer-events-none opacity-70',
         )}
       >

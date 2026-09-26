@@ -88,9 +88,14 @@ export async function cancelCallAction(id: string): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanManage') };
   const supabase = await createServer();
-  const { error } = await supabase.from('concierge_calls')
-    .update({ status: 'cancelled' }).eq('id', id).in('status', ['draft', 'queued', 'action_needed']);
+  // Family-scoped and read back: RLS filters an update rather than refusing it,
+  // and so does the status fence, so zero rows is "this call did not change" —
+  // already placed, already cancelled, or not this family's — never a success.
+  const { data: rows, error } = await supabase.from('concierge_calls')
+    .update({ status: 'cancelled' }).eq('id', id).eq('family_id', ctx.active.familyId)
+    .in('status', ['draft', 'queued', 'action_needed']).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (!rows?.length) return { ok: false, error: t('actions.nothingWasChangedRefresh') };
   return { ok: true };
 }
 
@@ -103,9 +108,11 @@ export async function requeueCallAction(id: string, phone?: string): Promise<Res
   const supabase = await createServer();
   const patch: { status: string; callee_phone?: string } = { status: 'queued' };
   if (phone?.trim()) patch.callee_phone = phone.trim();
-  const { error } = await supabase.from('concierge_calls')
-    .update(patch).eq('id', id).in('status', ['draft', 'failed', 'action_needed']);
+  const { data: rows, error } = await supabase.from('concierge_calls')
+    .update(patch).eq('id', id).eq('family_id', ctx.active.familyId)
+    .in('status', ['draft', 'failed', 'action_needed']).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (!rows?.length) return { ok: false, error: t('actions.nothingWasChangedRefresh') };
   return { ok: true };
 }
 
@@ -123,10 +130,13 @@ export async function logCallOutcomeAction(id: string, outcome: string): Promise
   const text = (outcome ?? '').trim();
   if (text.length < 2) return { ok: false, error: t('actions.sayWhatHappenedOnThe') };
   const supabase = await createServer();
-  const { error } = await supabase.from('concierge_calls')
+  const { data: rows, error } = await supabase.from('concierge_calls')
     .update({ status: 'completed', outcome: text.slice(0, 2000), completed_at: new Date().toISOString() })
-    .eq('id', id).eq('family_id', ctx.active.familyId).in('status', ['draft', 'queued', 'failed', 'action_needed']);
+    .eq('id', id).eq('family_id', ctx.active.familyId).in('status', ['draft', 'queued', 'failed', 'action_needed'])
+    .select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  // No row moved, so there is nothing to audit and nothing was logged.
+  if (!rows?.length) return { ok: false, error: t('actions.nothingWasChangedRefresh') };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
     resource: 'concierge_calls', resourceId: id, metadata: { loggedByHand: true },

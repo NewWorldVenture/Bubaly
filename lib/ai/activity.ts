@@ -128,7 +128,6 @@ export function normalizeStatusFilter(raw: string | undefined): { status: AiRunS
  * feature name someone will reasonably type, and a dot inside the value half of
  * `column.operator.value` is not structural.
  */
-
 export type AiActivityPage = {
   rows: AiActivityRow[];
   /** Total matching the filters, not the page — the server counts, we do not guess. */

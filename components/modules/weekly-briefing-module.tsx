@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types (mirror the /api/ai/weekly-briefing JSON contract) ──────────────────
 
@@ -328,6 +328,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
 // ─── Main export ───────────────────────────────────────────────────────────────
 
 export function WeeklyBriefingModule() {
+  const locale = useLocale();
   const t = useTranslations();
   const [data, setData] = useState<WeeklyBriefingData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -372,7 +373,7 @@ export function WeeklyBriefingModule() {
     }
   }, [storageKey, t]);
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleString(locale.code, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   return (
     <div className="space-y-6">

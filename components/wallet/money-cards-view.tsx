@@ -19,7 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import {
   SPEND_WINDOWS, BLOCKABLE_CATEGORIES, type SpendWindow,
 } from '@/lib/wallet/card-controls';
@@ -27,7 +27,7 @@ import {
   startConnectOnboardingAction, issueCardAction, setCardFrozenAction, updateCardControlsAction,
 } from '@/app/(app)/money/actions';
 import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -330,6 +330,10 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   return (

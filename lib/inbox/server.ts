@@ -15,8 +15,9 @@
 //     from a source that did not answer, and the two never merge.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
+import type { Database, Json } from '@/lib/database.types';
 import { settleAll } from '@/lib/supabase/settle';
+import { paperworkSummary, paperworkSummaryFacts, type PaperworkReader } from '@/lib/paperwork/triage';
 import {
   countNeedsYou, unifyInbox,
   type CommunicationRow, type InboxMessageRow, type PaperworkRow, type UnifiedInboxItem,
@@ -24,6 +25,9 @@ import {
 
 /** How far back each source is pulled. The queue is "what needs me", not an archive. */
 export const PER_SOURCE_LIMIT = 60;
+
+/** The paperwork columns read here: what unify shows, plus what the summary is made of. */
+type StoredPaperworkRow = PaperworkRow & { actions: Json; amount: number | null; meta: Json };
 
 export type InboxQueueSources = { messages: boolean; paperwork: boolean; communications: boolean };
 
@@ -36,9 +40,17 @@ export type InboxQueueRead = {
   allFailed: boolean;
 };
 
+/**
+ * `reader` is the member looking at the queue. A paperwork row's stored
+ * `summary` is an en-US record (lib/paperwork/triage.ts, RECORD_LOCALE), so its
+ * snippet is re-rendered from the row's own columns in the reader's language,
+ * with the amount in the reader's format (I18N-003). Required: a default here is
+ * how every reader ends up with the writer's English.
+ */
 export async function loadInboxQueue(
   db: SupabaseClient<Database>,
   familyId: string,
+  reader: PaperworkReader,
   opts: { now?: Date } = {},
 ): Promise<InboxQueueRead> {
   const [messagesResult, paperworkResult, commsResult] = await settleAll([
@@ -51,7 +63,7 @@ export async function loadInboxQueue(
       .limit(PER_SOURCE_LIMIT),
     db
       .from('paperwork_items')
-      .select('id, kind, title, summary, sender, due_on, urgency, status, created_at')
+      .select('id, kind, title, summary, sender, due_on, urgency, status, created_at, actions, amount, meta')
       .eq('family_id', familyId)
       .in('status', ['needs_action', 'in_progress'])
       .order('created_at', { ascending: false })
@@ -80,7 +92,15 @@ export async function loadInboxQueue(
   // be an answer; `unavailable` is what tells the UI the difference.
   const items = allFailed ? [] : unifyInbox({
     messages: messagesResult.error ? [] : ((messagesResult.data ?? []) as InboxMessageRow[]),
-    paperwork: paperworkResult.error ? [] : ((paperworkResult.data ?? []) as PaperworkRow[]),
+    paperwork: paperworkResult.error ? [] : ((paperworkResult.data ?? []) as StoredPaperworkRow[]).map(
+      ({ actions, amount, meta, ...row }): PaperworkRow => ({
+        ...row,
+        // A row with no summary had nothing triaged to say; it stays empty.
+        summary: row.summary === null
+          ? null
+          : paperworkSummary(paperworkSummaryFacts({ kind: row.kind, meta, actions, due_on: row.due_on, amount }), reader),
+      }),
+    ),
     communications: commsResult.error ? [] : ((commsResult.data ?? []) as CommunicationRow[]),
     now: opts.now,
   });

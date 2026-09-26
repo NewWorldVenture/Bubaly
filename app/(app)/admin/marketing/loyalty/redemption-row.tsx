@@ -5,6 +5,7 @@ import { Check, X, Loader2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fulfillRedemptionAction, cancelRedemptionAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export type Redemption = {
   id: string; reward_name: string; cost_points: number; status: string; code: string | null;
@@ -49,7 +50,7 @@ export function RedemptionRow({ redemption }: { redemption: Redemption }) {
           <input type="hidden" name="id" value={r.id} />
           <input name="code" placeholder={t('adminMarketingLoyaltyRedemptionRow.fulfillmentCodeOptional')} className={inputCls} />
           <input name="notes" placeholder={t('adminMarketingLoyaltyRedemptionRow.notesOptional')} className={inputCls} />
-          <div className="sm:col-span-2"><button className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingLoyaltyRedemptionRow.markFulfilled')}</button></div>
+          <div className="sm:col-span-2"><SubmitButton className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingLoyaltyRedemptionRow.markFulfilled')}</SubmitButton></div>
         </form>
       )}
     </div>

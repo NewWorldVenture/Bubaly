@@ -57,7 +57,19 @@ describe('the search-index route', () => {
     expect(route).not.toMatch(/body:|heroImageUrl:|tags:|author:/);
   });
 
-  it('is rate limited', () => {
+  it('is bounded by the cache, with the per-instance limiter behind it', () => {
+    // `toContain('rateLimit(')` used to be the whole assertion, and on a
+    // serverless deployment that limiter is a bucket PER INSTANCE — the caller
+    // decides how many instances there are by sending in parallel. Everywhere
+    // else in app/api that is a defect (tests/no-route-gates-on-a-per-instance-limit).
+    //
+    // Here it is not, and the reason has to be asserted or the exemption is just
+    // a habit: no query string and a five-minute shared cache mean a hammer is
+    // answered by the CDN, so the origin sees roughly one request per five
+    // minutes per edge location. If either of those goes, the argument goes with
+    // it and this route needs the durable limiter like all the others.
+    expect(route).toMatch(/s-maxage=\d{3,}/);
+    expect(route).not.toMatch(/searchParams/);
     expect(route).toContain('rateLimit(');
     expect(route).toContain('429');
   });

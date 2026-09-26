@@ -1,4 +1,4 @@
--- Behavioural proof for 0319, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0362, run as real `authenticated` sessions under RLS.
 --
 -- `driving_trips` and `driver_licenses` are the two tables of one feature and
 -- did not carry the same rule. The licence had
@@ -131,5 +131,5 @@ begin
   delete from public.family_members where user_id in (parent_uid, teen_uid);
   delete from public.families       where id = fam;
 
-  raise notice '0319 driving score write boundary: all assertions held';
+  raise notice '0362 driving score write boundary: all assertions held';
 end $$;

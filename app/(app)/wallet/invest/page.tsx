@@ -10,6 +10,7 @@ import {
 } from '@/components/wallet/invest-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Wallet Invest' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,12 @@ export default async function WalletInvestPage() {
     supabase.from('invest_assets').select('id, symbol, name, kind, emoji, description, price_cents, risk_level').eq('is_active', true).order('sort_order'),
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
-    supabase.from('invest_holdings').select('child_wallet_id, asset_id, shares, avg_cost_cents').eq('family_id', familyId),
+    // Paged: PostgREST caps at db-max-rows whatever the client asks, so an
+    // unbounded read shows a portfolio computed from part of the holdings.
+    readAllAsQuery<{ child_wallet_id: string; asset_id: string; shares: number; avg_cost_cents: number }>(
+      (from, to) => supabase.from('invest_holdings').select('child_wallet_id, asset_id, shares, avg_cost_cents')
+        .eq('family_id', familyId).order('asset_id').range(from, to),
+    ),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId).eq('kind', 'invest'),
     supabase.from('invest_orders').select('id, child_wallet_id, asset_id, side, shares, amount_cents, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),
   ]);
@@ -47,9 +53,12 @@ export default async function WalletInvestPage() {
   const investBucketIds = new Map((buckets ?? []).map((b) => [b.id, b.child_wallet_id]));
   const investCashByChild = new Map<string, number>();
   if ((buckets ?? []).length > 0) {
-    const { data: txns, error: txnsError } = await supabase
-      .from('wallet_transactions').select('bucket_id, direction, amount_cents, status')
-      .eq('family_id', familyId).in('bucket_id', Array.from(investBucketIds.keys())).in('status', ['completed', 'processing']);
+    const { data: txns, error: txnsError } = await readAllAsQuery<{ bucket_id: string | null; direction: string; amount_cents: number; status: string }>(
+      (from, to) => supabase
+        .from('wallet_transactions').select('bucket_id, direction, amount_cents, status')
+        .eq('family_id', familyId).in('bucket_id', Array.from(investBucketIds.keys())).in('status', ['completed', 'processing'])
+        .order('id').range(from, to),
+    );
     if (txnsError) {
       console.error('[wallet-invest] Investment transactions read failed', txnsError);
       return <ErrorState message={tr('invest.couldNotLoadInvestmentCash2')} />;

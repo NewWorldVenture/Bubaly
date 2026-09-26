@@ -10,7 +10,8 @@ import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { QuickAdd } from '@/components/family/quick-add';
 import { DeleteButton } from '@/components/family/record-actions';
 import { ErrorState } from '@/components/ui/states';
-import { fmtRelative, firstName } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family COO' };
@@ -21,6 +22,12 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default async function FamilyCooPage() {
   const tr = await getTranslations();
   const ctx = await requireFeature('/dashboard/family-coo');
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtRelative } = await getFormat(tz);
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date().toISOString();

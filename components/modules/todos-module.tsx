@@ -22,7 +22,8 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
@@ -57,15 +58,17 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function dueLabel(due: string, todayStr: string, tomorrowStr: string): string {
+const dueLabelIn = (locale: LocaleCode) => (due: string, todayStr: string, tomorrowStr: string): string => {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
   // due is 'YYYY-MM-DD' — render without TZ surprises.
   const [y, m, d] = due.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+  return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 export function TodosModule() {
+  const locale = useLocale();
+  const dueLabel = dueLabelIn(locale.code);
   const tr = useTranslations();
   const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

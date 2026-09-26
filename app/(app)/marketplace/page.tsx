@@ -20,7 +20,7 @@ import {
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
@@ -31,14 +31,14 @@ const BASE = '/marketplace';
 type ListingRow = PickListing & { rent_period: string | null; location: string | null; condition: string | null };
 
 const ACTIONS: { label: string; sub: string; href: string; icon: typeof ShoppingBag; tint: string }[] = [
-  { label: 'Sell', sub: 'List for sale', href: `${BASE}/browse?post=1&kind=sell`, icon: ShoppingBag, tint: 'text-amber-500 bg-amber-500/12' },
-  { label: 'Rent', sub: 'Rent out', href: `${BASE}/browse?post=1&kind=rent`, icon: Clock, tint: 'text-sky-500 bg-sky-500/12' },
-  { label: 'Lend', sub: 'Offer to lend', href: `${BASE}/browse?post=1&kind=borrow`, icon: Package, tint: 'text-emerald-500 bg-emerald-500/12' },
-  { label: 'Borrow', sub: 'Request to borrow', href: `${BASE}/browse?kind=borrow`, icon: HandHeart, tint: 'text-violet-500 bg-violet-500/12' },
-  { label: 'Request', sub: 'Request an item', href: `${BASE}/browse?post=1&kind=wanted`, icon: HelpCircle, tint: 'text-rose-500 bg-rose-500/12' },
-  { label: 'Donate', sub: 'Give for free', href: `${BASE}/browse?post=1&kind=donate`, icon: Gift, tint: 'text-pink-500 bg-pink-500/12' },
-  { label: 'Swap', sub: 'Trade items', href: `${BASE}/browse?post=1&kind=swap`, icon: Repeat, tint: 'text-teal-500 bg-teal-500/12' },
-  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand-text bg-brand/12' },
+  { label: 'Sell', sub: 'List for sale', href: `${BASE}/browse?post=1&kind=sell`, icon: ShoppingBag, tint: 'text-amber-500 bg-amber-500/10' },
+  { label: 'Rent', sub: 'Rent out', href: `${BASE}/browse?post=1&kind=rent`, icon: Clock, tint: 'text-sky-500 bg-sky-500/10' },
+  { label: 'Lend', sub: 'Offer to lend', href: `${BASE}/browse?post=1&kind=borrow`, icon: Package, tint: 'text-emerald-500 bg-emerald-500/10' },
+  { label: 'Borrow', sub: 'Request to borrow', href: `${BASE}/browse?kind=borrow`, icon: HandHeart, tint: 'text-violet-500 bg-violet-500/10' },
+  { label: 'Request', sub: 'Request an item', href: `${BASE}/browse?post=1&kind=wanted`, icon: HelpCircle, tint: 'text-rose-500 bg-rose-500/10' },
+  { label: 'Donate', sub: 'Give for free', href: `${BASE}/browse?post=1&kind=donate`, icon: Gift, tint: 'text-pink-500 bg-pink-500/10' },
+  { label: 'Swap', sub: 'Trade items', href: `${BASE}/browse?post=1&kind=swap`, icon: Repeat, tint: 'text-teal-500 bg-teal-500/10' },
+  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand-text bg-brand/10' },
 ];
 
 const CATEGORY_ICON: Record<string, typeof Shirt> = {
@@ -59,6 +59,9 @@ const BADGE_STYLE: Record<string, string> = {
 
 export default async function MarketplaceHomePage() {
   const t = await getTranslations();
+  // The feed's "when" chip follows the reader; each item's text is still English
+  // (I18N-002).
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -154,7 +157,7 @@ export default async function MarketplaceHomePage() {
     orders as ActivityOrder[],
     reviews as ActivityReview[],
     listings.map((l) => ({ id: l.id, title: l.title, member_id: l.member_id, created_at: l.created_at })),
-    nameOf, now, 5,
+    nameOf, now, 5, locale.code,
   );
 
   const itemsByCollection = new Map<string, number>();
@@ -219,7 +222,7 @@ export default async function MarketplaceHomePage() {
               <div className="flex shrink-0 gap-2.5 overflow-x-auto">
                 {hero.map((l) => (
                   <Link key={l.id} href={`${BASE}/item/${l.id}`} className="w-36 shrink-0 rounded-xl border border-border bg-surface/80 p-3 transition hover:border-brand/40">
-                    <span className="inline-block rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
+                    <span className="inline-block rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[l.kind as ListingKind]}
                     </span>
                     <p className="mt-1.5 line-clamp-2 text-xs font-medium">{l.title}</p>
@@ -302,7 +305,7 @@ export default async function MarketplaceHomePage() {
           <Link href={`${BASE}/browse?kind=wanted`} className="group rounded-2xl border border-border bg-surface/60 p-4 transition hover:border-brand/40">
             <p className="flex items-center gap-2 text-sm font-semibold"><HandHeart className="h-4 w-4 text-brand-text" /> {t('marketplace.requestAmpGetMatched')}</p>
             <p className="mt-1 text-xs text-muted">{t('marketplace.cantFindItPostARequest')}</p>
-            <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {matchCount > 0 ? `${matchCount} match${matchCount === 1 ? '' : 'es'} found!` : 'Post a request'}
             </p>
           </Link>

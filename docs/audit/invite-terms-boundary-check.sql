@@ -1,4 +1,4 @@
--- Behavioural proof for 0297, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0298 policy (the audit branch's 0364 trigger was dropped as surplus at the merge), run as real `authenticated` sessions under RLS.
 --
 -- `invites_update` (0004, re-asserted by 0118) had a USING clause and no WITH
 -- CHECK. Postgres reuses USING as the check, so the invitee's branch —
@@ -125,31 +125,16 @@ begin
     raise exception 'a manager can no longer revoke their own pending invite (%)', n;
   end if;
 
-  -- 7. …but not readdress one. `email` is the identity accept_invite checks, so
-  --    a changed address is a different grant wearing the same token.
-  blocked := false;
-  begin
-    update public.invites set email = 'someone.else@example.test' where token = tok || '-2';
-  exception when insufficient_privilege then blocked := true;
-  end;
-  if not blocked then
-    raise exception 'a manager readdressed an issued invite';
-  end if;
-
-  -- 8. …and not move one to another family, even one they also manage. The
-  --    WITH CHECK added in 0297 is what stops this; before it, the missing
-  --    check made USING serve for both.
-  blocked := false;
-  begin
-    update public.invites set family_id = fam_b where token = tok || '-2';
-    get diagnostics n = row_count;
-    if n = 0 then blocked := true; end if;
-  exception when insufficient_privilege then blocked := true;
-  end;
-  if not blocked then
-    raise exception 'an invite was moved to another family';
-  end if;
+  -- Legs 7 and 8 — a manager could neither readdress an issued invite nor
+  -- move one to a second family they also manage — asserted the audit
+  -- branch's 0364 trigger, which fixed family_id, token and email at issue.
+  -- At the merge with main that trigger was dropped: main's 0298 policy
+  -- already closes every escalation the INVITEE has (legs 1-5 above, all
+  -- still asserted), and main's own invite probes rest on a manager of both
+  -- families being able to move an invite, which is the control that proves
+  -- their refusal is 0298's. A manager who can issue a fresh invite gains
+  -- nothing by readdressing an old one.
 
   reset role;
-  raise notice 'OK invite terms: role/expiry/family/reuse all refused to the invitee; accept still joins at the invited role; managers keep revoke and lose readdress+move';
+  raise notice 'OK invite terms: role/expiry/family/reuse all refused to the invitee; accept still joins at the invited role; managers keep revoke';
 end $$;

@@ -45,7 +45,9 @@ export async function assessAffordabilityAction(input: AffordabilityFormInput): 
 
   const supabase = await createServer();
   try {
-    const base = await loadMoneyTimelineInput(supabase, ctx.active.familyId);
+    // The forecast's day keys are the family's, not the server's: this action
+    // runs wherever Vercel puts it, and "today" has to mean the household's.
+    const base = await loadMoneyTimelineInput(supabase, ctx.active.familyId, ctx.active.family.timezone || 'UTC');
     const result = assessAffordability(base, {
       label,
       amount: Math.round(amount * 100) / 100,

@@ -1,4 +1,4 @@
--- Behavioural proof for 0333, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0318 (0376 on the audit branch, dropped as its duplicate at the merge), run as real `authenticated` sessions under RLS.
 --
 -- Guardian screens a family member's incoming calls and texts. Two tables decide
 -- what gets through:
@@ -10,7 +10,7 @@
 -- Both carried ONE policy, `FOR ALL … is_family_member(family_id)`, from 01370.
 -- Every server action that writes them checks `isManager` first — but PostgREST
 -- is reachable with the same JWT, so those checks were a UI boundary and not a
--- database one. As a child, before 0333:
+-- database one. As a child, before 0318:
 --
 --     update guardian_contacts set trust_level = 'immediate_family' where …; -> UPDATE 1
 --     update guardian_member_profiles set default_mode_unknown = 'immediate_ring';
@@ -28,8 +28,8 @@ grant usage on schema public to authenticated;
 do $$
 declare
   fam        uuid := 'eeee0000-0000-4000-8000-00000000000e';
-  parent_uid uuid := 'e0000000-0000-4000-8000-000000000001';
-  child_uid  uuid := 'e0000000-0000-4000-8000-000000000002';
+  parent_uid uuid := 'e0100000-0000-4000-8000-000000000001';
+  child_uid  uuid := 'e0100000-0000-4000-8000-000000000002';
   child_mid  uuid;
   scam       uuid;
   prof       uuid;
@@ -73,7 +73,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. Cannot promote a blocked caller. Before 0333: UPDATE 1.
+  -- 1. Cannot promote a blocked caller. Before 0318: UPDATE 1.
   update public.guardian_contacts set trust_level = 'immediate_family' where id = scam;
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'a child promoted a blocked caller to immediate_family'; end if;

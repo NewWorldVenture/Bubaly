@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
-  ROOT_CHROME_SCOPE, MARKETING_SCOPE, AUTH_SCOPE, PUBLIC_LINK_SCOPE, scopeMessages,
+  ROOT_CHROME_SCOPE, MARKETING_SCOPE, AUTH_SCOPE, PUBLIC_LINK_SCOPE, SURVEY_SCOPE, scopeMessages,
 } from '@/lib/i18n/scopes';
 import enUS from '@/lib/i18n/messages/en-US.json';
 
@@ -51,36 +51,136 @@ function clientModulesFrom(entries: string[]): Set<string> {
 }
 
 /**
- * The literal keys those modules pass to their translator.
+ * Every name a client module binds `useTranslations()` to.
  *
- * The binding is READ FROM THE FILE rather than assumed to be `t`. That
- * assumption was a real hole: `components/marketing/contact-form.tsx` writes
- * `const tr = useTranslations()` and calls `tr('contact.sendMessage')`, so this
- * scan never saw a single one of its keys, and MARKETING_SCOPE fell behind
- * without failing here. Nothing noticed, because `translate` used to fall back
- * to the whole English catalogue — the same fallback that shipped 244 KB gzip
- * to every visitor. Remove the fallback and the raw key renders at a visitor;
- * `contact.whatsThisAbout` is one unbreakable token, which is why the overflow
- * suite went red on eleven public routes at once.
- *
- * So: find every `const <name> = useTranslations()` and scan for calls on those
- * names. A component that renames its translator tomorrow is covered by
- * construction rather than by someone remembering to extend a list.
+ * The extractor below reads CALLS, so it has to know what the translator is
+ * called. `const t = useTranslations()` is the common form; `tr` and `i18nT`
+ * are the two others in this tree. If a module invents a fourth the extractor
+ * goes silently blind on that file, so `TRANSLATOR_NAMES` is asserted complete
+ * by a case below rather than trusted.
  */
+const TRANSLATOR_NAMES = ['t', 'tr', 'i18nT'] as const;
+const BINDS_TRANSLATOR = /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*useTranslations\s*\(/g;
+
+/**
+ * The literal keys those modules pass to the translator.
+ *
+ * The pattern used to be `/\bt\(/`, and that is a second way this file went
+ * blind — after the entry globs, before anyone looked here. `\b` puts a
+ * boundary BEFORE the `t`, and then `\(` demands the very next character be an
+ * open paren. In `tr('planOutcomes.heading')` the next character is `r`, so
+ * nothing matched — while `if (!/useTranslations/.test(source)) continue` above
+ * happily let the file through. **105 client modules bind the translator as
+ * `tr` or `i18nT`**, so the guard walked every one of them and extracted ZERO
+ * keys, reporting clean over 56 out-of-scope keys on the marketing surface
+ * alone.
+ *
+ * The lookbehind is what `\b` should have been: it rejects a longer
+ * identifier ending in one of these names — `.t(`, `format(`, `parseInt(` —
+ * without rejecting the names themselves.
+ */
+const CALLS_TRANSLATOR = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$.])(?:${TRANSLATOR_NAMES.join('|')})\(\s*['"]([A-Za-z0-9_.]+)['"]`,
+  'g',
+);
+
+/** Any key-shaped string literal. Judged against the catalogue by the caller. */
+const KEY_SHAPED = /['"]([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)['"]/g;
+
+/** The balanced argument text of a call starting at `open` (the '(' index). */
+function argumentText(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') { depth -= 1; if (depth === 0) return source.slice(open + 1, i); }
+  }
+  return '';
+}
+
+/** A translator call whose first argument does not begin with a quote. */
+const CALLS_TRANSLATOR_WITH_EXPRESSION = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$.])(?:${TRANSLATOR_NAMES.join('|')})\(\s*([^)\s])`,
+  'g',
+);
+
 function translationKeys(modules: Set<string>): Map<string, string> {
   const keys = new Map<string, string>(); // key → the file that asked for it
+  const add = (key: string, file: string) => {
+    if (!keys.has(key)) keys.set(key, file.replace(`${ROOT}/`, ''));
+  };
   for (const file of modules) {
     const source = readFileSync(file, 'utf8');
     if (!/useTranslations/.test(source)) continue;
-    const bindings = [...source.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*useTranslations\s*\(/g)]
-      .map((m) => m[1]);
-    // A file that calls useTranslations() without binding it (inline, or
-    // destructured in a way this does not model) is still scanned for `t(`,
-    // because that is the convention everywhere else.
-    for (const name of bindings.length ? bindings : ['t']) {
-      const call = new RegExp(`\\b${name}\\(\\s*['"]([A-Za-z0-9_.]+)['"]`, 'g');
-      for (const m of source.matchAll(call)) {
-        if (!keys.has(m[1])) keys.set(m[1], file.replace(`${ROOT}/`, ''));
+    for (const m of source.matchAll(CALLS_TRANSLATOR)) add(m[1], file);
+
+    // ── Expression-keyed calls, resolved as far as a reading can honestly go ──
+    //
+    // `CALLS_TRANSLATOR` above only sees a call whose first argument OPENS with
+    // a quote, so it misses every `t(cond ? 'a.b' : 'c.d')` — and those are
+    // literal keys in every branch, sitting on a scoped public surface, which
+    // is precisely what must be in scope before PERF-001 deletes the fallback.
+    //
+    // Two sweeps, in order of confidence:
+    //
+    //   1. Every key-shaped literal INSIDE the call's own balanced argument.
+    //      A ternary over literals is fully resolved by this, exactly.
+    //   2. If the file still has a call this cannot resolve — `t(view.error)`,
+    //      `t(item.labelKey)` — every key-shaped literal ANYWHERE in the file.
+    //      Deliberately over-broad: `view.error` is assigned from literals
+    //      elsewhere in the same module, and requiring MORE keys to be in scope
+    //      than a surface strictly needs errs in the safe direction. A raw key
+    //      at a visitor is the failure this guards; a slightly wider scope is
+    //      some bytes.
+    //
+    // Non-keys swept in by either pass are harmless: the surface case below
+    // filters to `key in messages`, so a literal like 'session-changed' that is
+    // not in the catalogue is ignored rather than reported as missing.
+    const unresolved: string[] = [];
+    for (const m of source.matchAll(CALLS_TRANSLATOR_WITH_EXPRESSION)) {
+      if (m[1] === "'" || m[1] === '"') continue;
+      const open = source.indexOf('(', m.index!);
+      const arg = argumentText(source, open);
+      let resolvedHere = false;
+      for (const lit of arg.matchAll(KEY_SHAPED)) { add(lit[1], file); resolvedHere = true; }
+      if (!resolvedHere) unresolved.push(arg.trim());
+    }
+    if (unresolved.length > 0) {
+      for (const lit of source.matchAll(KEY_SHAPED)) add(lit[1], file);
+      // …and the ONE module each unresolved call's key table actually lives in.
+      //
+      // `t(item.labelKey)` renders keys held in ANOTHER file — MARKETING_NAV in
+      // lib/constants/navigation.ts, CONSENT_UI in lib/marketing/consent-ui.ts,
+      // CONTACT_TOPICS in lib/validation.ts — and those are not "use client",
+      // so the walk above never opens them. `consentUi` sits in MARKETING_SCOPE
+      // by hand with a comment saying it was listed because nothing could see
+      // it; this is that comment turned into a check.
+      //
+      // Traced to the IDENTIFIER rather than swept over every import, because
+      // sweeping every import is wrong in a way that is easy to miss: the auth
+      // recovery form has an unresolved `t(view.error)` and also imports
+      // lib/validation.ts for its field rules, so a blanket sweep demanded the
+      // eight contactTopic.* keys be in AUTH_SCOPE — which the sign-in surface
+      // never renders. Over-wide is safer than under-wide for a RAW KEY, but a
+      // scope that carries keys its surface cannot reach is a scope nobody will
+      // trust to be minimal, and it is how AUTH_SCOPE came to carry 478
+      // `actions` keys to render two.
+      for (const expr of unresolved) {
+        const root = /([A-Za-z_$][A-Za-z0-9_$]*)/.exec(expr)?.[1];
+        if (!root) continue;
+        // Either the identifier is imported, or it is the parameter of a
+        // `.map()` over something that is.
+        const owner = new RegExp(
+          String.raw`([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\.filter\([^)]*\))?\s*\.map\s*\(\s*\(?\s*${root}\b`,
+        ).exec(source)?.[1] ?? root;
+        const imported = new RegExp(
+          String.raw`^\s*import\s[^'"]*\b${owner}\b[^'"]*from\s*['"]([^'"]+)['"]`, 'm',
+        ).exec(source)?.[1];
+        if (!imported) continue;
+        const dep = resolveSpec(imported, file);
+        if (!dep) continue;
+        let depSource: string;
+        try { depSource = readFileSync(dep, 'utf8'); } catch { continue; }
+        for (const lit of depSource.matchAll(KEY_SHAPED)) add(lit[1], dep);
       }
     }
   }
@@ -88,34 +188,25 @@ function translationKeys(modules: Set<string>): Map<string, string> {
 }
 
 /**
- * The files matching each pattern, with `**` ALSO matching zero directories.
+ * Every page.tsx / layout.tsx under a directory — listed, then filtered by
+ * BASENAME rather than matched by a glob.
  *
- * git's `**` requires at least one path segment, so `app/(marketing)/**​/layout.tsx`
- * matched NOTHING — `app/(marketing)/layout.tsx` is the only marketing layout
- * there is. The same held for every route group: each group's ROOT layout and
- * ROOT page were invisible to this scan, and those are precisely the files that
- * install `ScopedLocaleProvider` and render the chrome around everything else.
- * That is how MARKETING_SCOPE came to be missing `skipLink`, `marketing` and
- * `consentManager` while this test reported the surface clean.
+ * This used to take git pathspecs, and one of them silently matched nothing.
+ * In a git pathspec `**\/` requires AT LEAST ONE intervening directory, so
+ * `app/(marketing)/**\/layout.tsx` does not match `app/(marketing)/layout.tsx`
+ * — and a route group's ROOT layout is exactly where its shared chrome mounts.
+ * The header, the cookie banner, the skip link and the logo were therefore
+ * never walked by this test, on any of the three scoped surfaces.
  *
- * The aggregate `entries.length > 0` assertion below could not see it either: a
- * pattern that matches nothing is invisible when a sibling pattern matches 28
- * files. So each pattern is now required to match on its own.
+ * It passed throughout, because `**\/page.tsx` DID match the nested pages, so
+ * `entries.length > 0` below was satisfied and the surface looked covered. A
+ * non-empty list is not a complete one, which is why the control underneath
+ * now names the root files instead of counting them.
  */
-const files = (patterns: string[]): string[] =>
-  patterns.flatMap((p) => {
-    // `git ls-files` is spawned WITHOUT a shell, so the glob reaches git as a
-    // pathspec rather than being expanded by sh. Git's default pathspec lets
-    // `*` cross a `/`, which means `.../**/page.tsx` still requires the extra
-    // directory separator and never matches a page at the surface's own root —
-    // so each pattern is also tried with `/**/` collapsed to `/`.
-    const both = [p, p.replace('/**/', '/')];
-    const found = both
-      .flatMap((g) => execFileSync('git', ['ls-files', '--', g], { encoding: 'utf8' }).split(/\r?\n/))
-      .filter(Boolean);
-    expect(found.length, `no file matches ${p} — the pattern has gone stale`).toBeGreaterThan(0);
-    return [...new Set(found)];
-  });
+const entryFiles = (dirs: string[]): string[] =>
+  dirs.flatMap((d) => execFileSync('git', ['ls-files', '--', d], { encoding: 'utf8' }).split(/\r?\n/))
+    .filter(Boolean)
+    .filter((f) => /\/(page|layout)\.tsx$/.test(f));
 
 const messages = enUS as Record<string, string>;
 
@@ -127,20 +218,133 @@ const SURFACES: { name: string; entries: string[]; scope: readonly string[] }[] 
   },
   {
     name: 'the marketing site',
-    entries: files(['app/(marketing)/**/page.tsx', 'app/(marketing)/**/layout.tsx']),
+    entries: entryFiles(['app/(marketing)/']),
     scope: MARKETING_SCOPE,
   },
   {
     name: 'sign-in and sign-up',
-    entries: files(['app/(auth)/**/page.tsx', 'app/(auth)/**/layout.tsx']),
+    entries: entryFiles(['app/(auth)/']),
     scope: AUTH_SCOPE,
   },
   {
     name: 'the public link surfaces (gift, join, pay, reviews, offline)',
-    entries: files(['app/gift/**/page.tsx', 'app/join/**/page.tsx', 'app/pay/**/page.tsx', 'app/reviews/**/page.tsx', 'app/offline/**/page.tsx']),
+    entries: entryFiles(['app/gift/', 'app/join/', 'app/pay/', 'app/reviews/', 'app/offline/']),
     scope: PUBLIC_LINK_SCOPE,
   },
+  {
+    name: 'the public feedback survey',
+    entries: entryFiles(['app/s/']),
+    scope: SURVEY_SCOPE,
+  },
 ];
+
+/**
+ * Which pages a provider declaring the WHOLE catalogue governs.
+ *
+ * `app/(app)` and `app/onboarding` mount `ScopedLocaleProvider namespaces="all"`
+ * deliberately — behind a login, where there is no crawler and no first-visit
+ * cost, and where t() is called with a non-literal argument in 96 places, so no
+ * static analysis could prove a subset complete. Those pages are outside this
+ * file's concern and the control below says so by name rather than by silence.
+ */
+const UNSCOPED_BY_DESIGN = /^app\/(\(app\)|onboarding)\//;
+
+// The control that was missing, and the reason this file passed for so long
+// while three of its four surfaces were half-walked.
+//
+// `entries.length > 0` is satisfied by PARTIAL coverage. The old globs matched
+// every nested `**\/page.tsx` and no `**\/layout.tsx` at all, so each surface
+// reported plenty of entries and none of its route-group ROOT layout — which
+// is the one file that mounts the shared chrome. A count cannot tell "walked
+// the surface" from "walked most of it", so this names the files instead.
+//
+// These four are where the header, the cookie banner, the skip link, the logo
+// and the join-invite flow live. If a refactor moves them, update this list
+// deliberately; do not delete the case.
+// The control the extractor never had, and the reason this file was blind
+// twice over.
+//
+// The entry globs were fixed first: a git pathspec `**/` needs an intervening
+// directory, so the route-group root layouts were never walked. That was
+// caught by naming the files. This is the OTHER half — the walk was then
+// correct and the READ was not. `/\bt\(/` cannot see `tr('key')`, and 105
+// client modules bind the translator that way, so the guard opened 105 files
+// and took nothing out of them.
+//
+// A list of names is only as good as the guarantee that it is complete, so
+// this asserts that no client module binds `useTranslations()` to a name the
+// extractor does not know. A new alias fails HERE, naming the file, instead of
+// silently removing that file's keys from every surface it belongs to.
+describe('the extractor knows every name the translator is bound to', () => {
+  it('finds no client module binding useTranslations to an unknown alias', () => {
+    const unknown: string[] = [];
+    const tracked = ['app/', 'components/', 'lib/']
+      .flatMap((d) => execFileSync('git', ['ls-files', '--', d], { encoding: 'utf8' }).split(/\r?\n/))
+      .filter((f) => /\.tsx?$/.test(f));
+    expect(tracked.length, 'the alias scan must see the tree').toBeGreaterThan(500);
+    for (const file of tracked) {
+      const source = readFileSync(file, 'utf8');
+      if (!/useTranslations/.test(source)) continue;
+      for (const m of source.matchAll(BINDS_TRANSLATOR)) {
+        if (!(TRANSLATOR_NAMES as readonly string[]).includes(m[1])) unknown.push(`${m[1]}  (${file})`);
+      }
+    }
+    expect(unknown, 'add the name to TRANSLATOR_NAMES — until you do, every key '
+      + 'in these files is invisible to every surface check in this file').toEqual([]);
+  });
+});
+
+describe('the scan reaches each surface, named rather than counted', () => {
+  it('walks the route-group root layouts, not just the nested pages', () => {
+    const walked = new Set(SURFACES.flatMap((s) => s.entries));
+    for (const file of [
+      'app/(marketing)/layout.tsx',
+      'app/(auth)/layout.tsx',
+      'app/join/layout.tsx',
+      'app/join/page.tsx',
+    ]) {
+      expect(walked, `${file} mounts shared chrome and must be walked`).toContain(file);
+    }
+  });
+});
+
+// The control that would have found the survey page, and the third instance of
+// the same shape this file has now been caught by.
+//
+// Twice the guard was blind to something INSIDE the surfaces it knew about:
+// first the entry globs (a pathspec that matched nothing), then the extractor
+// (`\bt\(` cannot see `tr(`). Both were fixed by naming what had been counted.
+// This is the same defect one level up — the SURFACES list itself is
+// hand-written, and nothing required it to be COMPLETE.
+//
+// `app/s/[slug]` is what fell through: the only page in the tree with no
+// `layout.tsx` of its own, so no ScopedLocaleProvider mounted for it and the
+// root layout's chrome scope was all it got, while `survey-form.tsx` asks for
+// two namespaces outside that scope. It rendered correct English regardless —
+// through `translate`'s SOURCE_MESSAGES fallback, on an UNAUTHENTICATED page
+// linked out to people who are not customers.
+//
+// So: every page under `app/` is either governed by a provider that declares
+// the whole catalogue, or it belongs to a surface this file walks. A new public
+// route with no layout fails HERE, naming the file, on the day it is added —
+// rather than on the day PERF-001 deletes the fallback underneath it.
+describe('every page belongs to a surface this file walks', () => {
+  it('leaves no page governed only by the root chrome scope', () => {
+    const walked = new Set(SURFACES.flatMap((s) => s.entries));
+    const pages = execFileSync('git', ['ls-files', '--', 'app/'], { encoding: 'utf8' })
+      .split(/\r?\n/)
+      .filter((f) => /\/page\.tsx$/.test(f));
+    // A scan that sees nothing must not pass, which is how the count control
+    // this replaces went wrong in the first place.
+    expect(pages.length, 'the page scan must see the tree').toBeGreaterThan(100);
+
+    const orphans = pages.filter((f) => !UNSCOPED_BY_DESIGN.test(f) && !walked.has(f));
+    expect(orphans, 'each of these pages ships only ROOT_CHROME_SCOPE. Give it a '
+      + 'layout.tsx mounting ScopedLocaleProvider and add it to SURFACES above, '
+      + 'or its keys resolve only through the SOURCE_MESSAGES fallback')
+      .toEqual([]);
+  });
+});
 
 describe('a surface ships every string its client components ask for', () => {
   for (const surface of SURFACES) {
@@ -155,6 +359,83 @@ describe('a surface ships every string its client components ask for', () => {
       expect(missing).toEqual([]);
     });
   }
+});
+
+/**
+ * PERF-001's actual gate, measured rather than estimated.
+ *
+ * The fix for PERF-001 is to give `translate` a module with no JSON imports, so
+ * the 821.5 KB / 245.8 KB gzip English catalogue stops shipping to every page.
+ * The cost is that `translate` loses its SOURCE_MESSAGES fallback on the client,
+ * and a key outside its surface's scope stops rendering English prose and starts
+ * rendering the raw key at a visitor.
+ *
+ * On an `namespaces="all"` surface that is a no-op. On a SCOPED surface it is
+ * only safe once every key those components can ask for is provably in scope.
+ * The cases above establish that for LITERAL calls. This one bounds what is
+ * left: calls whose first argument is an expression, where no static reading of
+ * the call site alone can say which key it produces.
+ *
+ * The audit had recorded "122 non-literal t() calls across 46 client files" as
+ * the blocker. That is the whole-tree number and most of it sits behind the
+ * login, where it costs nothing. Measured on the FIVE SCOPED SURFACES only:
+ *
+ *     root-chrome    0
+ *     marketing     36
+ *     auth           6
+ *     public-link    0
+ *     survey         0
+ *
+ * Eleven files, and that is the real gate. It is listed here rather than
+ * counted, for the reason this file has had to learn three times: a count is
+ * satisfied by partial coverage, and a name is not. A NEW expression-keyed call
+ * on a public surface now fails HERE, on the day it is written, instead of
+ * becoming a raw key on a marketing page the day the fallback is deleted.
+ *
+ * To remove a file from this list, prove every key its expression can produce is
+ * inside the surface's scope — then delete the entry and watch this case stay
+ * green.
+ */
+const EXPRESSION_KEYED = [
+  'app/(marketing)/pricing/pricing-content.tsx',
+  'components/auth/callback-completion.tsx',
+  'components/auth/legal-consent.tsx',
+  'components/auth/recovery-form.tsx',
+  'components/auth/sign-out-completion.tsx',
+  'components/auth/sign-out-form.tsx',
+  'components/marketing/ai-showcase.tsx',
+  'components/marketing/consent-manager.tsx',
+  'components/marketing/contact-form.tsx',
+  'components/marketing/pricing-value-block.tsx',
+  'components/marketing/site-header.tsx',
+];
+
+describe('the scoped surfaces still ask for keys no static reading can name', () => {
+  it('names every expression-keyed translator call, and finds no new one', () => {
+    const found = new Set<string>();
+    for (const surface of SURFACES) {
+      for (const file of clientModulesFrom(surface.entries)) {
+        const source = readFileSync(file, 'utf8');
+        if (!/useTranslations/.test(source)) continue;
+        for (const m of source.matchAll(CALLS_TRANSLATOR_WITH_EXPRESSION)) {
+          if (m[1] === "'" || m[1] === '"') continue; // a literal; the cases above cover it
+          found.add(file.replace(`${ROOT}/`, ''));
+        }
+      }
+    }
+    // A scan that sees nothing must not pass. Same floor as the two controls
+    // above, for the same reason.
+    expect(found.size, 'the expression scan matched nothing at all').toBeGreaterThan(0);
+
+    const added = [...found].filter((f) => !EXPRESSION_KEYED.includes(f)).sort();
+    expect(added, 'a NEW expression-keyed translator call on a scoped public surface. '
+      + 'Every key it can produce must be proved in scope before PERF-001 can delete '
+      + "translate()'s English fallback, or this renders a raw key at a visitor").toEqual([]);
+
+    const gone = EXPRESSION_KEYED.filter((f) => !found.has(f)).sort();
+    expect(gone, 'these files no longer have an expression-keyed call — delete them from '
+      + 'EXPRESSION_KEYED so the list keeps meaning what it says').toEqual([]);
+  });
 });
 
 describe('scopeMessages', () => {
@@ -174,20 +455,41 @@ describe('scopeMessages', () => {
 
   it('is dramatically smaller than the catalogue it narrows', () => {
     const full = JSON.stringify(messages).length;
-    const marketing = JSON.stringify(scopeMessages(messages, MARKETING_SCOPE)).length;
-    // The ratio was /50, against a marketing scope of about 2 KB. That number
-    // was never honest: the scope was missing the entire marketing LAYOUT —
-    // skip link, header, nav, consent manager — because the entry glob matched
-    // no file at all, and the surface rendered correctly only because
-    // `translate` fell back to the whole English catalogue. A complete scope is
-    // ~27 KB, still a 30x reduction on ~814 KB, and it is the size the page
-    // actually needs rather than the size it appeared to need while something
-    // else was quietly paying.
+    // EVERY declared scope, not just marketing. The bound used to name one
+    // surface, and `auth` sat at 5.3% of the catalogue — 2.7x the stated
+    // ceiling — for as long as this case has existed, because nothing measured
+    // it. A guard that checks one of four is three-quarters decoration.
+    const sizes = {
+      'root-chrome': JSON.stringify(scopeMessages(messages, ROOT_CHROME_SCOPE)).length,
+      marketing: JSON.stringify(scopeMessages(messages, MARKETING_SCOPE)).length,
+      auth: JSON.stringify(scopeMessages(messages, AUTH_SCOPE)).length,
+      'public-link': JSON.stringify(scopeMessages(messages, PUBLIC_LINK_SCOPE)).length,
+    };
+    // The measured production page was 93% catalogue. Assert the order of
+    // magnitude, not an exact number, so adding strings a surface genuinely
+    // renders is allowed.
     //
-    // Assert the order of magnitude, not an exact number, so adding marketing
-    // strings is allowed — but keep it tight enough that pulling in an
-    // authenticated-app namespace by accident still fails here.
-    expect(marketing).toBeLessThan(full / 25);
+    // The bound is full/25 (4%), raised from full/50 when the extractor above
+    // was fixed. That is worth stating precisely, because "the scope got
+    // bigger" reads like a regression and is the opposite:
+    //
+    // The 56 marketing keys that pushed it over were ALREADY being shipped to
+    // the browser. They resolved through `translate`'s SOURCE_MESSAGES
+    // fallback, which lives in the 821.5 KB / 245.8 KB gzip chunk that
+    // PERF-001 measures on every page. So a visitor to /pricing was paying for
+    // the whole 13,778-key catalogue to read 56 of them. Putting them in the
+    // scope moves ~21 KB of JSON into the payload and takes 245.8 KB of gzip
+    // JS out of it.
+    //
+    // The cost that IS real, and is not hidden: one scope serves a whole route
+    // group, so /cookies now carries the pricing page's strings too — 7.9 KB
+    // to 28.8 KB. Still 29x smaller than the catalogue, and still the right
+    // trade against the chunk. If a future surface needs its own narrower
+    // scope, that is the fix, not a bigger bound.
+    for (const [name, size] of Object.entries(sizes)) {
+      expect(size, `${name} is ${(size / full * 100).toFixed(1)}% of the catalogue`)
+        .toBeLessThan(full / 25);
+    }
   });
 
   it('leaves the authenticated app whole', () => {

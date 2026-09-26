@@ -52,6 +52,20 @@ describe('external fetch deadlines', () => {
     }
   });
 
+  // `lib/server/push.ts` was on the list above and came off it, because it no
+  // longer reaches a provider: its native send targeted the FCM legacy endpoint
+  // Google decommissioned on 2024-06-20, and the web half goes out through the
+  // `web-push` library rather than fetch. The half of the rule that still bites
+  // is kept here rather than dropped with the entry — "no bare fetch" is true of
+  // every server file whether or not it currently calls one.
+  it('files that left the audited list still may not reach for a bare fetch', () => {
+    for (const file of ['lib/server/push.ts']) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, file).not.toMatch(/await fetch\(/);
+      expect(source, file).not.toMatch(/fetch\(['"`]https?:/);
+    }
+  });
+
   it('keeps browser public-provider helpers behind a timeout wrapper', () => {
     for (const file of ['lib/weather/open-meteo.ts', 'lib/trips/routing.ts']) {
       const source = readFileSync(file, 'utf8');

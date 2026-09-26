@@ -27,7 +27,7 @@ export type RedemptionResult = { ok: true; id: string } | { ok: false; error: st
 export type RedemptionDecision = 'approved' | 'rejected' | 'fulfilled';
 
 /**
- * 0335's refusal. Matched on its message as well as its code, because 0308's
+ * 0378's refusal. Matched on its message as well as its code, because 0308's
  * price guard raises the same check_violation for a different reason.
  */
 function isShortOfPoints(error: { code?: string; message?: string }): boolean {
@@ -89,7 +89,7 @@ export async function requestRedemptionAction(input: {
 
     // A manager redeeming for THEMSELVES takes it; everything else queues. The
     // role is resolved here, from the session, and no longer asserted by the
-    // caller. Whether the points are there is the database's to say (0335):
+    // caller. Whether the points are there is the database's to say (0378):
     // an instant redemption the member cannot pay for is refused at the insert.
     const instant = isManager(ctx.active.role) && input.forMemberId === ctx.active.member.id;
     const decidedAt = instant ? new Date().toISOString() : null;
@@ -157,7 +157,7 @@ export async function decideRedemptionAction(input: {
       .select('id')
       .maybeSingle();
     if (error) {
-      // 0335 refuses an approval the member's points cannot cover.
+      // 0378 refuses an approval the member's points cannot cover.
       if (isShortOfPoints(error)) return { ok: false, error: t('actions.notEnoughPointsForThisReward') };
       return { ok: false, error: describeActionError(error, t('actions.thatRewardIsNotAvailable')) };
     }

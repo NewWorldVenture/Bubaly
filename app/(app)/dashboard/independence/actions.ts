@@ -10,7 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 
 type Result = { ok: true } | { ok: false; error: string };
 
-// The ladder is a parent's to move (0338): a child reads their own progress but
+// The ladder is a parent's to move (0381): a child reads their own progress but
 // does not mark it achieved, skip what they would rather not do, or edit a
 // sibling's track. Checked here so a child gets a sentence rather than a
 // database refusal; the database is what actually holds the line.

@@ -7,7 +7,8 @@ import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
@@ -17,6 +18,12 @@ export const dynamic = 'force-dynamic';
 export default async function KidsPage() {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtTime } = await getFormat(tz);
   const me = ctx.active.member;
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -24,7 +31,7 @@ export default async function KidsPage() {
   // `setHours(0,0,0,0)` is the SERVER's midnight — 17:00 in California on a UTC
   // host — so after 5pm a child saw tomorrow's events and lost today's, every
   // day. Same defect and same fix as the kitchen display (display/page.tsx:122).
-  const tz = ctx.active.family.timezone || 'UTC';
+  // `tz` is the family's zone, bound above.
   const bounds = zonedDayBoundsMs(dayKeyInTz(new Date(), tz), tz);
   const start = new Date(bounds.start);
   const end = new Date(bounds.end);

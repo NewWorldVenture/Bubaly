@@ -4,6 +4,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { settleAll } from '@/lib/supabase/settle';
 import { normalizeSlug } from '@/lib/blog/engagement';
 
 export const runtime = 'nodejs';
@@ -22,14 +23,30 @@ async function loadPostId(svc: ReturnType<typeof createServiceClient>, slug: str
   return data?.id ?? null;
 }
 
+/** The public count and this reader's own save, or the error that stopped either.
+ *
+ *  Both reads used to drop their error. `count: 0` over an unreadable aggregate
+ *  is a claim that nobody saved the article, and `saved: false` over an
+ *  unreadable row is a claim about THIS reader — the one that matters, because
+ *  the heart then renders empty for an article they have saved and the toggle
+ *  behind it removes the bookmark on their next tap.
+ *
+ *  settleAll rather than Promise.all so a transport rejection arrives as an
+ *  error the caller can answer with, instead of rejecting out of a POST whose
+ *  write has already landed. */
 async function saveState(svc: ReturnType<typeof createServiceClient>, postId: string, userId: string | null) {
-  const [{ count }, saved] = await Promise.all([
+  const [countRead, savedRead] = await settleAll([
     svc.from('blog_post_saves').select('id', { count: 'exact', head: true }).eq('post_id', postId),
     userId
       ? svc.from('blog_post_saves').select('id').eq('post_id', postId).eq('user_id', userId).maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
-  return { count: count ?? 0, saved: !!(saved as { data: unknown }).data };
+  const error = (countRead as { error?: unknown }).error ?? (savedRead as { error?: unknown }).error ?? null;
+  return {
+    count: (countRead as { count?: number | null }).count ?? 0,
+    saved: !!(savedRead as { data: unknown }).data,
+    error,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -42,7 +59,14 @@ export async function GET(req: NextRequest) {
   if (!postId) return NextResponse.json({ error: t('save.notFound') }, { status: 404 });
 
   const { data: auth } = await (await createServer()).auth.getUser();
-  const state = await saveState(svc, postId, auth.user?.id ?? null);
+  const { error, ...state } = await saveState(svc, postId, auth.user?.id ?? null);
+  if (error) {
+    // 503 rather than a state we could not read. The client keeps whatever it
+    // had (`r.ok ? r.json() : null`), which is the honest outcome: an empty
+    // heart it never contradicted beats one this endpoint asserted.
+    console.error('[blog/save] state read failed', { postId, error });
+    return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
   return NextResponse.json(
     { ...state, authenticated: !!auth.user },
     { headers: { 'Cache-Control': 'no-store' } },
@@ -85,14 +109,29 @@ export async function POST(req: NextRequest) {
 
   // Toggle: insert wins the save; a unique-violation means it existed → remove.
   const { error: insertError } = await svc.from('blog_post_saves').insert({ post_id: postId, user_id: userId });
+  // What the toggle DID is known here, from the branch taken — it is not
+  // something to re-read. The re-read used to decide the reported `saved`, so a
+  // read that failed after a write that succeeded reported the opposite of what
+  // had just happened.
+  let saved = true;
   if (insertError) {
     if (insertError.code === '23505') {
-      await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      const { error: deleteError } = await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      if (deleteError) {
+        console.error('[blog/save] unsave failed', { postId, error: deleteError });
+        return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 500 });
+      }
+      saved = false;
     } else {
       return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 500 });
     }
   }
 
-  const state = await saveState(svc, postId, userId);
-  return NextResponse.json({ ...state, authenticated: true }, { headers: { 'Cache-Control': 'no-store' } });
+  // Only the count is read back, and a count that cannot be read is reported as
+  // unknown rather than as zero. The write stands either way.
+  const { count, error } = await saveState(svc, postId, userId);
+  return NextResponse.json(
+    { saved, count: error ? null : count, authenticated: true },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }

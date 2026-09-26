@@ -3,32 +3,65 @@
 // Kept free of Supabase / network so the windowing and aggregation can be unit
 // tested deterministically.
 //
-// ── Every day here is the FAMILY's day ──────────────────────────────────────
+// THE WEEK IS THE FAMILY'S WEEK, and this file used to say the opposite. Its
+// header read:
 //
-// This module used to say "all dates are handled in UTC day-keys", and it meant
-// it: `weekWindow` built its window from `getUTCFullYear/Month/Date` and
-// `bucketByDay` took `starts_at.slice(0, 10)`. Both are the host's day wearing a
-// day-key's clothes, and the briefing is where that shows worst:
+//     All dates are handled in UTC day-keys (YYYY-MM-DD), matching the
+//     convention used by the daily-briefing route.
 //
-//   * A family in Los Angeles asking for the week ahead at 6pm was told "today"
-//     is tomorrow — the look-ahead started a day late and the recap ended a day
-//     late, on exactly the evening somebody sits down to plan.
-//   * An event at 7pm Pacific on Monday is `2026-09-15T02:00Z`, so it bucketed
-//     into Tuesday. Every evening commitment in the Americas appeared on the
-//     wrong day of the briefing, and for Auckland every morning one did.
+// That was true when it was written, on 2026-07-18. It stopped being true on
+// 2026-09-06, when `7ef10c59` — "fix(briefing): the Daily Brief arrives, in the
+// family's own morning" — moved the daily route to `dayKeyInTz(now, tz)` and left
+// this comment pointing at the fix as though it were the precedent for the bug.
+// The daily route's own note says what it cost: "for a family in Los Angeles at
+// 5pm it is already tomorrow, so the brief covered the wrong day". The weekly
+// briefing was simply not carried across.
 //
-// `tests/server-midnight-is-not-the-familys-midnight.test.ts` exists to catch
-// exactly this and could not see it: it matches `setHours(0,0,0,0)`, and this is
-// the same defect spelled `toISOString().slice(0,10)`. That test now looks for
-// both, and this module is why.
+// Concretely, in UTC day-keys, for a family in America/Los_Angeles: a 21:00
+// Saturday game is 04:00 Sunday at Greenwich, so it appeared under SUNDAY in the
+// week grid, and the week itself ran 17:00 Sunday to 17:00 Sunday rather than
+// midnight to midnight.
 //
-// The zone arithmetic is NOT re-implemented here. `lib/services/scope.ts` owns
-// it, re-resolving each local midnight rather than adding 86,400,000 ms, which
-// is what keeps a 23- or 25-hour DST day from sliding the whole window.
-import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+// `lib/schedule/zoned.ts` is used rather than `lib/services/scope.ts` on purpose:
+// scope.ts opens with `import 'server-only'`, and this module's whole point is
+// that it can be exercised in a unit test. zoned.ts states that it keeps the
+// identical day-key shape, so a key from here compares equal to one from there.
+import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
+
+const MS_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * ISO YYYY-MM-DD for a Date, at Greenwich.
+ *
+ * Still exported because it is still the right answer for a value that IS a UTC
+ * instant and is not being presented to a family as a day. It is no longer what
+ * the week grid is built from.
+ */
+export function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** The day after a day KEY, by calendar arithmetic. */
+function nextDayKey(key: string): string {
+  const d = new Date(`${key}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The instant a family's calendar day begins.
+ *
+ * Advancing a day KEY and asking when that day starts, rather than adding
+ * `86_400_000` to an instant, is what makes the window survive a DST boundary:
+ * the local day is 23 or 25 hours long twice a year, and a fixed-millisecond
+ * step either skips a day or repeats one.
+ */
+function startOfDayMs(key: string, tz: string): number {
+  return zonedTimeMs(key, 0, 0, tz);
+}
 
 export type WeekWindow = {
-  /** Today's day-key (UTC). */
+  /** Today's day-key, in the family's zone. */
   todayKey: string;
   /** Start of today (inclusive) — ISO. */
   aheadStart: string;
@@ -51,23 +84,40 @@ export type WeekWindow = {
  * correct.
  */
 export function weekWindow(now: Date, tz: string): WeekWindow {
-  const todayKey = dayKeyInTz(now, tz);
-  const days = Array.from({ length: 7 }, (_, i) => addDaysToDayKey(todayKey, i));
+  // `tz` is REQUIRED rather than defaulted to 'UTC'. A default is what let this
+  // module be wrong quietly for seven weeks: the one caller would have kept
+  // compiling and kept shipping Greenwich weeks. There is one caller, so making
+  // it required costs one line and removes the failure mode.
+  const todayKey = dayKeyInZone(now.getTime(), tz) ?? dayKey(now);
 
-  // Each boundary is a real local midnight, resolved on its own day, so a DST
-  // transition inside the window moves the boundary rather than the window.
-  const today = zonedDayBoundsMs(todayKey, tz);
-  const lastAhead = zonedDayBoundsMs(days[days.length - 1], tz);
-  const firstRecap = zonedDayBoundsMs(addDaysToDayKey(todayKey, -7), tz);
+  const days: string[] = [todayKey];
+  for (let i = 1; i < 7; i += 1) days.push(nextDayKey(days[i - 1]));
+
+  // Each boundary is the start of a family day, so every window edge lands on
+  // their midnight rather than Greenwich's.
+  const aheadStart = startOfDayMs(todayKey, tz);
+  const aheadEnd = startOfDayMs(nextDayKey(days[6]), tz) - 1;
+
+  let recapKey = todayKey;
+  for (let i = 0; i < 7; i += 1) recapKey = previousDayKey(recapKey);
+  const recapStart = startOfDayMs(recapKey, tz);
+  const recapEnd = aheadStart - 1; // end of yesterday, their time
 
   return {
     todayKey,
-    aheadStart: new Date(today.start).toISOString(),
-    aheadEnd: new Date(lastAhead.end - 1).toISOString(),
-    recapStart: new Date(firstRecap.start).toISOString(),
-    recapEnd: new Date(today.start - 1).toISOString(),
+    aheadStart: new Date(aheadStart).toISOString(),
+    aheadEnd: new Date(aheadEnd).toISOString(),
+    recapStart: new Date(recapStart).toISOString(),
+    recapEnd: new Date(recapEnd).toISOString(),
     days,
   };
+}
+
+/** The day before a day KEY, by calendar arithmetic. See `nextDayKey`. */
+function previousDayKey(key: string): string {
+  const d = new Date(`${key}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Statuses that count as a completed chore assignment. */
@@ -99,11 +149,17 @@ export function bucketByDay<T>(
   for (const item of items) {
     const raw = getKey(item);
     if (!raw) continue;
-    // A `date` column arrives as 'YYYY-MM-DD' and is ALREADY a calendar day —
-    // pushing it through a zone would shift it by one. A `timestamptz` arrives
-    // as a full instant and has to be asked which local day it fell on;
-    // `.slice(0, 10)` answers "which UTC day", which is the defect.
-    const key = raw.length <= 10 ? raw : dayKeyInTz(new Date(raw), tz);
+    // `raw.slice(0, 10)` is the day at GREENWICH. That is the defect, and it is
+    // the one the repo's existing guard cannot see, because
+    // tests/family-day-not-greenwich-day.test.ts scans for a literal
+    // `.toISOString()` before the slice and a column read has none.
+    //
+    // And a `date` column arrives as 'YYYY-MM-DD', which is ALREADY the
+    // family's calendar day. `Date.parse` reads it as Greenwich midnight, so
+    // pushing it through the zone would file it a day EARLY for every family
+    // west of Greenwich. Only a full instant is asked which local day it was.
+    const parsed = raw.length <= 10 ? Number.NaN : Date.parse(raw);
+    const key = Number.isNaN(parsed) ? raw.slice(0, 10) : dayKeyInZone(parsed, tz) ?? raw.slice(0, 10);
     if (key in buckets) buckets[key].push(item);
   }
   return buckets;

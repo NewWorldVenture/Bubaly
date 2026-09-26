@@ -23,6 +23,7 @@ import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type HomeAsset = Tables<'home_assets'>;
 type MaintenanceTask = Tables<'maintenance_tasks'>;
@@ -73,6 +74,7 @@ function expiryStatus(dateStr: string | null): {
 
 export function HomeModule() {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, role } = useApp();
   const manager = isManager(role);
   const { success, error: toastError } = useToast();
@@ -173,9 +175,15 @@ export function HomeModule() {
   }
 
   async function removeAsset(id: string) {
+    if (!(await askConfirm({ title: tr('home.deleteAssetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets').delete().eq('id', id);
+    // Family-scoped, and read back: 0336 makes this table manager-written, and
+    // RLS FILTERS a delete rather than refusing it, so a refused one answered
+    // `error: null` and the toast said the asset was gone while it stayed.
+    const { data: removed, error } = await supabase.from('home_assets').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!removed?.length) return toastError(tr('actions.nothingWasChangedRefresh'));
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
@@ -378,6 +386,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   onClose: () => void; onChanged: () => void;
 }) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { success, error: toastError } = useToast();
   const [warrantyUntil, setWarrantyUntil] = useState(asset.warranty_until ?? '');
   const [savingDate, setSavingDate] = useState(false);
@@ -392,10 +401,13 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function saveDate() {
     setSavingDate(true);
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets')
-      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
+    const { data: saved, error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null })
+      .eq('id', asset.id).eq('family_id', asset.family_id).select('id');
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
+    // A filtered update (0336: managers only) is not a saved date.
+    if (!saved?.length) return toastError(tr('actions.nothingWasChangedRefresh'));
     success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }
@@ -438,6 +450,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   }
 
   async function removeFile(doc: WarrantyDoc) {
+    if (!(await askConfirm({ title: tr('home.deleteFileQ'), body: tr('confirm.cannotBeUndone') }))) return;
     setRemovingId(doc.id);
     const supabase = createClient();
     await removeFamilyDocument(supabase, doc.storage_path);

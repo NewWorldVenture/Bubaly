@@ -2195,7 +2195,7 @@ export interface Database {
         { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
         Partial<{ family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; user_agent: string | null; enabled: boolean; last_seen_at: string; updated_by: string | null; metadata: Json }>
       >;
-      // Per-device push receipts (migration 0336): service role only.
+      // Per-device push receipts (migration 0379): service role only.
       push_deliveries: T<
         { notification_id: string; device_id: string; delivered_at: string },
         { notification_id: string; device_id: string; delivered_at?: string },
@@ -2773,7 +2773,7 @@ export interface Database {
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
-      // 0332: the one door onto medical_profiles that is NOT manager-or-self.
+      // 0375: the one door onto medical_profiles that is NOT manager-or-self.
       // Returns (member_id, allergies) and nothing else, and RAISES rather than
       // returning zero rows to a non-member, so the callers' fail-closed guards fire.
       family_allergies: { Args: { p_family_id: string }; Returns: { member_id: string; allergies: string | null }[] };
@@ -2803,7 +2803,7 @@ export interface Database {
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
-      // 0337: mark + increment in one transaction, for the claim holder only.
+      // 0380: mark + increment in one transaction, for the claim holder only.
       apply_resend_campaign_counter: { Args: { p_svix_id: string; p_received_at: string; p_campaign_id: string; p_field: string }; Returns: string };
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };
@@ -2816,6 +2816,36 @@ export interface Database {
       wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_fund_goal: { Args: { p_family_id: string; p_goal_id: string; p_amount: number; p_actor_id: string }; Returns: Json };
+      // A spend decided and written under the spend bucket's row lock (0342).
+      // jsonb {ok, reason, transaction_id, status, available, idempotent}: the
+      // committed + held ledger is totalled inside the lock, so two concurrent
+      // spends cannot each be approved against the same dollar.
+      wallet_debit_spend_bucket: {
+        Args: {
+          p_family_id: string; p_child_wallet_id: string; p_amount: number; p_type: WalletTxnType;
+          p_description: string; p_actor_id: string | null; p_requires_approval?: boolean;
+          p_approved_by?: string | null; p_related_type?: string | null; p_related_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      // Chore progress under a row lock (0341). Both are jsonb {ok, …}: the
+      // award adds to what the locked row holds, the reversal subtracts from it,
+      // so two approvals landing together both count and rolling one back does
+      // not erase the other.
+      kid_progress_apply_completion: {
+        Args: { p_family_id: string; p_member_id: string; p_gained_xp: number; p_today: string };
+        Returns: Json;
+      };
+      kid_progress_revert_completion: {
+        Args: {
+          p_family_id: string; p_member_id: string; p_gained_xp: number;
+          p_applied_streak: number; p_applied_longest_streak: number; p_applied_last_activity: string | null;
+          p_previous_streak: number; p_previous_longest_streak: number; p_previous_last_activity: string | null;
+        };
+        Returns: Json;
+      };
+      kid_progress_level_for_xp: { Args: { p_xp: number }; Returns: number };
       claim_marketing_generation_jobs: {
         Args: { p_limit?: number };
         Returns: Tables<'marketing_generation_jobs'>[];

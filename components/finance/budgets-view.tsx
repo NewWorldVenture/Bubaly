@@ -14,8 +14,8 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd, budgetSpent, pct, type Period } from '@/lib/finance/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usd as usdIn, budgetSpent, pct, type Period } from '@/lib/finance/hub';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Budget = Tables<'budgets'>;
 type Txn = Tables<'transactions'>;
@@ -23,6 +23,9 @@ const CATEGORIES = ['Groceries', 'Dining', 'Transport', 'Entertainment', 'Shoppi
 
 export function BudgetsView() {
   const t = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (amount: number) => usdIn(amount, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 

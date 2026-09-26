@@ -6,7 +6,25 @@
 // must render its own <html>/<body> and cannot rely on globals.css or Tailwind
 // being present. Everything here is therefore inlined and self-contained.
 import { useEffect } from 'react';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { translate } from '@/lib/i18n/translate';
+import { GLOBAL_ERROR_MESSAGES } from '@/lib/i18n/global-error-messages';
+
+// Not `useTranslations()`, and not a LocaleProvider of its own either.
+//
+// This component is the boundary for an error thrown in the ROOT LAYOUT, so
+// Next.js replaces the whole document and `app/layout.tsx` — the only thing
+// that mounts a provider — never ran. It has therefore NEVER had one, in any
+// locale, and its t() calls were resolving through translate()'s English
+// fallback: already English-only for every visitor, always.
+//
+// lib/i18n/translate.ts removes that fallback so the 841 KB catalogue stops
+// shipping to the browser, which would leave this page rendering
+// `globalError.somethingWentWrong` at somebody whose session has just broken.
+// So it carries its own four strings.
+//
+// Mounting a LocaleProvider here instead would mean inventing a locale and a
+// source for a page that cannot know either, which dresses an English-only
+// fallback up as localisation. Calling translate directly says what it is.
 
 export default function GlobalError({
   error,
@@ -15,7 +33,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const t = useTranslations();
+  const t = (key: string) => translate(GLOBAL_ERROR_MESSAGES, key);
   useEffect(() => {
     console.error('[Bubaly] root error:', error);
   }, [error]);

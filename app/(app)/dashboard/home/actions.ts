@@ -135,8 +135,13 @@ export async function saveServiceRecordAction(fd: FormData) {
   // (the record itself is already saved), but log a failure so a broken update is
   // observable instead of silently drifting the forecast math.
   if (assetId && serviceDate) {
-    const { error: assetError } = await supabase.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId);
+    const { data: stamped, error: assetError } = await supabase.from('home_assets').update({ last_serviced_on: serviceDate })
+      .eq('id', assetId).eq('family_id', familyId).select('id');
     if (assetError) console.error('[home] home_assets last_serviced_on update failed', { familyId, assetId, error: assetError });
+    // Best-effort, as the error branch above is: the service record is the
+    // write that matters. But a stamp RLS filtered (0336: managers only) is
+    // logged too, rather than looking identical to one that landed.
+    else if (!stamped?.length) console.error('[home] home_assets last_serviced_on update touched no row', { familyId, assetId });
   }
   revalidatePath('/dashboard/home/service');
   revalidatePath('/dashboard/home');

@@ -2,8 +2,11 @@
 // Even-split math (cent-accurate), per-member balances, and minimal-transfer
 // settlement suggestions. No Supabase/React so it's deterministically testable.
 
-export function usd(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+/** Cents as dollars for the reader; the currency stays the money's own. */
+export function usd(cents: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
 /** Split a total evenly across members; leftover cents go to the first members

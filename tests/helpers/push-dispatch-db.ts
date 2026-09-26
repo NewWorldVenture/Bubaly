@@ -49,8 +49,8 @@ function matches(row: PushFixtureRow, expression: string): boolean {
 /** Stateful execution fixture: filters, multi-column ordering, limits, keysets and writes all apply. */
 export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options: { maxRows?: number } = {}) {
   tables.app_settings ??= [];
-  // Per-device receipts (0336). Present by default because every dispatch reads
-  // them; a test that needs the pre-0336 database deletes the key.
+  // Per-device receipts (0379). Present by default because every dispatch reads
+  // them; a test that needs the pre-0379 database deletes the key.
   tables.push_deliveries ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();

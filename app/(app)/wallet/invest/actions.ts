@@ -38,7 +38,10 @@ async function decisionResult(operation: string, message: string, data: unknown)
     insufficient_cash: 'No longer enough in the Invest bucket.',
     insufficient_shares: 'No longer enough shares to sell.',
   };
-  return { ok: false, error: messages[String(result.reason)] ?? `Could not ${operation}.` };
+  // `operation` is a log label (see actionFailure); what a parent reads for an
+  // unrecognised reason is the caller's translated `message`, not an English
+  // template around a catalogue key.
+  return { ok: false, error: messages[String(result.reason)] ?? message };
 }
 
 /** Live balance (cents) of a child's INVEST bucket from the immutable ledger. */
@@ -154,7 +157,7 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
     p_approve: input.approve,
   });
   if (error) return actionFailure('decide the investment order', t('invest.couldNotDecideTheInvestmentOrder'), error);
-  const result = await decisionResult(tr('actions.decideTheInvestmentOrder'), tr('invest.couldNotDecideTheInvestment'), data);
+  const result = await decisionResult('decide the investment order', tr('invest.couldNotDecideTheInvestment'), data);
   if (!result.ok) return result;
 
   revalidatePath('/wallet/invest');

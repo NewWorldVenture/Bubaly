@@ -216,7 +216,7 @@ export function CommunityModule({
               {feed.map((f) => (
                 <article key={`${f.circleId}-${f.listing.id}`} className="rounded-2xl border border-border bg-surface p-4">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
+                    <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[f.listing.kind as ListingKind] ?? f.listing.kind}
                     </span>
                     <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] font-bold text-muted">

@@ -107,7 +107,7 @@ describe('a paths filter lists what the workflow depends on', () => {
     // Three workflows pin SPECIFIC migration filenames — 0274_finance_…,
     // 0245_move_planner, 0270_travel_confirmation_import and friends. This
     // branch has renumbered a migration ten times (the tenth moved our own 0311
-    // to 0327 to clear a collision with main), and a renumbering that lands on
+    // to 0370 to clear a collision with main), and a renumbering that lands on
     // one of these makes the filter match nothing. The workflow then never runs
     // again, and a runtime test that never runs looks exactly like one that
     // passes.

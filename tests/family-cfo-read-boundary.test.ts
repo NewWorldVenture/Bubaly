@@ -42,7 +42,11 @@ describe('family-cfo forecast surface', () => {
   const moneyTimelinePage = fs.readFileSync('app/(app)/dashboard/money-timeline/page.tsx', 'utf8');
 
   it('fails closed when the forecast loader throws, after the finance guard and before deriving data', () => {
-    expect(page).toContain('forecastInput = await loadMoneyTimelineInput(supabase, familyId);');
+    // The PROPERTY, not the call text: the forecast read is awaited into
+    // forecastInput. Asserting the exact argument list made this fail the moment
+    // the loader gained a locale, which is a change to wording and not to the
+    // read boundary this test exists to hold.
+    expect(page).toMatch(/forecastInput = await loadMoneyTimelineInput\(/);
     expect(page).toContain("console.error('[dashboard/family-cfo] forecast read failed', err);");
     const financeGuard = page.indexOf('if (financeError) {');
     const forecastGuard = page.indexOf("console.error('[dashboard/family-cfo] forecast read failed', err);");

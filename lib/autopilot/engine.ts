@@ -12,6 +12,7 @@
 //   < 70   → ask   : surface as awareness / a question
 
 import { buildMomentPrep } from '@/lib/moments/prep';
+import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 
 export type ConfidenceTier = 'auto' | 'approve' | 'ask';
 
@@ -55,7 +56,23 @@ export type FavoriteMeal = { name: string; count: number };
 export type InsuranceSignal = { id: string; label: string; renewalOn: string };
 
 export type FamilySnapshot = {
+  /**
+   * Today on the FAMILY's wall, `YYYY-MM-DD` — not Greenwich's today.
+   *
+   * Every `daysUntil` below measures from this key, so which day it names
+   * decides whether an appointment reads "today" or "tomorrow". It used to be
+   * `new Date().toISOString().slice(0, 10)`, which is the day at Greenwich and
+   * a different day from the family's for 7h of every day in Los Angeles and
+   * 9h in Tokyo.
+   */
   today: string; // YYYY-MM-DD
+  /**
+   * The family's IANA zone, required because half the fields below are DATE
+   * columns (already the family's day) and half are timestamptz instants
+   * (a day only once resolved somewhere). Without it this engine cannot tell
+   * the two apart, and comparing one against the other is the defect.
+   */
+  tz: string;
   renewals: RenewalSignal[];
   appointments: AppointmentSignal[];
   overdueChores: ChoreSignal[];
@@ -72,8 +89,30 @@ export type FamilySnapshot = {
 
 const DAY_MS = 86_400_000;
 
+/**
+ * The day of a value that is ALREADY a day — a Postgres DATE column arrives
+ * from PostgREST as a bare `YYYY-MM-DD`, so this is a no-op that documents
+ * "no instant here, nothing to resolve". Binding a zone to one of these would
+ * MOVE it: `2026-09-21` read in Los Angeles is the 20th.
+ */
 function isoDay(s: string): string {
   return s.slice(0, 10);
+}
+
+/**
+ * The day of an INSTANT, on the family's wall. This is the conversion
+ * `isoDay` must never be used for: `starts_at.slice(0, 10)` on a 19:00
+ * Los Angeles event answers TOMORROW, so "is it today?" came back no for
+ * every evening in the family's week.
+ */
+function localDay(s: FamilySnapshot, instantIso: string): string {
+  return dayKeyInZone(Date.parse(instantIso), s.tz) ?? isoDay(instantIso);
+}
+
+/** 09:00 on the family's wall on `dayKey`, as an instant. Greenwich's 09:00 is 02:00 in Los Angeles. */
+function localMorningIso(s: FamilySnapshot, dayKey: string): string {
+  const ms = zonedTimeMs(dayKey, 9, 0, s.tz);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : `${dayKey}T09:00:00Z`;
 }
 function daysUntil(today: string, target: string): number {
   return Math.round((Date.parse(`${isoDay(target)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS);
@@ -121,7 +160,9 @@ export function renewalSuggestions(s: FamilySnapshot): SuggestionDraft[] {
 export function appointmentSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return s.appointments
     .filter((a) => !a.hasReminder)
-    .map((a) => ({ a, d: daysUntil(s.today, a.startsAt) }))
+    // `starts_at` is timestamptz: resolve the instant on the family's wall
+    // before asking how many of THEIR days away it is.
+    .map((a) => ({ a, d: daysUntil(s.today, localDay(s, a.startsAt)) }))
     .filter(({ d }) => d >= 0 && d <= 1)
     .map(({ a, d }) => ({
       kind: 'appointment',
@@ -186,7 +227,8 @@ export function birthdaySuggestions(s: FamilySnapshot): SuggestionDraft[] {
 
 export function grocerySuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return s.lingeringGroceries
-    .map((g) => ({ g, age: -daysUntil(s.today, g.addedAt) }))
+    // `created_at` is timestamptz — the age of the item in FAMILY days.
+    .map((g) => ({ g, age: -daysUntil(s.today, localDay(s, g.addedAt)) }))
     .filter(({ age }) => age >= 7)
     .map(({ g }) => ({
       kind: 'groceries',
@@ -223,14 +265,16 @@ export function conflictSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   const seen = new Set<string>();
   const todays = s.events.filter((e) => {
-    const d = daysUntil(s.today, e.startsAt);
+    const d = daysUntil(s.today, localDay(s, e.startsAt));
     return d >= 0 && d <= 1;
   });
   for (let i = 0; i < todays.length; i++) {
     for (let j = i + 1; j < todays.length; j++) {
       const a = todays[i];
       const b = todays[j];
-      if (isoDay(a.startsAt) !== isoDay(b.startsAt)) continue;
+      // "Same day" is the family's day. Sliced at Greenwich, a 16:00 and a
+      // 17:00 Los Angeles clash straddle midnight UTC and stopped being a clash.
+      if (localDay(s, a.startsAt) !== localDay(s, b.startsAt)) continue;
       if (!overlaps(a.startsAt, a.endsAt, b.startsAt, b.endsAt)) continue;
       const sameMember = a.memberId && b.memberId && a.memberId === b.memberId;
       const key = [a.id, b.id].sort().join('|');
@@ -383,7 +427,7 @@ export function medicationSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         urgency: clampUrgency(d <= 1 ? 3 : 2),
         actionType: 'create_reminder',
         actionLabel: 'Remind me to refill',
-        payload: { title: `Refill ${m.name}`, at: `${isoDay(m.refillOn)}T09:00:00Z` },
+        payload: { title: `Refill ${m.name}`, at: localMorningIso(s, isoDay(m.refillOn)) },
         sourceKind: 'medications',
         sourceId: m.id,
         memberId: m.memberId,
@@ -447,7 +491,7 @@ export function insuranceSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         urgency: clampUrgency(d <= 3 ? 3 : d <= 14 ? 2 : 1),
         actionType: 'create_reminder',
         actionLabel: 'Add renewal reminder',
-        payload: { title: `Renew ${p.label}`, at: `${isoDay(p.renewalOn)}T09:00:00Z` },
+        payload: { title: `Renew ${p.label}`, at: localMorningIso(s, isoDay(p.renewalOn)) },
         sourceKind: 'family_insurance_policies',
         sourceId: p.id,
         memberId: null,
@@ -493,7 +537,7 @@ export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   const now = new Date(`${s.today}T00:00:00Z`);
   for (const e of s.events) {
-    const d = daysUntil(s.today, e.startsAt);
+    const d = daysUntil(s.today, localDay(s, e.startsAt));
     if (d < 0 || d > 2) continue; // only imminent moments auto-prep
 
     const prep = buildMomentPrep(

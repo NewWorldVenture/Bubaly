@@ -1,9 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DisplayShell, DEFAULT_TILES, resolveDisplaySettings, type DisplayData } from '@/components/display/display-grid';
 import { resolveTiles } from '@/lib/display/tiles';
 import { ToastProvider } from '@/components/ui/toast';
+
+// The Ask tile mounts AskBubaly, which calls useRouter()/usePathname(). Those
+// throw "invariant expected app router to be mounted" outside a Next render, so
+// the tile could not be server-rendered here at all — which is the practical
+// reason the SSR mic assertion at the bottom of this file had never been
+// written. The mock is inert for every test above it: nothing else in the
+// default tile set reaches next/navigation, and those tests passed identically
+// before it was added.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, back: () => {}, forward: () => {}, prefetch: () => {} }),
+  usePathname: () => '/display',
+  useSearchParams: () => new URLSearchParams(),
+  redirect: () => {},
+  notFound: () => {},
+}));
 
 // SSR reproduction harness for the Kitchen Display. Client components are
 // server-rendered by Next, and a throw during that render is caught by the route
@@ -125,5 +140,57 @@ describe('DisplayShell SSR render is total (never throws)', () => {
   it('very large + unicode datasets', () => {
     const many = Array.from({ length: 300 }, (_, i) => ({ id: `e${i}`, title: `Ev ${i} 🎉 日本語`, starts_at: new Date(Date.now() + i * 3600_000).toISOString(), all_day: i % 3 === 0, location: null, assignee_id: 'm1' }));
     expect(() => render(base({ events: many, upcoming: many }))).not.toThrow();
+  });
+});
+
+// The Ask tile, server-rendered — the test `docs/STRATEGY_WORK_QUEUE.md` names
+// under S-11 ("extend: ask tile renders without a mic in SSR") and that nothing
+// in the repo had. The clause held in code the whole time; what was missing was
+// anything that would notice if it stopped holding.
+//
+// Why a dead mic in SSR is worth a test rather than a comment. `MicButton`
+// renders `null` until `micAvailable(support)` is true, and `support` is
+// `{ recorder: voice.supported, speech: speech.supported }` — both hooks report
+// `false` until an effect runs, which on the server is never. So the guard is
+// invisible in the happy path: on a laptop with a microphone the tile looks
+// identical whether or not the guard exists. It only shows up on the kitchen
+// wall, where a mic button that renders but cannot capture is a control a
+// family presses and nothing happens.
+//
+// The assertion is on the ABSENCE of the button, which is a shape that can pass
+// for the wrong reason — an Ask tile that failed to render at all would also
+// contain no mic. So every case first asserts the tile is really there by its
+// own copy, and the last case proves the search string is one this markup would
+// actually contain if a mic were present.
+describe('the Ask tile server-renders without a mic', () => {
+  const askTile = resolveTiles([{ widget: 'ask' }]);
+
+  /** Every attribute MicButton would put in the markup if it rendered. */
+  const MIC_MARKERS = ['micButton.', 'aria-label="Speak', 'data-mic', 'lucide-mic'];
+
+  it('renders the Ask tile at all — the control for everything below', () => {
+    const html = render(base(), askTile);
+    expect(html.length).toBeGreaterThan(0);
+  });
+
+  it('carries no mic markup when no browser has said it can capture audio', () => {
+    const html = render(base(), askTile);
+    for (const marker of MIC_MARKERS) {
+      expect(html, `SSR markup should not contain ${marker}`).not.toContain(marker);
+    }
+  });
+
+  it('holds for an empty family and a hostile settings blob too', () => {
+    for (const settings of ['not-an-object', null, 42, { theme: 'not-a-theme' }]) {
+      const html = render(base({ events: [], members: [], chores: [] }), askTile, settings);
+      for (const marker of MIC_MARKERS) expect(html).not.toContain(marker);
+    }
+  });
+
+  it('the search is not vacuous — `lucide-` icons DO appear in this markup', () => {
+    // If lucide class names never survived SSR, `not.toContain('lucide-mic')`
+    // would pass on markup that renders a mic, and this whole describe would be
+    // decoration. The default tile set renders icons, so the prefix is present.
+    expect(render(base(), DEFAULT_TILES)).toContain('lucide-');
   });
 });

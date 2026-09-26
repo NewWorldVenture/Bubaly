@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 const CHIP_TONE: Record<AttentionTone, string> = {
   danger: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
   warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  info: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
+  info: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
   muted: 'bg-border/60 text-muted',
 };
 

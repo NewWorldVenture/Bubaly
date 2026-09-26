@@ -1,4 +1,5 @@
--- Behavioural proof for 0298, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0306 (allowance_rules), 0322 (the gift and babysitter tables) and
+-- 0324 (wallet_goals), run as real `authenticated` sessions under RLS.
 --
 -- 0217 narrowed writes to can_manage_family on five wallet tables and 0254/0275
 -- re-assert that set with restrictive guards. SIX tables from the same 0088 loop
@@ -12,6 +13,14 @@
 -- What a member may still DO is asserted alongside what they may not: reads stay
 -- family-wide, because a child seeing their own allowance and savings goal is
 -- the product working. A guard that blinded them would be a different bug.
+--
+-- This file was written for the audit branch's own migration over all six
+-- (0309, later 0368). At the merge with main it turned out main had closed
+-- every one of them first — allowance_rules in 0306, which was on the branch's
+-- base all along — with restrictive guards over the permissive policy it keeps,
+-- and main's probes name those guards as the refusal. The branch's migration
+-- was dropped as the duplicate and its stray-policy sweep with it; what this
+-- file asserts is behaviour, and the behaviour is unchanged.
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
 -- `alter default privileges` already gives `authenticated` full DML on every
@@ -141,21 +150,7 @@ begin
     raise exception 'a child deleted a savings goal';
   end if;
 
-  -- ── No stray permissive write policy survives on any of the six ──────────
   reset role;
-  select count(*) into n
-  from pg_policy p
-  join pg_class c on c.oid = p.polrelid
-  join pg_namespace ns on ns.oid = c.relnamespace
-  where ns.nspname = 'public'
-    and c.relname = any (array['allowance_rules','wallet_goals','gift_links',
-                               'gift_payments','babysitter_profiles','babysitter_payments'])
-    and p.polpermissive
-    and p.polcmd in ('a','w','d','*')
-    and p.polname not in (c.relname || '_mng_insert', c.relname || '_mng_update', c.relname || '_mng_delete');
-  if n <> 0 then
-    raise exception '% stray permissive write policy(ies) on the allowance/gift tables', n;
-  end if;
 
   raise notice 'OK allowance/gift writes: a child cannot write any of the six, a parent can, and a child still READS their own rule and goal';
 end $$;

@@ -2,6 +2,16 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { applyCompletionRewards, awardBadges, ensureProgress } from '@/lib/chores/server';
+import { DIFFICULTY_XP } from '@/lib/chores/logic';
+
+// The award and its reversal are RPCs as of 0341 — `kid_progress_apply_completion`
+// reads the row FOR UPDATE so two approvals landing together both count, and
+// `kid_progress_revert_completion` subtracts under the same lock rather than
+// writing a pre-award snapshot back over whatever is there. So the boundaries
+// below are asserted against those calls rather than against a blind
+// `.from('kid_progress').update(…)`. What each case asserts is unchanged: the
+// engine stops on a failed award, and it takes its own award back — and only
+// its own — when the work after it fails.
 
 type Result = { data: unknown; error: unknown; count?: number | null };
 type Call = { table: string; operation: string };
@@ -12,9 +22,25 @@ const progress = {
   created_at: '2026-07-01T00:00:00Z', updated_at: '2026-07-01T00:00:00Z',
 };
 
-function fakeClient(resolveResult: (table: string, operation: string, calls: Call[]) => Result) {
+/** What `kid_progress_apply_completion` hands back on a successful award. */
+const applied = {
+  ok: true, xp: 30, level: 1, current_streak: 3, longest_streak: 4, last_activity: '2026-07-02',
+  previous_level: progress.level, previous_streak: progress.current_streak,
+  previous_longest_streak: progress.longest_streak, previous_last_activity: progress.last_activity,
+};
+
+function fakeClient(
+  resolveResult: (table: string, operation: string, calls: Call[]) => Result,
+  resolveRpc: (fn: string, args: Record<string, unknown>) => Result = () => ({ data: applied, error: null }),
+) {
   const calls: Call[] = [];
+  const rpcArgs: Record<string, unknown>[] = [];
   const client = {
+    rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: fn, operation: 'rpc' });
+      rpcArgs.push(args);
+      return Promise.resolve(resolveRpc(fn, args));
+    },
     from(table: string) {
       let operation = 'read';
       const chain: Record<string, unknown> = {};
@@ -27,10 +53,39 @@ function fakeClient(resolveResult: (table: string, operation: string, calls: Cal
       return chain;
     },
   };
-  return { client, calls };
+  return { client, calls, rpcArgs };
 }
 
-const rewardOptions = { familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100, tz: 'UTC' };
+// The zone and the instant are ARGUMENTS as of the family-day conversion, so
+// these boundary cases name both rather than inheriting the host's clock. The
+// pair resolves to 2026-07-02 in Asia/Tokyo (09:30 local), which is the
+// `last_activity` the stubbed award below reports back.
+const rewardOptions = {
+  familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100,
+  tz: 'Asia/Tokyo', now: new Date('2026-07-02T00:30:00Z'),
+};
+
+/**
+ * The rollback takes back THIS award and nothing else.
+ *
+ * It used to write the pre-award row back absolutely, which erased any approval
+ * that landed beside it — the lost update pointing the other way. So the
+ * reversal has to carry the XP this award added (relative, subtracted under the
+ * row lock) and the snapshot it is allowed to put the streak back to, and the
+ * values it wrote, so the function can tell whether anybody has written since.
+ */
+function expectTakesBackItsOwnAwardOnly(revert: Record<string, unknown> | undefined) {
+  expect(revert, 'no reversal was sent').toBeDefined();
+  expect(revert!.p_family_id).toBe(rewardOptions.familyId);
+  expect(revert!.p_member_id).toBe(rewardOptions.memberId);
+  expect(revert!.p_gained_xp).toBe(DIFFICULTY_XP.medium);
+  expect(revert!.p_applied_streak).toBe(applied.current_streak);
+  expect(revert!.p_applied_longest_streak).toBe(applied.longest_streak);
+  expect(revert!.p_applied_last_activity).toBe(applied.last_activity);
+  expect(revert!.p_previous_streak).toBe(progress.current_streak);
+  expect(revert!.p_previous_longest_streak).toBe(progress.longest_streak);
+  expect(revert!.p_previous_last_activity).toBe(progress.last_activity);
+}
 
 describe('chore reward persistence boundaries', () => {
   it('fails closed when the progress lookup fails', async () => {
@@ -45,34 +100,43 @@ describe('chore reward persistence boundaries', () => {
   });
 
   it('does not continue after an XP progress write fails', async () => {
-    const { client, calls } = fakeClient((table, operation) => {
-      if (table === 'kid_progress' && operation === 'read') return { data: progress, error: null };
-      if (table === 'kid_progress' && operation === 'update') return { data: null, error: new Error('write failed') };
-      return { data: null, error: null };
-    });
+    const { client, calls } = fakeClient(
+      () => ({ data: null, error: null }),
+      () => ({ data: null, error: new Error('write failed') }),
+    );
 
     await expect(applyCompletionRewards(client as never, rewardOptions)).rejects.toThrow('Could not save chore progress');
-    expect(calls).toEqual([{ table: 'kid_progress', operation: 'update' }]);
+    expect(calls).toEqual([{ table: 'kid_progress_apply_completion', operation: 'rpc' }]);
+  });
+
+  it('does not continue when the award comes back refused rather than errored', async () => {
+    // The RPC reports a boundary it refused as `{ ok: false, reason }` with no
+    // transport error, so a caller that only checks `error` would celebrate an
+    // award that never happened.
+    const { client, calls } = fakeClient(
+      () => ({ data: null, error: null }),
+      () => ({ data: { ok: false, reason: 'forbidden' }, error: null }),
+    );
+
+    await expect(applyCompletionRewards(client as never, rewardOptions)).rejects.toThrow('Could not save chore progress');
+    expect(calls).toEqual([{ table: 'kid_progress_apply_completion', operation: 'rpc' }]);
   });
 
   it('restores the prior progress row when chore history cannot be read', async () => {
-    const { client, calls } = fakeClient((table, operation, allCalls) => {
-      if (table === 'kid_progress' && operation === 'read') return { data: progress, error: null };
-      if (table === 'kid_progress' && operation === 'update') {
-        return { data: { id: 'progress-1' }, error: null };
-      }
+    const { client, calls, rpcArgs } = fakeClient((table) => {
       if (table === 'chore_assignments') return { data: null, error: new Error('history failed'), count: null };
       return { data: null, error: null };
     });
 
     await expect(applyCompletionRewards(client as never, rewardOptions)).rejects.toThrow('Could not apply chore rewards');
-    expect(calls.filter((call) => call.table === 'kid_progress' && call.operation === 'update')).toHaveLength(2);
+    expect(calls.map((call) => call.table)).toEqual([
+      'kid_progress_apply_completion', 'kid_progress_revert_completion',
+    ]);
+    expectTakesBackItsOwnAwardOnly(rpcArgs[1]);
   });
 
   it('restores progress when badge persistence fails', async () => {
-    const { client, calls } = fakeClient((table, operation) => {
-      if (table === 'kid_progress' && operation === 'read') return { data: progress, error: null };
-      if (table === 'kid_progress' && operation === 'update') return { data: { id: 'progress-1' }, error: null };
+    const { client, calls, rpcArgs } = fakeClient((table, operation) => {
       if (table === 'chore_assignments') return { data: null, error: null, count: 1 };
       if (table === 'member_badges' && operation === 'read') return { data: [], error: null };
       if (table === 'member_badges' && operation === 'upsert') return { data: null, error: new Error('badge write failed') };
@@ -80,7 +144,10 @@ describe('chore reward persistence boundaries', () => {
     });
 
     await expect(applyCompletionRewards(client as never, rewardOptions)).rejects.toThrow('Could not apply chore rewards');
-    expect(calls.filter((call) => call.table === 'kid_progress' && call.operation === 'update')).toHaveLength(2);
+    expect(calls.filter((call) => call.operation === 'rpc').map((call) => call.table)).toEqual([
+      'kid_progress_apply_completion', 'kid_progress_revert_completion',
+    ]);
+    expectTakesBackItsOwnAwardOnly(rpcArgs[1]);
   });
 
   it('returns only badges actually inserted by an idempotent upsert', async () => {
@@ -106,53 +173,30 @@ describe('chore reward persistence boundaries', () => {
   // not increment. Two days running, and the streak does not move. Evening then
   // next morning is the ordinary rhythm for a school-age child.
   describe('the streak counts the family\u2019s day, not the host\u2019s', () => {
-    /** Run the engine at `at`, in `tz`, against a member whose last activity was `lastActivity`. */
-    async function streakAfter(at: string, tz: string, lastActivity: string): Promise<number> {
-      // `applyCompletionRewards` reads the clock itself, so the clock is what
-      // has to move. Vitest's fake timers do it properly — an earlier draft
-      // hand-rolled a Date subclass and TypeScript was right to reject it.
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date(at));
-      try {
-        const { client } = fakeClient((table, operation) => {
-          if (table === 'kid_progress' && operation === 'read') {
-            return { data: { ...progress, current_streak: 3, last_activity: lastActivity }, error: null };
-          }
-          if (table === 'kid_progress' && operation === 'update') return { data: { id: 'progress-1' }, error: null };
-          if (table === 'chore_assignments') return { data: null, error: null, count: 1 };
-          if (table === 'member_badges') return { data: [], error: null };
-          return { data: null, error: null };
-        });
-        const result = await applyCompletionRewards(client as never, { ...rewardOptions, tz });
-        return result.streak;
-      } finally {
-        vi.useRealTimers();
-      }
+    // Since 0341 the streak arithmetic is SQL's (`p_today - last_activity = 1`),
+    // run under the row lock; what TypeScript still owns is WHICH DAY it names
+    // as `p_today`. That is the half this branch's streak finding was about, so
+    // the assertion moved to the argument: a wrong day here is a wrong streak
+    // there, in both directions, exactly as the SQL comment describes.
+    async function todaySent(at: string, tz: string): Promise<unknown> {
+      const { client, rpcArgs } = fakeClient(() => ({ data: null, error: null }));
+      await applyCompletionRewards(client as never, { ...rewardOptions, tz, now: new Date(at) });
+      return rpcArgs[0]?.p_today;
     }
 
-    // Every instant below is a Los Angeles EVENING, because that is the only
-    // time the two answers differ — 2026-06-24T01:00Z is 6pm on the 23rd in Los
-    // Angeles and already the 24th in UTC. A morning instant would pass under
-    // the bug as easily as under the fix, which is worth saying out loud: the
-    // first draft of this test used 10am and proved nothing.
+    // A Los Angeles EVENING, because that is the only time the two answers
+    // differ — 2026-06-24T01:00Z is 6pm on the 23rd in Los Angeles and already
+    // the 24th in UTC. A morning instant would pass under the bug as easily as
+    // under the fix; the first draft of this test used 10am and proved nothing.
     const TUESDAY_EVENING = '2026-06-24T01:00:00Z';
 
-    it('extends a streak across consecutive family days', async () => {
-      // Family day 23rd, last activity the 22nd: consecutive, so 3 -> 4. Read in
-      // UTC the day is the 24th, a two-day gap, and the streak RESETS to 1 —
-      // a child who did chores two evenings running is told they start again.
-      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-22')).toBe(4);
+    it('files the award against the family\u2019s day', async () => {
+      expect(await todaySent(TUESDAY_EVENING, 'America/Los_Angeles')).toBe('2026-06-23');
     });
 
-    it('does not increment twice on the same family day', async () => {
-      // Family day 23rd, last activity the 23rd: unchanged at 3. Read in UTC the
-      // day is the 24th, so it would count a second time and inflate the streak.
-      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-23')).toBe(3);
-    });
-
-    it('gives two households two different — and both correct — answers', async () => {
-      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-23')).toBe(3);
-      expect(await streakAfter(TUESDAY_EVENING, 'UTC', '2026-06-23')).toBe(4);
+    it('gives two households two different \u2014 and both correct \u2014 days', async () => {
+      expect(await todaySent(TUESDAY_EVENING, 'America/Los_Angeles')).toBe('2026-06-23');
+      expect(await todaySent(TUESDAY_EVENING, 'UTC')).toBe('2026-06-24');
     });
   });
 

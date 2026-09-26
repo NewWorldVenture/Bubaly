@@ -91,6 +91,7 @@ function readCachedChildMap(): NavChildMap {
  * unlocks; payment-tier gating happens at render.
  */
 function useSidebarNav() {
+  const t = useTranslations();
   const [keys, setKeysState] = useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_SIDEBAR_NAV_KEYS;
     try {
@@ -103,12 +104,27 @@ function useSidebarNav() {
     return DEFAULT_SIDEBAR_NAV_KEYS;
   });
   const [childMap, setChildMap] = useState<NavChildMap>(readCachedChildMap);
+  // `loaded` is the write gate. The seed above is a localStorage CACHE — and on a
+  // cold cache it is DEFAULT_SIDEBAR_NAV_KEYS, which looks exactly like "this
+  // member never customized anything". A save replaces sidebarNav wholesale
+  // (lib/services/navigation saveSidebarNavigation), so until the authoritative
+  // read lands we must not write: a failed read (or a slow one the member clicks
+  // through) would otherwise persist a defaults-derived list over their real
+  // layout. Fail closed and say so, exactly as Settings › Navigation Choices does.
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
 
-  // Supabase is authoritative — reconcile once on mount.
+  // Supabase is authoritative — reconcile once on mount (and on an explicit retry).
   useEffect(() => {
     let active = true;
-    loadSidebarPrefs().then(({ nav, children }) => {
+    loadSidebarPrefs().then(({ nav, children, error }) => {
       if (!active) return;
+      // A read we could not do is not an empty layout: close the write gate
+      // (a failed re-read un-confirms whatever an earlier read established,
+      // as in Settings) and surface the failure.
+      if (error) { setLoadError(true); setLoaded(false); return; }
+      setLoadError(false);
       if (nav != null) {
         const clean = resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS);
         setKeysState(clean);
@@ -119,9 +135,14 @@ function useSidebarNav() {
         setChildMap(clean);
         try { window.localStorage.setItem(SIDEBAR_NAV_CHILDREN_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
       }
-    });
+      // `nav == null` with no error is the legitimate "nothing saved yet" case —
+      // authoritative, and writable.
+      setLoaded(true);
+    }).catch(() => { if (active) { setLoadError(true); setLoaded(false); } });
     return () => { active = false; };
-  }, []);
+  }, [reload]);
+
+  const retryLoad = useCallback(() => { setLoadError(false); setReload((value) => value + 1); }, []);
 
   // Live update when a layout change is broadcast in this tab (Settings editor
   // saving, or the other FreeTierSidebar instance pinning).
@@ -137,6 +158,7 @@ function useSidebarNav() {
 
   /** Save a new pin list: optimistic + cache + broadcast + Supabase. */
   const persist = useCallback((next: string[]): Promise<{ ok: boolean; error?: string }> => {
+    if (!loaded) return Promise.resolve({ ok: false, error: t('outcomeDiscovery.navigationUnavailable') });
     const clean = sanitizeNavKeys(next, ALL_SERVICES_KEYS);
     setKeysState(clean);
     try { window.localStorage.setItem(SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
@@ -144,11 +166,12 @@ function useSidebarNav() {
       window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: clean, children: childMap } }));
     }
     return saveSidebarNavAction({ keys: clean });
-  }, [childMap]);
+  }, [childMap, loaded, t]);
 
   /** Reset the whole sidebar to the plan default — top-level keys AND every
    *  group's sub-page layout — matching the Settings › Navigation Choices reset. */
   const resetToDefault = useCallback((): Promise<{ ok: boolean; error?: string }> => {
+    if (!loaded) return Promise.resolve({ ok: false, error: t('outcomeDiscovery.navigationUnavailable') });
     const clean = [...DEFAULT_SIDEBAR_NAV_KEYS];
     setKeysState(clean);
     setChildMap({});
@@ -160,7 +183,7 @@ function useSidebarNav() {
       window.dispatchEvent(new CustomEvent(SIDEBAR_NAV_EVENT, { detail: { nav: clean, children: {} } }));
     }
     return saveSidebarNavAction({ keys: clean, children: {} });
-  }, []);
+  }, [loaded, t]);
 
   const items = useMemo(
     () => resolveNavKeys(keys, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS)
@@ -178,7 +201,7 @@ function useSidebarNav() {
     [keys, childMap],
   );
 
-  return { items, keys, childMap, persist, resetToDefault };
+  return { items, keys, childMap, persist, resetToDefault, loaded, loadError, retryLoad };
 }
 
 /** Full catalog of every module, grouped + plan-gated, with ⭐ pin toggles and a
@@ -321,7 +344,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   const [allOpen, setAllOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const liveUnread = useLiveUnread(unreadMessages, familyId, userId);
-  const { items: sidebarNav, keys, childMap, persist, resetToDefault } = useSidebarNav();
+  const { items: sidebarNav, keys, childMap, persist, resetToDefault, loaded, loadError, retryLoad } = useSidebarNav();
   const manager = isManager(role);
 
   // Already on the plan default? (same top-level keys + no sub-page overrides.)
@@ -412,6 +435,18 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
           {t('freeTierSidebar.allServices')}
         </button>
 
+        {/* A layout we could not read is not a layout we may overwrite. The list
+            above stays as read-only links (the cached layout, or on a cold cache
+            the plan default — resolveNavKeys never leaves the rail blank) so the
+            member can still get around; this line is what stops that fallback
+            passing for their own saved layout, and every write stays blocked. */}
+        {loadError && (
+          <p role="alert" className="mt-2 px-3 text-xs text-danger xl:px-4">
+            {t('outcomeDiscovery.navigationUnavailable')}{' '}
+            <button type="button" onClick={retryLoad} className="underline">{t('outcomeDiscovery.refresh')}</button>
+          </p>
+        )}
+
         {/* Push the footer to the bottom */}
         <div className="flex-1" />
 
@@ -438,7 +473,7 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
         onUnpinAll={unpinAll}
         onReset={reset}
         isDefault={isDefaultLayout}
-        busy={busy}
+        busy={busy || !loaded}
       />
     </>
   );

@@ -147,7 +147,7 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   }
 
   // The read above establishes the order is this family's, but the write did not
-  // repeat it — and 0327 ("the terms of a deal are fixed when it is struck")
+  // repeat it — and 0370 ("the terms of a deal are fixed when it is struck")
   // narrows `marketplace_orders_update`, so a write the policy filters answers
   // `error: null` and the order stays in its old status while the buyer is told it
   // moved. The scope also closes the window between the read and the write.

@@ -172,6 +172,12 @@ describe('no claimed write discards its result', () => {
     trust_audit_logs: 'dashboard/trust and api/privacy/export are answered from it',
     stripe_authorizations: 'the admin page and the assistant explain declines from it',
     push_devices: 'an unpruned dead endpoint is retried on every later notification',
+    // Added by Pass F. This table was NOT in the original four, and that is
+    // exactly how /api/blog/unsubscribe kept the defect C-07 closed elsewhere:
+    // it told the reader "You've been unsubscribed" after an update nobody
+    // checked. A sweep scoped to tables it can name readers for is right, but
+    // the scope has to grow when a new reader is found.
+    blog_subscribers: 'the digest sends to every row that still says subscribed',
     // The seventh through thirteenth instances of the same shape. Each of these
     // sat inside a try/catch whose message named this very write — and a
     // PostgREST call RESOLVES with { data, error }, rejecting only under
@@ -207,9 +213,26 @@ describe('no claimed write discards its result', () => {
       lines.forEach((line, i) => {
         // Statement position: the line begins with `await`, so whatever the call
         // resolved with goes nowhere at all.
-        if (!new RegExp(`^\\s*(?:void\\s+)?await\\s+[\\w.]*\\.from\\('${table}'\\)`).test(line)) return;
-        const chunk = lines.slice(i, i + 4).join('\n');
-        if (/\.(insert|update|upsert|delete)\s*\(/.test(chunk)) offenders.push(`${file}:${i + 1}`);
+        //
+        // The window is JOINED before matching, because a chain is routinely
+        // broken across lines:
+        //
+        //     await supabase
+        //       .from('blog_subscribers')
+        //       .update({ ... })
+        //
+        // Matching `.from('t')` on the same line as the `await` misses every one
+        // of those. That is not hypothetical — it is how /api/blog/unsubscribe
+        // kept this exact defect while this sweep reported clean, and it was
+        // found only when the table was added here and the reverted code still
+        // passed. A guard that cannot see the common formatting of the thing it
+        // forbids is decoration.
+        if (!/^\s*(?:void\s+)?await\s/.test(line)) return;
+        const window = lines.slice(i, i + 8).join(' ').replace(/\s+/g, ' ');
+        // Stop at the end of the statement so the next one is not swept in.
+        const statement = window.split(/;\s/)[0];
+        if (!new RegExp(`\\.from\\('${table}'\\)`).test(statement)) return;
+        if (/\.(insert|update|upsert|delete)\s*\(/.test(statement)) offenders.push(`${file}:${i + 1}`);
       });
     }
     expect(offenders, `read the result — ${WATCHED[table]}`).toEqual([]);

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { addAeoQuestion, deleteAeoQuestion, updateAeoQuestion } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · AEO', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -94,11 +95,11 @@ export default async function AeoPage() {
                       <select name="status" defaultValue={q.status} className={inputCls}>{STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                       <input name="clarity_score" type="number" min="0" max="100" defaultValue={q.clarity_score ?? ''} placeholder={t('aeo.clarityScore0100')} className={inputCls} />
                       <input name="source_path" defaultValue={q.source_path ?? ''} placeholder="Source path (/faq)" className={inputCls} />
-                      <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('aeo.saveQuestion')}</button>
+                      <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('aeo.saveQuestion')}</SubmitButton>
                     </form>
                     <form action={deleteAeoQuestion} className="mt-2">
                       <input type="hidden" name="id" value={q.id} />
-                      <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('aeo.deleteQuestion')}</button>
+                      <SubmitButton className="text-xs text-muted hover:text-rose-400">{t('aeo.deleteQuestion')}</SubmitButton>
                     </form>
                   </details>
                   {q.pattern && <p className="mt-2 text-xs text-muted">Pattern: {q.pattern.replace(/_/g, ' ')}{q.entity ? ` · ${q.entity}` : ''}</p>}
@@ -116,7 +117,7 @@ export default async function AeoPage() {
             <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
             <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
             <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAeo.addQuestion')}</button>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAeo.addQuestion')}</SubmitButton>
           </form>
         </Card>
       </div>
