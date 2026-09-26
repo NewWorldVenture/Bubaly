@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T13:22:25Z
-- Total Audit Items: 14142
+- Last Updated: 2026-09-26T13:36:25Z
+- Total Audit Items: 14143
 - Not Started: 13906
-- In Progress: 233
+- In Progress: 235
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
-- Failed: 2
+- Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 moved ❌ → 🔄 (Q57). Now: 14,142 = 13,906 + 233 + 1 + 2. See Q56 and Q57.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Now: 14,143 = 13,906 + 235 + 1 + 1. See Q56–Q58.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -12159,7 +12159,7 @@ PRODUCTION READY: NO
 | SUPPORT-D59FA133542C | SUPPORT | public/launch/launch-1320x2868.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4C8E9A36E1EE | SUPPORT | public/launch/launch-750x1334.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-292C0CE6AF4C | SUPPORT | public/launch/launch-828x1792.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout | None | Desired private-image isolation regression RED | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
+| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout |None · 2026-09-26 (Q58): /_next/image is network-only (excluded by PATH — Next marks optimized images public whatever their source, so a header check alone still stores them); responses marked private or no-store are never stored; CACHE bumped v4→v5 so the activate sweep purges what v4 held on existing devices |Desired private-image isolation regression RED · tests/a-private-image-does-not-outlive-the-session.test.ts runs the ACTUAL sw.js in a VM: 5/5 pass; against v4 the three defect cases fail and both positive controls pass; with a header-only fix the optimized-image case still fails. The real-Chromium regression above has not been re-run by this session | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
 | SUPPORT-E3637D40E182 | SUPPORT | route-inventory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-52B4E3C1B5F2 | SUPPORT | scripts/backfill-marketing-asset-provenance.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-010123692F7B | SUPPORT | scripts/backfill-marketing-coverage.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13380,7 +13380,7 @@ PRODUCTION READY: NO
 | PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
-| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending |  |
+| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending | 2026-09-26 (Q58): the service-worker cache half — private rendered images outliving logout — is fixed and tested (see SUPPORT-98FD1D4C44AD). The bucket itself is still public; its rollout order (every consumer before the access change) is unchanged, so SEC-001 stays ❌ FAIL. |
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13543,7 +13543,7 @@ PRODUCTION READY: NO
 | DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
-| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
+| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🔄 IN PROGRESS | Critical |Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. · 2026-09-26: REPRODUCED as a real authenticated adult on a full replay ("an adult deleted their own read_only restriction"); worse than recorded — the DELETE policy never checked user_id, so ANY member could delete ANY member's row. docs/audit/social-access-delete-boundary-check.sql fails before 0334 and passes after | 0334: DELETE now requires is_family_admin OR social_has_permission(manage_access) — the authority INSERT/UPDATE already required — plus a RESTRICTIVE delete guard and a by-shape sweep. No app code deletes from this table, so nothing legitimate is removed | Fresh replay 347/347, probes 56/56 twice, re-apply rehearsal clean |Release blocker; no production-readiness claim. Continue independent repository repairs. ❌→🔄, not FIXED + PASS: an operator must apply 0334 and the boundary must be verified against the deployed database. See Q58. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -14294,6 +14294,7 @@ PRODUCTION READY: NO
 | MIGRATION-A3915A0867C0 | MIGRATION | supabase/migrations/0331_a_journal_is_the_one_thing_nobody_else_writes.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
 | MIGRATION-61E07EEE563E | MIGRATION | supabase/migrations/0332_a_diagnosis_is_not_the_familys_to_browse.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
 | MIGRATION-0A4628571BE1 | MIGRATION | supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql | 🔄 IN PROGRESS | High | docs/audit/guardian-screening-write-boundary-check.sql fails before and passes after; fresh replay 346/346; probes 55/55 twice; re-apply rehearsal clean | Written 2026-09-26 for AUTHZ-005 | Local replay only | Discovered 2026-09-26 (Q56/Q57). Not applied to production — agents must not; an operator applies it with the other pending migrations. |
+| MIGRATION-1D84DA6B461C | MIGRATION | supabase/migrations/0334_a_social_restriction_is_not_its_holders_to_lift.sql | 🔄 IN PROGRESS | Critical | docs/audit/social-access-delete-boundary-check.sql fails before and passes after; fresh replay 347/347; probes 56/56 twice | Written 2026-09-26 for AUTHZ-003 | Local replay only | Not applied to production — agents must not; an operator applies it with the other pending migrations. See Q58. |
 
 ## Inventory and evidence rules
 
@@ -16036,7 +16037,7 @@ Executed real access/roles/settle code with controlled database responses: activ
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
-Status: ❌ FAIL
+Status: 🔄 IN PROGRESS
 Severity: Critical
 Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; social_access_permissions; social_role_for
 
@@ -16055,16 +16056,18 @@ Members assigned restrictive social permissions cannot remove their own restrict
 Generic family-member DELETE policy includes social_access_permissions. Later granular policies tighten only INSERT/UPDATE. An active adult with explicit read_only can delete that row and regain marketing_manager connect/publish permissions via successful role fallback.
 
 #### Fixes Applied
-None. Standing no-SQL boundary prevents changing the database policy in this cycle.
+None in the earlier cycle, which worked under a standing no-SQL boundary.
+
+2026-09-26 (Q58): `supabase/migrations/0334_a_social_restriction_is_not_its_holders_to_lift.sql` requires `is_family_admin(family_id) OR social_has_permission(family_id, 'manage_access')` for DELETE — exactly the authority INSERT and UPDATE already required — with a RESTRICTIVE delete guard ANDed with every permissive policy and a by-shape sweep of any other permissive DELETE policy. No application code deletes from the table; its only writer is the manager-gated upsert.
 
 #### Retest Results
-Pending database policy repair and isolated role/tenant execution.
+2026-09-26: `docs/audit/social-access-delete-boundary-check.sql`, as real `authenticated` sessions on a fresh replay, FAILED before 0334 with "an adult deleted their own read_only restriction" and PASSES after it: the adult's role stays `read_only` without publish after a refused delete; an adult cannot delete another member's row either; every member still reads the roles; a parent still revokes. Fresh replay 347/347, all 56 probes pass twice, re-apply rehearsal clean.
 
 #### Evidence
 Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md.
 
 #### Final Status
-❌ FAIL
+🔄 IN PROGRESS — repository fix proven; awaiting operator application of 0334 and verification against the deployed database.
 
 ### DATA-005 — Medication dose actions must use current verified household and daily state
 
@@ -29703,6 +29706,97 @@ production still does until an operator applies 0333. Agents must not apply
 migrations to production, and the boundary then has to be verified against the
 deployed database. That is the precise remaining step, and it is the owner's.
 
+---
+
+## Q58 — AUTHZ-003, and the half of SEC-001 that could be fixed alone
+
+The other two ❌ FAIL items, both Critical.
+
+### AUTHZ-003: a social restriction could be lifted by the person it restricts
+
+A social role is one row per (family, user) in `social_access_permissions`. With no
+row, `social_role_for` falls back to a default by household role — parent → admin,
+**adult → `marketing_manager`**, teen → content_creator. So the row is what makes a
+restriction real, and 0034 narrowed INSERT and UPDATE to `is_family_admin OR
+social_has_permission('manage_access')` while leaving DELETE on the generic
+`is_family_member(family_id)`.
+
+Reproduced first, as a real `authenticated` adult on a fresh replay:
+
+```
+ERROR:  an adult deleted their own read_only restriction
+```
+
+**It was worse than the record said.** The DELETE policy never examined `user_id`,
+so any member could delete **any** member's row: lift a teen's restriction, or a
+sibling's. The probe asserts both.
+
+`0334_a_social_restriction_is_not_its_holders_to_lift.sql` requires, for DELETE,
+exactly the authority INSERT and UPDATE already required, and adds a RESTRICTIVE
+delete guard and a by-shape sweep. No application code deletes from this table —
+its only writer is the manager-gated upsert — so nothing legitimate is removed.
+`social_has_permission` is SECURITY DEFINER, so reading the table from inside its
+own policy does not recurse; the existing INSERT and UPDATE policies already rely
+on that.
+
+After 0334: the adult's role stays `read_only` without publish rights after a
+refused delete; an adult cannot delete another member's row; every member still
+reads the roles, which the settings page renders; a parent still revokes. Fresh
+replay **347/347**, all **56** probes pass twice, the re-apply rehearsal is clean,
+and `migration-version-safety` reads 0335 after its non-overlap claim was
+re-checked. **❌ → 🔄**, for the same reason as AUTHZ-005: production needs an
+operator to apply 0334.
+
+### SEC-001: the service-worker half, which did not have to wait for the bucket
+
+SEC-001 is not one fix. Making the family media bucket private touches six
+uploaders and a dozen consumers — including a grandparent portal that reads across
+independently authorised households — and its record sets a rollout order in which
+every consumer ships **before** the bucket flips. That is a coordinated
+architectural change, and it is not rushed here.
+
+Inside it sat a defect the earlier cycle had already **executed red** in real
+Chromium. `public/sw.js` v4 cached every successful same-origin style, script or
+**image**, and `/_next/image` is same-origin with `destination: 'image'`. It is the
+image optimizer — a proxy that renders whatever URL it is handed, private family
+photos included. Those bytes went into Cache Storage, were served cache-first, and
+survived logout, so on a shared device the next person to open the app offline saw
+the previous one's photos. The rollout order names cache handling as a
+prerequisite, so fixing it now is safe on its own.
+
+**The obvious fix is not enough, and the test proves it.** Honouring
+`Cache-Control` is the textbook answer, and it is included: a response marked
+`private` or `no-store` is never stored. But Next's optimizer emits
+`Cache-Control: public` for optimized images **whatever their source was**, so a
+header-only fix still stores the private photo. `/_next/image` is excluded by
+**path** and goes network-only. `CACHE` is bumped v4 → v5, so the existing activate
+sweep — the same mechanism that purged v3's HTML under M-023 — removes what v4
+already holds on devices in the field, while the family's downloaded-episode cache
+is spared.
+
+`tests/a-private-image-does-not-outlive-the-session.test.ts` runs the **actual**
+`sw.js` in a VM with a fake `self`, `caches` and `fetch`, dispatches real `Request`
+objects at its fetch listener, and inspects what it stored:
+
+| case | v4 | header-only fix | v5 |
+|---|---|---|---|
+| `/_next/image` marked `public` is not stored | ❌ | ❌ | ✅ |
+| `private` / `no-store` images are not stored (4 spellings) | ❌ | ✅ | ✅ |
+| a public static image and a hashed script ARE stored | ✅ | ✅ | ✅ |
+| `x-privateish=1` is not mistaken for `private` | ✅ | ✅ | ✅ |
+| activating purges `bubaly-v4`, spares `bubaly-library-v1` | ❌ | ❌ | ✅ |
+
+A source-text assertion, which is what the existing service-worker tests use, could
+not tell a guard that runs from one reordered below the `put`.
+
+**SEC-001 stays ❌ FAIL.** The bucket is still public and unguessable object names
+still do not enforce family-only reads. SUPPORT-98FD1D4C44AD stays 🔄 with this fix
+and retest appended to its cells: that row is another cycle's, and its real-Chromium
+regression is the authoritative browser proof, which this session has not re-run.
+
+**Verified:** full suite 17,128 of 17,131 (the 3 are this container's Node 22),
+lint exit 0, typecheck exit 0.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -29744,7 +29838,7 @@ Status: 🔄 IN PROGRESS — all 146 routes now fall under the gate rule (writes
 Earlier: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
 
 ## Database
-Status: 🔄 IN PROGRESS — 346 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333 added, Q57); 55/55 boundary probes pass, run twice, including the new Guardian screening probe and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
+Status: 🔄 IN PROGRESS — 347 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333–0334 added, Q57/Q58); 56/56 boundary probes pass, run twice, including the new Guardian screening and social-access probes and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
 
 Earlier: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
 
@@ -29760,7 +29854,7 @@ Status: 🔄 IN PROGRESS — unattached-label ratchet held at 16 (three label-le
 Earlier: 🔄 IN PROGRESS — complete accessibility verification pending.
 
 ## Security
-Status: 🔄 IN PROGRESS — the filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
+Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (private rendered images no longer outlive logout), its public-bucket half still open (Q57, Q58). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
 
 Earlier: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
 

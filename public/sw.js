@@ -8,7 +8,12 @@
    public app shell below is ever cached for navigations; every other page is
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
    previous worker cached, via the activate-time cleanup.) */
-const CACHE = 'bubaly-v4';
+const CACHE = 'bubaly-v5';
+/* v5 (SEC-001, Q58): v4 cached every successful same-origin IMAGE, which
+   included /_next/image — the optimizer proxy that renders private family
+   photos. Those bytes persisted in Cache Storage after logout and were served
+   cache-first, offline, to whoever used the device next. The bump purges what v4
+   stored, through the same activate sweep that purged v3's HTML. */
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown
@@ -59,12 +64,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // The image optimizer is a PROXY, not a static asset: /_next/image renders
+  // whatever URL it is handed, including a family's private photos. It is
+  // network-only, and it has to be excluded by PATH rather than by header —
+  // Next emits `Cache-Control: public` for optimized images whatever their
+  // source was, so honouring the header alone would still store them.
+  if (url.pathname.startsWith('/_next/image')) return;
+
   event.respondWith(
     caches.match(request).then(
       (cached) =>
         cached ||
         fetch(request).then((res) => {
-          if (res.ok && (request.destination === 'style' || request.destination === 'script' || request.destination === 'image')) {
+          if (res.ok && isStaticDestination(request) && mayStore(res)) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(request, copy));
           }
@@ -73,6 +85,18 @@ self.addEventListener('fetch', (event) => {
     ),
   );
 });
+
+function isStaticDestination(request) {
+  return request.destination === 'style' || request.destination === 'script' || request.destination === 'image';
+}
+
+/* The HTTP contract, which v4 ignored: a response that says `no-store` must not
+   be stored, and one that says `private` is for this user's browser rather than
+   a store that outlives their session on a shared device. Both are refused. */
+function mayStore(res) {
+  const cc = (res.headers.get('Cache-Control') || '').toLowerCase();
+  return !/(^|[\s,])(no-store|private)([\s,=]|$)/.test(cc);
+}
 
 // Push notifications (Phase 10 dispatch sends Web Push payloads here).
 self.addEventListener('push', (event) => {
