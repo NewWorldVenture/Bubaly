@@ -97,8 +97,9 @@ describe('ApprovalCard', () => {
     // have stayed live on a request the server will refuse.
     const { LocaleProvider } = await import('@/components/i18n/locale-provider');
     const { localeOrDefault } = await import('@/lib/i18n/locales');
-    const html = render(React.createElement(LocaleProvider, { locale: localeOrDefault('de-DE'), source: 'cookie', messages: getMessages('de-DE') },
-      React.createElement(ApprovalCard, { approval: { ...data, expiresAt: '2020-01-01T00:00:00Z' }, canDecide: true })));
+    const card = React.createElement(ApprovalCard, { approval: { ...data, expiresAt: '2020-01-01T00:00:00Z' }, canDecide: true });
+    const props = { locale: localeOrDefault('de-DE'), source: 'cookie', messages: getMessages('de-DE') } as React.ComponentProps<typeof LocaleProvider>;
+    const html = render(React.createElement(LocaleProvider, props, card));
     expect(html).toContain(translate(getMessages('de-DE'), 'approvalCard.expired'));
     expect(html).not.toContain('>Expired<');
     expect(html.match(/<button[^>]* disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
