@@ -16,6 +16,11 @@ import { createTodo } from '@/lib/services/tasks';
 import { scopeKey } from '@/lib/services/idempotency';
 import type { ServiceScope } from '@/lib/services/types';
 
+// A database without 0382 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown };
 
@@ -63,7 +68,7 @@ function makeDb() {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls, rows };
+  return { db: { from, rpc: missingDefaultListRpc } as unknown as SupabaseClient<Database>, calls, rows };
 }
 
 function stepScope(db: SupabaseClient<Database>, extra?: Partial<ServiceScope>): ServiceScope {

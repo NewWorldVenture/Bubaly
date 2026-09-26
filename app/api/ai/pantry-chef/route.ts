@@ -10,6 +10,7 @@ import { fetchExternal } from '@/lib/server/external-fetch';
 import {
   annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 // Fridge Chef — snap a photo of the fridge/pantry, get allergy-aware dinner
 // ideas, and push the missing ingredients straight to the shared grocery list.
@@ -83,39 +84,18 @@ export async function POST(req: NextRequest) {
         .slice(0, 40);
       if (names.length === 0) return NextResponse.json({ added: 0 });
 
-      // Get (or create) the family's default grocery list, then append items.
-      const { data: list, error: listError } = await supabase
-        .from('grocery_lists')
-        .select('id')
-        .eq('family_id', familyId)
-        // The OLDEST list is the one most likely to have been archived and
-        // replaced, so an unfiltered lookup files the whole shop where nobody
-        // looks. `grocery_lists` answers "archived" with two columns and only
-        // `archived_at` is ever written — ask both.
-        .eq('is_archived', false)
-        .is('archived_at', null)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (listError) {
-        console.error('[ai/pantry-chef] grocery list read failed', listError);
+      // The family's default grocery list, found or created as ONE operation
+      // (0382, DATA-007) — the same get-or-create every other writer uses, so a
+      // pantry-chef shop and a quick capture at the same moment cannot give a
+      // family two lists. Both archive columns are asked, inside the helper.
+      const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');
+      if (!list.id) {
+        console.error('[ai/pantry-chef] grocery list get-or-create failed', list.error);
         return NextResponse.json({ error: t('pantryChef.couldNotOpenYourGrocery') }, { status: 500 });
       }
-      let listId = list?.id;
-      if (!listId) {
-        const { data: created, error: createError } = await supabase
-          .from('grocery_lists')
-          .insert({ family_id: familyId, name: 'Groceries', created_by: userId })
-          .select('id')
-          .single();
-        if (createError || !created) {
-          console.error('[ai/pantry-chef] grocery list create failed', createError);
-          return NextResponse.json({ error: t('pantryChef.couldNotCreateYourGrocery') }, { status: 500 });
-        }
-        listId = created.id;
-      }
+      const listId = list.id;
 
-      const rows = names.map((name) => ({ family_id: familyId, list_id: listId!, name, created_by: userId }));
+      const rows = names.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId }));
       const { data: inserted, error: insertError } = await supabase.from('grocery_items').insert(rows).select('id');
       if (insertError) {
         console.error('[ai/pantry-chef] grocery insert failed', insertError);

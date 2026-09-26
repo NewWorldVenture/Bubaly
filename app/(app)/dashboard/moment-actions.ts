@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 const PREF_KEY = 'momentPrep';
 
@@ -128,31 +129,20 @@ export async function addMomentGroceryAction(input: {
   if (input.familyId && input.familyId !== familyId) return { ok: false, error: t('momentActions.couldNotAddToGroceries') };
   const supabase = await createServer();
 
-  // Resolve the active (non-archived) list, or create "Groceries" — same rule the
-  // Grocery module uses, so the moment's items land exactly where the family shops.
-  // Both archive columns: only `archived_at` is ever written (the shopping
-  // module stamps it), so `is_archived` alone calls an archived list active.
-  // A refused read is NOT "this family has no list": `lists` is null on failure
-  // and `[]` when genuinely empty, and `?.[0]?.id` flattens both to undefined,
-  // so falling through created a SECOND "Groceries" list and put the snacks on
-  // it. The shopping module opens the oldest list, so those items land where
-  // nobody shops while the toast says they were added. Fail closed — the same
-  // guard lib/services/groceries ensureDefaultList and the recipes module use.
-  const { data: lists, error: listLookupError } = await supabase.from('grocery_lists')
-    .select('id').eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at').limit(1);
-  if (listLookupError) {
-    console.error('[dashboard/moment-prep] grocery list read failed', listLookupError);
+  // The family's default list — found or created as ONE operation (0382,
+  // DATA-007), the same get-or-create the Grocery module, the assistant and
+  // quick capture use, so the moment's items land exactly where the family
+  // shops and two taps at once cannot make a second "Groceries".
+  //
+  // A refused read is NOT "this family has no list": the helper returns the
+  // error rather than falling through to a create, so a failed read never
+  // puts the snacks on a SECOND list nobody opens. Fail closed.
+  const list = await ensureDefaultGroceryListId(supabase, familyId, ctx.user.id, 'Groceries');
+  if (!list.id) {
+    console.error('[dashboard/moment-prep] grocery list get-or-create failed', list.error);
     return { ok: false, error: t('momentActions.couldNotOpenYourGroceryList') };
   }
-  let listId = lists?.[0]?.id;
-  if (!listId) {
-    const { data: created, error: listErr } = await supabase.from('grocery_lists')
-      .insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id })
-      .select('id').single();
-    if (listErr || !created) return { ok: false, error: describeActionError(listErr, 'Could not create a list') };
-    listId = created.id;
-  }
+  const listId = list.id;
 
   // Skip items already present (unchecked) so re-tapping is idempotent. The
   // idempotence in the docstring above is THIS read, and `existing ?? []` turned

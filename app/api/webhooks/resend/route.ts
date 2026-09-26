@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
+import { isMissingFunctionError } from '@/lib/supabase/errors';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey, isEventTrigger } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -53,12 +54,6 @@ function verify(body: string, headers: Headers, nowMs = Date.now()): boolean {
  * unbounded loop would spin for as long as the send lasts.
  */
 const COUNTER_ATTEMPTS = 8;
-
-/** PostgREST's answer for a function the database does not have (yet). */
-function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
-  return error.code === 'PGRST202' || error.code === '42883'
-    || /could not find the function/i.test(error.message ?? '');
-}
 
 const FIELD: Record<string, 'opens' | 'clicks' | 'bounces' | 'unsubscribes'> = {
   'email.opened': 'opens',

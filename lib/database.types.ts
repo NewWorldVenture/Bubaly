@@ -2804,6 +2804,8 @@ export interface Database {
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
       // 0380: mark + increment in one transaction, for the claim holder only.
+      ensure_default_grocery_list: { Args: { p_family_id: string; p_name: string; p_created_by: string | null }; Returns: string };
+      ensure_default_todo_list: { Args: { p_family_id: string; p_name: string; p_match_name: boolean; p_created_by: string | null }; Returns: string };
       apply_resend_campaign_counter: { Args: { p_svix_id: string; p_received_at: string; p_campaign_id: string; p_field: string }; Returns: string };
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };

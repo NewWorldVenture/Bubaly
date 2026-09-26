@@ -30,6 +30,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { buildMomentPrep } from '@/lib/moments/prep';
 
+// A database without 0382 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 // The REAL en-US catalogue, and nothing else: a key it does not hold renders as
 // the raw key, exactly as lib/i18n/translate.ts does in the product. The copy
 // this change adds is asserted below as the ENGLISH SENTENCE, never looked up, so
@@ -110,9 +115,15 @@ function makeClient() {
   function from(table: string) {
     let op: 'select' | 'insert' | 'upsert' = 'select';
     let payload: unknown = null;
+    // `.maybeSingle()` answers ONE row, as PostgREST does. The list lookup
+    // moved behind lib/services/groceries ensureDefaultGroceryListId (DATA-007),
+    // which reads it that way; the fixture's list replies stay array-shaped.
+    let oneRow = false;
     const q: Record<string, unknown> = {};
     const same = () => q;
-    const reply = (): Reply => {
+    const shaped = (r: Reply): Reply => (oneRow && Array.isArray(r.data) ? { ...r, data: r.data[0] ?? null } : r);
+    const reply = (): Reply => shaped(raw());
+    const raw = (): Reply => {
       if (op !== 'select') {
         if (table === 'grocery_lists') return { data: { id: 'list-created' }, error: null };
         if (table === 'grocery_items') {
@@ -128,7 +139,7 @@ function makeClient() {
     };
     Object.assign(q, {
       select: same, eq: same, is: same, not: same, gte: same, lte: same, lt: same,
-      order: same, limit: same, maybeSingle: same, single: same, in: same,
+      order: same, limit: same, maybeSingle: () => { oneRow = true; return q; }, single: () => { oneRow = true; return q; }, in: same,
       insert: (rows: unknown) => { op = 'insert'; payload = rows; writes.push({ table, rows }); return q; },
       upsert: (rows: unknown) => { op = 'upsert'; payload = rows; writes.push({ table, rows }); return q; },
       then: (resolve: (v: Reply) => unknown, reject: (e: unknown) => unknown) =>
@@ -136,7 +147,7 @@ function makeClient() {
     });
     return q;
   }
-  return { from };
+  return { from, rpc: missingDefaultListRpc };
 }
 
 async function renderMomentsPage() {

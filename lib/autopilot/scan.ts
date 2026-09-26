@@ -48,6 +48,7 @@ import { notify } from '@/lib/services/notifications';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 type DB = SupabaseClient<Database>;
 
@@ -114,21 +115,15 @@ export function defaultReminderIso(dayKey: string, tz: string): string {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : `${dayKey}T09:00:00Z`;
 }
 
-/** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
+/**
+ * Get-or-create the family's active shopping list, as ONE operation (0382,
+ * DATA-007): the scan runs beside a family who may be capturing their first
+ * item at the same moment, and a read-then-insert of its own gave them two.
+ */
 async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
-  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
-  // `archived_at` (0014) — and only `archived_at` is ever written, by the
-  // shopping module. Asking one of them calls an archived list open and
-  // quietly files the family's groceries where nobody is looking.
-  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) throw new Error('Autopilot could not read the family shopping list');
-  if (existing) return existing.id;
-  const { data: created, error: createError } = await supabase.from('grocery_lists')
-    .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
-  if (createError || !created?.id) throw new Error('Autopilot could not create the family shopping list');
-  return created?.id ?? null;
+  const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Shopping List');
+  if (!list.id) throw new Error('Autopilot could not open or create the family shopping list');
+  return list.id;
 }
 
 /**

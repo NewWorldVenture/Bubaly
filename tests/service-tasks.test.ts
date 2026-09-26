@@ -21,6 +21,11 @@ import {
 } from '@/lib/services/tasks';
 import type { ServiceScope } from '@/lib/services/types';
 
+// A database without 0382 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown };
 
@@ -48,7 +53,7 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  return { db: { from, rpc: missingDefaultListRpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T12:00:00Z');
@@ -71,7 +76,7 @@ describe('ensureTodoList', () => {
   it('reuses the oldest un-archived list instead of creating a second one', async () => {
     const { db, calls } = makeDb(() => ({ data: { id: 'list-1' }, error: null }));
     const res = await ensureTodoList(scopeWith(db));
-    expect(res).toEqual({ ok: true, data: { id: 'list-1', created: false } });
+    expect(res).toEqual({ ok: true, data: { id: 'list-1' } });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
     expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', archived_at: null });
   });
@@ -81,7 +86,7 @@ describe('ensureTodoList', () => {
       ? { data: { id: 'list-new' }, error: null }
       : { data: null, error: null }));
     const res = await ensureTodoList(scopeWith(db));
-    expect(res).toEqual({ ok: true, data: { id: 'list-new', created: true } });
+    expect(res).toEqual({ ok: true, data: { id: 'list-new' } });
     // todo_lists.created_by references family_members(id) — migration 0015.
     expect(calls.find((c) => c.kind === 'insert')?.payload).toEqual({
       family_id: 'fam-1', name: 'To-Do', created_by: 'member-1',

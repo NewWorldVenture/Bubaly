@@ -120,6 +120,19 @@ export function describeActionError(error: unknown, fallback = 'Something went w
 }
 
 /**
+ * PostgREST's answer for a FUNCTION the database does not have (yet) — PGRST202
+ * from the schema cache, or 42883 from Postgres. A deploy can precede its
+ * migration, so a caller of a new RPC falls back to what it did before rather
+ * than failing the family's request. Shared so each new RPC does not grow its
+ * own copy (the Resend webhook had one).
+ */
+export function isMissingFunctionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, message } = error as NonNullable<DbErrorLike>;
+  return code === 'PGRST202' || code === '42883' || /could not find the function/i.test(message ?? '');
+}
+
+/**
  * True when an error means the table/column/relation isn't present yet — e.g. a
  * migration hasn't been applied to this database. PostgREST reports these as
  * "Could not find the table '…' in the schema cache" (PGRST205/PGRST204) or

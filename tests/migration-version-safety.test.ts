@@ -282,7 +282,14 @@ describe('Supabase migration filename safety', () => {
     // main's negative controls could no longer fail. 0367 lost its locator half
     // to main's 0335 the same way and kept safety_check_ins, which 0335 does
     // not reach.
-    expect(audit.nextVersion).toBe('0382');
+    //
+    // 0382_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
+    // and ensure_default_todo_list: get-or-create of a family's DEFAULT list as
+    // one operation under a per-family advisory lock (DATA-007), SECURITY
+    // INVOKER so RLS decides exactly what it decided before. Held by
+    // docs/audit/a-family-gets-one-default-list-check.sql, which races two
+    // sessions against it and against a lock-less copy.
+    expect(audit.nextVersion).toBe('0383');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

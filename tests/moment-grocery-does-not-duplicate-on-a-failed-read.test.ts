@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// A database without 0382 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 /**
  * addMomentGroceryAction ("add this event's shopping to the list").
  *
@@ -13,10 +18,15 @@ const state = vi.hoisted(() => ({ writes: [] as string[], failRead: '' as '' | '
 
 function client() {
   return {
+    rpc: missingDefaultListRpc,
     from(table: string) {
       const chain: Record<string, unknown> = {};
       for (const m of ['select', 'eq', 'is', 'order', 'limit']) chain[m] = () => chain;
       chain.insert = () => { state.writes.push(table); return { select: () => ({ single: async () => ({ data: { id: 'new-list' }, error: null }), then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: 'item' }], error: null }).then(r) }) }; };
+      // One row, as PostgREST's maybeSingle answers — the list lookup reads it so.
+      chain.maybeSingle = async () => (state.failRead === table
+        ? { data: null, error: { code: 'XX000', message: 'Fixture read unavailable' } }
+        : { data: table === 'grocery_lists' ? { id: 'list-1' } : null, error: null });
       chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve(
         state.failRead === table
           ? { data: null, error: { code: 'XX000', message: 'Fixture read unavailable' } }

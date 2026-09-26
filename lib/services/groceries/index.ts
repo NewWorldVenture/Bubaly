@@ -28,7 +28,7 @@ import {
   applySubstitutions, collectDietaryConstraints, type Substitution,
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
-import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, isMissingFunctionError } from '@/lib/supabase/errors';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
@@ -118,33 +118,67 @@ export function categorizeGroceryItem(name: string): string | null {
  */
 export { normalizeName };
 
-export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceResult<{ id: string; created: boolean }>> {
-  const { data: existing, error: lookupError } = await scope.db
+/**
+ * Get-or-create a family's default grocery list, as ONE operation (DATA-007).
+ *
+ * Every writer that files groceries without naming a list comes through here:
+ * this service, the assistant's tools, moment prep and the recipe vote. They
+ * used to read "the oldest open list" and insert one when there was none, with
+ * nothing serialising the two, so two first captures at once gave the family
+ * two "Groceries" lists — and the shopping module opens the oldest, so half of
+ * what was captured sat on a list nobody looks at. 0382's
+ * `ensure_default_grocery_list` holds a per-family advisory lock across the
+ * read and the insert; docs/audit/a-family-gets-one-default-list-check.sql
+ * races two sessions against it and against a lock-less copy.
+ *
+ * A database without 0382 answers PGRST202, and the read-then-insert that ran
+ * before is the fallback: a deploy can precede its migration. Any other error
+ * is returned, never mistaken for "no list".
+ *
+ * Both archive columns, as the service header explains: only `archived_at` is
+ * ever written, so `is_archived` alone calls an archived list open.
+ */
+export async function ensureDefaultGroceryListId(
+  db: ServiceScope['db'],
+  familyId: string,
+  createdBy: string | null,
+  name: string = DEFAULT_GROCERY_LIST_NAME,
+): Promise<{ id: string; error: null } | { id: null; error: unknown }> {
+  const { data, error } = await db.rpc('ensure_default_grocery_list', {
+    p_family_id: familyId, p_name: name, p_created_by: createdBy,
+  });
+  if (!error && typeof data === 'string') return { id: data, error: null };
+  if (error && !isMissingFunctionError(error)) return { id: null, error };
+
+  const { data: existing, error: lookupError } = await db
     .from('grocery_lists')
     .select('id')
-    .eq('family_id', scope.familyId)
+    .eq('family_id', familyId)
     .eq('is_archived', false)
     .is('archived_at', null)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (lookupError) {
-    console.error('[service:groceries] list lookup failed', lookupError);
-    return fail(describeDbError(lookupError, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });
-  }
-  if (existing?.id) return ok({ id: existing.id, created: false });
+  if (lookupError) return { id: null, error: lookupError };
+  if (existing?.id) return { id: existing.id, error: null };
 
-  const { data, error } = await scope.db
+  const { data: created, error: createError } = await db
     .from('grocery_lists')
     // created_by references auth.users (0002).
-    .insert({ family_id: scope.familyId, name: DEFAULT_GROCERY_LIST_NAME, created_by: scope.userId })
+    .insert({ family_id: familyId, name, created_by: createdBy })
     .select('id')
     .single();
-  if (error || !data) {
-    console.error('[service:groceries] list create failed', error);
-    return fail(describeDbError(error, 'Could not create a shopping list.'), { code: SERVICE_CODES.db });
+  if (createError || !created) return { id: null, error: createError ?? new Error('Grocery list was not created') };
+  return { id: created.id, error: null };
+}
+
+export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceResult<{ id: string }>> {
+  const list = await ensureDefaultGroceryListId(scope.db, scope.familyId, scope.userId);
+  if (list.error || !list.id) {
+    console.error('[service:groceries] default list get-or-create failed', list.error);
+    return fail(describeDbError(list.error as never, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });
   }
-  return ok({ id: data.id, created: true });
+  return ok({ id: list.id });
 }
 
 export type GroceryItemInput = {

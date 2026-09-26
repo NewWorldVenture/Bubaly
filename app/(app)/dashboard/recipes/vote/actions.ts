@@ -8,6 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 type Json = Database['public']['Tables']['grocery_items']['Insert'];
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -110,21 +111,16 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   const ingredients = (recipe?.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [];
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
-  // Get or create a default grocery list.
-  // Both archive columns, as lib/services/groceries explains: only `archived_at`
-  // is ever written, so an `is_archived`-only reader hands the shopping list a
-  // list the family already put away.
-  const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
-    .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
-  let listId = list?.id;
-  if (!listId) {
-    const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();
-    if (error || !created) return { ok: false, error: describeActionError(error, 'Could not create a grocery list') };
-    listId = created.id;
-  }
+  // The family's default grocery list, found or created as ONE operation
+  // (0382, DATA-007). This read used to drop its error — `const { data: list }`
+  // — so a failed lookup looked like "no list" and created a second
+  // "Groceries" beside the one that failed to load.
+  const list = await ensureDefaultGroceryListId(supabase, familyId, ctx.user.id, 'Groceries');
+  if (!list.id) return { ok: false, error: describeActionError(list.error as never, 'Could not create a grocery list') };
+  const listId = list.id;
 
   const items: Json[] = ingredients.map((ing) => ({
-    family_id: familyId, list_id: listId!, created_by: ctx.user.id,
+    family_id: familyId, list_id: listId, created_by: ctx.user.id,
     name: ing.name, quantity: [ing.quantity, ing.unit].filter(Boolean).join(' ').trim() || null,
   }));
   const { error: insErr } = await supabase.from('grocery_items').insert(items);
