@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import type { Database } from '@/lib/database.types';
 import { getStripe } from '@/lib/stripe';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -142,7 +143,9 @@ export async function updateCardControls(
   // because the control did take effect and the change is now reconciled by
   // issuing_card.updated (lib/stripe/webhook.ts): telling the parent this failed
   // would be the more misleading answer of the two.
-  const { error } = await supabase
+  // And a write matching no row is the same stale display by another route —
+  // logged with it, not thrown, for the reason above. Audit C1-S9-64.
+  const { data: controlled, error } = await supabase
     .from('stripe_issuing_cards')
     .update({
       spend_limit_cents: params.spendLimitCents,
@@ -150,8 +153,9 @@ export async function updateCardControls(
       blocked_categories: params.blockedCategories,
     })
     .eq('id', params.cardRowId)
-    .eq('family_id', params.familyId);
-  if (error) {
+    .eq('family_id', params.familyId)
+    .select('id');
+  if (error || wroteNoRows(controlled)) {
     console.error('[money] card controls changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
       { cardRowId: params.cardRowId, error });
   }
@@ -171,12 +175,13 @@ export async function setCardFrozen(
   // Same as updateCardControls: the freeze is real at Stripe by here, so a
   // failed mirror write is a stale DISPLAY, not a failed freeze, and
   // issuing_card.updated corrects it.
-  const { error } = await supabase
+  const { data: frozenRow, error } = await supabase
     .from('stripe_issuing_cards')
     .update({ is_frozen: params.frozen, status: params.frozen ? 'inactive' : 'active' })
     .eq('id', params.cardRowId)
-    .eq('family_id', params.familyId);
-  if (error) {
+    .eq('family_id', params.familyId)
+    .select('id');
+  if (error || wroteNoRows(frozenRow)) {
     console.error('[money] card freeze changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
       { cardRowId: params.cardRowId, frozen: params.frozen, error });
   }

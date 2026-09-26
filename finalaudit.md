@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-204 finding IDs from four workers and two parallel sessions; none of it was
+205 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 214 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 215 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34608,6 +34608,57 @@ named above. What remains is `lib/`.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][MONEY]` C1-S9-64 — the money code in lib/: a Stripe mirror that discarded its own result
+
+**Eight writes** in `lib/stripe`, `lib/wallet` and `lib/referrals`.
+
+**Fixed — a different answer (1).** `syncConnectedAccount` mirrors a family's
+Stripe connected account (`charges_enabled`, `payouts_enabled`,
+`details_submitted`, the Treasury and Issuing capabilities) into the table the
+wallet reads, and **discarded the result whole, error included**. A refused write
+left a family looking un-onboarded after they had finished, and the "refresh"
+action answered `ok` over it. It now **throws on a refused write**, since every
+caller handles a throw: the money action reports *"Could not refresh Stripe
+onboarding"*, the cards page already catches it, and in the webhook it is a 500
+that Stripe retries. That is the rule `lib/stripe/webhook.ts` already states:
+*"Throwing returns 500 and Stripe retries, which is exactly what a reconciler
+should do when it could not reconcile."* It **logs, and does not throw, on zero
+rows**: an account row that is gone has nothing to mirror, and throwing there
+would have Stripe retry for days an event nothing can apply. The two answers
+differ because the two situations do.
+
+**Confirmed for the log (5).** Both card mirrors in `issuing.ts` (the control and
+freeze are real at Stripe, and `issuing_card.updated` reconciles them; telling
+a parent it failed "would be the more misleading answer of the two", as the file
+already said), both referral rollback writes (a row this request just recorded,
+so zero rows is a failed rollback that leaves an unsent invite counting against
+the family's limit), and the Treasury balance cache, whose result was discarded
+whole but which returns Stripe's own figure either way.
+
+**Deliberate (2).** The money webhook's card mirror (the row was read just above,
+so zero rows means deleted in between) and `releaseCardHold`, documented as
+idempotent: capture and reversal can both call it, and the `processing` filter is
+what makes the second call a no-op.
+
+**A twelfth exact-statement guard red on an improvement** —
+`issuing-card-mirror-reconciles`, upstream (#565), counting `const { error }`
+exactly twice. Widening it to "any destructure that keeps `error`" **admitted a
+third match: a READ from the same table**, which the exact form had been
+excluding only by accident. Anchored on `.update(`, which is what it was about,
+and proved to still bite by reverting one write to discarding its result.
+
+**And one of my own slips, caught by the typecheck:** the import insertion used
+"after the last line starting with `import`", which landed *inside* a
+multi-line `import {` block in `referrals/server.ts`. Fixed by hand, and every
+earlier insertion re-checked. None had hit it.
+
+**Status:** FIXED. Guard: 8 new cases, 9 mutations, **five of them
+over-tightening** (throwing on a missing mirror row, throwing from the freeze
+mirror, gating the webhook mirror and the hold release, raising from a referral
+rollback), all killed. **Ratchet: 119 → 114 across 63 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34677,8 +34728,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,258 passing / 17,261 across 1,355
-files.** (Re-run after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,266 passing / 17,269 across 1,355
+files.** (Re-run after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

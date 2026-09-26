@@ -165,6 +165,9 @@ export async function reserveCardAuth(supabase: DB, params: {
  * authorization reversal/expiry. Idempotent: only `processing` holds are touched.
  */
 export async function releaseCardHold(supabase: DB, authId: string): Promise<void> {
+  // Rows deliberately not checked: capture and reversal can both call this, and
+  // the `status = 'processing'` filter is what makes the second call a no-op.
+  // Zero rows means the hold is already released. Audit C1-S9-64.
   const { error } = await supabase
     .from('wallet_transactions')
     .update({ status: 'cancelled' })

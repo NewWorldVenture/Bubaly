@@ -222,3 +222,70 @@ describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', 
     });
   }
 });
+
+/**
+ * Audit C1-S9-64 — the money code in lib/: Stripe mirrors, a wallet hold, and
+ * a referral rollback.
+ */
+const connect = read('lib/stripe/connect.ts');
+const issuing = read('lib/stripe/issuing.ts');
+const treasury = read('lib/stripe/treasury.ts');
+const moneyWebhook = read('lib/stripe/webhook.ts');
+const walletServer = read('lib/wallet/server.ts');
+const referrals = read('lib/referrals/server.ts');
+
+describe('the connected-account mirror no longer discards its result (C1-S9-64)', () => {
+  it('throws on a refused write, so every caller — and Stripe — can react', () => {
+    const fn = block(connect, 'export async function syncConnectedAccount(');
+    expect(fn).toContain("if (error) throw new Error('Stripe connected-account mirror update failed');");
+    expect(fn).toContain(".eq('family_id', familyId)\n    .select('id');");
+  });
+
+  it('logs, and does NOT throw, when no mirror row matched', () => {
+    // Throwing there would have Stripe retry for days an event nothing can apply.
+    const b = code(block(connect, 'if (wroteNoRows(mirrored)) {'));
+    expect(b).toContain('console.error(');
+    expect(b).not.toMatch(/\bthrow\b/);
+  });
+});
+
+describe('card mirrors log a no-op as well as an error (C1-S9-64)', () => {
+  for (const binding of ['controlled', 'frozenRow']) {
+    it(binding, () => {
+      const b = code(block(issuing, `if (error || wroteNoRows(${binding})) {`));
+      expect(b, binding).toContain('issuing_card.updated reconciles it');
+      // The control took effect at Stripe; telling the parent it failed would
+      // be the more misleading answer of the two.
+      expect(b, binding).not.toMatch(/\bthrow\b|\breturn\b/);
+    });
+  }
+
+  it('the webhook card mirror stays ungated on rows, with its reason', () => {
+    const w = moneyWebhook.slice(at(moneyWebhook, ".from('stripe_issuing_cards')\n    .update(cardMirrorFromStripe(card))"));
+    expect(w.slice(0, w.indexOf(';'))).not.toContain('.select(');
+    expect(moneyWebhook).toContain('there is nothing left to\n  // mirror');
+  });
+
+  it('the treasury balance cache logs its error and still returns Stripe\'s figure', () => {
+    expect(treasury).toContain("if (cacheError) console.error('[money] treasury balance cache write failed'");
+    const fn = treasury.slice(at(treasury, "if (cacheError) console.error("));
+    expect(fn.slice(0, 200)).toContain('return cash;');
+  });
+});
+
+describe('a wallet hold release and a referral rollback (C1-S9-64)', () => {
+  it('releasing a card hold stays ungated — the second call is meant to be a no-op', () => {
+    const fn = block(walletServer, 'export async function releaseCardHold(');
+    expect(code(fn)).not.toContain('.select(');
+    expect(fn).toContain('Zero rows means the hold is already released');
+    expect(fn).toContain("if (error) throw new Error(walletFailure(error,");
+  });
+
+  it('both referral rollback writes log a no-op, never raise', () => {
+    for (const binding of ['dropped', 'unstamped']) {
+      const b = code(block(referrals, `wroteNoRows(${binding})) {`));
+      expect(b, binding).toContain("console.error('[referrals/email] invite rollback");
+      expect(b, binding).not.toMatch(/\bthrow\b|\breturn\b/);
+    }
+  });
+});

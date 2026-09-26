@@ -27,7 +27,8 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
 // route writes confirmed; eight more documented as deliberate or log-only
 // and left counted, each with its reason beside the code) → 119/66 (C1-S9-63:
 // the guardian screening webhook, the trip builder's rollback, and the crons;
-// the deliberate ones stay counted with their reasons).
+// the deliberate ones stay counted with their reasons) → 114/63 (C1-S9-64:
+// the Stripe mirrors, a wallet hold, a referral rollback).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
@@ -70,7 +71,6 @@ const BASELINE = new Map<string, number>([
   ['lib/marketing/platform.ts', 3],
   ['lib/marketing/recurring-ads-runner.ts', 2],
   ['lib/network/aggregate-server.ts', 3],
-  ['lib/referrals/server.ts', 2],
   ['lib/server/calendar-feeds.ts', 1],
   ['lib/server/notification-emails.ts', 1],
   ['lib/server/profiles.ts', 1],
@@ -87,8 +87,6 @@ const BASELINE = new Map<string, number>([
   ['lib/services/trips/index.ts', 3],
   ['lib/social/account-tokens.ts', 5],
   ['lib/social/publish.ts', 1],
-  ['lib/stripe/connect.ts', 1],
-  ['lib/stripe/issuing.ts', 2],
   ['lib/stripe/treasury.ts', 1],
   ['lib/stripe/webhook.ts', 1],
   ['lib/sync/engine/generic.ts', 3],
@@ -135,6 +133,6 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(119);
+    expect(total).toBe(114);
   });
 });

@@ -63,9 +63,14 @@ export async function syncFinancialAccountBalance(
     { stripeAccount: params.accountId },
   );
   const cash = fa.balance?.cash?.usd ?? 0;
-  await supabase
+  // A CACHE of the figure returned below, which comes from Stripe either way —
+  // so a failed write is a stale cache, not a wrong answer, and is logged rather
+  // than raised. Its result used to be discarded whole. Zero rows (no account
+  // row) stays ordinary. Audit C1-S9-64.
+  const { error: cacheError } = await supabase
     .from('stripe_financial_accounts')
     .update({ cached_balance_cents: cash, cached_at: new Date().toISOString() })
     .eq('family_id', params.familyId);
+  if (cacheError) console.error('[money] treasury balance cache write failed', { familyId: params.familyId, error: cacheError.message });
   return cash;
 }
