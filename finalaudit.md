@@ -39756,7 +39756,7 @@ main's three new restrictive-guard tables (`concierge_calls`,
 `0329` leaves main's `0338` as the only rule, and the two disagree on whether
 the subject member may read their own log — an owner decision, MEDIUM.
 (2) Location family-consistency residual, LOW. (3) ~~Closet wear-count lost
-update~~ — FIXED by `C1-S9-90`. (4) Object-first delete residual, LOW. (5) Timetable copy, LOW.
+update~~ — FIXED by `C1-S9-90`. (4) Object-first delete residual, LOW. (5) ~~Timetable copy~~ — FIXED by `C1-S9-91`.
 
 **Verification.** `npx vitest run`: 18,882 / 18,885 across 1,465 files; the
 three failures are `node-version-is-pinned` and the two
@@ -39838,6 +39838,25 @@ cases are covered, and so is the uncontended path's cost of one read plus one
 write. Two exact-statement pins were re-pointed at the new write.
 
 **Status:** FIXED. `C1-S9-89` item (3) is closed.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-91 — the timetable said its save failed in English only
+
+**File/path:** `components/modules/timetable-module.tsx:109`; seven base catalogues.
+
+**Problem.** A refused class save toasted the literal `'Failed to update class'`
+or `'Failed to add class'`, while every other line in the module, including the
+sibling `timetableModule.failedToRemoveClass`, comes from the catalogue. It is
+the right answer in the wrong language for families in ten locales. It was
+logged under `C1-S9-81` as a smaller answer.
+
+**Fix.** `timetableModule.failedToAddClass` and
+`timetableModule.failedToUpdateClass` were added to the seven base catalogues
+(en-US, de-DE, es-ES, fr-FR, it-IT, nl-NL, pt-PT), phrased like their
+`failedToRemoveClass` sibling, and the toast now reads them.
+
+**Status:** FIXED. `C1-S9-89` item (5) is closed.
 
 ---
 

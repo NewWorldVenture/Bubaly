@@ -106,7 +106,7 @@ export function TimetableModule() {
       ? await sb.from('school_classes').update(fields).eq('id', form.id).select('id')
       : await sb.from('school_classes').insert({ ...fields, family_id: familyId, member_id: form.member_id, created_by: userId }).select('id');
     setSaving(false);
-    if (err) { toastError(form.id ? 'Failed to update class' : 'Failed to add class'); return; }
+    if (err) { toastError(form.id ? t('timetableModule.failedToUpdateClass') : t('timetableModule.failedToAddClass')); return; }
     if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Class updated' : 'Class added');
     setOpen(false);
