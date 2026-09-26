@@ -55,7 +55,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then to 2,835 as the AI daily-limit, sync, weather, social-feed, language,
 // medical and feedback-upload messages were translated (the feedback one is
 // now a generic message that no longer leaks the storage error).
-const CEILING = 2835;
+//
+// Then to 2,822 as the thirteen "Blocked by household policy: …" refusals in
+// the wallet, money and invest actions were translated — reason included: the
+// trust engine's deny paths now carry a catalogue key and code-valued params.
+const CEILING = 2822;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

@@ -6,6 +6,7 @@
 // Orders are parent-approved. The wallet ledger stays the source of truth.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { householdPolicyBlocked } from '@/lib/trust/messages';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
@@ -109,7 +110,7 @@ export async function placeInvestOrderAction(input: { childWalletId: string; ass
     context: { amountCents: amount }, openApproval: false,
   });
   if (decision.effect === 'deny' && (decision.basis === 'deny_grant' || decision.basis === 'policy')) {
-    return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    return { ok: false, error: householdPolicyBlocked(t, decision) };
   }
 
   const { error } = await supabase.from('invest_orders').insert({
@@ -146,7 +147,7 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
       title: `Fill invest order ${(order.amount_cents / 100).toFixed(2)}`,
       context: { amountCents: order.amount_cents }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
   }
 
   const { data, error } = await supabase.rpc('invest_decide_order', {

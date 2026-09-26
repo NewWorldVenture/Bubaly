@@ -80,6 +80,10 @@ type RoleDefault = {
   automationTrusted: boolean;
 };
 
+/** "a teen", "an adult": the audit text read "a adult" for the one role that starts with a vowel. */
+const withArticle = (role: string) => `${/^[aeiou]/i.test(role) ? 'an' : 'a'} ${role}`;
+const WithArticle = (role: string) => { const phrase = withArticle(role); return phrase[0].toUpperCase() + phrase.slice(1); };
+
 export const ROLE_DEFAULTS: Record<TrustRole, RoleDefault> = {
   parent: {
     capabilities: ['view', 'create', 'edit', 'delete', 'approve', 'delegate', 'automate', 'share', 'archive', 'export'],
@@ -189,7 +193,16 @@ export type EvaluateInput = {
 
 export type Decision = {
   effect: 'allow' | 'deny' | 'require_approval';
+  /** English explanation, as logged to the household audit trail. */
   reason: string;
+  /**
+   * The same explanation as a catalogue key, for showing to a person in their
+   * language (lib/trust/messages.ts). Params carry CODES (a domain, a
+   * capability, a role), never English labels, so they can be localized too.
+   * Set on the deny paths a member can hit (I18N-002).
+   */
+  reasonKey?: 'trust.denyExplicitlyBlocked' | 'trust.denyBlockedByPolicy' | 'trust.denyRoleLacksPermission';
+  reasonParams?: { domain?: string; capability?: string; role?: string };
   policyId?: string;
   approvalModel?: ApprovalModel;
   requiredApprovals?: number;
@@ -276,7 +289,7 @@ export function evaluateAction(input: EvaluateInput): Decision {
   // 2) Explicit per-member deny always wins (safety first).
   if (actor.kind === 'member') {
     const deny = grants.find((g) => g.memberId === actor.id && g.domain === domain && g.capability === capability && g.effect === 'deny');
-    if (deny) return { effect: 'deny', reason: `${DOMAIN_LABELS[domain] ?? domain} · ${CAPABILITY_LABELS[capability]} is explicitly blocked for this member.`, basis: 'deny_grant' };
+    if (deny) return { effect: 'deny', reason: `${DOMAIN_LABELS[domain] ?? domain} · ${CAPABILITY_LABELS[capability]} is explicitly blocked for this member.`, reasonKey: 'trust.denyExplicitlyBlocked', reasonParams: { domain, capability }, basis: 'deny_grant' };
   }
 
   // 3) Highest-priority matching policy whose conditions hold.
@@ -285,7 +298,7 @@ export function evaluateAction(input: EvaluateInput): Decision {
     .sort((a, b) => b.priority - a.priority);
   if (matching.length > 0) {
     const p = matching[0];
-    if (p.effect === 'deny') return { effect: 'deny', reason: `Blocked by policy: ${DOMAIN_LABELS[domain] ?? domain}.`, policyId: p.id, basis: 'policy' };
+    if (p.effect === 'deny') return { effect: 'deny', reason: `Blocked by policy: ${DOMAIN_LABELS[domain] ?? domain}.`, reasonKey: 'trust.denyBlockedByPolicy', reasonParams: { domain }, policyId: p.id, basis: 'policy' };
     if (p.effect === 'allow' || p.effect === 'auto_approve') {
       return {
         effect: 'allow',
@@ -336,14 +349,14 @@ export function evaluateAction(input: EvaluateInput): Decision {
         return { effect: 'allow', reason: 'Within this role’s automation trust.', basis: 'role_default' };
       }
       if (sensitive && writey) {
-        return { effect: 'require_approval', reason: `${DOMAIN_LABELS[domain] ?? domain} is a sensitive area for a ${actor.role}; a parent should approve.`, approvalModel: 'single', requiredApprovals: 1, basis: 'role_default' };
+        return { effect: 'require_approval', reason: `${DOMAIN_LABELS[domain] ?? domain} is a sensitive area for ${withArticle(actor.role)}; a parent should approve.`, approvalModel: 'single', requiredApprovals: 1, basis: 'role_default' };
       }
-      return { effect: 'allow', reason: `Within a ${actor.role}'s default permissions.`, basis: 'role_default' };
+      return { effect: 'allow', reason: `Within ${withArticle(actor.role)}'s default permissions.`, basis: 'role_default' };
     }
   }
 
   // 6) Fallback — least privilege.
-  return { effect: 'deny', reason: `A ${actor.role} doesn't have ${CAPABILITY_LABELS[capability]} permission for ${DOMAIN_LABELS[domain] ?? domain}. Ask a parent to grant it.`, basis: 'fallback' };
+  return { effect: 'deny', reason: `${WithArticle(actor.role)} doesn't have ${CAPABILITY_LABELS[capability]} permission for ${DOMAIN_LABELS[domain] ?? domain}. Ask a parent to grant it.`, reasonKey: 'trust.denyRoleLacksPermission', reasonParams: { role: actor.role, capability, domain }, basis: 'fallback' };
 }
 
 // ── Dynamic trust score ──────────────────────────────────────────────────────

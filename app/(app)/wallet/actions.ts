@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { householdPolicyBlocked } from '@/lib/trust/messages';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { dayKeyInTz } from '@/lib/services/scope';
 import { settleAll } from '@/lib/supabase/settle';
@@ -143,7 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     title: `Add funds ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
@@ -231,7 +232,7 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     title: `Pay chore reward ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await creditChildWallet(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'chore_reward',
@@ -328,7 +329,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     title: `Run ${rules!.length} due allowance${rules!.length === 1 ? '' : 's'}`,
     context: { amountCents: totalDue }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   let ranCount = 0;
   let paidCents = 0;
@@ -424,7 +425,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const result = await fundGoal(supabase, {
     familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
@@ -483,7 +484,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
     title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
     context: { amountCents: gift.amount_cents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
@@ -582,7 +583,7 @@ export async function recordBabysitterPaymentAction(input: {
     title: `Record babysitter payment ${(input.amountCents / 100).toFixed(2)}`,
     context: { amountCents: input.amountCents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const { error } = await supabase.from('babysitter_payments').insert({
     family_id: ctx.active.familyId,
@@ -761,7 +762,7 @@ export async function requestSpendAction(input: {
   // request. A role-default "no" just means the child needs a parent's OK — they
   // can always *ask*, which is the whole point of a spend request.
   const explicitlyDenied = decision.effect === 'deny' && (decision.basis === 'deny_grant' || decision.basis === 'policy');
-  if (explicitlyDenied) return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (explicitlyDenied) return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   // A parent under threshold (and not forced to review by a policy) spends directly.
   const needsApproval = !manager || amount > threshold || decision.effect !== 'allow';
@@ -831,7 +832,7 @@ export async function decideSpendRequestAction(input: {
       title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
       context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideSpend(supabase, {
@@ -871,7 +872,7 @@ export async function sendMoneyAction(input: {
     title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const transfer = await transferWallets(supabase, {
     familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
@@ -956,7 +957,7 @@ export async function decideAllowanceRequestAction(input: {
       title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
       context: { amountCents: amount }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideAllowance(supabase, {
