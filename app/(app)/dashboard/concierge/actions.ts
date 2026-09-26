@@ -112,12 +112,16 @@ export async function planAcceptedAction(
 
   const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
-    .select('id, title, description, location, planned_for, budget_cents')
+    .select('id, title, description, location, planned_for, budget_cents, status')
     .eq('id', planId)
     .eq('family_id', familyId)
     .maybeSingle();
   if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNotFound') };
+  // `nextStatus` is the caller's word. The loop acts on the plan's persisted
+  // status, so an acceptance that never landed — or a call that only claims
+  // one — materialises nothing. Audit C1-S9-77.
+  if (plan.status !== nextStatus) return { ok: true, mode: 'off', applied: [], summary: null };
 
   // Nothing new to do? Don't open approvals for a no-op.
   //

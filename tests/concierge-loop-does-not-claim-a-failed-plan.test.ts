@@ -32,9 +32,11 @@ vi.mock('@/lib/trust/server', () => ({
 vi.mock('@/lib/services/ai-settings', () => ({ getAISettings: () => getAISettings() }));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
 
-const PLAN = { id: 'plan-1', title: 'Beach day', description: null, location: null, planned_for: '2026-10-10', budget_cents: null };
+// `status` is the persisted acceptance planAcceptedAction now requires (C1-S9-77).
+const PLAN = { id: 'plan-1', title: 'Beach day', description: null, location: null, planned_for: '2026-10-10', budget_cents: null, status: 'booked' };
 
 type Sb = {
+  plan?: Record<string, unknown>;
   planError?: unknown;
   ledgerError?: unknown;
   run?: Record<string, unknown> | null;
@@ -50,7 +52,7 @@ function userClient(o: Sb, updates: Record<string, unknown>[]) {
         eq: () => chain,
         maybeSingle: () => Promise.resolve(
           table === 'concierge_plans'
-            ? { data: o.planError ? null : PLAN, error: o.planError ?? null }
+            ? { data: o.planError ? null : (o.plan ?? PLAN), error: o.planError ?? null }
             : { data: o.run ?? null, error: null },
         ),
         then: (res: (v: unknown) => unknown) =>
@@ -197,6 +199,30 @@ describe('the autopilot on plan acceptance', () => {
     const res = await accept();
     expect(res).toMatchObject({ ok: true, mode: 'ask' });
     expect(inserts[0]).toMatchObject({ status: 'pending', state: 'awaiting_approval' });
+  });
+});
+
+describe('the loop acts on the persisted status, not the caller\'s word (C1-S9-77)', () => {
+  it('an acceptance that never landed materialises nothing and records no run', async () => {
+    const inserts: Record<string, unknown>[] = [];
+    createServer.mockResolvedValue(userClient({ plan: { ...PLAN, status: 'draft' } }, []));
+    createServiceClient.mockReturnValue(serviceClient(inserts));
+    evaluateTrust.mockResolvedValue({ decision: { effect: 'allow', basis: 'policy', reason: 'dial' }, approvalId: null });
+    const res = await (await actions()).planAcceptedAction('plan-1', 'draft', 'booked');
+    expect(res).toMatchObject({ ok: true, mode: 'off' });
+    expect(materializeConciergePlan).not.toHaveBeenCalled();
+    expect(inserts).toEqual([]);
+  });
+
+  it('a persisted "confirmed" is an acceptance too (not over-tightened to "booked")', async () => {
+    const inserts: Record<string, unknown>[] = [];
+    createServer.mockResolvedValue(userClient({ plan: { ...PLAN, status: 'confirmed' } }, []));
+    createServiceClient.mockReturnValue(serviceClient(inserts));
+    evaluateTrust.mockResolvedValue({ decision: { effect: 'allow', basis: 'policy', reason: 'dial' }, approvalId: null });
+    materializeConciergePlan.mockResolvedValue({ applied: ['reminder'], failed: [] });
+    const res = await (await actions()).planAcceptedAction('plan-1', 'draft', 'confirmed');
+    expect(res).toMatchObject({ ok: true, mode: 'auto' });
+    expect(materializeConciergePlan).toHaveBeenCalled();
   });
 });
 

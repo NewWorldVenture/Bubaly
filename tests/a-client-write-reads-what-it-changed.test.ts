@@ -20,6 +20,7 @@ const FIXED = [
   'components/modules/care-module.tsx',
   'components/modules/devices-module.tsx',
   'components/modules/reminders-module.tsx',
+  'components/modules/concierge-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -40,6 +41,21 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     for (const file of FIXED.filter((f) => !f.endsWith('health-module.tsx'))) {
       expect(readFileSync(file, 'utf8'), file).toMatch(/\(['"]errors\.thatChangeWasNotSaved['"]\)/);
     }
+  });
+});
+
+describe('a plan acceptance that never landed does not run the loop (C1-S9-77)', () => {
+  it('the status move is confirmed and reverted on screen before planAcceptedAction can run', () => {
+    const src = readFileSync('components/modules/concierge-module.tsx', 'utf8');
+    const fn = between(src, 'async function updateStatus(status: string) {', 'planAcceptedAction(plan.id, prev, status)');
+    expect(fn).toContain("if (wroteNoRows(moved)) { setEditStatus(prev); toastError(t('errors.thatChangeWasNotSaved')); return; }");
+  });
+
+  it('the server acts on the persisted status, not the caller\'s claim', () => {
+    const src = readFileSync('app/(app)/dashboard/concierge/actions.ts', 'utf8');
+    const fn = between(src, 'export async function planAcceptedAction(', 'export async function executeQueuedRunAction(');
+    expect(fn).toContain("select('id, title, description, location, planned_for, budget_cents, status')");
+    expect(at(fn, 'if (plan.status !== nextStatus)')).toBeLessThan(at(fn, 'const { decision, approvalId } = await evaluateTrust('));
   });
 });
 

@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-218 finding IDs from four workers and two parallel sessions; none of it was
+219 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 228 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 229 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35555,6 +35555,46 @@ declutter (9), moving (8), inventory, language and watchlist (7 each). Most
 are low-stakes list edits, but each one says "saved" over a refusal it cannot
 see.
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-78 — a plan acceptance that never landed, materialised anyway
+
+**Found in the components burn-down, by looking for writes that license a
+follow-on action.** In the concierge plan detail, `updateStatus` moved a plan to
+`booked` or `confirmed` and then ran the autonomous loop (`planAcceptedAction`).
+The loop can put the plan on the family's calendar, set a reminder, and add a
+prep task.
+- **The client side.** The status update checked its error but not its rows.
+  A move that matched nothing (refused under RLS, or the plan deleted
+  meanwhile) went straight on to the loop, and the screen kept showing the new
+  status.
+- **The server side.** `planAcceptedAction(planId, prevStatus, nextStatus)`
+  took both statuses on the **caller's word**. It never read the plan's status.
+  So an acceptance that never persisted, or a direct call that merely claimed
+  one, materialised the plan: calendar event, reminder and all.
+
+**Fixed on both sides.** The client confirms the row (`.select('id')`). On zero
+rows it reverts the status on screen, says *"That change wasn't saved…"*, and
+returns before the loop. The server reads the persisted `status` and acts only
+when it equals the claimed acceptance; otherwise it does nothing and says
+nothing. The check is generic, not hard-coded to `booked`, and a case proves
+`confirmed` still triggers the loop.
+
+**Guards:**
+- in `a-client-write-reads-what-it-changed`: the move is confirmed and
+  reverted before the loop can run; the server compares the persisted status
+  *before* the trust engine is consulted;
+- in `concierge-loop-does-not-claim-a-failed-plan`: an acceptance that never
+  landed materialises nothing and records no run, and a persisted `confirmed`
+  is an acceptance.
+
+My C1-S9-72 fake gained the `status` field the action now reads.
+
+**4 mutations, all red**, including the over-tightening to `booked` only.
+Components ratchet: 183 → 182.
+
+**Status:** FIXED. The E2E `concierge.spec.ts` drives this page but needs a
+live server and Supabase, so it runs in CI, not locally; its steps do not move
+plan status.
+
 ---
 
 ## What this pass did NOT establish
@@ -35626,8 +35666,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,428 passing / 17,431 across 1,370
-files.** (Re-run after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,433 passing / 17,436 across 1,370
+files.** (Re-run after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
