@@ -3,6 +3,7 @@
 // stay a thin Supabase reader.
 
 import type { MemberRole } from '@/lib/constants/roles';
+import { ageOn } from '@/lib/utils/birthday';
 
 // ── Finances ────────────────────────────────────────────────────────────────
 export type HomeTxn = { type: string; amount: number; date: string };
@@ -40,13 +41,8 @@ const SHORT_ROLE: Record<MemberRole, string> = {
 
 /** Whole-year age from an ISO birthday, or null if missing/unparseable. */
 export function ageFromBirthday(birthday: string | null | undefined, now: Date): number | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  let age = now.getFullYear() - b.getFullYear();
-  const md = now.getMonth() - b.getMonth();
-  if (md < 0 || (md === 0 && now.getDate() < b.getDate())) age--;
-  return age >= 0 && age < 150 ? age : null;
+  const age = ageOn(birthday, now);
+  return age !== null && age >= 0 && age < 150 ? age : null;
 }
 
 /**

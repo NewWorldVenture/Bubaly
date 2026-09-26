@@ -1,8 +1,10 @@
 'use client';
 
+import { parseISO } from 'date-fns';
 import { Printer, X } from 'lucide-react';
 import type { Tables, RecordKind } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ageOn } from '@/lib/utils/birthday';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -10,24 +12,25 @@ type Profile = Tables<'medical_profiles'>;
 type Member = Tables<'family_members'>;
 type Medication = Tables<'medications'>;
 
-const KIND_LABEL: Record<RecordKind, string> = { medical: 'Medical', dental: 'Dental' };
+// Whole sentences per kind, not a noun spliced into English word order.
+const SHEET_KEYS = {
+  medical: { providers: 'medicalRecords.providersSheetTitleMedical', checkIn: 'medicalRecords.checkInSheetTitleMedical', noInsurance: 'printSheet.noInsuranceOnFileMedical' },
+  dental: { providers: 'medicalRecords.providersSheetTitleDental', checkIn: 'medicalRecords.checkInSheetTitleDental', noInsurance: 'printSheet.noInsuranceOnFileDental' },
+} as const satisfies Record<RecordKind, Record<string, string>>;
 
-function formatDate(iso: string | null): string {
+// parseISO reads a date-only string ('2015-03-04', how a birthday is stored)
+// as that calendar day in local time. `new Date()` reads it as UTC midnight,
+// which west of Greenwich is the evening before: the sheet printed March 3.
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = parseISO(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function ageFrom(birthday: string | null): string {
-  if (!birthday) return '';
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return '';
-  const now = new Date();
-  let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
-  return `${age}`;
+  const age = ageOn(birthday, new Date());
+  return age === null ? '' : `${age}`;
 }
 
 /** A labelled row that prints cleanly (label left, value right). */
@@ -62,6 +65,7 @@ function SheetShell({
   children: React.ReactNode;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
   return (
     <div className="print-sheet fixed inset-0 z-[120] overflow-y-auto bg-white">
       {/* Toolbar — excluded from print */}
@@ -89,7 +93,7 @@ function SheetShell({
           </div>
           <div className="text-right text-xs text-gray-500">
             <p className="font-bold text-gray-700">{t('printSheet.bubaly')}</p>
-            <p>{t('printSheet.generated')} {formatDate(new Date().toISOString())}</p>
+            <p>{t('printSheet.generated')} {formatDate(new Date().toISOString(), locale)}</p>
           </div>
         </header>
         {children}
@@ -114,11 +118,11 @@ export function ProviderInfoSheet({
   onClose: () => void;
 }) {
   const t = useTranslations();
-  const scopeLabel = member ? member.display_name : 'Whole Family';
+  const scopeLabel = member ? member.display_name : t('medicalRecords.wholeFamily');
   return (
     <SheetShell
-      title={`${KIND_LABEL[kind]} Providers`}
-      subtitle={`${scopeLabel} · ${providers.length} provider${providers.length === 1 ? '' : 's'}`}
+      title={t(SHEET_KEYS[kind].providers)}
+      subtitle={`${scopeLabel} · ${providers.length === 1 ? t('medicalRecords.providerCountOne') : t('medicalRecords.providerCountMany', { n: providers.length })}`}
       onClose={onClose}
     >
       {providers.length === 0 ? (
@@ -137,7 +141,7 @@ export function ProviderInfoSheet({
               <div className="mt-2">
                 <Row label={t('printSheet.practice')} value={p.practice_name} />
                 <Row label={t('printSheet.phone')} value={p.phone} />
-                <Row label="Fax" value={p.fax} />
+                <Row label={t('printSheet.fax')} value={p.fax} />
                 <Row label={t('printSheet.email')} value={p.email} />
                 <Row label={t('printSheet.address')} value={p.address} />
                 <Row label={t('printSheet.notes')} value={p.notes} />
@@ -169,22 +173,23 @@ export function CheckInSheet({
   onClose: () => void;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
   const age = ageFrom(member.birthday);
   const primary = providers.find((p) => p.is_primary) ?? providers[0] ?? null;
   const medList = medications.length
     ? medications.map((m) => [m.name, m.dosage].filter(Boolean).join(' ')).join(', ')
-    : profile?.current_medications || 'None reported';
+    : profile?.current_medications || t('medicalRecords.noneReported');
 
   return (
     <SheetShell
-      title={`${KIND_LABEL[kind]} Check-In`}
-      subtitle={`${member.display_name}${age ? ` · Age ${age}` : ''}`}
+      title={t(SHEET_KEYS[kind].checkIn)}
+      subtitle={`${member.display_name}${age ? ` · ${t('medicalRecords.ageN', { age })}` : ''}`}
       onClose={onClose}
     >
       <SectionTitle>{t('printSheet.patient')}</SectionTitle>
       <Row label={t('printSheet.name')} value={member.display_name} />
-      <Row label={t('printSheet.dateOfBirth')} value={member.birthday ? formatDate(member.birthday) : undefined} />
-      <Row label="Age" value={age || undefined} />
+      <Row label={t('printSheet.dateOfBirth')} value={member.birthday ? formatDate(member.birthday, locale) : undefined} />
+      <Row label={t('printSheet.age')} value={age || undefined} />
       <Row label={t('printSheet.bloodType')} value={profile?.blood_type} />
 
       <SectionTitle>{t('printSheet.insurance')}</SectionTitle>
@@ -200,7 +205,7 @@ export function CheckInSheet({
           <Row label={t('printSheet.memberServices')} value={policy.customer_service_phone} />
         </>
       ) : (
-        <p className="py-1.5 text-sm text-gray-500">No {KIND_LABEL[kind].toLowerCase()} {t('printSheet.insuranceOnFile')}</p>
+        <p className="py-1.5 text-sm text-gray-500">{t(SHEET_KEYS[kind].noInsurance)}</p>
       )}
 
       <SectionTitle>{t('printSheet.primaryProvider')}</SectionTitle>
@@ -212,12 +217,12 @@ export function CheckInSheet({
           <Row label={t('printSheet.phone')} value={primary.phone} />
         </>
       ) : (
-        <Row label={t('printSheet.primaryPhysician')} value={profile?.primary_physician ?? 'Not on file'} />
+        <Row label={t('printSheet.primaryPhysician')} value={profile?.primary_physician ?? t('printSheet.notOnFile')} />
       )}
 
       <SectionTitle>{t('printSheet.medicalHistory')}</SectionTitle>
-      <Row label={t('printSheet.allergies')} value={profile?.allergies || 'None reported'} />
-      <Row label={t('printSheet.conditions')} value={profile?.conditions || 'None reported'} />
+      <Row label={t('printSheet.allergies')} value={profile?.allergies || t('medicalRecords.noneReported')} />
+      <Row label={t('printSheet.conditions')} value={profile?.conditions || t('medicalRecords.noneReported')} />
       <Row label={t('printSheet.currentMedications')} value={medList} />
       <Row label={t('printSheet.immunizations')} value={profile?.immunizations} />
       {kind === 'dental' && <Row label={t('printSheet.dentalNotes')} value={profile?.dental_notes} />}

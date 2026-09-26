@@ -97,7 +97,13 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then batch 2: 70 context-specific attribute templates (wallet dialog titles,
 // star ratings with a one/many split, inventory, closet, routing placeholders,
 // theme toggle, OTP digits and more), 2,870 -> 2,800.
-const CEILING = 2800;
+// Then the scanner got more precise: it no longer reads TypeScript between two
+// generics (`type A = Tables<'a'>; type B = Tables<'b'>`) as a JSX text node.
+// 125 findings were that, not copy, 2,800 -> 2,675.
+// Then the medical and dental records page and its printed sheets: per-kind
+// catalogue sentences instead of "Add {Doctor}" and "{Dental} Providers",
+// 2,675 -> 2,664.
+const CEILING = 2664;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -204,5 +210,26 @@ describe('the scanner sees the question asked before a delete (I18N-005)', () =>
     const texts = scanFile(file).map((f: { text: string }) => f.text);
     expect(texts).toContain('Remove … from the inventory?');
     expect(texts).toContain('Delete everything in this list?');
+  });
+});
+
+describe('the scanner does not count TypeScript as copy', () => {
+  it('ignores a type alias between generics and still reports real text beside it', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-types-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      "type Tables<T> = { t: T };",
+      "type Member = Tables<'family_members'>; type Plan = Tables<'plans'>;",
+      'export function Row({ m }: { m: Member; p?: Plan }) {',
+      '  return <p>Nothing planned this week</p>;',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts.some((t: string) => /type Plan/.test(t))).toBe(false);
+    expect(texts).toContain('Nothing planned this week');
   });
 });

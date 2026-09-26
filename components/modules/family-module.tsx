@@ -25,6 +25,7 @@ import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -41,25 +42,8 @@ function roleBadge(role: MemberRole): { label: string; cls: string; icon: typeof
   return { label: 'Kid Account', cls: 'text-sky-400', icon: Shield };
 }
 function memberAge(birthday: string | null): number | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
-  return age >= 0 && age < 130 ? age : null;
-}
-function nextBirthday(birthday: string | null, now: Date): { date: Date; inDays: number; turning: number } | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let next = new Date(now.getFullYear(), b.getMonth(), b.getDate());
-  if (next < today) next = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
-  const inDays = Math.round((next.getTime() - today.getTime()) / 86_400_000);
-  const turning = next.getFullYear() - b.getFullYear();
-  return { date: next, inDays, turning };
+  const age = ageOn(birthday, new Date());
+  return age !== null && age >= 0 && age < 130 ? age : null;
 }
 function inLabel(days: number): string {
   if (days === 0) return 'Today';

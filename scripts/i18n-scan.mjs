@@ -102,6 +102,11 @@ function walk(dir, out = []) {
 
 // Strings that are structurally not copy, however word-like they look.
 const NOT_COPY = [
+  // TypeScript between two generics, which the JSX-text rule reads as a text
+  // node: `type Member = Tables<'family_members'>; type Plan = Tables<'plans'>`
+  // yields "; type Plan = Tables". 126 of 2,800 findings were this, so the count
+  // overstated the English on screen by about 4.5%.
+  /^[;,]?\s*(export\s+)?(type|interface)\s+\w+\s*(=|extends)/,
   /^https?:\/\//i,
   /^\//,                        // paths
   /^[a-z0-9-]+$/,               // slugs, ids, css tokens

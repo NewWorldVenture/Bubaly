@@ -28,10 +28,28 @@ type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
 type Profile = Tables<'medical_profiles'>;
 
-const COPY: Record<RecordKind, { title: string; desc: string; provider: string; Icon: typeof Stethoscope }> = {
-  medical: { title: 'Medical', desc: 'Doctors, insurance, and health records for the whole family.', provider: 'Doctor', Icon: Stethoscope },
-  dental: { title: 'Dental', desc: 'Dentists, dental insurance, and oral-health records for the family.', provider: 'Dentist', Icon: Smile },
-};
+// Catalogue keys, not words: "Add a doctor" and "Add a dentist" are separate
+// sentences in every language, so nothing here is built from a noun.
+const COPY = {
+  medical: {
+    Icon: Stethoscope,
+    title: 'medicalRecords.titleMedical', desc: 'medicalRecords.descMedical',
+    provider: 'medicalRecords.providerMedical', providers: 'medicalRecords.providersMedical',
+    addProvider: 'medicalRecords.addProviderMedical', addProviderPlus: 'medicalRecords.addProviderPlusMedical',
+    editProvider: 'medicalRecords.editProviderMedical', primaryProvider: 'medicalRecords.primaryProviderMedical',
+    noProvidersYet: 'medicalRecords.noProvidersYetMedical', addProvidersHint: 'medicalRecords.addProvidersHintMedical',
+    addInsuranceHint: 'medicalRecords.addInsuranceHintMedical',
+  },
+  dental: {
+    Icon: Smile,
+    title: 'medicalRecords.titleDental', desc: 'medicalRecords.descDental',
+    provider: 'medicalRecords.providerDental', providers: 'medicalRecords.providersDental',
+    addProvider: 'medicalRecords.addProviderDental', addProviderPlus: 'medicalRecords.addProviderPlusDental',
+    editProvider: 'medicalRecords.editProviderDental', primaryProvider: 'medicalRecords.primaryProviderDental',
+    noProvidersYet: 'medicalRecords.noProvidersYetDental', addProvidersHint: 'medicalRecords.addProvidersHintDental',
+    addInsuranceHint: 'medicalRecords.addInsuranceHintDental',
+  },
+} as const satisfies Record<RecordKind, { Icon: typeof Stethoscope } & Record<string, unknown>>;
 
 const WHOLE_FAMILY = '__family__';
 
@@ -63,7 +81,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
-  const { title, desc, provider: providerWord, Icon } = COPY[kind];
+  const copy = COPY[kind];
+  const Icon = copy.Icon;
 
   // ── Data ──────────────────────────────────────────────────
   const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
@@ -93,13 +112,13 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const providerGroups = useMemo(() => {
     const groups: { key: string; label: string; color: string | null; member: Tables<'family_members'> | null; items: Provider[] }[] = [];
     const family = providers.filter((p) => !p.member_id);
-    if (family.length) groups.push({ key: WHOLE_FAMILY, label: 'Whole Family', color: null, member: null, items: family });
+    if (family.length) groups.push({ key: WHOLE_FAMILY, label: t('medicalRecords.wholeFamily'), color: null, member: null, items: family });
     for (const m of members) {
       const items = providers.filter((p) => p.member_id === m.id);
       if (items.length) groups.push({ key: m.id, label: m.display_name, color: m.color, member: m, items });
     }
     return groups;
-  }, [providers, members]);
+  }, [providers, members, t]);
 
   // ── Modal state ───────────────────────────────────────────
   const [providerForm, setProviderForm] = useState<typeof blankProvider | null>(null);
@@ -253,15 +272,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={title}
-        description={desc}
+        title={t(copy.title)}
+        description={t(copy.desc)}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medical" iconOnly />
             {canEdit ? (
               <>
                 <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
-                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> {t(copy.addProvider)}</Button>
               </>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>
@@ -277,7 +296,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
         </div>
         {policies.length === 0 ? (
-          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? `Add a ${title.toLowerCase()} insurance plan and snap a photo of the card.` : 'No insurance has been added yet.'} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
+          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? t(copy.addInsuranceHint) : t('medicalRecords.noInsuranceAddedYet')} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {policies.map((p) => {
@@ -321,11 +340,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Providers ─────────────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {providerWord}s</h2>
-          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.add')} {providerWord.toLowerCase()}</button>}
+          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {t(copy.providers)}</h2>
+          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{t(copy.addProviderPlus)}</button>}
         </div>
         {providerGroups.length === 0 ? (
-          <EmptyState icon={Icon} title={`No ${providerWord.toLowerCase()}s yet`} description={canEdit ? `Add your family's ${providerWord.toLowerCase()}s and generate a printable info file.` : 'No providers have been added yet.'} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> Add {providerWord}</Button> : undefined} />
+          <EmptyState icon={Icon} title={t(copy.noProvidersYet)} description={canEdit ? t(copy.addProvidersHint) : t('medicalRecords.noProvidersAddedYet')} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> {t(copy.addProvider)}</Button> : undefined} />
         ) : (
           <div className="space-y-4">
             {providerGroups.map((g) => (
@@ -344,7 +363,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     <div key={p.id} className="flex items-center gap-3 rounded-lg bg-surface/40 p-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{p.name}{p.is_primary && <span className="ml-2 text-[10px] font-bold text-emerald-300">PRIMARY</span>}</p>
-                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || providerWord}</p>
+                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || t(copy.provider)}</p>
                       </div>
                       {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
@@ -399,7 +418,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </section>
 
       {/* ── Provider modal ────────────────────────────────── */}
-      <Modal open={!!providerForm} title={providerForm?.id ? `Edit ${providerWord}` : `Add ${providerWord}`} onClose={() => setProviderForm(null)}>
+      <Modal open={!!providerForm} title={providerForm?.id ? t(copy.editProvider) : t(copy.addProvider)} onClose={() => setProviderForm(null)}>
         {providerForm && (
           <div className="space-y-3">
             <Field label={t('medicalRecords.belongsTo')}>{(id) => <Select id={id} value={providerForm.member_id} onChange={(e) => setProviderForm({ ...providerForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -415,14 +434,14 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             <Field label={t('medicalRecords.email')}>{(id) => <Input id={id} value={providerForm.email} onChange={(e) => setProviderForm({ ...providerForm, email: e.target.value })} placeholder="office@clinic.com" />}</Field>
             <Field label={t('medicalRecords.address')}>{(id) => <Input id={id} value={providerForm.address} onChange={(e) => setProviderForm({ ...providerForm, address: e.target.value })} placeholder={t('medicalRecords.123MainStSuite200')} />}</Field>
             <Field label={t('medicalRecords.notes')}>{(id) => <Textarea id={id} value={providerForm.notes} onChange={(e) => setProviderForm({ ...providerForm, notes: e.target.value })} rows={2} placeholder={t('medicalRecords.hoursParkingPortalLoginEtc')} />}</Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> {t('medicalRecords.primary')} {providerWord.toLowerCase()}</label>
-            <Button onClick={saveProvider} disabled={saving || !providerForm.name} loading={saving} className="w-full">{providerForm.id ? 'Save Changes' : `Add ${providerWord}`}</Button>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> {t(copy.primaryProvider)}</label>
+            <Button onClick={saveProvider} disabled={saving || !providerForm.name} loading={saving} className="w-full">{providerForm.id ? t('medicalRecords.saveChanges') : t(copy.addProvider)}</Button>
           </div>
         )}
       </Modal>
 
       {/* ── Insurance modal ───────────────────────────────── */}
-      <Modal open={!!policyForm} title={policyForm?.id ? 'Edit Insurance' : 'Add Insurance'} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
+      <Modal open={!!policyForm} title={policyForm?.id ? t('medicalRecords.editInsurance') : t('medicalRecords.addInsuranceTitle')} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
         {policyForm && (
           <div className="space-y-3">
             <Field label={t('medicalRecords.covers')}>{(id) => <Select id={id} value={policyForm.member_id} onChange={(e) => setPolicyForm({ ...policyForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -447,17 +466,17 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             <div className="grid grid-cols-2 gap-3">
               {(['front', 'back'] as const).map((side) => (
                 <div key={side}>
-                  <p className="mb-1.5 text-xs font-medium text-muted capitalize">{side} {t('medicalRecords.ofCard')}</p>
-                  <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={`${side} of card`} />
+                  <p className="mb-1.5 text-xs font-medium text-muted">{side === 'front' ? t('medicalRecords.frontOfCard') : t('medicalRecords.backOfCard')}</p>
+                  <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={side === 'front' ? t('medicalRecords.frontOfCard') : t('medicalRecords.backOfCard')} />
                   <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs font-semibold text-muted hover:text-fg">
-                    <Camera className="h-4 w-4" /> {uploading === side ? 'Uploading…' : 'Take photo / Upload'}
+                    <Camera className="h-4 w-4" /> {uploading === side ? t('medicalRecords.uploading') : t('medicalRecords.takePhotoOrUpload')}
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCard(side, f); e.target.value = ''; }} />
                   </label>
                 </div>
               ))}
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policyForm.is_primary} onChange={(e) => setPolicyForm({ ...policyForm, is_primary: e.target.checked })} /> {t('medicalRecords.primaryPlan')}</label>
-            <Button onClick={savePolicy} disabled={saving || !policyForm.insurer} loading={saving} className="w-full">{policyForm.id ? 'Save Changes' : 'Add Insurance'}</Button>
+            <Button onClick={savePolicy} disabled={saving || !policyForm.insurer} loading={saving} className="w-full">{policyForm.id ? t('medicalRecords.saveChanges') : t('medicalRecords.addInsuranceTitle')}</Button>
           </div>
         )}
       </Modal>
