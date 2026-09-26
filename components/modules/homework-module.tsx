@@ -23,7 +23,7 @@ import {
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Homework = Tables<'homework_assignments'>;
 
@@ -46,6 +46,7 @@ function toLocalInput(iso: string | null): string {
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -126,7 +127,7 @@ export function HomeworkModule() {
 
   const fmtDue = (iso: string | null) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
   if (loading) return <SkeletonList count={5} />;

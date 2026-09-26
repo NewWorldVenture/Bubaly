@@ -6,19 +6,19 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'AI Conflict Resolution' };
 export const dynamic = 'force-dynamic';
 
-function whenLabel(startsAt: string, endsAt: string | null): string {
+function whenLabel(startsAt: string, endsAt: string | null, locale: string): string {
   const s = new Date(startsAt);
-  const start = s.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const start = s.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   if (!endsAt) return start;
   const e = new Date(endsAt);
   const sameDay = s.toDateString() === e.toDateString();
-  const end = e.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  const end = e.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
 
 /** The soonest events to consider, and the most overlaps worth showing at once.
@@ -27,6 +27,7 @@ const MAX_EVENTS = 500;
 const MAX_CONFLICTS = 100;
 
 export default async function ConflictsPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/conflicts');
   const supabase = await createServer();
@@ -62,7 +63,7 @@ export default async function ConflictsPage() {
     const ev = (e: TimedEvent) => ({
       id: e.id,
       title: e.title,
-      whenLabel: whenLabel(e.starts_at, e.ends_at),
+      whenLabel: whenLabel(e.starts_at, e.ends_at, locale),
       location: e.location ?? null,
       assignee: e.assignee_id ? nameById.get(e.assignee_id) ?? null : null,
     });
@@ -77,7 +78,7 @@ export default async function ConflictsPage() {
             label: qf.label,
             startsAtIso: qf.startsAtIso,
             endsAtIso: qf.endsAtIso,
-            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso),
+            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale),
           }
         : null,
       aiPayload: {

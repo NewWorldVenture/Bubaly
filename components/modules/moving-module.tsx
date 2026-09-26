@@ -21,14 +21,14 @@ import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
   nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
 type Box = Tables<'move_boxes'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtLong = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDate = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+const fmtLong = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 // Move statuses render from the catalogue (I18N-002); MOVE_STATUSES in lib/
 // stays the English source for non-screen uses.
 const MOVE_STATUS_KEYS: Record<MoveStatus, string> = {
@@ -45,6 +45,7 @@ export function MovingModule() {
 }
 
 export function MovingWorkspace() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -172,7 +173,7 @@ export function MovingWorkspace() {
         <div className="min-w-0 flex-1">
           <p className={cn('truncate text-sm font-medium', t.status === 'done' && 'text-muted line-through', t.status === 'skipped' && 'text-muted')}>{t.title}</p>
           <p className="text-xs text-muted">
-            {t.due_date ? <span className={cn(overdue && 'text-rose-300')}>{overdue ? 'Overdue · ' : ''}{fmtDate(t.due_date)}</span> : 'No date'}
+            {t.due_date ? <span className={cn(overdue && 'text-rose-300')}>{overdue ? 'Overdue · ' : ''}{fmtDate(t.due_date, locale)}</span> : 'No date'}
             {' · '}{meta.label}{t.assignee_id ? ` · ${nameOf(t.assignee_id) ?? 'someone'}` : ''}{t.status === 'skipped' ? ' · skipped' : t.status === 'doing' ? ' · in progress' : ''}
           </p>
         </div>
@@ -229,7 +230,7 @@ export function MovingWorkspace() {
               {moves.data.map((m) => (
                 <button key={m.id} role="tab" aria-selected={m.id === moveId} onClick={() => setMoveId(m.id)}
                   className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', m.id === moveId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                  {m.title} <span className="text-xs opacity-70">· {fmtDate(m.move_date)}</span>
+                  {m.title} <span className="text-xs opacity-70">· {fmtDate(m.move_date, locale)}</span>
                 </button>
               ))}
             </div>
@@ -246,7 +247,7 @@ export function MovingWorkspace() {
                     <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(tr, suggested)} →</button>
                   )}
                 </div>
-                <p className="mt-1 text-sm text-muted"><CalendarClock className="mr-1 inline h-3.5 w-3.5" />{fmtLong(move.move_date)} · {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label}</p>
+                <p className="mt-1 text-sm text-muted"><CalendarClock className="mr-1 inline h-3.5 w-3.5" />{fmtLong(move.move_date, locale)} · {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label}</p>
                 {(move.from_address || move.to_address) && <p className="mt-1 text-sm text-muted"><MapPin className="mr-1 inline h-3.5 w-3.5" />{move.from_address ?? '?'} → {move.to_address ?? '?'}</p>}
                 {move.mover_name && <p className="mt-1 text-xs text-muted">Movers: {move.mover_name}{move.mover_phone ? ` · ${move.mover_phone}` : ''}{move.mover_quote_cents ? ` · quote ${money(move.mover_quote_cents)}` : ''}</p>}
               </div>
@@ -321,7 +322,7 @@ export function MovingWorkspace() {
                     <section key={phase.key}>
                       <div className="mb-2 flex items-baseline justify-between">
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{phase.label}</h3>
-                        <span className="text-xs text-muted">{doneCount}/{list.length} · {fmtDate(addDays(move.move_date, Math.max(phase.from, -56)))}{phase.from !== phase.to ? ` → ${fmtDate(addDays(move.move_date, Math.min(phase.to, 14)))}` : ''}</span>
+                        <span className="text-xs text-muted">{doneCount}/{list.length} · {fmtDate(addDays(move.move_date, Math.max(phase.from, -56)), locale)}{phase.from !== phase.to ? ` → ${fmtDate(addDays(move.move_date, Math.min(phase.to, 14)), locale)}` : ''}</span>
                       </div>
                       <ul className="space-y-2">{visible.map((t) => <TaskRow key={t.id} t={t} />)}</ul>
                     </section>
@@ -452,6 +453,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -487,7 +489,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
         <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.category')}>{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
-          <Field label="Due" hint={`Move day is ${fmtDate(move.move_date)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
+          <Field label="Due" hint={`Move day is ${fmtDate(move.move_date, locale)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> {tr('moving.followTheMoveDate')}</label>
         <p className="text-xs text-muted">{tr('moving.fixedDatesIncludingOlderTasks')}</p>

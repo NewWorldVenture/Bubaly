@@ -22,20 +22,21 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
 type Move = Tables<'inventory_moves'>;
 
-const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const money = (cents: number, locale: string) => `$${(cents / 100).toLocaleString(locale, { maximumFractionDigits: 0 })}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(d: string, locale: string): string {
+  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 export function InventoryModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -161,7 +162,7 @@ export function InventoryModule() {
                   <span className="text-xl">{categoryMeta(h.item.category).emoji}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{h.item.name}{h.item.quantity > 1 ? ` ×${h.item.quantity}` : ''}</p>
-                    <p className="truncate text-xs text-muted"><MapPin className="mr-1 inline h-3 w-3" />{h.where}{h.item.status !== 'in_place' ? ` · ${statusMeta(h.item.status).label}${h.item.lent_to ? ` to ${h.item.lent_to}` : ''}` : ''}{confirmed ? ` · ${tr('inventory.lastConfirmed')} ${fmtDate(confirmed.at)}` : ''}</p>
+                    <p className="truncate text-xs text-muted"><MapPin className="mr-1 inline h-3 w-3" />{h.where}{h.item.status !== 'in_place' ? ` · ${statusMeta(h.item.status).label}${h.item.lent_to ? ` to ${h.item.lent_to}` : ''}` : ''}{confirmed ? ` · ${tr('inventory.lastConfirmed')} ${fmtDate(confirmed.at, locale)}` : ''}</p>
                   </div>
                   <Button size="sm" variant="secondary" onClick={() => confirmHere(h.item)} title={tr('inventory.confirmItsHere')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('inventory.confirmItsHere')}</Button>
                   <Button size="sm" variant="secondary" onClick={() => setMoveFor(h.item)}><ArrowRightLeft className="h-3.5 w-3.5" /> {tr('inventory.moved')}</Button>
@@ -181,8 +182,8 @@ export function InventoryModule() {
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
-          <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents) : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
+          <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents, locale) : '—'}</p>
+          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents, locale)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
         </div>
         <div className={cn('rounded-2xl border p-5', loans.some((l) => l.overdue) || warranties.length ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> {tr('inventory.needsAttention')}</div>
@@ -263,9 +264,9 @@ export function InventoryModule() {
                     ) : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{item.name}{item.quantity > 1 ? <span className="text-muted"> ×{item.quantity}</span> : null}</p>
-                      <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
-                      {item.status !== 'in_place' && <p className="text-[11px] text-amber-300">{statusMeta(item.status).emoji} {statusMeta(item.status).label}{item.lent_to ? ` to ${item.lent_to}` : ''}{item.lent_on ? ` since ${fmtDate(item.lent_on)}` : ''}</p>}
-                      {confirmed && <p className="text-[11px] text-muted"><CheckCircle2 className="mr-0.5 inline h-3 w-3" />{tr('inventory.lastConfirmed')} {fmtDate(confirmed.at)}</p>}
+                      <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents, locale)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
+                      {item.status !== 'in_place' && <p className="text-[11px] text-amber-300">{statusMeta(item.status).emoji} {statusMeta(item.status).label}{item.lent_to ? ` to ${item.lent_to}` : ''}{item.lent_on ? ` since ${fmtDate(item.lent_on, locale)}` : ''}</p>}
+                      {confirmed && <p className="text-[11px] text-muted"><CheckCircle2 className="mr-0.5 inline h-3 w-3" />{tr('inventory.lastConfirmed')} {fmtDate(confirmed.at, locale)}</p>}
                     </div>
                     <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
                       <button onClick={() => confirmHere(item)} aria-label={`${tr('inventory.confirmItsHere')}: ${item.name}`} title={tr('inventory.confirmItsHere')} className="rounded-lg p-1.5 text-muted hover:text-fg"><CheckCircle2 className="h-4 w-4" /></button>
@@ -292,7 +293,7 @@ export function InventoryModule() {
               const item = items.data.find((i) => i.id === m.item_id);
               return (
                 <li key={m.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm">
-                  <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(m.moved_at)}</span>
+                  <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(m.moved_at, locale)}</span>
                   {m.reason === CONFIRM_REASON && m.from_location_id === m.to_location_id
                     ? <span className="min-w-0 flex-1 truncate"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-emerald-400" />{item?.name ?? 'Item'}: {tr('inventory.lastConfirmed').toLowerCase()} · {locationLabel(locations.data, m.to_location_id)}</span>
                     : <span className="min-w-0 flex-1 truncate">{item?.name ?? 'Item'}: {locationLabel(locations.data, m.from_location_id)} → {locationLabel(locations.data, m.to_location_id)}</span>}

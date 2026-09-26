@@ -27,7 +27,7 @@ import { DOMAIN_LABELS } from '@/lib/trust/engine';
 import { decideApproval, editAndApproveApproval } from '@/app/(app)/dashboard/approvals-actions';
 import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data';
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 /** A context slice in the family's words; the raw name when it is not one we ship. */
 function sliceLabelOf(slice: string, t: (key: string) => string): string {
@@ -50,11 +50,11 @@ export function formatAmount(cents: number | null | undefined, currency = 'USD')
   }
 }
 
-export function formatWhen(iso: string | null | undefined): string | null {
+export function formatWhen(iso: string | null | undefined, locale: string): string | null {
   if (!iso) return null;
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return null;
-  return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 /** "Expires in 2 days" / "Expires in 3h" / "Expired" — the deadline a parent is deciding against. */
@@ -87,6 +87,7 @@ export function ApprovalCard({
   onResult?: (result: ApprovalCardResult) => void;
   className?: string;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -140,7 +141,7 @@ export function ApprovalCard({
   }, [approval.id, busy, onResult, router, success, toastError]);
 
   const amount = formatAmount(approval.amountCents);
-  const when = formatWhen(approval.requestedAt);
+  const when = formatWhen(approval.requestedAt, locale);
   const expiry = formatExpiry(approval.expiresAt);
   const expired = expiry === 'Expired';
   const requester = approval.requestedBy ?? (approval.agent ? 'Bubaly' : null);

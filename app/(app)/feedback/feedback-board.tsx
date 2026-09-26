@@ -11,17 +11,17 @@ import {
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Comment = { id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 const SORTS: { id: FeedbackSort; label: string }[] = [
@@ -147,6 +147,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
 // ── Comment thread (lazy-loaded on expand) ───────────────────────────────────
 function CommentThread({ ideaId }: { ideaId: string }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { error } = useToast();
   const [comments, setComments] = useState<Comment[] | null>(null);
@@ -209,7 +210,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
               <p className="text-xs">
                 <span className={cn('font-semibold', c.is_team && 'text-brand-text')}>{c.author_name}</span>
                 {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{t('feedbackBoard.team')}</span>}
-                <span className="ml-1.5 text-muted">{timeAgo(c.created_at)}</span>
+                <span className="ml-1.5 text-muted">{timeAgo(c.created_at, locale)}</span>
               </p>
               <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.body}</p>
             </div>

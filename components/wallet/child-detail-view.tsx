@@ -28,7 +28,7 @@ import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wa
 import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -595,6 +595,7 @@ export function ChildDetailView({
   canManage: boolean;
   siblings: Sibling[];
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const t = useTranslations();
   const [adding, setAdding] = useState(false);
@@ -788,7 +789,7 @@ export function ChildDetailView({
             {visibleGroups.map((grp) => (
               <div key={grp.date}>
                 <p className="bg-bg/50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-                  {new Date(grp.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {new Date(grp.date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </p>
                 {grp.txns.map((tx) => <TxnRow key={tx.id} tx={tx as HistoryTxn} />)}
               </div>

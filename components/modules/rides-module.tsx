@@ -24,7 +24,7 @@ import {
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Ride = Tables<'rides'>;
 
@@ -47,6 +47,7 @@ const blankRide = {
 };
 
 export function RidesModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
@@ -148,7 +149,7 @@ export function RidesModule() {
   }
 
   const fmtDay = (key: string) =>
-    new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    new Date(`${key}T00:00:00`).toLocaleDateString(locale, { weekday: 'long', month: 'short', day: 'numeric' });
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rides'} />;

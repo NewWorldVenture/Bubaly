@@ -356,13 +356,14 @@ function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
+  const locale = useLocale().code;
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (

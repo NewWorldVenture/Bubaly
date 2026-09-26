@@ -23,7 +23,7 @@ import {
   WARDROBE_CATEGORIES, WARDROBE_STATUSES, SEASONS, OCCASIONS, categoryMeta, statusMeta, occasionMeta,
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
 
 type Item = Tables<'wardrobe_items'>;
@@ -36,12 +36,13 @@ const cToF = (c: number) => Math.round((c * 9) / 5 + 32);
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(d: string, locale: string): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 
 export function ClosetModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -270,7 +271,7 @@ export function ClosetModule() {
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
               <p className="font-semibold text-amber-200">{t('closet.notWornInMonths')}</p>
               <ul className="mt-1 space-y-1 text-xs text-amber-100/90">
-                {neglected.map((i) => <li key={i.id}>{i.name}{i.last_worn_on ? ` · last worn ${fmtDate(i.last_worn_on)}` : ' · never worn'}</li>)}
+                {neglected.map((i) => <li key={i.id}>{i.name}{i.last_worn_on ? ` · last worn ${fmtDate(i.last_worn_on, locale)}` : ' · never worn'}</li>)}
               </ul>
               <p className="mt-2 text-[11px] text-amber-200/80">{t('closet.outgrownMarkItDonateItOr')}</p>
             </div>
@@ -308,7 +309,7 @@ export function ClosetModule() {
                     <p className="truncate text-xs text-muted">{categoryMeta(item.category).label}{item.color ? ` · ${item.color}` : ''}{item.size ? ` · ${item.size}` : ''}</p>
                     <p className="mt-1 text-[11px] text-muted">
                       warmth {item.warmth}/5 · formality {item.formality}/5
-                      {item.last_worn_on ? ` · worn ${fmtDate(item.last_worn_on)}` : ''}
+                      {item.last_worn_on ? ` · worn ${fmtDate(item.last_worn_on, locale)}` : ''}
                       {cpw !== null ? ` · ${money(cpw)}/wear` : ''}
                     </p>
                   </div>
@@ -368,7 +369,7 @@ export function ClosetModule() {
             <ul className="space-y-1.5">
               {memberLogs.slice(0, 8).map((l) => (
                 <li key={l.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm">
-                  <span className="w-14 shrink-0 text-xs text-muted">{dayDiff(l.worn_on, today) === 0 ? 'Today' : fmtDate(l.worn_on)}</span>
+                  <span className="w-14 shrink-0 text-xs text-muted">{dayDiff(l.worn_on, today) === 0 ? 'Today' : fmtDate(l.worn_on, locale)}</span>
                   <span className="min-w-0 flex-1 truncate">{l.item_ids.map((id) => itemById.get(id)?.name).filter(Boolean).join(' + ') || 'Outfit'}</span>
                   <span className="shrink-0 text-xs text-muted">{l.occasion ?? ''}{typeof l.temp_c === 'number' ? ` · ${cToF(l.temp_c)}°F` : ''}</span>
                 </li>

@@ -18,7 +18,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
 
@@ -97,14 +97,14 @@ const HOW_IT_WORKS = [
   { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
 ] as const;
 
-function fmtTime(iso: string) {
+function fmtTime(iso: string, locale: string) {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const diffH = diffMs / 3_600_000;
   if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
   if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 function fmtDuration(secs: number | null) {
@@ -136,6 +136,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
   voice: FrontDeskVoiceMessage[];
   unavailable?: FrontDeskUnavailable;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -292,7 +293,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                         <span className={cn('truncate text-sm', v.status === 'new' ? 'font-bold' : 'font-medium')}>
                           {v.from_addr || tr('frontDesk.unknownCaller')}
                         </span>
-                        <span className="shrink-0 text-[10px] text-muted">{fmtTime(v.occurred_at)}</span>
+                        <span className="shrink-0 text-[10px] text-muted">{fmtTime(v.occurred_at, locale)}</span>
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted">{v.ai_summary || v.body || ''}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -452,7 +453,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                           <span className={cn('truncate text-sm', !call.is_read ? 'font-bold' : 'font-medium')}>
                             {call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'Unknown caller'}
                           </span>
-                          <span className="shrink-0 text-[10px] text-muted">{fmtTime(call.received_at)}</span>
+                          <span className="shrink-0 text-[10px] text-muted">{fmtTime(call.received_at, locale)}</span>
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted">
                           {call.ai_summary ?? call.caller_number ?? st.label}
@@ -529,6 +530,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
 function CallDetail({ call, familyId, userId, onClose }: {
   call: Call; familyId: string; userId: string; onClose: () => void;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const st = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.screened;
@@ -582,7 +584,7 @@ function CallDetail({ call, familyId, userId, onClose }: {
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold">{call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'Unknown'}</div>
-          <div className="text-[10px] text-muted">{st.label} · {fmtTime(call.received_at)}</div>
+          <div className="text-[10px] text-muted">{st.label} · {fmtTime(call.received_at, locale)}</div>
         </div>
       </div>
 

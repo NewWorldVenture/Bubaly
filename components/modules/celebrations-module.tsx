@@ -19,7 +19,7 @@ import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
 } from '@/lib/celebrations/dates';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type FamilyDate = Tables<'family_dates'>;
 
@@ -34,6 +34,7 @@ const KIND_TINT: Record<CelebrationKind, string> = {
 };
 
 export function CelebrationsModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId, role, members } = useApp();
   const admin = isAdmin(role);
@@ -114,7 +115,7 @@ export function CelebrationsModule() {
                 <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${KIND_TINT[c.kind]}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">{t('celebrations.turning')} {c.turning}</span> : null}</p>
-                  <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
                 <span className={`shrink-0 text-sm font-semibold ${soon ? 'text-brand-text' : 'text-muted'}`}>{countdownLabel(c.daysUntil)}</span>

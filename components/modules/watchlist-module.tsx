@@ -19,18 +19,19 @@ import {
   WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, AGE_RATINGS, TIME_PRESETS, kindMeta, serviceLabel, ratingMinAge,
   ageOn, pickTonight, watchlistAudienceAges, watchlistSummary,
 } from '@/lib/watchlist/picker';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Title = Tables<'watchlist_titles'>;
 type Vote = Tables<'watchlist_votes'>;
 type Session = Tables<'watch_sessions'>;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(d: string, locale: string): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 export function WatchlistModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -256,7 +257,7 @@ export function WatchlistModule() {
           <ul className="space-y-1.5">
             {sessions.data.slice(0, 8).map((s) => (
               <li key={s.id} className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm">
-                <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(s.watched_on)}</span>
+                <span className="w-14 shrink-0 text-xs text-muted">{fmtDate(s.watched_on, locale)}</span>
                 <span className="min-w-0 flex-1 truncate">{s.title_name}<span className="text-xs text-muted"> · {s.member_ids.map(memberName).join(', ') || 'family'}</span></span>
                 {s.rating ? <span className="shrink-0 text-xs text-amber-300">{'★'.repeat(s.rating)}</span> : null}
                 <button onClick={() => deleteSession(s)} aria-label={tr('watchlist.deleteSession')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>

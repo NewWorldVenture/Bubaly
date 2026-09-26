@@ -22,7 +22,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
@@ -57,15 +57,16 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function dueLabel(due: string, todayStr: string, tomorrowStr: string): string {
+function dueLabel(due: string, todayStr: string, tomorrowStr: string, locale: string): string {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
   // due is 'YYYY-MM-DD' — render without TZ surprises.
   const [y, m, d] = due.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 export function TodosModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -289,7 +290,7 @@ export function TodosModule() {
         <div className="flex shrink-0 items-center gap-2">
           {item.due_date && (
             <span className={cn('whitespace-nowrap text-xs', overdue ? 'font-semibold text-danger' : 'text-muted')}>
-              {dueLabel(item.due_date, todayStr, tomorrowStr)}
+              {dueLabel(item.due_date, todayStr, tomorrowStr, locale)}
             </span>
           )}
           {assignee
@@ -416,7 +417,7 @@ export function TodosModule() {
                     {i.due_date && (
                       <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
                         overdue ? 'bg-danger/15 text-danger' : i.due_date === todayStr ? 'bg-amber-500/15 text-amber-400' : 'bg-elevated text-muted')}>
-                        {overdue ? 'Overdue' : dueLabel(i.due_date, todayStr, tomorrowStr)}
+                        {overdue ? 'Overdue' : dueLabel(i.due_date, todayStr, tomorrowStr, locale)}
                       </span>
                     )}
                   </button>
@@ -446,7 +447,7 @@ export function TodosModule() {
                       <p className="truncate text-xs font-semibold">{m?.display_name ?? 'Member'}</p>
                       <p className="truncate text-[11px] text-muted">{i.title}</p>
                     </div>
-                    {i.due_date && <span className="shrink-0 text-[11px] text-muted">{dueLabel(i.due_date, todayStr, tomorrowStr)}</span>}
+                    {i.due_date && <span className="shrink-0 text-[11px] text-muted">{dueLabel(i.due_date, todayStr, tomorrowStr, locale)}</span>}
                   </button>
                 );
               })}

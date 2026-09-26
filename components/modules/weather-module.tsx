@@ -17,7 +17,7 @@ import {
   type Forecast, type GeoResult,
 } from '@/lib/weather/open-meteo';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type SavedLocation = Tables<'weather_locations'>;
 
@@ -45,13 +45,14 @@ function placeLabel(p: Place): string {
   return [p.name, p.admin1, p.country].filter(Boolean).slice(0, 2).join(', ');
 }
 
-function dayName(date: string, i: number): string {
+function dayName(date: string, i: number, locale: string): string {
   if (i === 0) return 'Today';
   if (i === 1) return 'Tomorrow';
-  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 export function WeatherModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -317,7 +318,7 @@ export function WeatherModule() {
                   const info = weatherInfo(d.code);
                   return (
                     <li key={d.date} className="flex items-center gap-4 px-4 py-3">
-                      <span className="w-28 shrink-0 text-sm font-medium">{dayName(d.date, i)}</span>
+                      <span className="w-28 shrink-0 text-sm font-medium">{dayName(d.date, i, locale)}</span>
                       <span className="text-2xl">{info.icon}</span>
                       <span className="min-w-0 flex-1 truncate text-sm text-muted">{info.label}</span>
                       {d.precipProb != null && d.precipProb > 0 && (

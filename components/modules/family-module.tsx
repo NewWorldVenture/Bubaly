@@ -23,7 +23,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 
@@ -52,19 +52,19 @@ function inLabel(days: number): string {
   const months = Math.round(days / 30);
   return months <= 1 ? 'in 1 month' : `in ${months} months`;
 }
-function fmtRelDay(iso: string): string {
+function fmtRelDay(iso: string, locale: string): string {
   const d = new Date(iso);
   const now = new Date();
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+function fmtTime(iso: string, locale: string): string {
+  return new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(iso: string, locale: string): string {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function planLabel(level: number): string {
   return level >= 2 ? 'Family+' : level === 1 ? 'Family Basic' : 'Free';
@@ -81,6 +81,7 @@ const ROLE_OPTIONS: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiv
 const MEMBER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 export function FamilyModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId, role, members, refreshMembers, planLevel } = useApp();
   const { success, error: toastError } = useToast();
@@ -316,7 +317,7 @@ export function FamilyModule() {
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><CalendarIcon className="h-4 w-4" /></span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{e.title}</p>
-                        <p className="truncate text-xs text-muted">{fmtRelDay(e.starts_at)}{!e.all_day ? ` · ${fmtTime(e.starts_at)}` : ' · All Day'}</p>
+                        <p className="truncate text-xs text-muted">{fmtRelDay(e.starts_at, locale)}{!e.all_day ? ` · ${fmtTime(e.starts_at, locale)}` : ' · All Day'}</p>
                       </div>
                       {who && <span className="shrink-0 text-xs text-muted">{firstName(who.display_name)}</span>}
                     </Link>
@@ -346,7 +347,7 @@ export function FamilyModule() {
                     </div>
                     <div className="p-2">
                       <p className="truncate text-xs font-semibold">{a.name}</p>
-                      <p className="truncate text-[10px] text-muted">{fmtDate(a.created_at)}</p>
+                      <p className="truncate text-[10px] text-muted">{fmtDate(a.created_at, locale)}</p>
                     </div>
                   </Link>
                 ))}
@@ -387,7 +388,7 @@ export function FamilyModule() {
             <InfoRow icon={Home} tint="bg-blue-500/10 text-blue-400" label={t('family.address')} value={family?.address ?? 'Not set'} />
             <InfoRow icon={Clock} tint="bg-emerald-500/10 text-emerald-400" label={t('family.timeZone')} value={family?.timezone ?? 'UTC'} />
             <InfoRow icon={CreditCard} tint="bg-orange-500/10 text-orange-400" label={t('family.subscription')}
-              value={`${planName} Plan`} sub={sub?.current_period_end ? `Renews ${fmtDate(sub.current_period_end)}` : undefined} />
+              value={`${planName} Plan`} sub={sub?.current_period_end ? `Renews ${fmtDate(sub.current_period_end, locale)}` : undefined} />
             <div className="flex items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-500/10 text-rose-400"><CreditCard className="h-4 w-4" /></span>
               <div className="min-w-0 flex-1">
@@ -418,7 +419,7 @@ export function FamilyModule() {
                     <p className="truncate text-sm font-semibold">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">{t('family.turns')} {nb.turning} {inLabel(nb.inDays)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</span>
                 </div>
               ))}
             </div>

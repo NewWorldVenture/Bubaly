@@ -83,6 +83,7 @@ vi.mock('@/lib/server/health', () => ({
 // Real English, so the assertions below are the words an operator reads.
 vi.mock('@/lib/i18n/server', () => ({
   getTranslations: async () => (key: string) => SOURCE_MESSAGES[key] ?? key,
+  getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
 }));
 
 const ERROR_STATE_COPY = 'Could not load the admin dashboard from Supabase';

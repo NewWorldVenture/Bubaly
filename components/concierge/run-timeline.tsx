@@ -23,7 +23,7 @@ import type { StepState } from '@/lib/ai/runs/states';
 import type { CompletedSource } from '@/lib/home/today';
 import { toolDomainLabel } from '@/lib/ai/tool-domains';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 // ─── The read model ──────────────────────────────────────────────────────────
 //
@@ -179,10 +179,10 @@ export function ProgressBar({ progress }: { progress: RunProgressView }) {
   );
 }
 
-function when(iso: string): string {
+function when(iso: string, locale: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
 
 /**
@@ -208,6 +208,7 @@ function SourceChip({ source }: { source: CompletedSource }) {
 }
 
 export function RunTimeline({ view, showActivity, stepSources }: { view: RunView; showActivity: boolean; stepSources?: StepSources }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   useLiveRun(view.familyId, view.id, view.planId);
   const rows = timelineRows(view.steps, view.events);
@@ -250,7 +251,7 @@ export function RunTimeline({ view, showActivity, stepSources }: { view: RunView
           <ol className="space-y-2 border-t border-border px-4 py-3" aria-label={t('runTimeline.activity')}>
             {activity.map((e) => (
               <li key={e.id} className="flex items-start gap-3 text-xs">
-                <span className="w-16 shrink-0 tabular-nums text-muted">{when(e.at)}</span>
+                <span className="w-16 shrink-0 tabular-nums text-muted">{when(e.at, locale)}</span>
                 <span className={cn('min-w-0 flex-1', e.type === 'model_call' ? 'text-muted' : 'text-fg/85')}>
                   {e.type === 'model_call' ? `Thinking${e.metrics ? ` · ${e.metrics}` : ''}` : e.message}
                   {e.actor === 'member' && <span className="ml-1 text-muted">{t('runTimeline.byAFamilyMember')}</span>}

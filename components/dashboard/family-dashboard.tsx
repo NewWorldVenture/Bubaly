@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { localPartsAt, startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -76,6 +76,7 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
 }
 
 export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -275,7 +276,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                   <li key={e.id} className="flex items-center gap-3">
                     <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
-                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
+                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale, { month: 'short' })}</p>
                         <p className="text-base font-black leading-none">{d.getDate()}</p>
                       </div>
                     </div>

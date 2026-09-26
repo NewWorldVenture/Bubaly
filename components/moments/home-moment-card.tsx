@@ -22,7 +22,7 @@ import { reminderTimeFor } from '@/lib/moments/reminders';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -36,6 +36,7 @@ const DOMAIN_ICON: Record<PrepDomain, typeof Clock> = {
 const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -127,7 +128,7 @@ export function HomeMomentCard() {
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
                 <Clock className="h-3.5 w-3.5 text-brand-text" />
-                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}
               </span>
             )}
             {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {

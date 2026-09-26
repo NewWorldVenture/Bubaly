@@ -18,7 +18,7 @@ import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import {
   saveBabysitterAction, archiveBabysitterAction, recordBabysitterPaymentAction,
 } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 export type BabysitterRow = {
   id: string; name: string; phone: string | null; email: string | null;
@@ -32,6 +32,7 @@ export type PaymentRow = {
 export function BabysittersView({ sitters, payments, canManage }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
@@ -139,7 +140,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
                   <div className="flex items-center gap-2 text-[11px] text-muted">
                     {p.hours != null && <span className="flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{p.hours}h</span>}
                     {p.tipCents > 0 && <span>+{formatCents(p.tipCents)} tip</span>}
-                    <span>{new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span>{new Date(p.createdAt).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</span>
                   </div>
                 </div>
                 <div className="text-sm font-bold">{formatCents(p.amountCents)}</div>

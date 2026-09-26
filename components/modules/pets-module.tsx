@@ -23,7 +23,7 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Pet = Tables<'pets'>;
@@ -41,11 +41,12 @@ const URGENCY_STYLE: Record<CareUrgency, string> = {
   ok: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(d: string, locale: string): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function PetsModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -167,7 +168,7 @@ export function PetsModule() {
                   </p>
                   {nextDue && (
                     <span className={cn('mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[nextDue.urgency])}>
-                      {careKindMeta(nextDue.kind).emoji} {nextDue.urgency === 'overdue' ? 'Overdue' : `Due ${fmtDate(nextDue.nextDue)}`}
+                      {careKindMeta(nextDue.kind).emoji} {nextDue.urgency === 'overdue' ? 'Overdue' : `Due ${fmtDate(nextDue.nextDue, locale)}`}
                     </span>
                   )}
                 </div>
@@ -195,7 +196,7 @@ export function PetsModule() {
                     <p className="truncate text-sm">{pet?.name}: {u.title}</p>
                   </div>
                   <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-xs', URGENCY_STYLE[u.urgency])}>
-                    {u.urgency === 'overdue' ? `${Math.abs(u.daysUntil)}d overdue` : fmtDate(u.nextDue)}
+                    {u.urgency === 'overdue' ? `${Math.abs(u.daysUntil)}d overdue` : fmtDate(u.nextDue, locale)}
                   </span>
                 </li>
               );
@@ -344,6 +345,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
@@ -399,8 +401,8 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{r.title}</p>
                       <p className="text-xs text-muted">
-                        {fmtDate(r.record_date)}{r.dose ? ` · ${r.dose}` : ''}
-                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>{t('pets.next')} {fmtDate(r.next_due)}</span>}
+                        {fmtDate(r.record_date, locale)}{r.dose ? ` · ${r.dose}` : ''}
+                        {r.next_due && <span className={cn('ml-1', u === 'overdue' ? 'text-rose-300' : u === 'due_soon' ? 'text-amber-300' : '')}>{t('pets.next')} {fmtDate(r.next_due, locale)}</span>}
                       </p>
                     </div>
                     <button onClick={() => deleteRecord(r.id)} aria-label={t('pets.deleteRecord')} className="shrink-0 p-1 text-muted/50 opacity-0 transition hover:text-rose-400 group-hover:opacity-100">

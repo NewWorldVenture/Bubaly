@@ -23,18 +23,19 @@ import {
 } from '@/app/(app)/admin/feedback/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmt(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
   ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<AdminFeedbackFilter>({ status: 'all', category: 'all' });
@@ -128,7 +129,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-fg">{n.title}</p>
                   {n.body && <p className="mt-0.5 whitespace-pre-line text-muted">{n.body}</p>}
-                  <p className="mt-0.5 text-[11px] text-muted/60">{fmt(n.created_at)}</p>
+                  <p className="mt-0.5 text-[11px] text-muted/60">{fmt(n.created_at, locale)}</p>
                 </div>
                 {n.url && <Link href={n.url} className="shrink-0 text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></Link>}
               </li>
@@ -215,6 +216,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
   idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
+  const locale = useLocale().code;
   const a11yId = useId();
   const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
@@ -261,7 +263,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
               </a>
             )}
             {idea.pinned && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text"><Pin className="h-3 w-3" /> {t('feedbackAdmin.pinned')}</span>}
-            <span className="text-[11px] text-muted/70">· {idea.author_name} · {fmt(idea.created_at)}</span>
+            <span className="text-[11px] text-muted/70">· {idea.author_name} · {fmt(idea.created_at, locale)}</span>
           </div>
           <h3 className="mt-1 text-sm font-bold text-fg">{idea.title}</h3>
           {idea.problem && <p className="mt-1 text-xs text-muted"><span className="font-semibold">Problem:</span> {idea.problem}</p>}

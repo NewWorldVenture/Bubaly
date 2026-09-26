@@ -5,12 +5,12 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { TRANSPORT_KINDS, dollars, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Flight = Tables<'vacation_flights'>;
 type Transport = Tables<'vacation_transportation'>;
 
-const fmtDT = (s: string | null) => (s ? new Date(s).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
+const fmtDT = (s: string | null, locale: string) => (s ? new Date(s).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 
 const flightFields: FieldDef[] = [
   { name: 'airline', label: 'Airline', type: 'text', half: true },
@@ -44,6 +44,7 @@ const transportFields: FieldDef[] = [
 ];
 
 export function TripTravel({ vacationId }: { vacationId: string }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   return (
     <div className="space-y-8">
@@ -58,7 +59,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
               {f.booked ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">{tr('tripTravel.booked')}</span>
                 : <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">{tr('tripTravel.notBooked')}</span>}
             </div>
-            <p className="mt-0.5 text-sm text-muted">{f.depart_airport || '?'} → {f.arrive_airport || '?'} · {fmtDT(f.depart_at)}{f.arrive_at ? ` – ${fmtDT(f.arrive_at)}` : ''}</p>
+            <p className="mt-0.5 text-sm text-muted">{f.depart_airport || '?'} → {f.arrive_airport || '?'} · {fmtDT(f.depart_at, locale)}{f.arrive_at ? ` – ${fmtDT(f.arrive_at, locale)}` : ''}</p>
             <p className="mt-0.5 text-xs text-muted">
               {[f.terminal && `Terminal ${f.terminal}`, f.gate && `Gate ${f.gate}`, f.seats && `Seat ${f.seats}`, f.confirmation_code && `Conf ${f.confirmation_code}`, f.cost_cents != null && dollars(f.cost_cents)].filter(Boolean).join(' · ')}
             </p>
@@ -77,7 +78,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
                 <p className="font-semibold">{k.emoji} {t.provider || k.label}</p>
                 {t.booked && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">{tr('tripTravel.booked')}</span>}
               </div>
-              <p className="mt-0.5 text-sm text-muted">{[t.from_location, t.to_location].filter(Boolean).join(' → ') || k.label} · {fmtDT(t.depart_at)}</p>
+              <p className="mt-0.5 text-sm text-muted">{[t.from_location, t.to_location].filter(Boolean).join(' → ') || k.label} · {fmtDT(t.depart_at, locale)}</p>
               <p className="mt-0.5 text-xs text-muted">
                 {[t.distance_miles != null && `${t.distance_miles} mi`, t.fuel_estimate_cents != null && `Fuel ${dollars(t.fuel_estimate_cents)}`, t.confirmation_code && `Conf ${t.confirmation_code}`, t.cost_cents != null && dollars(t.cost_cents)].filter(Boolean).join(' · ')}
               </p>

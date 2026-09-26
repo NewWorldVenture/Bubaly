@@ -25,7 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import {
   refreshPlaybookAction, acceptSuggestionAction, dismissSuggestionAction,
 } from '@/app/(app)/dashboard/playbook/playbook-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'family_playbook_suggestions'>;
 
@@ -37,6 +37,7 @@ function confidenceMeta(n: number): { label: string; tint: string } {
 }
 
 export function PlaybookModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -163,7 +164,7 @@ export function PlaybookModule() {
                           <>
                             {expired ? 'Expired: ' : 'Stops being true: '}
                             <time dateTime={s.expires_at ?? undefined}>
-                              {expiry.toLocaleString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}
+                              {expiry.toLocaleString(locale, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}
                             </time>
                           </>
                         )}

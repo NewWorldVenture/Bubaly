@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 export type DiningRow = {
   id: string; name: string; kind: string; cuisine: string | null; category: string | null;
@@ -20,9 +20,10 @@ export type DiningRow = {
 
 const priceLabel = (n: number | null) => (n && n > 0 ? '$'.repeat(Math.min(4, n)) : '');
 const usd = (cents: number | null) => (cents == null ? '' : `$${(cents / 100).toFixed(2)}`);
-const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+const fmtDay = (d: string | null, locale: string) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
 export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]; visits: DiningRow[] }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -174,7 +175,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{v.name}</p>
                   <p className="truncate text-xs text-muted">
-                    {[fmtDay(v.visited_at), v.item_count != null ? `${v.item_count} items` : null].filter(Boolean).join(' · ')}
+                    {[fmtDay(v.visited_at, locale), v.item_count != null ? `${v.item_count} items` : null].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 {v.amount_cents != null && <span className="shrink-0 text-sm font-semibold">{usd(v.amount_cents)}</span>}

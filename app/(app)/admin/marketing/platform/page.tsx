@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { PAGE_TYPES } from '@/lib/marketing/platform';
 import { archivePlatformPage, createPlatformPage, retryMarketingJob, saveMarketingBrandRule, saveMarketingTemplate, updatePlatformPage } from './actions';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Platform', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,7 @@ const inputCls = 'h-10 w-full rounded-lg border border-border bg-surface/60 px-3
 const areaCls = 'w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring';
 
 export default async function MarketingPlatformPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const t = await getTranslations();
   const supabase = createServiceClient();
   const providerNames = ['google_search_console', 'bing_webmaster', 'ai_citation'] as const;
@@ -125,7 +126,7 @@ export default async function MarketingPlatformPage() {
               const observation = observationByProvider.get(sync.provider as typeof providerNames[number]);
               return <div key={sync.provider} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-3"><span className="capitalize">{sync.provider.replaceAll('_', ' ')}</span><Badge tone={sync.status === 'connected' ? 'success' : sync.status === 'error' || sync.status === 'degraded' ? 'danger' : 'neutral'}>{sync.status.replaceAll('_', ' ')}</Badge></div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted"><span>{observation?.count.toLocaleString() ?? '0'} observations</span><span>Latest: {observation?.latest ?? 'none'}</span>{sync.last_completed_at ? <span>Synced: {formatTimestamp(sync.last_completed_at)}</span> : null}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted"><span>{observation?.count.toLocaleString() ?? '0'} observations</span><span>Latest: {observation?.latest ?? 'none'}</span>{sync.last_completed_at ? <span>Synced: {formatTimestamp(sync.last_completed_at, locale)}</span> : null}</div>
                 {sync.last_error ? <p className="mt-1 text-xs text-danger">{sync.last_error}</p> : null}
               </div>;
             })}</div>
@@ -149,7 +150,7 @@ export default async function MarketingPlatformPage() {
       <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.generationQueue')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.claimedByTheFiveMinuteWorker')}</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>
         <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-6">{jobStatuses.map((status) => <div key={status} className="rounded-lg border border-border px-2 py-2"><span className="block capitalize text-muted">{status.replace('_', ' ')}</span><span className="mt-1 block text-lg font-bold tabular-nums">{jobCounts[status].toLocaleString()}</span></div>)}</div>
         {staleJobs ? <p className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">{staleJobs} {t('adminMarketingPlatform.runningJob')}{staleJobs === 1 ? '' : 's'} {t('adminMarketingPlatform.hasALockOlderThan15')}</p> : null}
-        <p className="mb-3 text-xs text-muted">{t('adminMarketingPlatform.lastSuccessfulJob')} {latestSuccess?.completed_at ? `${latestSuccess.job_type.replaceAll('_', ' ')} · ${formatTimestamp(latestSuccess.completed_at)}${latestSuccess.target_path ? ` · ${latestSuccess.target_path}` : ''}` : 'none recorded'}</p>
+        <p className="mb-3 text-xs text-muted">{t('adminMarketingPlatform.lastSuccessfulJob')} {latestSuccess?.completed_at ? `${latestSuccess.job_type.replaceAll('_', ' ')} · ${formatTimestamp(latestSuccess.completed_at, locale)}${latestSuccess.target_path ? ` · ${latestSuccess.target_path}` : ''}` : 'none recorded'}</p>
         {jobs.length === 0 ? <p className="text-sm text-muted">{t('adminMarketingPlatform.noJobsHaveBeenCreatedYet')}</p> : <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-border text-xs text-muted"><tr><th className="px-2 py-2">{t('adminMarketingPlatform.type')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.target')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.status')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.attempts')}</th><th className="px-2 py-2">{t('adminMarketingPlatform.action')}</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id} className="border-b border-border/60"><td className="px-2 py-2 font-medium">{job.job_type.replaceAll('_', ' ')}</td><td className="px-2 py-2 text-muted">{job.target_path ?? job.target_id ?? 'system'}</td><td className="px-2 py-2"><Badge tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'dead_letter' ? 'danger' : 'neutral'}>{job.status}</Badge></td><td className="px-2 py-2 text-muted">{job.attempts}/{job.max_attempts}</td><td className="px-2 py-2">{job.status === 'failed' || job.status === 'dead_letter' ? <form action={retryMarketingJob}><input type="hidden" name="id" value={job.id} /><button className="text-xs font-semibold text-brand-text hover:underline">{t('platform.retry')}</button></form> : <span className="text-xs text-muted">{job.completed_at ? 'Complete' : 'Waiting'}</span>}</td></tr>)}</tbody></table></div>}
       </Card>
     </div>
@@ -160,8 +161,8 @@ function Metric({ icon: Icon, label, value }: { icon: typeof FileText; label: st
   return <Card className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span><span><span className="block text-lg font-bold tabular-nums">{value.toLocaleString()}</span><span className="block text-[11px] text-muted">{label}</span></span></Card>;
 }
 
-function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+function formatTimestamp(value: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 async function PageEditor({ page }: { page: Awaited<ReturnType<typeof createServiceClient>> extends never ? never : DatabasePage }) {

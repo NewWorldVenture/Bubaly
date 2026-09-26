@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 type SportsEvent = Tables<'sports_events'>;
@@ -30,6 +30,7 @@ const SPORT_EMOJIS: Record<string, string> = { Soccer: '⚽', Basketball: '🏀'
 const RESULT_OPTIONS = ['win', 'loss', 'tie'] as const;
 
 export function SportsModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -234,8 +235,8 @@ export function SportsModule() {
                           </td>
                           <td className="px-4 py-3.5"><span className="text-fg">{e.sport || 'Sports'}</span></td>
                           <td className="px-4 py-3.5">
-                            <p className="font-medium">{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                            <p className="text-xs text-muted">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+                            <p className="font-medium">{d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</p>
+                            <p className="text-xs text-muted">{d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}</p>
                           </td>
                           <td className="px-4 py-3.5 text-muted text-xs">{e.location || '—'}</td>
                           <td className="px-4 py-3.5">
@@ -311,7 +312,7 @@ export function SportsModule() {
                       <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black', isWin ? 'bg-emerald-500/20 text-emerald-300' : isTie ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-400')}>{label}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold">{team?.team_name ?? 'Unknown'} vs {r.opponent}</p>
-                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {d?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {d?.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}</p>
                       </div>
                       <p className="text-sm font-bold tabular-nums">{scoreStr}</p>
                     </div>
@@ -337,9 +338,9 @@ export function SportsModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500 text-center text-white">
-                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale, { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
                     </div>
-                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p></div>
+                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}</p></div>
                   </div>
                 );
               })}

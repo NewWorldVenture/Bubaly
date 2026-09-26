@@ -9,7 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { StrategyMetricTiles } from '@/components/admin/strategy-metric-tiles';
 import { loadStrategyMetrics } from '@/lib/metric/strategy-server';
 
@@ -27,7 +27,7 @@ function fmtBytes(bytes: number): string {
   return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-function monthBuckets<T extends { created_at: string }>(rows: T[], valueOf: (r: T) => number) {
+function monthBuckets<T extends { created_at: string }>(rows: T[], valueOf: (r: T) => number, locale: string) {
   return Array.from({ length: 6 }, (_, i) => {
     const d = new Date(new Date().getFullYear(), new Date().getMonth() - (5 - i), 1);
     const start = d.getTime();
@@ -35,11 +35,12 @@ function monthBuckets<T extends { created_at: string }>(rows: T[], valueOf: (r: 
     const value = rows
       .filter((r) => { const t = new Date(r.created_at).getTime(); return t >= start && t < end; })
       .reduce((sum, r) => sum + valueOf(r), 0);
-    return { label: d.toLocaleDateString('en-US', { month: 'short' }), value };
+    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
   });
 }
 
 export default async function AdminReportsPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const supabase = createServiceClient();
   const fourteenDaysAgo = new Date(Date.now() - 14 * MS_DAY).toISOString();
@@ -134,9 +135,9 @@ export default async function AdminReportsPage() {
   const mrrCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
   const usedBytes = (docs ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
 
-  const familyGrowth = monthBuckets(families ?? [], () => 1);
-  const userGrowth = monthBuckets(profiles ?? [], () => 1);
-  const revenueTrend = monthBuckets(subscriptions ?? [], (r) => planMonthlyCents(r.plan));
+  const familyGrowth = monthBuckets(families ?? [], () => 1, locale);
+  const userGrowth = monthBuckets(profiles ?? [], () => 1, locale);
+  const revenueTrend = monthBuckets(subscriptions ?? [], (r) => planMonthlyCents(r.plan), locale);
   const maxFamily = Math.max(...familyGrowth.map((m) => m.value), 1);
   const maxUser = Math.max(...userGrowth.map((m) => m.value), 1);
   const maxRevenue = Math.max(...revenueTrend.map((m) => m.value), 1);
@@ -154,7 +155,7 @@ export default async function AdminReportsPage() {
     const dayStart = Date.now() - (13 - i) * MS_DAY;
     const d = new Date(dayStart);
     return {
-      label: d.toLocaleDateString('en-US', { day: 'numeric' }),
+      label: d.toLocaleDateString(locale, { day: 'numeric' }),
       value: (activity ?? []).filter((a) => { const t = new Date(a.created_at).getTime(); return t >= dayStart && t < dayStart + MS_DAY; }).length,
     };
   });

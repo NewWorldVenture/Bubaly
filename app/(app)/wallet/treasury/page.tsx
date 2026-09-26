@@ -8,13 +8,14 @@ import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } 
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Family Treasury' };
 export const dynamic = 'force-dynamic';
 
 export default async function WalletTreasuryPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -116,7 +117,7 @@ export default async function WalletTreasuryPage() {
       if (t.direction === 'credit') credits += t.amount_cents;
       else debits += t.amount_cents;
     }
-    trend.push({ label: d.toLocaleDateString('en-US', { month: 'short' }), credits, debits });
+    trend.push({ label: d.toLocaleDateString(locale, { month: 'short' }), credits, debits });
   }
 
   return (

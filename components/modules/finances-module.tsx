@@ -23,7 +23,7 @@ import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
@@ -67,11 +67,12 @@ const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', c
 const usd0 = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
 function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function shortDate(s: string, locale: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }); }
 
 const MANAGE = '/dashboard/billing?view=manage';
 
 export function FinancesModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -317,7 +318,7 @@ export function FinancesModule() {
                         <p className="truncate text-sm font-medium">{t.name}</p>
                         <p className="truncate text-[11px] text-muted">{t.category ?? '—'}</p>
                       </div>
-                      <span className="shrink-0 text-[11px] text-muted">{shortDate(t.date)}</span>
+                      <span className="shrink-0 text-[11px] text-muted">{shortDate(t.date, locale)}</span>
                       <span className={cn('w-20 shrink-0 text-right text-sm font-semibold', inc ? 'text-green-400' : 'text-fg')}>
                         {inc ? '+' : '-'}{usd(num(t.amount))}
                       </span>
@@ -352,7 +353,7 @@ export function FinancesModule() {
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-4 w-4" /></span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{b.name}</p>
-                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? 'Overdue · ' : 'Due '}{shortDate(b.due_date)}</p>
+                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? 'Overdue · ' : 'Due '}{shortDate(b.due_date, locale)}</p>
                           </div>
                           <span className="shrink-0 text-sm font-semibold">{usd(num(b.amount))}</span>
                         </div>
@@ -491,6 +492,7 @@ export function FinancesModule() {
 }
 
 function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: Bill[]; onPrev: () => void; onNext: () => void }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -515,7 +517,7 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
     <div>
       <div className="mb-2 flex items-center justify-between">
         <button onClick={onPrev} aria-label={tr('finances.previousMonth')} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{month.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</span>
         <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">

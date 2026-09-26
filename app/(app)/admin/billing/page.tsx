@@ -11,7 +11,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Billing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -30,6 +30,7 @@ type SubscriptionRow = Pick<
 >;
 
 export default async function AdminBillingPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const supabase = createServiceClient();
   // Every figure on this page — Est. MRR, Active, Past Due, the plan donut, the
@@ -77,7 +78,7 @@ export default async function AdminBillingPage() {
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
     const value = rows.filter((s) => { const t = new Date(s.created_at).getTime(); return t >= start && t < end; })
       .reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-    return { label: d.toLocaleDateString('en-US', { month: 'short' }), value };
+    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
   });
   const maxTrend = Math.max(...trend.map((t) => t.value), 1);
 

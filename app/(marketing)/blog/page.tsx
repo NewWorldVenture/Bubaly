@@ -12,7 +12,7 @@ import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -76,8 +76,8 @@ const CATEGORY_ICON_COLORS: Record<BlogCategory, string> = {
   'Home & Seasonal': 'bg-teal-500/20',
 };
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /** Hero photo, or a bespoke generated cover (unique per title) for image-less posts. */
@@ -105,6 +105,7 @@ type Props = { searchParams: Promise<{ category?: string; unsubscribed?: string;
 const PAGE_SIZE = 24; // cards per page — keeps the grid + image requests light
 
 export default async function BlogPage({ searchParams }: Props) {
+  const locale = (await getLocaleContext()).locale.code;
   const t = await getTranslations();
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
@@ -271,7 +272,7 @@ export default async function BlogPage({ searchParams }: Props) {
                     <p className="mt-2 text-sm leading-6 text-white/55">{featured.excerpt}</p>
                     <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
                       <span className="flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5" />{featured.author}</span>
-                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{fmtDate(featured.date)}</span>
+                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{fmtDate(featured.date, locale)}</span>
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{featured.readingMinutes} {t('blog.minRead')}</span>
                     </div>
                   </div>
@@ -305,7 +306,7 @@ export default async function BlogPage({ searchParams }: Props) {
                       </h3>
                       <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{post.excerpt}</p>
                       <div className="mt-auto pt-3 flex items-center gap-2 text-[11px] text-white/40">
-                        <span>{fmtDate(post.date)}</span>
+                        <span>{fmtDate(post.date, locale)}</span>
                         <span>·</span>
                         <span>{post.readingMinutes} min read</span>
                       </div>
@@ -345,7 +346,7 @@ export default async function BlogPage({ searchParams }: Props) {
                       <PostImage post={post} sizes="48px" className="h-12 w-12 shrink-0 rounded-lg" />
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{post.title}</p>
-                        <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date)}</p>
+                        <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date, locale)}</p>
                       </div>
                     </Link>
                   </li>

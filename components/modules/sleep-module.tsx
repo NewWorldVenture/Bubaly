@@ -19,7 +19,7 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
@@ -30,11 +30,12 @@ const localInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-const fmtDay = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+const fmtTime = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+const fmtDay = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short' });
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -128,7 +129,7 @@ export function SleepModule() {
           {summary.lastNight ? (
             <>
               <p className="mt-2 text-2xl font-bold">{fmtHours(summary.lastNight.duration_min)}</p>
-              <p className="mt-1 text-xs text-muted">{fmtTime(summary.lastNight.bedtime)} → {fmtTime(summary.lastNight.wake_time)}{summary.lastNight.quality ? ` · quality ${summary.lastNight.quality}/5` : ''}{summary.lastNight.awakenings ? ` · woke ${summary.lastNight.awakenings}×` : ''}</p>
+              <p className="mt-1 text-xs text-muted">{fmtTime(summary.lastNight.bedtime, locale)} → {fmtTime(summary.lastNight.wake_time, locale)}{summary.lastNight.quality ? ` · quality ${summary.lastNight.quality}/5` : ''}{summary.lastNight.awakenings ? ` · woke ${summary.lastNight.awakenings}×` : ''}</p>
             </>
           ) : <p className="mt-2 text-sm text-muted">{t('sleep.notLoggedYet')}</p>}
         </div>
@@ -167,7 +168,7 @@ export function SleepModule() {
                 return (
                   <li key={l.id} className="group relative flex h-full flex-1 flex-col justify-end" title={`${l.sleep_date}: ${fmtHours(l.duration_min)}`}>
                     <div className={cn('rounded-t-md transition', short ? 'bg-amber-400/70' : 'bg-brand/70')} style={{ height: `${(l.duration_min / maxMinutes) * 100}%` }} />
-                    <span className="mt-1 text-center text-[10px] text-muted">{fmtDay(l.sleep_date)}</span>
+                    <span className="mt-1 text-center text-[10px] text-muted">{fmtDay(l.sleep_date, locale)}</span>
                     <button onClick={() => deleteLog(l)} aria-label={t('sleep.deleteNight', { date: l.sleep_date })} className="absolute -top-1 right-0 hidden rounded p-0.5 text-muted hover:text-rose-400 group-hover:block"><Trash2 className="h-3 w-3" /></button>
                   </li>
                 );

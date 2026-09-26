@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Member = ReturnType<typeof useApp>['members'][number];
 type Slot = { startISO: string; endISO: string };
@@ -37,6 +37,7 @@ const WINDOWS = [
 export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
+  const locale = useLocale().code;
   const a11yId = useId();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
@@ -125,8 +126,8 @@ export function FindTimeModal({
   const fmtSlot = (s: Slot) => {
     const start = new Date(s.startISO);
     const end = new Date(s.endISO);
-    const day = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const t = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const day = start.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
+    const t = (d: Date) => d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
     return { day, time: `${t(start)} – ${t(end)}` };
   };
 

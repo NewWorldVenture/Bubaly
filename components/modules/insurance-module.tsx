@@ -23,7 +23,7 @@ import {
   annualPremium, renewalUrgency, upcomingRenewals, premiumByType,
   insuranceSummary, fmtMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -34,11 +34,12 @@ const URGENCY_STYLE: Record<RenewalUrgency, string> = {
   none: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(d: string, locale: string): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function InsuranceModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -126,7 +127,7 @@ export function InsuranceModule() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-fg">{policyTypeMeta(r.policyType).label} · {r.insurer}</p>
                       <p className="text-xs opacity-90">
-                        {r.urgency === 'lapsed' ? `Lapsed ${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} ago` : `Renews in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'} (${fmtDate(r.renewalDate)})`}
+                        {r.urgency === 'lapsed' ? `Lapsed ${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} ago` : `Renews in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'} (${fmtDate(r.renewalDate, locale)})`}
                       </p>
                     </div>
                     {r.urgency === 'lapsed' && <AlertTriangle className="h-4 w-4 shrink-0" />}
@@ -166,7 +167,7 @@ export function InsuranceModule() {
                     )}
                     {p.renewal_date && u !== 'upcoming' && (
                       <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[u])}>
-                        {u === 'lapsed' ? 'Lapsed' : `Renews ${fmtDate(p.renewal_date)}`}
+                        {u === 'lapsed' ? 'Lapsed' : `Renews ${fmtDate(p.renewal_date, locale)}`}
                       </span>
                     )}
                   </div>
@@ -276,6 +277,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
 function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
@@ -288,8 +290,8 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
     { label: 'Premium', value: policy.premium_amount != null ? `${fmtMoney(policy.premium_amount)} / ${frequencyMeta(policy.premium_frequency).label.toLowerCase()} (${fmtMoney(annual)}/yr)` : null },
     { label: 'Coverage', value: policy.coverage_amount != null ? fmtMoney(policy.coverage_amount) : null },
     { label: 'Deductible', value: policy.deductible != null ? fmtMoney(policy.deductible) : null },
-    { label: 'Effective', value: policy.effective_date ? fmtDate(policy.effective_date) : null },
-    { label: 'Renews', value: policy.renewal_date ? fmtDate(policy.renewal_date) : null },
+    { label: 'Effective', value: policy.effective_date ? fmtDate(policy.effective_date, locale) : null },
+    { label: 'Renews', value: policy.renewal_date ? fmtDate(policy.renewal_date, locale) : null },
   ];
 
   return (
@@ -301,7 +303,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
             <p className="font-semibold">{policy.insurer}</p>
             {policy.renewal_date && u !== 'upcoming' && (
               <span className={cn('mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs', URGENCY_STYLE[u])}>
-                {u === 'lapsed' ? 'Lapsed' : 'Renewing soon'} · {fmtDate(policy.renewal_date)}
+                {u === 'lapsed' ? 'Lapsed' : 'Renewing soon'} · {fmtDate(policy.renewal_date, locale)}
               </span>
             )}
           </div>

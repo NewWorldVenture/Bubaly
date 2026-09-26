@@ -24,7 +24,7 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { DOMAIN_LABELS } from '@/lib/trust/engine';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import type { TrustActivity, TrustToolCall } from '@/lib/trust/activity';
 
@@ -55,10 +55,10 @@ const ACTOR_KEYS: Record<string, string> = {
   system: 'trustActivity.actorAutomatic',
 };
 
-function fmtWhen(iso: string): string {
+function fmtWhen(iso: string, locale: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function TrustActivityTab({
@@ -71,6 +71,7 @@ export function TrustActivityTab({
   error: string | null;
   policies: ActivityPolicy[];
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const router = useRouter();
 
@@ -167,7 +168,7 @@ export function TrustActivityTab({
                   <p className="min-w-0 flex-1 text-xs font-medium text-fg/90">
                     {entry.requestText || tr('trustActivity.aRequestFromYourFamily')}
                   </p>
-                  <span className="flex-shrink-0 text-[10px] text-muted">{fmtWhen(entry.createdAt)}</span>
+                  <span className="flex-shrink-0 text-[10px] text-muted">{fmtWhen(entry.createdAt, locale)}</span>
                 </div>
                 <SliceList
                   icon={Eye}
@@ -215,6 +216,7 @@ function Section({
 }
 
 function ToolCallRow({ call }: { call: TrustToolCall }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const stateKey = STATE_KEYS[call.state] ?? STATE_KEYS.reserved;
   return (
@@ -228,7 +230,7 @@ function ToolCallRow({ call }: { call: TrustToolCall }) {
         <p className="mt-0.5 text-[10px] text-muted">
           {call.domain ? `${DOMAIN_LABELS[call.domain] ?? call.domain} · ` : ''}
           {tr(ACTOR_KEYS[call.actorKind] ?? ACTOR_KEYS.ai)}
-          {` · ${fmtWhen(call.createdAt)}`}
+          {` · ${fmtWhen(call.createdAt, locale)}`}
         </p>
         {call.state === 'failed' && call.error && (
           <p className="mt-0.5 text-[10px] text-red-400">{call.error}</p>

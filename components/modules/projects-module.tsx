@@ -21,19 +21,20 @@ import {
   compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDate = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -114,7 +115,7 @@ export function ProjectsModule() {
           <p className="mt-2 flex items-center gap-1 text-xs text-brand-text"><ArrowRight className="h-3 w-3" /> {nextAction(p, materials.data, quotes.data, today)}</p>
           <p className="mt-1 text-[11px] text-muted">
             {mt.count ? `${mt.purchased}/${mt.count} materials` : 'no materials'}{qc.received || qc.awaiting ? ` · ${qc.received} quote${qc.received === 1 ? '' : 's'}${qc.awaiting ? ` (+${qc.awaiting} waiting)` : ''}` : ''}
-            {sc.state === 'overdue' ? <span className="text-rose-300"> · {-(sc.days ?? 0)}{tr('projects.dOverdue')}</span> : sc.state === 'due_soon' ? <span className="text-amber-300"> {tr('projects.dueIn')} {sc.days}d</span> : p.target_start ? ` · ${fmtDate(p.target_start)}` : ''}
+            {sc.state === 'overdue' ? <span className="text-rose-300"> · {-(sc.days ?? 0)}{tr('projects.dOverdue')}</span> : sc.state === 'due_soon' ? <span className="text-amber-300"> {tr('projects.dueIn')} {sc.days}d</span> : p.target_start ? ` · ${fmtDate(p.target_start, locale)}` : ''}
           </p>
         </button>
       </li>
@@ -289,6 +290,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<'materials' | 'quotes'>(project.is_diy ? 'materials' : 'quotes');
@@ -378,7 +380,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
           <div className={cn('rounded-xl border p-3', sc.state === 'overdue' ? 'border-rose-500/30 bg-rose-500/10' : 'border-border bg-surface/60')}>
             <p className="text-xs text-muted">{tr('projects.schedule')}</p>
             <p className="text-lg font-bold">{sc.state === 'none' ? '—' : sc.state === 'done' ? 'Done' : sc.state === 'overdue' ? `${-(sc.days ?? 0)}d over` : `${sc.days}d`}</p>
-            <p className="text-[11px] text-muted">{project.target_start ? `${fmtDate(project.target_start)}${project.target_end ? ` → ${fmtDate(project.target_end)}` : ''}` : 'No dates yet'}</p>
+            <p className="text-[11px] text-muted">{project.target_start ? `${fmtDate(project.target_start, locale)}${project.target_end ? ` → ${fmtDate(project.target_end, locale)}` : ''}` : 'No dates yet'}</p>
           </div>
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <p className="text-xs text-brand-text">{tr('projects.next')}</p>
@@ -445,7 +447,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{q.contractor_name}{c?.is_preferred ? ' ⭐' : ''} <span className="font-bold">{q.status === 'requested' ? '' : money(q.amount_cents)}</span>{q.isLowest && q.status !== 'accepted' ? <span className="ml-1 rounded-full bg-brand/15 px-1.5 text-[10px] text-brand-text">lowest</span> : null}{q.vsLowestPct ? <span className="ml-1 text-xs text-muted">+{q.vsLowestPct}%</span> : null}</p>
-                        <p className="text-[11px] text-muted">{QUOTE_STATUSES.find((s) => s.value === q.status)?.label}{q.isExpired && q.status !== 'expired' ? ' · expired' : ''}{q.includes_materials ? ' · incl. materials' : ' · labour only'}{q.lead_time_days !== null ? ` · ${q.lead_time_days}d lead` : ''}{q.valid_until ? ` · valid to ${fmtDate(q.valid_until)}` : ''}{c?.phone ? ` · ${c.phone}` : ''}</p>
+                        <p className="text-[11px] text-muted">{QUOTE_STATUSES.find((s) => s.value === q.status)?.label}{q.isExpired && q.status !== 'expired' ? ' · expired' : ''}{q.includes_materials ? ' · incl. materials' : ' · labour only'}{q.lead_time_days !== null ? ` · ${q.lead_time_days}d lead` : ''}{q.valid_until ? ` · valid to ${fmtDate(q.valid_until, locale)}` : ''}{c?.phone ? ` · ${c.phone}` : ''}</p>
                         {q.notes && <p className="mt-0.5 text-[11px] text-muted">{q.notes}</p>}
                       </div>
                       <div className="flex shrink-0 items-center gap-0.5">

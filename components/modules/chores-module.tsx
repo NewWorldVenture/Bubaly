@@ -32,7 +32,7 @@ import {
   type AssignmentLike,
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -53,16 +53,17 @@ const DUE_TONE: Record<string, string> = {
   overdue: 'text-rose-400', today: 'text-amber-400', soon: 'text-amber-300', normal: 'text-muted', none: 'text-muted',
 };
 
-function timeAgo(iso: string | null): string {
+function timeAgo(iso: string | null, locale: string): string {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
+  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
 export function ChoresModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
@@ -319,7 +320,7 @@ export function ChoresModule() {
                     <span className="text-2xl">{choreEmoji(a.chore)}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{a.chore?.title ?? 'Chore'}</div>
-                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
+                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at, locale)}</div>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts</span>
                     {manager && (
@@ -470,7 +471,7 @@ export function ChoresModule() {
                   <Avatar name={m?.display_name ?? '?'} color={m?.color} size={26} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs"><span className="font-medium">{m?.display_name ?? 'Someone'}</span> submitted <span className="font-medium">{a.chore?.title}</span></div>
-                    <div className="text-[10px] text-muted">{timeAgo(a.submitted_at)}</div>
+                    <div className="text-[10px] text-muted">{timeAgo(a.submitted_at, locale)}</div>
                   </div>
                   {manager && (
                     <button onClick={() => approve(a)} disabled={busy === a.id}
@@ -656,12 +657,13 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 }
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
+  const locale = useLocale().code;
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
-        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Done'}</div>
+        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : 'Done'}</div>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {a.points_awarded ?? a.chore?.points ?? 0} pts</span>
     </div>

@@ -18,13 +18,13 @@ import type { Database, Tables, CareerEmploymentType, CareerStatus, CareerWorkMo
 import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
 } from '@/lib/career/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
 type Resume = Tables<'resume_versions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDate = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const STAGE_STYLE: Record<JobStage, string> = {
@@ -34,6 +34,7 @@ const STAGE_STYLE: Record<JobStage, string> = {
 };
 
 export function CareerModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -141,11 +142,11 @@ export function CareerModule() {
             <p className="truncate text-sm font-medium">{a.role_title} <span className="text-muted">· {a.company}</span>{a.excitement ? <span className="ml-1 text-xs text-amber-300">{'★'.repeat(a.excitement)}</span> : null}</p>
             <p className="text-[11px] text-muted">
               <span className={cn('rounded-full border px-1.5 py-0.5', STAGE_STYLE[a.stage])}>{stageMeta(a.stage).label}</span>
-              {a.applied_on ? ` · applied ${fmtDate(a.applied_on)}` : ''}{a.location ? ` · ${a.location}` : ''}{a.work_mode ? ` · ${a.work_mode}` : ''}
+              {a.applied_on ? ` · applied ${fmtDate(a.applied_on, locale)}` : ''}{a.location ? ` · ${a.location}` : ''}{a.work_mode ? ` · ${a.work_mode}` : ''}
               {a.salary_min_cents || a.salary_max_cents ? ` · ${money(a.salary_min_cents ?? a.salary_max_cents)}${a.salary_max_cents && a.salary_min_cents ? `–${money(a.salary_max_cents)}` : ''}` : ''}
             </p>
             {nudge ? <p className={cn('mt-1 text-xs', nudge.kind === 'next_step_overdue' ? 'text-rose-300' : 'text-amber-200')}><Bell className="mr-1 inline h-3 w-3" />{nudge.text}</p>
-              : a.next_step ? <p className="mt-1 text-xs text-muted">Next: {a.next_step}{a.next_step_on ? ` · ${fmtDate(a.next_step_on)}` : ''}</p> : null}
+              : a.next_step ? <p className="mt-1 text-xs text-muted">Next: {a.next_step}{a.next_step_on ? ` · ${fmtDate(a.next_step_on, locale)}` : ''}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}

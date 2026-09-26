@@ -23,7 +23,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type Document = Tables<'documents'>;
@@ -41,10 +41,10 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / GB).toFixed(1)} GB`;
 }
 function fmtGb(bytes: number): string { return `${(bytes / GB).toFixed(1)} GB`; }
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(iso: string, locale: string): string {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return mins <= 1 ? 'just now' : `${mins} minutes ago`;
@@ -53,7 +53,7 @@ function timeAgo(iso: string): string {
   const days = Math.floor(hrs / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return fmtDate(iso);
+  return fmtDate(iso, locale);
 }
 
 // ── File-type detection → icon + color, and coarse storage group ────────────
@@ -122,6 +122,7 @@ type SortKey = (typeof SORTS)[number]['value'];
 const PAGE_SIZE = 10;
 
 export function DocumentsModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -440,7 +441,7 @@ export function DocumentsModule() {
                           )}
                         </td>
                         <td className="hidden py-3 pr-4 md:table-cell">
-                          <p className="text-xs">{fmtDate(doc.updated_at ?? doc.created_at)}</p>
+                          <p className="text-xs">{fmtDate(doc.updated_at ?? doc.created_at, locale)}</p>
                           {uploader && <p className="text-[11px] text-muted">by {firstName(uploader.display_name)}</p>}
                         </td>
                         <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
@@ -486,7 +487,7 @@ export function DocumentsModule() {
                     <p className="truncate text-xs text-muted">{folderLabel(doc.category?.trim() || 'General')}</p>
                     <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
                       <span>{fmtSize(doc.size_bytes)}</span>
-                      <span>{fmtDate(doc.updated_at ?? doc.created_at)}</span>
+                      <span>{fmtDate(doc.updated_at ?? doc.created_at, locale)}</span>
                     </div>
                   </div>
                 );
@@ -597,7 +598,7 @@ export function DocumentsModule() {
                         <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded', meta.tint)}><meta.Icon className={cn('h-2.5 w-2.5', meta.color)} /></span>
                         <p className="truncate text-xs font-medium">{doc.title}</p>
                       </div>
-                      <p className="mt-0.5 text-[11px] text-muted">{timeAgo(doc.created_at)}</p>
+                      <p className="mt-0.5 text-[11px] text-muted">{timeAgo(doc.created_at, locale)}</p>
                     </div>
                   </div>
                 );

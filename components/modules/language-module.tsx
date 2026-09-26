@@ -19,15 +19,16 @@ import type { Tables, CefrLevel, LanguageSessionKind } from '@/lib/database.type
 import {
   CEFR, SESSION_KINDS, LANGUAGES, GRADES, cefrMeta, kindMeta, languageMeta, starterDeck, sm2, dueCards, deckStats, weekProgress, streak, levelEstimate, suggestToday, languageSummary, isoDate, type Grade,
 } from '@/lib/language/practice';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Goal = Tables<'language_goals'>;
 type Session = Tables<'language_sessions'>;
 type Card = Tables<'vocab_cards'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDate = (d: string, locale: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 
 export function LanguageModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -257,7 +258,7 @@ export function LanguageModule() {
             ) : (
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
                 <p className="font-semibold">{tr('language.deckClearForToday')}</p>
-                <p className="mt-1 text-sm text-muted">{deck.total === 0 ? 'Add a starter deck or your own cards to begin.' : `Next cards come due ${myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0]?.due_on ? fmtDate(myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0].due_on) : 'when you add more'}.`}</p>
+                <p className="mt-1 text-sm text-muted">{deck.total === 0 ? 'Add a starter deck or your own cards to begin.' : `Next cards come due ${myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0]?.due_on ? fmtDate(myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0].due_on, locale) : 'when you add more'}.`}</p>
                 {reviewedCount > 0 && <Button className="mt-4" onClick={finishReview}><Check className="h-4 w-4" /> Log {reviewedCount} {tr('language.reviewsAsPractice')}</Button>}
                 {deck.total === 0 && starterDeck(goal.language_code).length > 0 && <Button className="mt-4" onClick={addStarterDeck} loading={adding}><Wand2 className="h-4 w-4" /> {tr('language.addThe')} {goal.language_label} {tr('language.starterDeck')}</Button>}
               </div>
@@ -273,7 +274,7 @@ export function LanguageModule() {
                   <li key={c.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', c.is_suspended ? 'border-border/60 bg-surface/30 opacity-70' : 'border-border bg-surface/60')}>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm"><span className="font-medium">{c.term}</span> <span className="text-muted">— {c.translation}</span></p>
-                      <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>
+                      <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on, locale)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>
                     </div>
                     <button onClick={() => toggleSuspend(c)} aria-label={c.is_suspended ? 'Resume card' : 'Suspend card'} className="rounded-lg p-1.5 text-muted hover:text-fg">{c.is_suspended ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}</button>
                     <button onClick={() => setCardForm({ open: true, card: c })} aria-label={tr('itemAction.edit', { name: c.term })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
@@ -294,7 +295,7 @@ export function LanguageModule() {
                     <span className="text-lg" aria-hidden>{kindMeta(s.kind).emoji}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{kindMeta(s.kind).label} · {s.minutes} min{s.score !== null ? ` · ${s.score}/100` : ''}</p>
-                      <p className="text-[11px] text-muted">{fmtDate(s.practiced_on)}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''}{s.topic ? ` · ${s.topic}` : ''}{s.corrections.length ? ` · ${s.corrections.length} correction${s.corrections.length === 1 ? '' : 's'}` : ''}</p>
+                      <p className="text-[11px] text-muted">{fmtDate(s.practiced_on, locale)}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''}{s.topic ? ` · ${s.topic}` : ''}{s.corrections.length ? ` · ${s.corrections.length} correction${s.corrections.length === 1 ? '' : 's'}` : ''}</p>
                     </div>
                     <button onClick={() => deleteSession(s)} aria-label={tr('language.deleteSession')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                   </li>

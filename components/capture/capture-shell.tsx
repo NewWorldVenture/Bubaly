@@ -14,7 +14,7 @@ import { CaptureSaveError, saveCapture, undoCapture, type CaptureSaveResult } fr
 import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { DocumentCapture } from '@/components/capture/document-capture';
 import { documentLinkCandidates } from '@/lib/capture/document-link';
 
@@ -59,6 +59,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
   initialText?: string;
 }) {
   const t = useTranslations();
+  const locale = useLocale().code;
   const router = useRouter();
   const { error: toastError, success } = useToast();
   const { familyId, userId, selfMember } = useApp();
@@ -207,7 +208,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
     const voiceIntent = ++lifetime.current.intent;
     setIntent(voiceIntent);
     const isVoiceCurrent = () => lifetime.current.mounted && lifetime.current.owner === owner && lifetime.current.intent === voiceIntent;
-    recognition.lang = 'en-US';
+    recognition.lang = locale;  // the family's language, not always English
     recognition.interimResults = false;
     setMode('voice');
     setRecording(true);

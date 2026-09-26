@@ -21,7 +21,7 @@ import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
 import { planAcceptedAction } from '@/app/(app)/dashboard/concierge/actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Plan = Tables<'concierge_plans'>;
 
@@ -46,9 +46,9 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: 'bg-red-500/15 text-red-400 border border-red-500/30',
 };
 
-function fmtDate(d: string | null) {
+function fmtDate(d: string | null, locale: string) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function fmtCents(cents: number | null) {
@@ -58,6 +58,7 @@ function fmtCents(cents: number | null) {
 
 // ─── Main Module ──────────────────────────────────────────────────────────────
 export function ConciergeModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const t = useTranslations();
   const { familyId, userId, selfMember, family } = useApp();
@@ -294,7 +295,7 @@ export function ConciergeModule() {
                             <div className="truncate text-sm font-semibold">{plan.title}</div>
                             <div className="mt-0.5 flex items-center gap-2">
                               <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold capitalize', STATUS_STYLES[plan.status])}>{plan.status}</span>
-                              {plan.planned_for && <span className="text-[11px] text-muted">{fmtDate(plan.planned_for)}</span>}
+                              {plan.planned_for && <span className="text-[11px] text-muted">{fmtDate(plan.planned_for, locale)}</span>}
                               {plan.budget_cents && <span className="text-[11px] text-muted">{fmtCents(plan.budget_cents)}</span>}
                             </div>
                           </div>
@@ -410,6 +411,7 @@ export function ConciergeModule() {
 function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
@@ -458,7 +460,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
         {plan.planned_for && (
           <div className="flex items-center gap-2 text-xs">
             <Calendar className="h-3.5 w-3.5 text-muted" />
-            <span>{fmtDate(plan.planned_for)}</span>
+            <span>{fmtDate(plan.planned_for, locale)}</span>
           </div>
         )}
         {/* Deeper write-back: materialize the plan across calendar / reminder / task. */}

@@ -13,7 +13,7 @@ import { EventScheduleInsights } from '@/components/calendar/event-detail';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -25,12 +25,12 @@ const OPTIONS: { value: 'accepted' | 'declined' | 'maybe'; label: string; icon: 
   { value: 'declined', label: "Can't", icon: X, cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' },
 ];
 
-function fmtRange(e: Event): string {
+function fmtRange(e: Event, locale: string): string {
   const s = new Date(e.starts_at);
-  if (e.all_day) return s.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + ' · All day';
+  if (e.all_day) return s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · All day';
   const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
-  const date = s.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const time = s.toLocaleTimeString('en-US', opts) + (e.ends_at ? ` – ${new Date(e.ends_at).toLocaleTimeString('en-US', opts)}` : '');
+  const date = s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
+  const time = s.toLocaleTimeString(locale, opts) + (e.ends_at ? ` – ${new Date(e.ends_at).toLocaleTimeString(locale, opts)}` : '');
   return `${date} · ${time}`;
 }
 
@@ -38,6 +38,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
 }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
@@ -113,7 +114,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
     <Modal open onClose={onClose} title={event.title}>
       <div className="space-y-4">
         <div className="space-y-1.5 text-sm text-muted">
-          <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{fmtRange(event)}</p>
+          <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{fmtRange(event, locale)}</p>
           {event.location && <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{event.location}</p>}
           {event.assignee_id && memberById.get(event.assignee_id) && (
             <p className="flex items-center gap-2"><Clock className="h-4 w-4" />Owner: {memberById.get(event.assignee_id)!.display_name}</p>

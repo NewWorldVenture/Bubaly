@@ -27,7 +27,7 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 
@@ -77,8 +77,8 @@ function fmtAmount(cents: number | null) {
   if (cents == null) return null;
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
-function fmtWhen(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function fmtWhen(iso: string, locale: string) {
+  return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 function timeLeft(iso: string) {
   const ms = new Date(iso).getTime() - Date.now();
@@ -173,6 +173,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
   /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
   basedOn?: Record<string, BasedOn>;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -221,7 +222,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
               <div key={a.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-4 py-2.5">
                 <span className={cn('text-[11px] font-bold capitalize', DECISION_STYLES[a.status] ?? 'text-muted')}>{a.status}</span>
                 <span className="flex-1 truncate text-sm">{a.title}</span>
-                <span className="text-[10px] text-muted">{fmtWhen(a.created_at)}</span>
+                <span className="text-[10px] text-muted">{fmtWhen(a.created_at, locale)}</span>
               </div>
             ))}
           </div>
@@ -571,6 +572,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
 // ─── Delegations ─────────────────────────────────────────────────────────────
 function DelegationsTab({ delegations, members, canManage }: { delegations: Delegation[]; members: Member[]; canManage: boolean }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -603,7 +605,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
                   {d.domains.length ? d.domains.map(x => DOMAIN_LABELS[x] ?? x).join(', ') : 'All delegable domains'}
                   {d.reason ? ` · ${d.reason}` : ''}
                 </p>
-                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400"><Clock className="h-3 w-3" /> {timeLeft(d.expires_at)} {tr('trust.expires')} {fmtWhen(d.expires_at)}</p>
+                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400"><Clock className="h-3 w-3" /> {timeLeft(d.expires_at)} {tr('trust.expires')} {fmtWhen(d.expires_at, locale)}</p>
               </div>
               {canManage && (
                 <button onClick={() => revoke(d.id)} disabled={busy === d.id} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition">
@@ -678,6 +680,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
 function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -709,11 +712,11 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
       <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
         <Siren className="mx-auto mb-3 h-10 w-10 text-rose-400 animate-pulse" />
         <p className="text-lg font-bold text-rose-300">{tr('trust.emergencyModeIsActive')}</p>
-        <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
+        <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} {tr('trust.since')} {fmtWhen(active.activated_at, locale)}</p>
         <p className="mt-2 text-xs text-muted">Elevated: {active.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}</p>
         {/* Elevation outranks every other rule, so when it stops is part of what
             is active — not a detail to discover later. */}
-        {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at)}</p>}
+        {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at, locale)}</p>}
         {canManage && <button onClick={end} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-4 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/30 transition">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} {tr('trust.endEmergencyMode')}</button>}
       </div>
     );
@@ -762,6 +765,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
 function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);
@@ -789,7 +793,7 @@ function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Membe
               {a.actor_kind === 'ai_agent' ? `AI · ${a.actor_id}` : (nameById.get(a.actor_id ?? '') ?? 'Member')}
               {a.domain ? ` · ${DOMAIN_LABELS[a.domain] ?? a.domain}` : ''}
               {a.confidence != null ? ` · ${Math.round(a.confidence * 100)}%` : ''}
-              {` · ${fmtWhen(a.created_at)}`}
+              {` · ${fmtWhen(a.created_at, locale)}`}
             </p>
           </div>
         </div>

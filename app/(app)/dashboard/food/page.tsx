@@ -8,13 +8,13 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { makeDegradeRead } from '@/lib/meals/degrade-read';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Food & Nutrition' };
 export const dynamic = 'force-dynamic';
 
-const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
+const fmtDay = (d: string | null, locale: string) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '');
 
 // Per-query fail-safe so one erroring/not-yet-migrated table (e.g. dining_out)
 // degrades to an empty card instead of crashing the whole hub — and LOGS every
@@ -71,6 +71,7 @@ const FEATURES = [
 ];
 
 export default async function FoodPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -148,7 +149,7 @@ export default async function FoodPage() {
         {/* 1. Meal Planner */}
         <FeatureCard index={1} title={t('dashboardFood.mealPlanner')} href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={planCount ?? 0} countLabel="dinners planned this week">
           {planRows.length === 0 ? <EmptyHint>{t('dashboardFood.noDinnersPlannedYet')}</EmptyHint>
-            : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? 'Planned meal') : 'Planned meal'} meta={p.plan_date === todayIso ? 'Today' : fmtDay(p.plan_date)} dot="bg-blue-400" />)}
+            : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? 'Planned meal') : 'Planned meal'} meta={p.plan_date === todayIso ? 'Today' : fmtDay(p.plan_date, locale)} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Recipes */}
@@ -166,7 +167,7 @@ export default async function FoodPage() {
         {/* 4. Pantry Inventory */}
         <FeatureCard index={4} title={t('dashboardFood.pantryInventory')} href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryCount ?? 0} countLabel="expiring soon">
           {(pantry ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.nothingExpiringSoon')}</EmptyHint>
-            : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDay(p.expires_at) : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
+            : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDay(p.expires_at, locale) : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
         </FeatureCard>
 
         {/* 5. Family Favorites */}

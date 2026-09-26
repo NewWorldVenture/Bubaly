@@ -17,7 +17,7 @@ import {
   type AlbumRow, type PhotoRow, type MemberLite,
 } from '@/lib/memories/memories';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Memories' };
 export const dynamic = 'force-dynamic';
@@ -31,13 +31,13 @@ const TABS: { key: TabKey; label: string; icon: typeof ImageIcon }[] = [
   { key: 'stories', label: 'Stories', icon: BookOpen },
 ];
 
-function fmtDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDay(iso: string, locale: string): string {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function fmtEventRange(start: string, end: string | null): string {
-  const s = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtEventRange(start: string, end: string | null, locale: string): string {
+  const s = new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
   if (!end || end.slice(0, 10) === start.slice(0, 10)) return s;
-  return `${new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  return `${new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric' })} – ${new Date(end).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 const EVENT_ICON: Record<string, typeof Cake> = { birthday: Cake, holiday: Cake, school: GraduationCap, sports: GraduationCap };
@@ -49,6 +49,7 @@ function countVideos(photos: PhotoRow[] | undefined): number {
 }
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? 'highlights') as TabKey;
@@ -200,7 +201,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 <div className="flex w-28 shrink-0 flex-col">
                   <div className="flex items-center gap-2">
                     <span className="grid h-4 w-4 place-items-center rounded-full border-2 border-brand"><span className="h-1.5 w-1.5 rounded-full bg-brand" /></span>
-                    <span className="text-sm font-semibold">{new Date(row.album.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <span className="text-sm font-semibold">{new Date(row.album.created_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
                   <span className="ml-6 text-xs text-muted">{row.relative}</span>
                 </div>
@@ -290,7 +291,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                             <p className="truncate text-sm font-semibold text-white">{a.name}</p>
                             <div className="mt-0.5 flex items-center justify-between text-[11px] text-white/80">
-                              <span>{fmtDay(a.created_at)}</span>
+                              <span>{fmtDay(a.created_at, locale)}</span>
                               <span className="inline-flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5"><ImageIcon className="h-3 w-3" />{a.photo_count}</span>
                             </div>
                           </div>
@@ -399,7 +400,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{e.title}</span>
-                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at)}</span>
+                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at, locale)}</span>
                       </span>
                     </Link>
                   );

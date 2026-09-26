@@ -23,7 +23,7 @@ import {
 } from '@/lib/location/overview';
 import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofenceEnabled } from '@/app/(app)/dashboard/locator/actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
@@ -66,6 +66,7 @@ function geoErrorMessage(err: unknown): string {
 }
 
 export function LocatorModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -399,7 +400,7 @@ export function LocatorModule() {
                     <p className="truncate text-sm font-medium">{ev.place_name ?? 'A place'}</p>
                     <p className="truncate text-xs text-muted">{memberName(ev.member_id)} arrived</p>
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted">{new Date(ev.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                  <span className="shrink-0 text-[11px] text-muted">{new Date(ev.occurred_at).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}</span>
                 </div>
               );
             })}
@@ -464,7 +465,7 @@ export function LocatorModule() {
                           <span className={cn('absolute -left-[15px] top-1 h-2 w-2 rounded-full', i === 0 ? 'bg-brand' : 'bg-muted/50')} />
                           <div className="flex items-center justify-between">
                             <span className="text-sm">{e.place_name ?? 'A place'}</span>
-                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
+                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
                           </div>
                           <span className="text-[10px] text-muted">{memberName(e.member_id)}</span>
                         </div>

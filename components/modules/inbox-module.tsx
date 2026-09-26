@@ -23,7 +23,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
@@ -47,17 +47,18 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'email' | 'archived';
 
-function fmtTime(iso: string) {
+function fmtTime(iso: string, locale: string) {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const diffH = diffMs / 3_600_000;
   if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
   if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 export function InboxModule() {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -261,7 +262,7 @@ export function InboxModule() {
                           <span className={cn('truncate text-sm', isUnread ? 'font-bold' : 'font-medium')}>
                             {comm.contact?.name ?? comm.subject ?? 'No subject'}
                           </span>
-                          <span className="shrink-0 text-[10px] text-muted">{fmtTime(comm.received_at)}</span>
+                          <span className="shrink-0 text-[10px] text-muted">{fmtTime(comm.received_at, locale)}</span>
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted">
                           {comm.contact && comm.subject ? comm.subject : (comm.body?.slice(0, 80) ?? '')}
@@ -369,6 +370,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
 }) {
+  const locale = useLocale().code;
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;
@@ -489,7 +491,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold">{comm.contact?.name ?? comm.subject ?? 'No subject'}</div>
-          <div className="text-[10px] text-muted">{ch.label} · {fmtTime(comm.received_at)}</div>
+          <div className="text-[10px] text-muted">{ch.label} · {fmtTime(comm.received_at, locale)}</div>
         </div>
         <button onClick={onArchive} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg" title={tr('inbox.archive')}>
           <Archive className="h-4 w-4" />

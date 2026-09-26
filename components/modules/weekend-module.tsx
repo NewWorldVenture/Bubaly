@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -28,10 +28,11 @@ function sourceLabel(source: string): string {
 }
 
 const dayKey = (iso: string) => iso.slice(0, 10);
-const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
+const fmtDay = (iso: string, locale: string) => new Date(iso + 'T00:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'short', day: 'numeric' });
+const fmtTime = (iso: string | null, locale: string) => (iso ? new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
 
 export function WeekendModule() {
+  const locale = useLocale().code;
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -203,7 +204,7 @@ export function WeekendModule() {
                 <li key={plan.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface/60 p-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{categoryMeta(event.category).emoji} {event.title}</p>
-                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} · ${fmtTime(event.starts_at)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
+                    <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at), locale)} · ${fmtTime(event.starts_at, locale)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <select aria-label={t('fieldName.status')} value={plan.status} onChange={(e) => setStatus(event, e.target.value as WeekendPlanStatus)} className="h-8 rounded-lg border border-border bg-surface px-2 text-xs">
@@ -226,7 +227,7 @@ export function WeekendModule() {
         <div className="space-y-6">
           {grouped.map(([day, dayEvents]) => (
             <div key={day}>
-              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted"><Clock className="h-4 w-4" /> {fmtDay(day)} · {dayEvents.length} event{dayEvents.length > 1 ? 's' : ''}</h2>
+              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted"><Clock className="h-4 w-4" /> {fmtDay(day, locale)} · {dayEvents.length} event{dayEvents.length > 1 ? 's' : ''}</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {dayEvents.map((e) => {
                   const cat = categoryMeta(e.category);
@@ -245,7 +246,7 @@ export function WeekendModule() {
                           <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] text-muted">{sourceLabel(e.source)}</span>
                         </div>
                         <p className="line-clamp-2 font-semibold">{e.title}</p>
-                        <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
+                        <p className="mt-1 text-xs text-muted">{fmtTime(e.starts_at, locale)}{e.venue_name ? ` · ${e.venue_name}` : ''}</p>
                         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
                           {e.distance_miles != null && <span className="flex items-center gap-0.5"><Navigation className="h-3 w-3" /> {e.distance_miles} mi</span>}
                           {price && <span>· {price}</span>}
