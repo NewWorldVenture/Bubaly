@@ -21,4 +21,11 @@ describe('the screen-time limit control', () => {
     expect(at, 'the set-limit control moved — did the module change?').toBeGreaterThan(-1);
     expect(source.slice(Math.max(0, at - 260), at)).toMatch(/\{canSetLimits && \(/);
   });
+
+  it('offers deleting a logged entry only to a manager (0340)', () => {
+    const at = source.indexOf("aria-label={t('screenTime.delete')}");
+    expect(at, 'the delete control moved — did the module change?').toBeGreaterThan(-1);
+    expect(source.slice(Math.max(0, at - 200), at)).toMatch(/\{canSetLimits && <button/);
+    expect(source).toMatch(/\.from\('screen_time_entries'\)\.delete\(\)[^;]*\.select\('id'\)/);
+  });
 });

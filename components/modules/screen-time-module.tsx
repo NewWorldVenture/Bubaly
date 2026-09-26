@@ -34,6 +34,8 @@ export function ScreenTimeModule() {
   const { familyId, userId, members, role } = useApp();
   // A daily limit is a parental control: only a manager sets one (the database
   // enforces the same since 0325). Logging time stays open to everyone.
+  // Limits, and the usage log they are checked against, are a manager's to
+  // change: a child may log time but not erase it (0325, 0340).
   const canSetLimits = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -86,8 +88,10 @@ export function ScreenTimeModule() {
 
   async function remove(id: string) {
     if (!confirm(t('screenTimeModule.deleteThisEntry'))) return;
-    const { error } = await createClient().from('screen_time_entries').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('screenTimeModule.deleted'));
+    const { data, error } = await createClient().from('screen_time_entries').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (!data?.length) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(t('screenTimeModule.deleted'));
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -190,7 +194,7 @@ export function ScreenTimeModule() {
                 {e.note && <p className="text-xs text-muted">{e.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
               </div>
-              <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label={t('screenTime.delete')}><Trash2 className="h-4 w-4" /></button>
+              {canSetLimits && <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label={t('screenTime.delete')}><Trash2 className="h-4 w-4" /></button>}
             </div>
           );
         })}
