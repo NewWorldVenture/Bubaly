@@ -13,7 +13,12 @@ vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: harn
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: vi.fn() }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+  const { DEFAULT_LOCALE, localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
+    // The upgrade modal formats its prices for the reader's locale.
+    useLocale: () => localeOrDefault(DEFAULT_LOCALE),
+  };
 });
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),

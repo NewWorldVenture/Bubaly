@@ -138,6 +138,18 @@ describe('the pages that hold money, documents and trust call the guard', () => 
     expect(src).toMatch(/await require(UserContext|Feature)\(/);
   });
 
+  // The sidebar's "Finances" entry, and the parent of the nine above. It was
+  // absent from this suite while carrying no guard at all, so the suite that
+  // pins this wiring passed with the money area's front door open. Its return
+  // path is built from the query it was reached with (?upgrade=1&need=…,
+  // ?view=manage), so it is pinned here rather than in the literal table.
+  it('app/(app)/dashboard/billing/page.tsx calls requireAal2 as money, returning to its own path AND query', () => {
+    const src = readFileSync('app/(app)/dashboard/billing/page.tsx', 'utf8');
+    expect(src).toContain("from '@/lib/auth/require-aal2'");
+    expect(src).toContain("requireAal2(ctx, 'money', returnPathWith('/dashboard/billing', params))");
+    expect(src).toMatch(/await requireUserContext\(/);
+  });
+
   it('leaves /dashboard/security (home alarms) alone, per the standing sidebar rule', () => {
     const src = readFileSync('app/(app)/dashboard/security/page.tsx', 'utf8');
     expect(src).not.toContain('requireAal2');

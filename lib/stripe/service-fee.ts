@@ -2,6 +2,10 @@
 // tested. The amount is configurable in Super Admin → Stripe Setup; this module
 // holds the default and the helpers that turn it into Stripe API shapes.
 
+import FAMILY_PRICES from '@/lib/constants/family-prices.json';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
 /** Default Bubaly service fee added to transactions: $0.90. */
 export const DEFAULT_SERVICE_FEE_CENTS = 90;
 
@@ -17,9 +21,18 @@ export function resolveServiceFeeCents(settings: ServiceFeeConfig): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.trunc(v) : DEFAULT_SERVICE_FEE_CENTS;
 }
 
-/** Dollar string for display, e.g. 90 → "$0.90". */
-export function formatServiceFee(cents: number): string {
-  return `$${(Math.max(0, Math.trunc(cents)) / 100).toFixed(2)}`;
+/**
+ * The fee as the READER writes money: 90 → "$0.90" for en-US, "0,90 $" for
+ * de-DE. Its one caller is the checkout disclosure on /dashboard/billing, which
+ * resolves the reader's locale with getLocaleContext(). The locale is required,
+ * not defaulted, so a new caller cannot quietly print American money to everyone.
+ *
+ * The currency is the plan catalogue's: the fee rides the subscription's first
+ * invoice (serviceFeeAddInvoiceItems below), and Stripe charges an invoice item
+ * in its subscription's currency. stripe_settings has no currency column.
+ */
+export function formatServiceFee(cents: number, locale: LocaleCode): string {
+  return formatCents(Math.max(0, Math.trunc(cents)), FAMILY_PRICES.currency.toUpperCase(), locale);
 }
 
 /** True when the service fee should actually be applied to a charge. */

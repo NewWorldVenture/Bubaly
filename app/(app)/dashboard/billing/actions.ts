@@ -19,6 +19,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { aal2Verdict } from '@/lib/auth/require-aal2';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -28,25 +29,62 @@ import {
 } from '@/lib/services/finances';
 import type { BudgetPeriod } from '@/lib/database.types';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
 
 const BILLING = '/dashboard/billing';
 const BUDGETS = '/dashboard/budgets';
 const SAVINGS = '/dashboard/savings';
 
-export type MoneyActionResult = { ok: true; id: string } | { ok: false; error: string };
+export type MoneyActionResult =
+  | { ok: true; id: string }
+  /** `stepUp` is the /auth/step-up path when the refusal was an assurance one. */
+  | { ok: false; error: string; stepUp?: string };
 
-/** Session + scope, resolved OUTSIDE the try: `requireUserContext` redirects by throwing. */
-async function moneyScope() {
+/**
+ * Session + scope + the step-up verdict, resolved OUTSIDE the try:
+ * `requireUserContext` redirects by throwing.
+ *
+ * The assurance check is here and not only on the pages. Nine money PAGES call
+ * `requireAal2(ctx, 'money', …)`, and until this gate existed a server action
+ * was a second, unguarded way into the same tables: an `aal1` session (password
+ * only, no code) that was bounced off /dashboard/savings could still POST the
+ * Next-Action for `deleteSavingsGoalAction` and the row was gone. A page guard
+ * cannot cover an endpoint the page does not have to render to reach.
+ *
+ * It answers with the failure union rather than `redirect()`: every call site
+ * (`billing-module`, `budgets-view`, `savings-view`, `finances-module`) does
+ * `const res = await …Action(); if (!res.ok) return toastError(res.error)`, and
+ * a redirect thrown inside the action would be swallowed there. Same shape the
+ * three API routes already use — `app/api/privacy/export/route.ts:46` answers
+ * `step_up_required` with the return path rather than redirecting. Every one of
+ * those call sites hands a refusal to `reportRefusal`
+ * (lib/auth/step-up-client.ts), which shows the message and, on `stepUp`, takes
+ * the family to the code page and back to the page they were on.
+ */
+type MoneyGate =
+  | { ok: true; scope: ServiceScope }
+  | { ok: false; error: string; stepUp: string };
+
+async function moneyScope(): Promise<MoneyGate> {
   const ctx = await requireUserContext();
+
+  const verdict = await aal2Verdict(ctx, 'money', BILLING);
+  if (verdict.action === 'step_up') {
+    const t = await getTranslations();
+    return { ok: false, error: t('actions.moneyNeedsYourCodeAgain'), stepUp: verdict.to };
+  }
+
   const supabase = await createServer();
-  return scopeFromUserContext(ctx, supabase);
+  return { ok: true, scope: scopeFromUserContext(ctx, supabase) };
 }
 
 export async function contributeToGoalAction(goalId: string, delta: number): Promise<MoneyActionResult> {
   const t = await getTranslations();
   if (!goalId) return { ok: false, error: t('actions.thatSavingsGoalCouldNot') };
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await contributeToSavingsGoal(scope, goalId, delta);
@@ -64,7 +102,9 @@ export async function contributeToGoalAction(goalId: string, delta: number): Pro
 export async function deleteSavingsGoalAction(goalId: string): Promise<MoneyActionResult> {
   const t = await getTranslations();
   if (!goalId) return { ok: false, error: t('actions.thatSavingsGoalCouldNot') };
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await deleteSavingsGoal(scope, goalId);
@@ -82,7 +122,9 @@ export async function deleteSavingsGoalAction(goalId: string): Promise<MoneyActi
 export async function deleteBudgetAction(budgetId: string): Promise<MoneyActionResult> {
   const t = await getTranslations();
   if (!budgetId) return { ok: false, error: t('actions.thatBudgetCouldNotBe') };
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await deleteBudget(scope, budgetId);
@@ -100,7 +142,9 @@ export async function deleteBudgetAction(budgetId: string): Promise<MoneyActionR
 export async function deleteTransactionAction(transactionId: string): Promise<MoneyActionResult> {
   const t = await getTranslations();
   if (!transactionId) return { ok: false, error: t('actions.thatTransactionCouldNotBe') };
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await deleteTransaction(scope, transactionId);
@@ -117,7 +161,9 @@ export async function deleteTransactionAction(transactionId: string): Promise<Mo
 
 export async function createTransactionAction(input: CreateTransactionInput): Promise<MoneyActionResult> {
   const t = await getTranslations();
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     // `createTransaction` verifies the account and the member belong to THIS
@@ -148,7 +194,9 @@ export async function setBudgetAction(
   category: string, amount: number, period?: BudgetPeriod | null,
 ): Promise<MoneyActionResult> {
   const t = await getTranslations();
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await updateBudget(scope, { category, amount, period: period ?? null });
@@ -165,7 +213,9 @@ export async function setBudgetAction(
 
 export async function createSavingsGoalAction(input: CreateSavingsGoalInput): Promise<MoneyActionResult> {
   const t = await getTranslations();
-  const scope = await moneyScope();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
 
   try {
     const result = await createSavingsGoal(scope, input);

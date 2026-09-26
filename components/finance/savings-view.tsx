@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { contributeToGoalAction, createSavingsGoalAction, deleteSavingsGoalAction } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -43,13 +44,13 @@ export function SavingsView() {
     // each adding the same amount at once both wrote the same figure and one of
     // the contributions vanished. The service applies it under a compare-and-set.
     const res = await contributeToGoalAction(g.id, delta);
-    if (!res.ok) toastError(res.error); else success(t('savingsView.updated'));
+    if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.updated'));
     setContribute(null);
   }
   async function remove(id: string) {
     if (!confirm(t('savingsView.deleteThisGoal'))) return;
     const res = await deleteSavingsGoalAction(id);
-    if (!res.ok) toastError(res.error); else success(t('savingsView.deleted'));
+    if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.deleted'));
   }
 
   return (
@@ -116,7 +117,7 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
       emoji: v.emoji,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(t('savingsView.goalCreated'));
     onClose();
   }

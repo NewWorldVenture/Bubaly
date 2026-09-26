@@ -2231,6 +2231,107 @@ alone — a key keeps working if the parent who minted it later leaves the famil
 Whether a key belongs to the person or to the household is a product question,
 and it is recorded here rather than decided.
 
+### `0344` makes "two parents" mean two parents in the database too — unapplied
+
+`0344_two_parents_means_two_parents_in_the_database_too.sql` (SRV-001 leads
+`m7+m8`). Settings → Trust & Permissions offers "Just one parent or adult",
+"Two parents" and "Every parent and adult", and the whole point of the second
+and third is that ONE person cannot authorise the thing alone. That rule lived
+in TypeScript only — `thresholdOf` / `decide` / `editAndApprove` in
+`lib/services/approvals/index.ts`. The surviving UPDATE policy for a manager on
+`approval_requests`, 0251's `approval_requests_decide`, names no column, so any
+signed-in adult could `PATCH /rest/v1/approval_requests?id=eq.<id>
+{"status":"approved"}` with the browser session and the database said yes: the
+request closed, the second parent could never vote, and `trust_audit_logs` got
+no decision row because `auditDecision` only runs inside `decide()`.
+
+**What closes it**: `approval_votes_satisfy(family, model, required, approvals)`
+mirrors `lib/approvals/threshold.ts` in SQL; a BEFORE UPDATE trigger,
+`approval_requests_decision_is_earned`, refuses a move into `approved` or
+`modified` unless the row's own `approvals` satisfy its `approval_model` and
+`required_approvals`, refuses a vote signed as someone else, and refuses
+removing another decider's vote; `approval_requests_rule_is_immutable` refuses
+changing the model, the threshold or the requester on a pending row. Both
+functions are `revoke all … from public, anon, authenticated` and run only from
+their triggers. Replay-safe (`drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the approval card
+shows what an earlier approver changed (`approval.alreadyChangedByAnApprover`),
+the concierge panel's Approve and Dismiss route an approval-backed run through
+`decide()` — one decision surface instead of two — and a finished plan is
+stamped `state = 'completed'` with `completed_at`, so it counts in the family's
+week. Until 0344 is applied, a single adult with the browser session can still
+close a two-parent request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql` — its
+negative control runs first (the same adult's vote on a `single` request, and
+their second vote on a `two_parents` request, both LAND), then one adult's flip
+of a two-parent request to `approved`, a vote signed as the other parent, and a
+rewrite of the model on a pending row must each be refused by 0344's named
+trigger. Mutation-tested three ways on private clones of a HEAD template with
+the migration applied: as written (exit 0), the guard loosened (red on a
+refusal), a decoy refusing every write with the guard intact (red on the
+control). `tests/one-adult-cannot-approve-what-the-family-said-needs-two.test.ts`
+covers the service half and the panel's routing.
+
+**Recorded rather than closed.** (1) A `rejected` decision is not final in the
+database: on a `single` row another manager may remove the rejecting vote and
+add their own — before 0344 any manager could flip anything, so this is not a
+regression, but it is not closed. (2) `lib/ai/runs/executor.ts` still runs the
+raw `edited_payload` of `plan_steps` rows with `skipTrust`; the comments now say
+so, and a manager can still PATCH that column on a pending row. (3)
+`executeQueuedRunAction` routes through `decide()` only when the run's own
+`metadata.approval_id` is set, and `family_automation_runs_update` (0251) is
+bare `can_manage_family` with no column pin — an adult can PATCH the metadata to
+drop `approval_id` and then tap "Do it", materialising the plan with no vote
+while the two-parent approval stays pending. The rows it creates are ones an
+adult can already write directly, so the severity is low; recorded under
+SRV-001 as an open lead for a follow-up migration that pins the column.
+
+### `0345` makes a password alone unable to delete the family's budget — unapplied
+
+`0345_a_password_alone_does_not_delete_the_familys_budget.sql` (SRV-001 leads
+`m10+m11`; `O-03` from the database side). Two-step sign-in is an opt-in control
+a family turns on so that a stolen password cannot reach the money. Nine money
+pages send an `aal1` manager to `/auth/step-up`, and that was the whole
+enforcement: no policy anywhere read the JWT's `aal` claim, and the money
+tables' write policies (0275, superseding 0267) are `can_manage_family`, a
+ROLE, which a parent on a password-only session satisfies completely. Someone
+who has the password and not the authenticator holds a valid `aal1` session,
+and the anon key plus that session's JWT reach PostgREST directly — `DELETE
+/rest/v1/budgets?id=eq.<id>` — with no page rendered and no server action run.
+The same hole was open through the browser on `/dashboard/billing`, where
+`deleteBill` / `markBillPaid` / `deleteAccount` wrote straight to PostgREST.
+
+**What closes it**: `session_cleared_step_up()` mirrors `needsStepUp`
+(`lib/auth/mfa.ts`) exactly — true when the session is `aal2`, OR when the user
+has no verified TOTP factor enrolled, so a family that never set up an
+authenticator sees no change — and a RESTRICTIVE insert, update and delete
+guard per money table uses it: `budgets`, `savings_goals`, `bills`, the tables
+written only from the step-up-guarded money area (`transactions` and
+`financial_accounts` are left out for the reasons in the header). Restrictive,
+so it ANDs with whatever permissive policy drift has left and cannot be
+satisfied by adding a broad policy beside it. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: every money
+action in `app/(app)/dashboard/billing/actions.ts` requires `aal2` where the
+money pages already did, the billing page itself sends an `aal1` manager to
+step-up with a return path (`returnPathWith`), and the twelve client call sites
+route a refusal through `reportRefusal` (`lib/auth/step-up-client.ts`), which
+sends the family to the step-up page instead of showing a bare error
+(`actions.moneyNeedsYourCodeAgain`). Until 0345 is applied, a password-only
+session can still reach the money tables over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql`
+— control first (an `aal2` manager, and a manager with no factor enrolled, both
+write), then an `aal1` manager with a verified factor is refused a delete and an
+insert on `budgets` and an update on `savings_goals` and `bills`, and the
+function's grants are read back. Mutation-tested three ways on private clones
+of a HEAD template with the migration applied (as written 0, guard loosened
+red on a refusal, decoy red on the control).
+`tests/a-password-alone-does-not-empty-the-family-finances.test.ts` and
+`tests/require-aal2.test.ts` cover the action and page halves.
+
 ### `0349` keeps one saved copy of a provider recipe per family — unapplied
 
 `0349_one_saved_copy_of_a_provider_recipe_per_family.sql` (SRV-001 lead

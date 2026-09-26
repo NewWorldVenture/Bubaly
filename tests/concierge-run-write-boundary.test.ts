@@ -22,6 +22,13 @@ function client(runData: unknown, updateError: unknown) {
   return { from: () => ({ select: () => selectChain, update: () => updateChain }) };
 }
 
+// Imported ONCE, at module load, after the mocks above are hoisted. The action
+// module pulls in the approvals service, the trust engine and the i18n server;
+// importing it inside each case put that whole transform inside the case's 5 s
+// budget, and on a loaded machine the first case timed out while the action
+// itself ran in milliseconds.
+const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
+
 describe('dismissQueuedRunAction write boundary', () => {
   beforeEach(() => {
     requireUserContext.mockResolvedValue({ active: { familyId: 'fam-1', role: 'parent' }, user: { id: 'user-1' } });
@@ -31,14 +38,12 @@ describe('dismissQueuedRunAction write boundary', () => {
   it('returns ok:false when the dismiss status update fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, { message: 'update failed' }));
-    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(false);
   });
 
   it('returns ok:true when the dismiss succeeds', async () => {
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null));
-    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(true);
   });

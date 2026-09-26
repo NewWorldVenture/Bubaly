@@ -222,6 +222,20 @@ describe('Supabase migration filename safety', () => {
     // replays every policy and grant on the table and evaluates each request
     // the way Postgres does; it goes red with the migration absent.
     //
+    // 0344_two_parents_means_two_parents_in_the_database_too.sql adds two
+    // BEFORE UPDATE triggers on approval_requests: a move into approved or
+    // modified must be earned by the row's own votes under its own model and
+    // threshold, a vote is signed only as yourself, and the rule of a pending
+    // row cannot be rewritten. The rule had lived in TypeScript alone, and
+    // 0251's decide policy let any adult PATCH status=approved. Held by
+    // docs/audit/two-parents-means-two-parents-check.sql.
+    //
+    // 0345_a_password_alone_does_not_delete_the_familys_budget.sql adds
+    // session_cleared_step_up() — aal2, or no factor enrolled — and a
+    // RESTRICTIVE insert/update/delete guard on budgets, savings_goals and
+    // bills: the step-up the money pages demanded was never a database rule.
+    // Held by docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql.
+    //
     // 0349_one_saved_copy_of_a_provider_recipe_per_family.sql makes the
     // (family_id, source_provider, source_recipe_id) triple unique for provider
     // recipes, partial so the AI variants that share a source stay writable:

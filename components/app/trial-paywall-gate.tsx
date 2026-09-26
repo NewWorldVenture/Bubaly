@@ -10,18 +10,24 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { closeAccountAction } from '@/app/(app)/account/actions';
 import { BASIC_ANNUAL_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import { PLAN_CURRENCY } from '@/lib/marketing/value';
+import { formatCents } from '@/lib/wallet/ledger';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
-
-const fmt = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
+  // "{amount}/yr" is a catalogue sentence and the amount is in the reader's
+  // money format: a German family reads de-DE's own wording around "119,88 $",
+  // not "$119.88/yr". tests/a-german-family-reads-their-plan-price-in-their-own-format.test.ts
+  // fails if de-DE lacks its own translation of the key.
+  const locale = useLocale();
+  const perYear = (cents: number) => t('trialPaywallGate.pricePerYear', { amount: formatCents(cents, PLAN_CURRENCY, locale.code) });
   const [busy, setBusy] = useState<string | null>(null);
   const { error: toastError, success } = useToast();
 
@@ -70,12 +76,12 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         <div className="mt-6 space-y-3">
           <PlanRow
             icon={<Crown className="h-5 w-5 text-yellow-400" />}
-            name="Family Basic" price={`${fmt(BASIC_ANNUAL_CENTS)}/yr`} tagline="The best family organizer on earth."
+            name="Family Basic" price={perYear(BASIC_ANNUAL_CENTS)} tagline="The best family organizer on earth."
             busy={busy === 'basic_annual'} onClick={() => checkout('basic_annual')} featured
           />
           <PlanRow
             icon={<Sparkles className="h-5 w-5 text-violet-400" />}
-            name="Family+" price={`${fmt(PLUS_ANNUAL_CENTS)}/yr`} tagline="Your family’s AI Chief of Staff."
+            name="Family+" price={perYear(PLUS_ANNUAL_CENTS)} tagline="Your family’s AI Chief of Staff."
             busy={busy === 'plus_annual'} onClick={() => checkout('plus_annual')}
           />
         </div>

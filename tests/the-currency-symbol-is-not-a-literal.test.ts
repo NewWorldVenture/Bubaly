@@ -1,4 +1,5 @@
-// I18N-003 — fifty-one money values whose currency symbol is a LITERAL.
+// I18N-003 — money values whose currency symbol is a LITERAL. Fifty-one when
+// this pin was written; thirty-eight now, and the ceiling below may only fall.
 //
 // THE DEFECT, and why the locale ratchet is blind to it.
 // tests/hardcoded-locales-only-go-down.test.ts counts `'en-US'` in a formatter
@@ -10,15 +11,15 @@
 // `toFixed` has NO locale at all: it always emits a "." decimal mark and never
 // groups, so a German reader gets "2768.00" where their convention is "2.768,00",
 // with the symbol stuck on the American side. Even at ceiling ZERO on the locale
-// ratchet, fifty-one money values would still render this way.
+// ratchet, every money value counted here would still render this way.
 //
 // Nor would a locale swap fix it. The symbol is text, so the best a swap achieves
 // is "$2.768,00": the American symbol position with German separators, which
 // nobody writes. `new Intl.NumberFormat(locale, { style: 'currency', currency })`
 // is the fix — it places the symbol where the locale places it.
 //
-// WHY THIS PINS RATHER THAN CONVERTS. Every one of the fifty-one needs one of two
-// things first, and neither is a formatter change:
+// WHY THIS PINS RATHER THAN CONVERTS. Every site needs one of two things first,
+// and neither is a formatter change:
 //
 //   - a locale threaded from a caller that does not currently have one
 //     (lib/autopilot/engine.ts takes a FamilySnapshot; lib/intelligence/
@@ -30,10 +31,21 @@
 // Converting without that lowers a number while changing nothing a family sees,
 // which is the "optional parameter nobody passes" this audit has refused all
 // along. So the count is held here, visible, and may only fall.
+//
+// WHERE IT STANDS. The I18N-003 conversion is landing one verified unit at a
+// time, each doing both of those things — a reader's locale threaded from the
+// request or the provider, and the sentence around each amount moved to the
+// catalogue. Landed so far: the paperwork triage, and the plan price on
+// /pricing, the billing module, the upgrade modal, the trial gate and the
+// service fee (tests/a-german-family-reads-their-plan-price-in-their-own-
+// format.test.ts). `node scripts/audit-hand-written-currency.mjs` lists the
+// thirty-eight that remain, by file and line. A ceiling left at 51 over a count
+// of 38 would have let thirteen NEW hand-written symbols in without a word, so
+// SITES is the count, not the history, and every unit that lands lowers it.
 import { describe, expect, it } from 'vitest';
 import { findHandWrittenCurrency } from '../scripts/audit-hand-written-currency.mjs';
 
-const SITES = 51;
+const SITES = 38;
 
 describe('a currency symbol written as a literal', () => {
   const found = findHandWrittenCurrency() as { file: string; line: number }[];
@@ -55,8 +67,15 @@ describe('a currency symbol written as a literal', () => {
   it('sees the shape it is counting', () => {
     expect(found.length).toBeGreaterThan(0);
     const files = new Set(found.map((f) => f.file));
-    // Three that are certain to hold it until someone converts them.
-    for (const file of ['lib/stripe/service-fee.ts', 'components/modules/billing-module.tsx']) {
+    // One that is certain to keep holding it. lib/stripe/service-fee.ts and
+    // components/modules/billing-module.tsx used to be named here; both were
+    // converted (tests/a-german-family-reads-their-plan-price-in-their-own-format.test.ts).
+    // lib/marketing/crm.ts formatCents is operator-console money — its only
+    // callers are under app/(app)/admin/marketing/, and
+    // tests/hardcoded-locales-only-go-down.test.ts classifies it SUPER ADMIN — so
+    // it is left as it is by the audit's rule, but it lives under lib/, where the
+    // scanner's structural admin exemption cannot reach, so it is always counted.
+    for (const file of ['lib/marketing/crm.ts']) {
       expect(files, `${file} writes the symbol by hand`).toContain(file);
     }
   });
