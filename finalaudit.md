@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-212 finding IDs from four workers and two parallel sessions; none of it was
+213 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 222 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 223 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35094,6 +35094,94 @@ bail falling through.
 
 **Status:** FIXED.
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-72 — a concierge plan that did not land, reported as "already in place"
+
+**Found by checking a claim rather than trusting it.** `C1-S9-71` justified
+logging the write-backs ledger read in `plan-write-backs.tsx` because the
+materializer "re-reads the ledger and refuses on error". It does. What it
+refuses *with* is the problem.
+
+**One return shape for three outcomes.** `materializeConciergePlan` returned a
+bare `WriteBackKind[]`. Both of its failure paths were right locally. The
+ledger-read refusal says "guessing 'nothing' is how a plan lands on the calendar
+twice", and the insert `continue` says "a failed insert is not 'applied'". Both
+still produced a short or empty list, and **an empty list is also what "already
+in place" looks like.** Every caller read it that way:
+
+1. **The manual "Make it happen" button** got `ok: true, applied: []`, took its
+   `// already applied` branch, ticked itself green and disabled itself until
+   reload.
+2. **The autopilot on plan acceptance** recorded the run as `executed` /
+   `completed` with the summary *"“Beach day” accepted — everything was already
+   in place."* and toasted it.
+3. **Approving a queued run** stamped the run executed and the approval
+   approved, with that sentence as its `execution_result`. The pending row, the
+   one button that retries, was gone.
+4. **The approvals-inbox path** (`runConciergePlan`) did the same and closed the
+   legacy run.
+
+In every case the plan never reached the calendar, and the family was told it
+already had.
+
+**Fix.** The materializer now returns `{ applied, failed }`, where `failed` is
+every kind asked for that is **not known to exist**. Each caller now handles a
+failure as follows:
+- **Manual:** returns `ok: false` with a translated error.
+- **Autopilot:** records the run as `failed` or `partially_completed` (status
+  via `legacyStatusFor`), with a new `runFailureSummary` that names what is
+  missing, and returns `ok: false`.
+- **Queued run:** left `pending`, so the retry stays offered.
+- **Approvals path:** fails, retryable, *before* the summary is composed and
+  *before* the legacy run is closed.
+
+**The plan screen never mentioned the loop failing.** `updateStatus` toasted
+only on `res.ok && res.summary`, so `!res.ok` was silent. It now toasts. The
+adjacent "Queued for approval — check the Autopilot panel" was an English
+literal, and is now a key in the seven base catalogues.
+
+**The same file's other dropped results:**
+- **Both plan reads** answered "Plan not found" on a refused read (the claim
+  `C1-S9-48` removed from the sibling functions). Fixed.
+- **The ask-mode queue insert** discarded its result, while the caller says
+  "check the Autopilot panel", and that panel reads only this row. It now
+  returns `ok: false`.
+- **The autopilot run-record insert** discarded its result entirely. It is now
+  **logged, not raised**: the records exist by then, and failing would report
+  failure for work that landed.
+- **The ledger pre-check** is **logged and proceeds**. The materializer is the
+  authority, and the worst case is an approval that turns out to be a no-op.
+
+**Deliberately unchanged, and now asserted:** a lost *ledger* row still counts
+its kind as applied. The calendar event exists, and failing it would send the
+family to retry work that succeeded. The file already said so; a test now
+holds it.
+
+**Cross-reference:** Session B's inventory lists `applyConciergePlanAction`
+(`ACTION-868185556319`) and `planAcceptedAction` (`ACTION-A29C7E5C3F79`) as ⬜
+NOT STARTED. This entry is Session A evidence for both. Their rows are left to
+Session B.
+
+**Two instrument slips of mine, both caught by the instruments.**
+- My new source guard for `runConciergePlan` first sliced from the brace inside
+  its *return type* (`Promise<ServiceResult<{ summary: … }>>`), so it sliced
+  the type instead of the body. It failed with "not found" rather than passing
+  vacuously, and the brace-matcher now opens at the first brace that ends a
+  line.
+- The same guard then asserted an order on two bare `indexOf` results. That is
+  the `C4-S5-02` shape, which passes most convincingly when a needle is
+  absent. The full suite's meta-guard (`ordering-guards-fail-on-absence`)
+  refused it on the first run. It now uses `at()`, and the ordering was
+  re-proved by moving the bail after the summary.
+
+**Guard:** `concierge-materialize-reports-what-failed` (9 cases, the real
+materializer against a fake client, plus source guards for the approvals path,
+the plan screen and the summary) and `concierge-loop-does-not-claim-a-failed-plan`
+(12 cases, each caller driven with a failure report). **18 mutations, all
+red.** Three of them are over-tightenings: a lost ledger row un-counting its
+kind, a lost run record failing landed work, and the pre-check bailing.
+
+**Status:** FIXED.
+
 ---
 
 ## What this pass did NOT establish
@@ -35165,8 +35253,10 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,343 passing / 17,346 across 1,361
-files.** (Re-run after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,364 passing / 17,367 across 1,363
+files.** (Re-run after `C1-S9-72`, whose first full run had a FOURTH failure —
+the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
+rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

@@ -60,15 +60,35 @@ const STEP_PHRASE: Record<WriteBackKind, string> = {
   task: 'added a prep task',
 };
 
+const STEP_NOUN: Record<WriteBackKind, string> = {
+  calendar: 'the calendar event',
+  reminder: 'the follow-up reminder',
+  task: 'the prep task',
+};
+
+function joinList(parts: string[]): string {
+  return parts.length === 1
+    ? parts[0]
+    : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 /** Plain-language one-liner for the run audit ("what Bubaly did"). */
 export function runSummary(planTitle: string, applied: WriteBackKind[]): string {
   const t = planTitle.trim() || 'your plan';
   if (applied.length === 0) return `“${t}” accepted — everything was already in place.`;
-  const parts = applied.map((k) => STEP_PHRASE[k]);
-  const list = parts.length === 1
-    ? parts[0]
-    : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-  return `“${t}” accepted — Bubaly ${list}.`;
+  return `“${t}” accepted — Bubaly ${joinList(applied.map((k) => STEP_PHRASE[k]))}.`;
+}
+
+/**
+ * The run audit line when part of a plan did not land. `runSummary` has no
+ * such sentence — its empty case says "everything was already in place" — and
+ * a failed materialization used to be written with it. Audit C1-S9-72.
+ */
+export function runFailureSummary(planTitle: string, applied: WriteBackKind[], failed: WriteBackKind[]): string {
+  const t = planTitle.trim() || 'your plan';
+  const missed = joinList(failed.map((k) => STEP_NOUN[k]));
+  if (applied.length === 0) return `“${t}” accepted — Bubaly could not add ${missed}.`;
+  return `“${t}” accepted — Bubaly ${joinList(applied.map((k) => STEP_PHRASE[k]))}, but could not add ${missed}.`;
 }
 
 /** What the approval card asks when the dial is on "ask first". */

@@ -428,7 +428,12 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     try {
       const res = await planAcceptedAction(plan.id, prev, status);
       if (res.ok && res.summary) {
-        success(res.mode === 'auto' ? res.summary : `Queued for approval — check the Autopilot panel`);
+        success(res.mode === 'auto' ? res.summary : t('conciergeModule.queuedForApprovalCheckThe'));
+      } else if (!res.ok) {
+        // The status change saved; what did not happen is Bubaly's follow-
+        // through, and that was the one outcome this screen never mentioned.
+        // Audit C1-S9-72.
+        toastError(res.error);
       }
     } catch { /* the loop is best-effort; the status change already saved */ }
   }

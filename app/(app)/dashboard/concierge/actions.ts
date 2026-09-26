@@ -21,10 +21,11 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
-import { materializeConciergePlan } from '@/lib/services/approvals';
+import { materializeConciergePlan, type MaterializeResult } from '@/lib/services/approvals';
+import { legacyStatusFor } from '@/lib/ai/runs/states';
 import {
   AUTOPILOT_AGENT, AUTOPILOT_CAPABILITY, AUTOPILOT_DOMAIN, AUTOPILOT_POLICY_NAME,
-  approvalTitle, autonomyMode, dialEffect, isAcceptance, runSummary,
+  approvalTitle, autonomyMode, dialEffect, isAcceptance, runFailureSummary, runSummary,
   type AutonomyMode, type AutopilotLevel,
 } from '@/lib/autonomy/loop';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -51,7 +52,7 @@ type DB = Awaited<ReturnType<typeof createServer>>;
  */
 async function materializePlan(
   sb: DB, familyId: string, userId: string, plan: PlanRow, kinds: WriteBackKind[],
-): Promise<WriteBackKind[]> {
+): Promise<MaterializeResult> {
   return materializeConciergePlan(sb, familyId, userId, plan, kinds);
 }
 
@@ -67,16 +68,22 @@ export async function applyConciergePlanAction(planId: string, kinds: WriteBackK
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const { data: plan } = await sb
+  // A refused read answered "Plan not found" — a claim about the plan, from a
+  // read that never saw it. Audit C1-S9-72.
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', planId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNotFound') };
 
-  const applied = await materializePlan(sb, ctx.active.familyId, ctx.user.id, plan, requested);
+  const { applied, failed } = await materializePlan(sb, ctx.active.familyId, ctx.user.id, plan, requested);
   revalidatePath(PATH);
+  // The button reads an empty `applied` as "already applied" and ticks itself
+  // done, so a refused write must not reach it as ok. Audit C1-S9-72.
+  if (failed.length) return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
   return { ok: true, applied };
 }
 
@@ -103,19 +110,26 @@ export async function planAcceptedAction(
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const { data: plan } = await sb
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', planId)
     .eq('family_id', familyId)
     .maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNotFound') };
 
   // Nothing new to do? Don't open approvals for a no-op.
+  //
+  // This is a pre-check, not the authority: materializePlan re-reads the same
+  // ledger and refuses on error. So a refused read here is logged and treated
+  // as "nothing applied yet" — the worst case is an approval that turns out to
+  // be a no-op, which is smaller than dropping an accepted plan. Audit C1-S9-72.
   const kinds = availableWriteBackKinds(plan);
-  const { data: existing } = await sb
+  const { data: existing, error: existingErr } = await sb
     .from('concierge_plan_actions').select('action_kind')
     .eq('family_id', familyId).eq('plan_id', planId);
+  if (existingErr) console.error('[concierge] write-back ledger pre-check failed; proceeding', { planId, familyId, error: existingErr });
   const already = new Set((existing ?? []).map((r) => r.action_kind));
   const pendingKinds = kinds.filter((k) => !already.has(k));
   if (pendingKinds.length === 0) return { ok: true, mode: 'off', applied: [], summary: null };
@@ -146,24 +160,35 @@ export async function planAcceptedAction(
         : autonomyMode(decision);
 
   if (mode === 'auto') {
-    const applied = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
-    const summary = runSummary(plan.title, applied);
+    const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
+    // A failure used to be recorded as `executed` / `completed` under
+    // "everything was already in place". It is recorded as what it was, and
+    // the plan's own buttons stay the retry. Audit C1-S9-72.
+    const state = failed.length === 0 ? 'completed' : applied.length ? 'partially_completed' : 'failed';
+    const summary = failed.length ? runFailureSummary(plan.title, applied, failed) : runSummary(plan.title, applied);
     // Written by the server: 0252 only lets a member file their own unplanned
-    // queued run, and this row records work Bubaly already did.
-    await createServiceClient().from('family_automation_runs').insert({
-      family_id: familyId, trigger_type: 'plan_accepted', status: 'executed', state: 'completed',
+    // queued run, and this row records work Bubaly already did. Logged, not
+    // raised: the records exist by now, and failing the action would report
+    // failure for work that succeeded.
+    const { error: recordErr } = await createServiceClient().from('family_automation_runs').insert({
+      family_id: familyId, trigger_type: 'plan_accepted', status: legacyStatusFor(state), state,
       requested_by_member_id: ctx.active.member.id,
-      summary, result: { steps: applied } as never,
+      summary, result: { steps: applied, failed } as never,
       metadata: { plan_id: planId, basis: decision.basis, reason: decision.reason } as never,
       created_by: ctx.user.id,
     });
+    if (recordErr) console.error('[concierge] autopilot run record failed', { planId, familyId, state, error: recordErr });
     revalidatePath(PATH);
+    if (failed.length) return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
     return { ok: true, mode, applied, summary };
   }
 
   if (mode === 'ask') {
     const summary = `Waiting for approval: ${approvalTitle(plan.title)}`;
-    await createServiceClient().from('family_automation_runs').insert({
+    // The caller answers "check the Autopilot panel", and this row is the only
+    // thing that panel reads — so a refused insert is not a queued plan.
+    // Audit C1-S9-72.
+    const { error: queueErr } = await createServiceClient().from('family_automation_runs').insert({
       family_id: familyId, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
       requested_by_member_id: ctx.active.member.id,
       summary,
@@ -174,6 +199,10 @@ export async function planAcceptedAction(
       } as never,
       created_by: ctx.user.id,
     });
+    if (queueErr) {
+      console.error('[concierge] autopilot queue insert failed', { planId, familyId, approvalId: approvalId ?? null, error: queueErr });
+      return { ok: false, error: describeActionError(queueErr, t('actions.couldNotQueuePlanForApproval')) };
+    }
     revalidatePath(PATH);
     return { ok: true, mode, applied: [], summary };
   }
@@ -210,7 +239,14 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
-  const applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  if (failed.length) {
+    // Left `pending`: stamping it executed would retire the one button that
+    // retries, over a plan that did not land. Audit C1-S9-72.
+    console.error('[concierge] queued run materialization incomplete; left pending', { runId, familyId, applied, failed });
+    revalidatePath(PATH);
+    return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
+  }
   const summary = runSummary(plan.title, applied);
 
   // Record the run as executed. materializePlan is idempotent (it skips kinds

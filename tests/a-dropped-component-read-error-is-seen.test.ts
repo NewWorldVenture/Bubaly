@@ -120,7 +120,10 @@ describe('the four smaller answers are logged, not escalated', () => {
     const svc = read('lib/services/approvals/index.ts');
     const fn = block(svc, 'export async function materializeConciergePlan(');
     const bail = block(fn, 'if (existingError) {');
-    expect(bail).toContain('return [];');
+    // Re-pointed under C1-S9-72 from `return [];`. The refusal is the same; it
+    // now also says which kinds are NOT known to exist, instead of handing
+    // back the shape that means "already in place".
+    expect(bail).toContain('return { applied: [], failed: targets };');
     expect(at(fn, 'if (existingError) {')).toBeLessThan(at(fn, 'for (const kind of targets)'));
   });
 });
