@@ -14669,7 +14669,12 @@ Not fixed: the bucket itself is still `public = true`, so an object URL is still
 #### Retest Results
 Read-only source/caller map complete. Private-image cache isolation: the executed regression above was RED; the equivalent sandboxed regression is now GREEN. Remaining RED: bucket visibility (public in migration 0216 and in the replayed catalog), so SEC-001 stays FAIL.
 
-Proposed route for the bucket half, which avoids the expiry, offline-cache and cross-household problems listed above for signed URLs: a same-origin authenticated media route (for example `/media/family-media/<path>`) that checks the caller's membership in the path's family on every request and streams the object with `Cache-Control: private, no-store` (which the worker now refuses to cache). Render-time rewriting maps stored `…/storage/v1/object/public/family-media/<path>` URLs to it, so no stored row changes. Once every consumer renders through it, a migration can set the bucket private without breaking any reader. Grandparent-portal reads work because the check is the path's family, not the active household.
+The bucket half is an owner decision between two designs, and neither buys anything until the bucket is actually made private — so no half of it was shipped speculatively:
+
+- **Same-origin media route** (for example `/media/family/<path>`): checks the caller's membership in the path's family on every request (so Grandparent-portal reads across households keep working) and streams with `Cache-Control: private, no-store`, which the worker now refuses to cache. Stored `…/object/public/family-media/<path>` URLs are rewritten at render time, so no row changes, and revocation is immediate. Costs: every photo and video is served through a serverless function (bandwidth and latency the Supabase CDN absorbs today); Range requests must be implemented or Safari will not play video; and user uploads served from this origin must be forced to safe types (never inline `image/svg+xml`, HTML or unknown types; `nosniff` and a `sandbox` CSP), or it becomes a stored-XSS channel.
+- **Short-lived signed URLs** resolved at render time: keeps the CDN, but brings the expiry, offline-cache, realtime-row and idle-editor problems listed above, and a signed URL is a bearer credential until it expires.
+
+Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
 
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
@@ -26562,11 +26567,57 @@ all pass now, and the static-asset control passes both ways.
 
 **Still open — the bucket.** `family-media` is `public = true` (0216 and the
 replayed catalog), so an object URL is the only credential; unguessable object
-names (`familyMediaPath`) are the mitigation in place. The SEC-001 record
-proposes the route: a same-origin, membership-checked media route with
-`Cache-Control: private, no-store`, render-time rewriting of stored public URLs
-to it (no data migration), and only then a migration setting the bucket
-private. SEC-001 stays ❌ FAIL until that lands.
+names (`familyMediaPath`) are the mitigation in place. Closing it is an owner
+decision between a membership-checked same-origin media route (immediate
+revocation; costs serverless bandwidth, Range support for Safari video, and
+strict safe-type serving) and short-lived signed URLs (keeps the CDN; brings
+expiry and offline problems). The SEC-001 record lays both out. Either way,
+every reader moves first and the bucket goes private last. SEC-001 stays
+❌ FAIL until then.
+
+## C1-K-19 · HIGH · Calendar sync: another member's connection, and a second account that broke "Sync now"
+
+From the sweep of API routes never named in this file (`sync/[provider]/*`).
+The OAuth start and callback are sound: a 32-byte state in a provider-scoped
+httpOnly cookie, compared in constant time, and the identity taken from the
+session, never the query. Four defects sit around them.
+
+1. **Any member could disconnect or rewrite another member's calendar, and
+   forge the sync history.** Every `sync_*` table shipped with one policy,
+   "family member access" FOR ALL. Measured on the replayed schema: a teen
+   deleted a parent's Google connection, created one in the parent's name,
+   inserted a forged audit entry and erased a real one.
+   `0320_a_calendar_connection_belongs_to_its_owner.sql`: `sync_accounts`
+   stays readable to the family and is writable only by its own user;
+   `sync_audit_logs` is read-only to members (every writer is the service
+   role). `docs/audit/calendar-connection-owner-check.sql` fails 6 ways
+   before and passes after; 44/44 probes. `sync_tokens` was already
+   service-only.
+2. **The provider page showed a spouse's connection as yours.** It read
+   `sync_accounts` by family and provider with no `user_id`, so another
+   member's Google account rendered as "Connected" above a Sync now that then
+   answered "not connected", and two connected members made `maybeSingle` fail
+   the page. It now reads the viewer's own accounts.
+3. **A second account of one provider broke "Sync now".** A personal and a
+   work account are two rows (`sync_accounts` is unique on user_id, provider,
+   external_id; the disconnect route already handles it). `/api/sync/run` and
+   `/api/sync/google/sync` read with `maybeSingle`, which errors on the second
+   row, so the whole sync answered 503 "sync failed". Both now sync every
+   account and combine the results (`lib/sync/run-results.ts`), keeping any
+   account's error so a failed one does not hide behind one that worked.
+4. **The status probe said "not connected" to someone connected twice**, for
+   the same reason. It now asks for up to one row.
+
+**Test.** `a-second-calendar-account-is-not-a-failure` (5): both accounts
+synced and combined, a failing account still surfaces, the not-connected case
+holds, the Google route and the provider page read correctly. All 5 fail with
+the source reverted. The status-route harness now models `limit(1)`. Full
+suite: 16,919 pass; the 3 failures are the known Node-22-container-only cases.
+
+**Follow-up, not changed:** the other `sync_*` tables (calendar events,
+mappings, conflicts, jobs, reminders) still grant any member FOR ALL. They hold
+family-shared data and some may be written from member sessions, so each needs
+its own writer inventory before tightening.
 
 ## The master ledger's open list, worked to the end
 
