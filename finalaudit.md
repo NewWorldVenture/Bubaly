@@ -26775,6 +26775,25 @@ write; the module renders the control for managers only. Self-logged usage
 reads; parent sets); 49/49 probes. `a-child-cannot-set-their-own-screen-time-limit`
 pins the UI gate (fails with the module reverted).
 
+## C1-K-27 · HIGH · Any member could fake another member's location or safety check-in
+
+Same sweep. `member_locations` (live position and sharing flag),
+`location_events` (the arrived/left timeline behind "Kid arrived at school")
+and `safety_check_ins` ("I'm safe" / "I need help") let any member write any
+member's rows. Measured on the replayed schema: a teen moved a sibling's live
+location, switched off the sibling's sharing, wrote the sibling's arrival,
+checked the sibling in as safe, and deleted the sibling's "need help".
+
+Every application writer reports the caller's own member row (the locator
+actions, the check-in view), so
+`0326_a_members_location_is_theirs_to_report.sql` scopes INSERT, UPDATE and
+DELETE to "your own member row (`is_self_member`), or a family manager".
+Reads are unchanged: who may see whose location is the open owner decision in
+the 0297 read-scope list; who may write it is not a product question.
+`docs/audit/member-location-owner-check.sql` fails 5 ways before and passes
+after, with controls that a member still reports their own location and
+check-in and a parent can still manage a child's row; 50/50 probes.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
