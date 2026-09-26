@@ -26736,6 +26736,30 @@ the RPC is unaffected. `docs/audit/wallet-goal-manager-write-check.sql` fails
 before and passes after (child reads; parent edits and deletes); 47/47 probes;
 26 wallet test files pass.
 
+## C1-K-25 · HIGH · A child could redirect a sibling's gift money before a parent approved it
+
+A sweep of the ~290 tables that grant writes on membership alone, narrowed to
+those that hold money, authority or safety state and carry no guarding
+trigger. (Chores, redemptions and invest orders already have decision
+triggers from other sessions.) Three route money from relatives into a
+child's wallet and were member FOR ALL:
+
+- `gift_payments` — pending gifts from a public gift link. `wallet_approve_gift`
+  (SECURITY DEFINER, manager-gated) credits the row's `child_wallet_id` with
+  its `amount_cents` as stored. Measured on the replayed schema: sibling A
+  repointed B's pending gift from Grandma at A's own wallet, raised its amount
+  a hundredfold, and filed a pledge that never happened — each of which a
+  parent's approval would turn into real ledger money.
+- `pay_handles` — public Pay-IDs bound to a child's wallet: A repointed B's.
+- `gift_links` — public payment tokens: A created one.
+
+`0324_gift_money_routes_are_manager_writes.sql`: members read, managers
+write. Every application writer is the service role (public gift action and
+pages) or an `isManager`-gated action, and approval is the RPC.
+`docs/audit/gift-money-route-check.sql` reproduces all five before and passes
+after, with a control that the parent's approval of the untouched gift credits
+the intended child; 48/48 probes.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
