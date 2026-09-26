@@ -392,7 +392,7 @@ test('real French LocaleProvider renders the uncertainty recovery copy and desti
   const state = await fixture(page, 'fr-FR'); state.emptyTaskReceipt = true;
   await page.evaluate(() => window.__quickCaptureAudit.mount());
   const fr = JSON.parse(fs.readFileSync('lib/i18n/messages/fr-FR.json', 'utf8'));
-  await page.getByRole('button', { name: fr['quickCapture.quickCapture'], exact: true }).click(); await page.getByRole('textbox', { name: 'Task', exact: true }).fill('Préparer les sacs');
+  await page.getByRole('button', { name: fr['quickCapture.quickCapture'], exact: true }).click(); await page.getByRole('textbox', { name: fr['quickCapture.task'], exact: true }).fill('Préparer les sacs');
   await page.getByRole('button', { name: fr['quickCapture.save'], exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(new RegExp(fr['quickCapture.saveUncertain']));
   await expect(page.getByRole('link', { name: fr['quickCapture.reviewCapture'], exact: true })).toHaveAttribute('href', '/dashboard/todos');
