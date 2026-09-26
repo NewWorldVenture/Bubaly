@@ -16,6 +16,7 @@ import { decide } from '@/lib/services/approvals';
 import {
   acceptedPolicyName, policyCoversTool, policyProposalFromPayload, POLICY_SUGGESTION_KIND,
 } from '@/lib/autopilot/policy-candidates';
+import { loadPolicyCandidates } from '@/lib/autopilot/policy-scan';
 
 type Result = { ok: boolean; error?: string };
 
@@ -197,20 +198,33 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
   const alreadyHeld = (held ?? []).some((p) => policyCoversTool(p, proposal.domain, proposal.capability, proposal.tool));
 
   if (!alreadyHeld) {
+    // The stored payload is not evidence. autopilot_suggestions is family-
+    // writable (the on-demand scan runs in the caller's session), so a member
+    // could file a "suggestion" proposing any AI permission with any evidence
+    // text and wait for a parent to accept it. Only a proposal the family's
+    // real approval history supports right now is written, and it is written
+    // from that re-derived candidate, not from the row.
+    let candidates;
+    try {
+      candidates = await loadPolicyCandidates(supabase, familyId);
+    } catch (e) {
+      return actionFailure(e, t('actions.couldNotCreateThatPolicy'));
+    }
+    const supported = candidates.find((c) => c.domain === proposal.domain
+      && c.capability === proposal.capability && c.toolName === proposal.tool);
+    if (!supported) return { ok: false, error: t('actions.thatSuggestionDoesNotProposeAPolicy') };
     const saved = await savePolicyAction({
-      name: acceptedPolicyName(proposal),
-      description: proposal.evidence
-        ? `Accepted from an Autopilot suggestion — ${proposal.evidence}.`
-        : 'Accepted from an Autopilot suggestion.',
-      domain: proposal.domain,
-      capability: proposal.capability,
+      name: acceptedPolicyName({ tool: supported.toolName }),
+      description: `Accepted from an Autopilot suggestion — ${supported.evidence}.`,
+      domain: supported.domain,
+      capability: supported.capability,
       subjectKind: 'ai',
       effect: 'allow',
       conditions: {
-        tags: [proposal.tool],
+        tags: [supported.toolName],
         source: 'autopilot',
         suggestionId: suggestion.id,
-        approvals: proposal.approvals,
+        approvals: supported.approvals,
         acceptedAt: new Date().toISOString(),
       },
       priority: ACCEPTED_POLICY_PRIORITY,

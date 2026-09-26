@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
   const { error: insertError } = await svc.from('blog_post_saves').insert({ post_id: postId, user_id: userId });
   if (insertError) {
     if (insertError.code === '23505') {
-      await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      const { error: writeError1 } = await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      if (writeError1) console.error('[blog/save] blog_post_saves write failed', writeError1);
     } else {
       return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 500 });
     }

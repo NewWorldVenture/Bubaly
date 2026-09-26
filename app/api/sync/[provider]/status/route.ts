@@ -52,12 +52,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pro
       .eq('family_id', ctx.active.familyId)
       .eq('provider', provider)
       .eq('user_id', ctx.user.id)
-      .maybeSingle();
+      // One person may hold two accounts of a provider (personal and work) —
+      // sync_accounts is unique on (user_id, provider, external_id). maybeSingle
+      // errors on the second row, which this reported as "not connected".
+      .limit(1);
     if (error) {
       console.error('[sync-status] account read failed', provider, error);
       return NextResponse.json({ configured, connected: false, reason: 'read_failed' });
     }
-    return NextResponse.json({ configured, connected: !!data });
+    return NextResponse.json({ configured, connected: (data?.length ?? 0) > 0 });
   } catch (cause) {
     // The client could not even be constructed (missing service key, bad URL).
     console.error('[sync-status] status probe unavailable', provider, cause);

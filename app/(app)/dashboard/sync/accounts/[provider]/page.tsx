@@ -112,12 +112,19 @@ export default async function SyncProviderPage({
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: account, error } = await supabase
+  // The VIEWER's accounts. This had no user_id filter, and sync_accounts is
+  // readable family-wide, so a spouse's Google connection showed here as
+  // "Connected" — with a Sync now that then answered "not connected" — and two
+  // connected members made maybeSingle fail the page. One person may also hold
+  // two accounts of a provider (personal and work); all of them are theirs.
+  const { data: accounts, error } = await supabase
     .from('sync_accounts')
     .select('id, display_name, external_id, sync_status, last_synced_at')
     .eq('family_id', ctx.active.familyId)
     .eq('provider', provider)
-    .maybeSingle();
+    .eq('user_id', ctx.user.id)
+    .order('last_synced_at', { ascending: false, nullsFirst: false });
+  const account = accounts?.[0] ?? null;
 
   if (error) {
     console.error('[sync-provider] provider account read failed', error);
@@ -159,6 +166,9 @@ export default async function SyncProviderPage({
       {account && getAdapter(provider as SyncProviderEnum) && (
         <Card>
           <h2 className="mb-3 text-base font-semibold">{t('dashboardSyncAccounts.sync')}</h2>
+          {(accounts?.length ?? 0) > 1 && (
+            <p className="mb-2 text-xs text-muted">{accounts!.map((a) => a.display_name ?? a.external_id).join(' · ')}</p>
+          )}
           {account.last_synced_at && (
             <p className="mb-3 text-xs text-muted">{t('dashboardSyncAccounts.lastSynced')} {new Date(account.last_synced_at).toLocaleString()}</p>
           )}

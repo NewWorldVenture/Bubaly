@@ -103,16 +103,29 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   const materialize = (itemId: string, actionIndex: number) => {
     setBusyKey(`${itemId}:${actionIndex}`);
     startTransition(async () => {
-      await materializePaperworkActionAction({ itemId, actionIndex });
-      setBusyKey(null);
+      // These actions return void and THROW on failure. Without a catch the
+      // throw skipped `setBusyKey(null)`, so the button span forever while the
+      // reason — often a translated "only a parent can…" — went nowhere.
+      try {
+        await materializePaperworkActionAction({ itemId, actionIndex });
+      } catch (err) {
+        toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      } finally {
+        setBusyKey(null);
+      }
     });
   };
 
   const setStatus = (itemId: string, status: 'needs_action' | 'done' | 'archived') => {
     setBusyKey(itemId);
     startTransition(async () => {
-      await setPaperworkStatusAction({ itemId, status });
-      setBusyKey(null);
+      try {
+        await setPaperworkStatusAction({ itemId, status });
+      } catch (err) {
+        toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      } finally {
+        setBusyKey(null);
+      }
     });
   };
 
@@ -312,11 +325,16 @@ export function PaperworkModule({ items }: { items: Item[] }) {
 
 function Composer({ onDone }: { onDone: () => void }) {
   const t = useTranslations();
+  const { error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
 
   return (
     <form
-      action={(fd) => startTransition(async () => { await addPaperworkAction(fd); onDone(); })}
+      action={(fd) => startTransition(async () => {
+        // A throw here used to leave the form open with nothing said.
+        try { await addPaperworkAction(fd); onDone(); }
+        catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
+      })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
       <label htmlFor="pw-text" className="text-xs font-bold uppercase tracking-wide text-muted">

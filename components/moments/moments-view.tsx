@@ -123,10 +123,17 @@ export function MomentsView({ departures, departuresFailed = false }: {
       success(`Added ${res.added} to your grocery list`, {
         label: 'Undo',
         onClick: () => {
-          void removeMomentGroceryAction({ ids }).then((r) => {
-            if (!r.ok) toastError(r.error ?? 'Could not undo');
-            else if ((done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
-          });
+          void removeMomentGroceryAction({ ids }).then(
+            (r) => {
+              if (!r.ok) toastError(r.error ?? 'Could not undo');
+              else if ((done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+            },
+            // A rejection used to leave the Undo looking done. It is not.
+            (err: unknown) => {
+              console.error('[moments] undo failed', err);
+              toastError(err instanceof Error && err.message ? err.message : 'Could not undo');
+            },
+          );
         },
       });
     } else {

@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Kid Logins' };
 export const dynamic = 'force-dynamic';
@@ -20,11 +21,22 @@ export default async function FamilyAccessPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: members }, { data: logins }] = await settleAll([
+  const [{ data: members, error: membersError }, { data: logins, error: loginsError }] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),
   ]);
+
+  // A dropped error here is not an empty list, it is a WRONG list. An unreadable
+  // `child_logins` makes every child look as though they have no login, and the
+  // page's whole purpose is deciding who to give one to — so the parent would
+  // create a second login for a username that is already taken. An unreadable
+  // `family_members` hides the household entirely.
+  const readError = membersError ?? loginsError;
+  if (readError) {
+    console.error('[family-access] kid login read failed', readError);
+    return <ErrorState message={t('familyAccess.couldNotLoadKidLogins')} />;
+  }
 
   const usernameByMember = new Map((logins ?? []).map((l) => [l.member_id, l.username]));
 

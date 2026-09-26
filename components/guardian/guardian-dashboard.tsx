@@ -94,39 +94,68 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
   const [suggestionLoading, setSuggestionLoading] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
+  // Each of these awaits a server action, and a server action can REJECT — a
+  // dropped connection, or a throw on the server — instead of returning
+  // { ok: false }. Without a catch the reset below the await never ran: the
+  // scan spun forever, a context row or suggestion stayed locked, and nothing
+  // was said.
+  const failed = (err: unknown) => {
+    console.error('[guardian-dashboard] action failed', err);
+    toastError(t('globalError.somethingWentWrong'));
+  };
+
   async function handleScan() {
     setScanning(true);
-    const res = await generateGuardianSuggestionsAction();
-    setScanning(false);
-    if (res.ok) {
-      const n = res.data?.created ?? 0;
-      toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
-      if (n > 0) router.refresh();
-    } else {
-      toastError(res.error);
+    try {
+      const res = await generateGuardianSuggestionsAction();
+      if (res.ok) {
+        const n = res.data?.created ?? 0;
+        toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
+        if (n > 0) router.refresh();
+      } else {
+        toastError(res.error);
+      }
+    } catch (err) {
+      failed(err);
+    } finally {
+      setScanning(false);
     }
   }
 
   async function handleContextChange(memberId: string, context: string) {
     setContextLoading(memberId);
-    const res = await updateContextAction(memberId, context);
-    setContextLoading(null);
-    if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await updateContextAction(memberId, context);
+      if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    } finally {
+      setContextLoading(null);
+    }
   }
 
   async function handleSuggestion(id: string, decision: 'approved' | 'dismissed') {
     setSuggestionLoading(id);
-    const res = await reviewSuggestionAction(id, decision);
-    setSuggestionLoading(null);
-    if (res.ok) { toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed'); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await reviewSuggestionAction(id, decision);
+      if (res.ok) { toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed'); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    } finally {
+      setSuggestionLoading(null);
+    }
   }
 
   async function handleAcknowledge(id: string) {
-    const res = await acknowledgeEscalationAction(id);
-    if (res.ok) { toastSuccess(t('guardianDashboard.escalationAcknowledged')); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await acknowledgeEscalationAction(id);
+      if (res.ok) { toastSuccess(t('guardianDashboard.escalationAcknowledged')); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    }
   }
 
   const unacknowledgedEscalations = escalations.filter(e => !e.acknowledged_at);

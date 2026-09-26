@@ -1,7 +1,8 @@
 // lib/chores/server.ts
 // Server-side gamification engine for Family Missions: XP, levels, streaks, and
-// badge awards applied when a chore is approved. Runs as the signed-in family
-// member (RLS allows family members to manage kid_progress / member_badges).
+// badge awards applied when a chore is approved. Runs as whoever approved it:
+// the service role (auto-approve) or a family manager. kid_progress and
+// member_badges are manager writes (0328), so a child cannot award themselves.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';

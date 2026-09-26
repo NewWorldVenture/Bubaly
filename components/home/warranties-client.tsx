@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import {
   Shield, Plus, Phone, ExternalLink, Mail, Pencil, Trash2, FileText, Loader2,
 } from 'lucide-react';
@@ -29,6 +31,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Warranty | null>(null);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
 
   const assetName = (id: string | null) => assets.find((a) => a.id === id)?.name ?? null;
   const active = warranties.filter((w) => warrantyStatus(w.expires_on).active).length;
@@ -42,11 +45,12 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
   function openEdit(w: Warranty) { setEditing(w); setOpen(true); }
 
   function submit(fd: FormData) {
-    start(async () => { await saveWarrantyAction(fd); setOpen(false); });
+    start(async () => { if (await run(() => saveWarrantyAction(fd))) setOpen(false); });
   }
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('warrantiesClient.warranties')}</h1>
@@ -94,7 +98,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
 
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                   <button onClick={() => openEdit(w)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.edit')}</button>
-                  <button onClick={() => start(async () => { await deleteWarrantyAction(w.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.delete')}</button>
+                  <button onClick={() => start(async () => { await run(() => deleteWarrantyAction(w.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('warrantiesClient.delete')}</button>
                 </div>
               </Card>
             );

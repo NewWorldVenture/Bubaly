@@ -39,10 +39,13 @@ export async function submitGiftPledgeAction(input: {
   if (!link || !link.is_active) return { ok: false, error: t('actions.thisGiftLinkIsNo') };
 
   // Anti-abuse: cap pending pledges per link.
-  const { count } = await supabase
+  const { count, error: countError } = await supabase
     .from('gift_payments').select('id', { count: 'exact', head: true })
     .eq('gift_link_id', link.id).eq('status', 'pending');
-  if ((count ?? 0) >= 25) return { ok: false, error: t('actions.tooManyPendingGiftsOn') };
+  // The cap is the anti-abuse control on a link anyone can open; a count that
+  // could not be read must not read as zero pending gifts.
+  if (countError || count === null) return { ok: false, error: t('actions.couldNotRecordYourGift') };
+  if (count >= 25) return { ok: false, error: t('actions.tooManyPendingGiftsOn') };
 
   const { error } = await supabase.from('gift_payments').insert({
     family_id: link.family_id,

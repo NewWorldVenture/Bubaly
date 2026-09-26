@@ -84,6 +84,13 @@ function blockedIp(address: string): boolean {
   const top10 = value >> 118n;
   const top96 = value >> 32n;
   if (top96 === 0xffffn || top96 === 0n) return blockedIpv4(ipv4String(value & 0xffffffffn));
+  // NAT64 (RFC 6052): 64:ff9b::/96 carries an IPv4 address in its low 32 bits,
+  // and on a NAT64 network it routes to that address — so 64:ff9b::7f00:1 is
+  // 127.0.0.1 and 64:ff9b::a9fe:a9fe is the cloud metadata endpoint. Unwrapped
+  // exactly like the ::ffff: form above, so NAT64 to a PUBLIC host still works.
+  if (top96 === 0x64ff9b0000000000000000n) return blockedIpv4(ipv4String(value & 0xffffffffn));
+  // The local-use NAT64 range (RFC 8215) is never a public destination.
+  if ((value >> 80n) === 0x64ff9b0001n) return true;
   return value === 0n || value === 1n || top7 === 126n || top10 === 1018n || top8 === 255n
     || (value >> 96n) === 0x20010db8n;
 }

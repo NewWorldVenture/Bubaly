@@ -16,13 +16,23 @@ export type LearningRunResult = { analyzed: number; created: number; skipped: nu
 export async function runLearningForFamily(
   supabase: SupabaseClient,
   familyId: string,
+  options: {
+    /** Where the run's audit row is written. guardian_audit_log has no
+     *  member INSERT policy, so a run in a parent's session passes the service
+     *  client here; the cron's client already is one. */
+    auditClient?: SupabaseClient;
+  } = {},
 ): Promise<LearningRunResult> {
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: comms }, { data: contacts }, { data: pending }] = await Promise.all([
+  const [
+    { data: comms, error: commsError },
+    { data: contacts, error: contactsError },
+    { data: pending, error: pendingError },
+  ] = await Promise.all([
     gFrom('guardian_communications')
       .select('from_number, contact_id, scam_detected, trust_level_at_time, started_at')
       .eq('family_id', familyId)
@@ -37,6 +47,13 @@ export async function runLearningForFamily(
       .eq('family_id', familyId)
       .eq('status', 'pending'),
   ]);
+  // Every one of these decides what gets proposed. With communications or
+  // contacts missing the analyzer reasons about a family it cannot see; with
+  // the pending queue missing, de-duplication finds nothing and the run files
+  // every open suggestion a second time. Stop instead; both callers report it.
+  if (commsError || contactsError || pendingError) {
+    throw new Error('Guardian learning could not read the family\'s history');
+  }
 
   const drafts = analyzeCommunications({
     communications: (comms ?? []) as unknown as CommSummary[],
@@ -85,14 +102,24 @@ export async function runLearningForFamily(
   }
 
   // Audit the learning run (best-effort).
+  // Written through the parent's own session this was refused by RLS every time
+  // (the log is SELECT-only for members), and the refusal was discarded, so an
+  // on-demand run never reached the audit trail. Still best-effort, but a
+  // failure is now said out loud.
   if (created > 0) {
-    await gFrom('guardian_audit_log').insert({
-      family_id: familyId,
-      actor: 'ai',
-      action: 'learning.suggestions_generated',
-      entity_type: 'guardian_suggestions',
-      detail: { created, skipped, analyzed: (comms ?? []).length },
-    }).then(() => {}, () => {});
+    const audit = withGuardianTables(options.auditClient ?? supabase);
+    try {
+      const { error: auditError } = await (audit.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+        family_id: familyId,
+        actor: 'ai',
+        action: 'learning.suggestions_generated',
+        entity_type: 'guardian_suggestions',
+        detail: { created, skipped, analyzed: (comms ?? []).length },
+      });
+      if (auditError) console.error('[guardian-learning] run was not audited', auditError);
+    } catch (err) {
+      console.error('[guardian-learning] run was not audited', err);
+    }
   }
 
   return { analyzed: (comms ?? []).length, created, skipped };

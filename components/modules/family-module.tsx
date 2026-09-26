@@ -11,7 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -466,9 +466,10 @@ export function FamilyModule() {
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
               const sb = createClient();
-              const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
+              const { data: rows, error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
+              if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
@@ -529,14 +530,15 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    const { error: err } = member
-      ? await sb.from('family_members').update(payload).eq('id', member.id)
+    const { data: savedRows, error: err } = member
+      ? await sb.from('family_members').update(payload).eq('id', member.id).select('id')
       : await sb.from('family_members').insert({
           ...payload, family_id: familyId, is_active: true,
           color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
-        });
+        }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(member ? 'Member updated' : 'Member added');
     onSaved();
   }

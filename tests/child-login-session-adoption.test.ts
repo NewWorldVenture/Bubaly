@@ -23,6 +23,23 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({ data: state.throttle, error: state.throttleError }),
       limit: async () => ({ data: state.unknown ? [] : [{ username: 'emma', user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }], error: state.lookupError }),
       upsert: async (value: Record<string, unknown>) => { state.upserts.push(value); return { error: state.writeError }; },
+      // The failed-attempt counter is no longer a blind upsert: a blind write
+      // let N parallel guesses cost ONE failure (lib/auth/child-throttle-store).
+      // It INSERTs the first failure and UPDATEs later ones with the observed
+      // state as a predicate. Both still land in `upserts`, which this file
+      // reads as "every throttle write", so the assertions below keep meaning
+      // exactly what they meant.
+      insert: async (value: Record<string, unknown>) => { state.upserts.push(value); return { error: state.writeError }; },
+      update: (value: Record<string, unknown>) => {
+        state.upserts.push(value);
+        const settled = { data: state.writeError ? null : [{ username: 'emma' }], error: state.writeError };
+        const predicated: Record<string, unknown> = {
+          eq: () => predicated,
+          select: () => predicated,
+          then: (ok: (v: typeof settled) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve(settled).then(ok, bad),
+        };
+        return predicated;
+      },
     };
     return chain;
   } }),

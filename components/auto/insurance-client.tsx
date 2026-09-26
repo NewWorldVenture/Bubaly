@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import {
   ShieldCheck, Plus, Phone, Pencil, Trash2, ChevronDown, ChevronUp, AlertTriangle,
 } from 'lucide-react';
@@ -25,10 +27,12 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
   const [editing, setEditing] = useState<Policy | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
   const vName = (id: string | null) => { const v = vehicles.find((x) => x.id === id); return v ? vehicleLabel(v) : null; };
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold">{t('insuranceClient.autoInsurance')}</h2>
@@ -82,7 +86,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
 
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                   <button onClick={() => { setEditing(p); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('insuranceClient.edit')}</button>
-                  <button onClick={() => start(async () => { await deletePolicyAction(p.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('insuranceClient.delete')}</button>
+                  <button onClick={() => start(async () => { await run(() => deletePolicyAction(p.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('insuranceClient.delete')}</button>
                 </div>
               </Card>
             );
@@ -93,7 +97,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
       <p className="inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {t('insuranceClient.storedPrivatelyForYourFamilyOnly')}</p>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit policy' : 'Add policy'}>
-        <form action={(fd) => start(async () => { await savePolicyAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => savePolicyAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('insuranceClient.provider')}><Input name="provider" defaultValue={editing?.provider ?? ''} placeholder="GEICO" /></Field>

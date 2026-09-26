@@ -45,7 +45,7 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError, describeDbError } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, riskToDecision, toolTags,
+  HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -366,9 +366,8 @@ async function gate(
   // (spend money, submit an order, delete records, share a document) executed
   // with nobody asked. So a blanket allow is re-checked against the tier and
   // may be tightened, never loosened.
-  const fromGenericRule = decision.basis === 'role_default' || decision.basis === 'fallback';
-  const blanketAllow = decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad';
-  if (fromGenericRule || blanketAllow) {
+  const stance = riskTierStance(decision);
+  if (stance !== 'silent') {
     const risked = riskToDecision({
       // The family's own override, floored for money and documents.
       risk,
@@ -384,7 +383,7 @@ async function gate(
     const usable = risked && !(approvalId && risked.effect === 'allow');
     // Over a blanket allow the tier may only tighten: an `allow` from the tier
     // would be no change, and letting it through would rewrite the basis.
-    if (usable && (fromGenericRule || risked!.effect !== 'allow')) decision = risked!;
+    if (usable && (stance === 'speaks' || risked!.effect !== 'allow')) decision = risked!;
   }
 
   if (decision.basis === 'risk_tier') {

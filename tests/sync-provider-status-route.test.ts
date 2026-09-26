@@ -24,11 +24,14 @@ import { GET } from '@/app/api/sync/[provider]/status/route';
 const params = (provider: string) => ({ params: Promise.resolve({ provider }) });
 const req = () => ({}) as never;
 
-/** A Postgrest-ish builder whose maybeSingle settles however the test says. */
+/** A Postgrest-ish builder whose read settles however the test says. The route
+ *  asks for up to one row with limit(1) — a person may hold several accounts
+ *  of one provider — so a row is an array of one and "none" is empty. */
 function db(result: { data?: unknown; error?: unknown }) {
   const chain: Record<string, unknown> = {};
   for (const m of ['from', 'select', 'eq']) chain[m] = () => chain;
-  chain.maybeSingle = async () => ({ data: result.data ?? null, error: result.error ?? null });
+  const rows = result.error ? null : Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
+  chain.limit = async () => ({ data: rows, error: result.error ?? null });
   return { from: () => chain };
 }
 
@@ -43,6 +46,17 @@ describe('GET /api/sync/[provider]/status', () => {
     mocks.getAdapter.mockReturnValue({ isConfigured: () => true });
     signedIn();
     mocks.createServiceClient.mockReturnValue(db({ data: { id: 'acct-1' } }));
+
+    const body = await (await GET(req(), params('microsoft'))).json();
+    expect(body).toEqual({ configured: true, connected: true });
+  });
+
+  // A personal and a work account are two rows. maybeSingle errored on the
+  // second, and the probe reported "not connected" to someone connected twice.
+  it('reports connected when the user holds two accounts of the provider', async () => {
+    mocks.getAdapter.mockReturnValue({ isConfigured: () => true });
+    signedIn();
+    mocks.createServiceClient.mockReturnValue(db({ data: [{ id: 'acct-personal' }] }));
 
     const body = await (await GET(req(), params('microsoft'))).json();
     expect(body).toEqual({ configured: true, connected: true });

@@ -2,15 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
+- Last Updated: 2026-09-26T18:51:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
-- In Progress: 192
+- In Progress: 190
 - Passed: 0
-- Fixed + Passed: 1
+- Fixed + Passed: 5
 - Blocked: 0
-- Failed: 3
+- Failed: 1
 - Overall Completion: 0.01%
+
+2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001 (its cache half is fixed: SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS, verified natively; its public-bucket half is an owner decision). Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well. The member-writable-table sweep continues through C1-K-48. Migrations 0318–0346, each pinned by a probe that fails before and passes after, 70/70 probes. The highest-impact fixes: the sync engine could be steered into deleting or rewriting a parent's Google Calendar events and publishing a public feed (C1-K-30); the social permission matrix was enforced only by the app (C1-K-31); checkout nudges could be sent to any address (C1-K-29); plus forgeable commissions, consent, votes, reviews, reports and audit entries. All of these are inert in production until the F-001 ledger repair. Owner decisions recorded along the way: direct messages visible to the whole family (C1-K-43), whether an adult may make themselves Admin or demote the parents, dose logging (`medication_doses`, alongside F-K05), grade entry (`grades`), who may read whose location, guardian_communications member INSERT, and the SEC-001 bucket.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -84,7 +86,7 @@ PRODUCTION READY: NO
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
-- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
+- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 is repaired in the repository by migration 0318 (2026-09-26) and is live in production only after the F-001 ledger repair. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
 - EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
@@ -98,8 +100,8 @@ PRODUCTION READY: NO
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-002: Repaired in the repository — the resolver requires successful reads (34/34), and the database half is verified and aligned (C1-K-23: migration 0322, social-permission-matrix probe and matrix test). AUTHZ-003's DELETE bypass is repaired by migration 0318. Both need the F-001 ledger repair to reach production.
+- AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.
@@ -112,7 +114,7 @@ PRODUCTION READY: NO
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Current isolated action receipt and browser adoption/grant checks pass focused local execution; initiation-before-completion ownership and new-source hosted acceptance remain open. Local grant ownership is not distributed exactly-once mutation control, and a failed post-exchange check cannot undo provider code consumption.
 - SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- AUTHZ-005: Repaired in the repository 2026-09-26 — migration 0319 makes Guardian contact, member-profile and suggestion writes manager-only; docs/audit/guardian-manager-write-check.sql fails before and passes after. Member INSERT on guardian_communications is kept (the signed-ingress suites rely on it) and left to the owner. Child contact deletion (and so its cascade into routing rules) is closed with it. Remaining: apply to production after the F-001 ledger repair and verify there; member_id columns still reference family_members without a same-family constraint.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
@@ -12157,7 +12159,7 @@ PRODUCTION READY: NO
 | SUPPORT-D59FA133542C | SUPPORT | public/launch/launch-1320x2868.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4C8E9A36E1EE | SUPPORT | public/launch/launch-750x1334.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-292C0CE6AF4C | SUPPORT | public/launch/launch-828x1792.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout | None | Desired private-image isolation regression RED | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
+| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🛠 FIXED + PASS | Critical | Native Chromium with the real registered worker and the real Next image optimizer against a production build: the old worker (bubaly-v4) stored the /_next/image response; the new one (bubaly-v5) stores none, and after a reload still caches 18 static assets. Sandboxed worker regression tests/a-private-image-does-not-outlive-logout.test.ts (4 of 5 fail on the old worker). | Never cache /_next/image or any private/no-store response; cache name v4→v5 purges existing entries (C1-K-18). | Native before/after and control executed 2026-09-26; sandbox 5/5; mobile-sw-auth-cache and PWA suites pass. | Closes the private-image cache half of SEC-001 only; the public family-media bucket keeps SEC-001 at FAIL. |
 | SUPPORT-E3637D40E182 | SUPPORT | route-inventory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-52B4E3C1B5F2 | SUPPORT | scripts/backfill-marketing-asset-provenance.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-010123692F7B | SUPPORT | scripts/backfill-marketing-coverage.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13540,8 +13542,8 @@ PRODUCTION READY: NO
 | SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
-| AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
-| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
+| AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🛠 FIXED + PASS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. 2026-09-26 (C1-K-23): the database half verified on the replayed schema — docs/audit/social-permission-matrix-check.sql proves an explicit role grants nothing to an inactive member and read_only restricts; migration 0322 aligns the SQL matrix with lib/social/roles.ts (admin no longer holds manage_access), pinned by social-permission-matrix-matches-the-database. Production needs the F-001 ledger repair. |
+| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🛠 FIXED + PASS | Critical | Reproduced against the replayed schema (docs/audit/social-restriction-delete-check.sql): a `read_only` adult deleted their own row (1 row), resolved to `marketing_manager` and could publish. | Migration 0318 gives social_access_permissions DELETE the UPDATE predicate (is_family_admin or manage_access). The app never deletes these rows, so no legitimate path narrows. | Probe passes after 0318 (restriction holds; parent can still remove it); 0318 re-applies idempotently; 42/42 probes; migration audits and 41 migration-related test files pass. | Repository-verified 2026-09-26 (Pass C1-K). Production carries it only after the F-001 migration-ledger repair; deployed policy unverified. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -13803,7 +13805,7 @@ PRODUCTION READY: NO
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
-| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
+| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | 🛠 FIXED + PASS | High | Reproduced against the replayed schema (docs/audit/guardian-manager-write-check.sql): a teen raised a caller's trust, created a trusted contact, deleted a contact, and rewrote a routing profile and a suggestion. | Migration 0319: guardian_contacts, guardian_member_profiles and guardian_suggestions writes need can_manage_family (0215's pattern). guardian_communications keeps its member INSERT: the signed-ingress E2E suites rely on it. | Probe fails before 0319 and passes after (parent controls pass, members still read); 0319 re-applies idempotently; 44/44 probes; 26 Guardian test files (636 tests) and the full unit suite pass. | Repository-verified 2026-09-26 (Pass C1-K, C1-K-17). Production carries it only after the F-001 ledger repair. Cross-family member_id references remain a separate integrity item. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
 | SERVICE-274EDFA6815C | SERVICE | createAssistantLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -14060,9 +14062,9 @@ PRODUCTION READY: NO
 | MAIN-F-C04 | UPSTREAM | F-C04: /blog shipped its entire search corpus to the browser (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3073). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C05 | UPSTREAM | F-C05: Every unrouted path answered a login form (Medium, fixed — supersedes F13) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3085). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C06 | UPSTREAM | F-C06: A CSS margin lived in the message catalogue (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3109). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | ✅ CLOSED (Pass C1-K) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | ✅ MITIGATED (boot guard 1fa0ac5b; see finding) | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | ◐ MOSTLY MITIGATED (16 root tests; `expo-router` advisory needs a device build) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D02 | UPSTREAM | F-D02: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D03 | UPSTREAM | F-D03: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D10 | UPSTREAM | F-D10: The lint config enables none of the rules that would have caught them (Medium — and the root cause) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3305). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -14660,10 +14662,19 @@ Existing obligations remain SEC-001, STORAGE-EA481A772907, LIBRARY-02F9B7049DA7,
 Required rollout order: define strict configured-project/bucket/family reference parsing and the desired revocation/cache contract; prove authorized/cross-family, stale-owner, expiry/idle and range/download behavior on disposable data; deploy every legacy/new-reference consumer before changing bucket access; then verify a reviewed private-bucket change, denial of old public reads, permitted member reads, old-client behavior and cache handling. A signed bearer URL grants access until its expiry and alone cannot promise per-request membership or immediate logout revocation. Current provider configuration, old public cache exposure and production schema prerequisites need independent verification before such a rollout.
 
 #### Fixes Applied
-None
+2026-09-26 (Pass C1-K, C1-K-18) — the cache-disclosure half. `public/sw.js` no longer caches any `/_next/image` response (the optimizer proxies family media from this origin) or any response marked `private`/`no-store`; content-hashed static assets and public images are still cached. The cache name moves `bubaly-v4` → `bubaly-v5`, so the activate sweep purges whatever v4 already holds on every device. `tests/a-private-image-does-not-outlive-logout.test.ts` runs the real worker file against a fake Cache Storage and network: 4 of 5 fail on the old worker (optimizer response kept, private/no-store kept, a second user served the first user's bytes, v4 still named) and all pass now; the static-asset control passes both ways.
+
+Not fixed: the bucket itself is still `public = true`, so an object URL is still the only credential. See Retest Results for what remains and the proposed route.
 
 #### Retest Results
-Read-only source/caller map complete. Controlled private-image cache isolation regression fails as described above; provider access and native worker/optimizer acceptance are unexecuted. No privacy fix has been applied; SEC-001 stays FAIL.
+Read-only source/caller map complete. Private-image cache isolation: the executed regression above was RED; it is now GREEN both sandboxed and natively — real Chromium, the real registered worker and the real Next image optimizer against a production build: the old worker stored the `/_next/image` response in bubaly-v4, the new worker stores none in bubaly-v5, and after a reload still caches 18 static assets (SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS). Remaining RED: bucket visibility (public in migration 0216 and in the replayed catalog), so SEC-001 stays FAIL.
+
+The bucket half is an owner decision between two designs, and neither buys anything until the bucket is actually made private — so no half of it was shipped speculatively:
+
+- **Same-origin media route** (for example `/media/family/<path>`): checks the caller's membership in the path's family on every request (so Grandparent-portal reads across households keep working) and streams with `Cache-Control: private, no-store`, which the worker now refuses to cache. Stored `…/object/public/family-media/<path>` URLs are rewritten at render time, so no row changes, and revocation is immediate. Costs: every photo and video is served through a serverless function (bandwidth and latency the Supabase CDN absorbs today); Range requests must be implemented or Safari will not play video; and user uploads served from this origin must be forced to safe types (never inline `image/svg+xml`, HTML or unknown types; `nosniff` and a `sandbox` CSP), or it becomes a stored-XSS channel.
+- **Short-lived signed URLs** resolved at render time: keeps the CDN, but brings the expiry, offline-cache, realtime-row and idle-editor problems listed above, and a signed URL is a bearer credential until it expires.
+
+Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
 
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
@@ -15878,7 +15889,7 @@ Actual pipeline with InMemorySupabase and a confirming provider fixture: concurr
 
 ### AUTHZ-002 — Social permissions must require successful active membership and explicit permission reads
 
-Status: 🔄 IN PROGRESS
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: Critical
 Route(s), components, actions, tables and providers: lib/social/access.ts; lib/social/roles.ts; social_access_permissions; family_members
 
@@ -15905,40 +15916,47 @@ Installed Supabase/actual resolver regression: 17 failing cases before repair, 3
 #### Evidence
 Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access.
 
+#### Database half (2026-09-26, Pass C1-K, C1-K-23)
+`docs/audit/social-permission-matrix-check.sql`, on the replayed schema: an explicit `owner` row grants nothing (not even view_feed) to a member who is no longer active; `read_only` restricts to view_feed; a parent can still manage access. It also found the one cell where the database and `lib/social/roles.ts` disagreed — SQL granted `admin` manage_access, which the social_access_permissions policies check — so a social admin could rewrite anyone's role and make themselves owner directly against the API. `0322_a_social_admin_cannot_manage_access.sql` aligns the cell; the probe fails 4 ways before and passes after (46/46 probes), and `tests/social-permission-matrix-matches-the-database.test.ts` compares every role × permission cell of the latest SQL definition with ROLE_PERMISSIONS (fails on `admin` without 0322).
+
 #### Final Status
-🔄 IN PROGRESS
+🛠 FIXED + PASS in the repository — JavaScript resolver (34/34) and database (probe + matrix test). Production needs the F-001 migration-ledger repair; deployed policy unverified.
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: Critical
-Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; social_access_permissions; social_role_for
+Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; supabase/migrations/0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql; social_access_permissions; social_role_for; social_has_permission
 
 #### Expected Behavior
 Members assigned restrictive social permissions cannot remove their own restriction through direct database requests.
 
 #### Test Cases
-- [ ] Happy path through every required layer and persisted readback
-- [ ] Missing, invalid, unauthorized and cross-tenant inputs
-- [ ] Empty, loading, provider failure and retry states
-- [ ] Duplicate submissions and concurrent execution where applicable
-- [ ] Refresh, restart, keyboard and mobile behavior where applicable
-- [ ] Console and network inspection; related regression
+- [x] Restriction in force: a `read_only` adult resolves to `read_only` and cannot publish (control)
+- [x] The restricted adult's direct DELETE of their own row matches zero rows
+- [x] After the attempted DELETE the adult still resolves to `read_only` and still cannot publish
+- [x] A parent (family admin) can still remove the restriction (control)
+- [x] Migration re-applies idempotently onto an existing schema
+- [ ] Deployed production policy (blocked: migrations from 0296 on are not applied in production — F-001)
 
 #### Issues Found
 Generic family-member DELETE policy includes social_access_permissions. Later granular policies tighten only INSERT/UPDATE. An active adult with explicit read_only can delete that row and regain marketing_manager connect/publish permissions via successful role fallback.
 
+Reproduced 2026-09-26 against the replayed repository schema, before the fix: the adult's DELETE removed 1 row, `social_role_for` then returned `marketing_manager`, and `social_has_permission(…, 'publish_posts')` returned true.
+
 #### Fixes Applied
-None. Standing no-SQL boundary prevents changing the database policy in this cycle.
+`0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql` replaces `social_access_permissions_delete` with the predicate UPDATE already uses: `is_family_admin(family_id) or social_has_permission(family_id, 'manage_access')`. Removing a restriction is exactly as privileged as changing one. The app only upserts these rows (`app/(app)/dashboard/social/actions.ts`), never deletes them, so no legitimate path narrows.
+
+The separate parent/admin `manage_access` difference between the SQL matrix and `lib/social/roles.ts` noted in social-access-cycle.md is unchanged by this fix.
 
 #### Retest Results
-Pending database policy repair and isolated role/tenant execution.
+`docs/audit/social-restriction-delete-check.sql`: 3 failures before 0318 (breach, fallback to marketing_manager with publish, and the parent control finding nothing left to delete); passes after. 0318 applied twice without error. Full probe suite 42/42. `scripts/audit-migration-versions.mjs` passes (next free version 0319). 41 migration-related unit test files, 365 tests, pass.
 
 #### Evidence
-Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md.
+docs/audit/social-restriction-delete-check.sql; docs/final-audit/social-access-cycle.md; Pass C1-K in this file.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS in the repository. Production needs the F-001 migration-ledger repair before this policy is live there.
 
 ### DATA-005 — Medication dose actions must use current verified household and daily state
 
@@ -16441,35 +16459,41 @@ Two assistant redirects and five Contact Center neighbor failures reproduced; ac
 
 ### AUTHZ-005 — Guardian contact trust and member profiles require database manager write authority
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: High
-Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; app/(app)/guardian/actions.ts
+Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; supabase/migrations/0319_guardian_trust_and_routing_are_manager_writes.sql; app/(app)/guardian/actions.ts
 
 #### Expected Behavior
 Only family managers may change contact trust, member routing profiles, context or phone assignments, including through direct database requests.
 
 #### Test Cases
-- [ ] Happy path through every required layer and persisted readback
-- [ ] Missing, invalid, unauthorized and cross-tenant inputs
-- [ ] Empty, loading, provider failure and retry states
-- [ ] Duplicate submissions and concurrent execution where applicable
-- [ ] Refresh, restart, keyboard and mobile behavior where applicable
-- [ ] Console and network inspection; related regression
+- [x] A teen cannot raise a caller's trust level (UPDATE matches zero rows)
+- [x] A teen cannot create a trusted contact (INSERT refused)
+- [x] A teen cannot delete a contact, and so cannot cascade-delete manager-created routing rules through `condition_contact_id … ON DELETE CASCADE`
+- [x] A teen cannot rewrite a member routing profile (modes, Guardian phone)
+- [x] A teen cannot rewrite the learning queue (guardian_suggestions)
+- [ ] Members can still insert guardian_communications rows — kept deliberately (see Issues Found); an owner decision
+- [x] A teen can still read all four tables (control)
+- [x] A parent can set trust, update a profile, add a suggestion and delete a contact (controls)
+- [x] Every app write path keeps working: all go through isManager-gated actions, and isManager (parent/adult) is exactly can_manage_family
+- [ ] Deployed production policy (blocked: migrations from 0296 on are not applied in production — F-001)
 
 #### Issues Found
 The existing contacts and profiles authenticated FOR ALL policies use active family membership without a role check. Server actions require managers, but direct member REST writes bypass those action gates. The later0215 migration hardens routing rules only; contacts and profiles retain the earlier policy.
 
+2026-09-26: the same held for guardian_suggestions (FOR ALL, any member). Separately, "Service can insert guardian_communications" admits any family member although every application insert runs as the service role. A first version of 0319 dropped it; CI showed the signed-ingress E2E suites (guardian-receipt-authority, guardian-sms-recovery) file member-written rows on purpose and prove signed intake never trusts them, so it was restored. What it still allows is a member writing call/message history that the learning loop reads when it proposes trust changes (a manager must approve each). Whether members should write that history is left to the owner rather than changed under another session's tests.
+
 #### Fixes Applied
-Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force.
+`0319_guardian_trust_and_routing_are_manager_writes.sql`: INSERT/UPDATE/DELETE on guardian_contacts, guardian_member_profiles and guardian_suggestions require `can_manage_family(family_id)`, following 0215; SELECT stays open to members; guardian_communications is unchanged. Service-role writers are unaffected. The action file's header, which described the server actions as the only boundary, now says the database enforces it too.
 
 #### Retest Results
-Pending disposable role-boundary reproduction and authorized schema repair.
+`docs/audit/guardian-manager-write-check.sql` fails before 0319 (five breaches, plus two parent controls finding the teen had already deleted the contact) and passes after. 0319 applied twice without error. Probes 44/44. `scripts/audit-migration-versions.mjs` passes (next free version 0320). 26 Guardian test files / 636 tests and the full unit suite pass (the three failures are the known Node-22-container-only cases).
 
 #### Evidence
-Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed.
+docs/audit/guardian-manager-write-check.sql; Pass C1-K (C1-K-17) in this file.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS in the repository. Production needs the F-001 migration-ledger repair. Still open and separate: `member_id` columns reference family_members without a same-family constraint.
 
 ### SMS-002 — Guardian SMS recovery after provider retries stop
 
@@ -20905,7 +20929,7 @@ Status: 🔄 IN PROGRESS — the outer boundary is verified from outside; databa
 
 The middleware boundary was probed exhaustively (see APIs below): no route exposed family data to an unauthenticated caller. The assistant exemption was confirmed exact — POST /api/assistant answers 401 and POST /api/assistant/alexa answers 403 from their own handlers, GET on both answers 307, and /api/assistant/link and /api/assistant/other answer 307 on both verbs, so the namespace was not opened.
 
-NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 through AUTHZ-005 remain open, and AUTHZ-003 and AUTHZ-005 remain release failures requiring SQL this audit is not authorized to author.
+NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 and AUTHZ-004 remain open. AUTHZ-003 and AUTHZ-005 were repaired in the repository on 2026-09-26 by migrations 0318 and 0319; production needs the F-001 ledger repair for both.
 
 ## Core User Journeys
 Status: 🔄 IN PROGRESS — public journeys verified; authenticated journeys not exercised in this pass.
@@ -20938,7 +20962,7 @@ Status: 🔄 IN PROGRESS — migration integrity verified in CI; live policy beh
 
 The Database job (migration replay and RLS boundary probes) passes on head 92340315. This branch authors no SQL and changes no migration — `git diff origin/main...HEAD -- supabase/migrations/` is empty.
 
-NOT verified here: the applied production catalog, which no static evidence establishes. The three release failures (SEC-001 public family-media bucket, AUTHZ-003 social-member DELETE, AUTHZ-005 Guardian contact/profile writes) are all policy state on main, not regressions from this branch, and all need SQL applied by a human.
+NOT verified here: the applied production catalog, which no static evidence establishes. The remaining release failure (SEC-001 public family-media bucket) is policy state on main, not a regression from this branch. AUTHZ-003 (social-member DELETE) and AUTHZ-005 (Guardian contact/profile writes) were repaired in the repository on 2026-09-26 by migrations 0318 and 0319 and also need applying to production.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — no live provider exchange was performed in this pass.
@@ -21006,7 +21030,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
-- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
+- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 is repaired in the repository by migration 0318 (2026-09-26) and is live in production only after the F-001 ledger repair. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
 - EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
@@ -21020,8 +21044,8 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-002: Repaired in the repository — the resolver requires successful reads (34/34), and the database half is verified and aligned (C1-K-23: migration 0322, social-permission-matrix probe and matrix test). AUTHZ-003's DELETE bypass is repaired by migration 0318. Both need the F-001 ledger repair to reach production.
+- AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.
@@ -21034,7 +21058,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- AUTHZ-005: Repaired in the repository 2026-09-26 — migration 0319 makes Guardian contact, member-profile and suggestion writes manager-only; docs/audit/guardian-manager-write-check.sql fails before and passes after. Member INSERT on guardian_communications is kept (the signed-ingress suites rely on it) and left to the owner. Child contact deletion (and so its cascade into routing rules) is closed with it. Remaining: apply to production after the F-001 ledger repair and verify there; member_id columns still reference family_members without a same-family constraint.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
@@ -24288,7 +24312,7 @@ lengths, hex colours, URLs and CSS keywords. It deliberately does not catch
 `network.bandNone` (`'none'` — a word a reader sees); both are pinned so the
 rule cannot widen onto them.
 
-## F-C07 — Nineteen environment variables are undocumented *(Medium, open)*
+## F-C07 — Nineteen environment variables are undocumented *(Medium, closed in Pass C1-K)*
 
 `.env.example` documents 75; app code reads 89. Nineteen are absent.
 
@@ -24301,6 +24325,27 @@ is configured by two undocumented variables (`APPLE_SYNC_ENABLED`,
 Fix: add the operator-facing variables with a line each saying what breaks when
 unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
 under their own heading.
+
+**Closed (Pass C1-K).** Re-measured first rather than trusted: the code reads 88
+variables, `.env.example` documented 82 of a different set, and the gap was
+exactly nineteen. All nineteen are now in `.env.example`, each saying what
+breaks when it is unset:
+
+- operator-facing, in their own sections — `CONTACT_CENTER_INBOUND_SECRET`
+  (whose entry now says in capitals that it rejects every inbound message when
+  unset, and recommends the header over `?key=`, which lands in access logs),
+  `APPLE_SYNC_ENABLED` / `APPLE_CALDAV_BASE_URL`, `X_CLIENT_ID` /
+  `X_CLIENT_SECRET` (with the third dependency, `SYNC_TOKEN_KEY`), the four
+  `GITHUB_*` feedback variables with their precedence, and the two build-identity
+  variables `/api/build-info` and the display error screen report;
+- `AI_PROVIDER_STUB_DIR` under the existing test-only heading;
+- `NODE_ENV`, `NEXT_RUNTIME`, `TZ`, `VERCEL_ENV`, `VERCEL_REGION` and the two
+  commit-SHA variables under a new *Set by the platform — do not set by hand*
+  block, so their existence is recorded without inviting anyone to set them.
+
+`tests/every-env-var-the-code-reads-is-documented.test.ts` keeps it closed: a
+new `process.env.X` in `app/`, `lib/` or `components/` fails until
+`.env.example` names X. Calibrated by deleting one entry; the guard names it.
 
 ## F-C08 — The forward-release mechanism is pinned 38 migrations in the past *(High, open)*
 
@@ -24377,7 +24422,7 @@ block "must not be bypassed or treated as a missing-credentials failure".
 So F-C08's code half is closed and F-C08's release half, like F5, is the
 operator's.
 
-## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
+## F-C09 — Supabase credentials fail at first use, not at boot *(Low, mitigated — see status)*
 
 `NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
 read with a non-null assertion, and there is no central env validation module.
@@ -24387,7 +24432,31 @@ with `Error: supabaseUrl is required` while `/terms` and `/cookies` rendered
 fine. A misconfigured deploy degrades into scattered 500s on whichever pages
 happen to read the database, instead of refusing to start.
 
-## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
+**Status (Pass C1-K): mitigated by code that predates this finding — no change
+made.** Checked rather than assumed, and the finding's premise was partly wrong:
+
+- *"There is no central env validation module"* — there is.
+  `checkRequiredEnv()` in `lib/health/status.ts` checks `REQUIRED_ENV`
+  (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`), treating blank as missing.
+- *Nothing says why* — `instrumentation.ts` `register()` runs it at server
+  start in the Node runtime and logs **one** line naming every missing
+  variable, pointing at `GET /api/health`, which reports the same. Both landed
+  in `1fa0ac5b` on 2026-09-05, before this finding was written.
+- Both are covered: `tests/instrumentation-boot-guard.test.ts` and
+  `tests/health-endpoint.test.ts`, 22 cases, green.
+
+What is still literally true is that the app does not **refuse** to start —
+and that is a stated, tested decision, not an oversight. The guard's contract
+reads *"never throw (a boot hook that throws would take down the deploy)"*,
+and this finding's own reproduction shows why: `/terms` and `/cookies` render
+without Supabase. A hard fail would take the legal pages down with the rest.
+
+So the diagnosis gap this finding describes is closed; whether a misconfigured
+deploy should instead refuse to serve anything is a product decision, and it
+has already been made the other way on purpose.
+
+## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, mostly mitigated — see status)*
 
 `mobile/` is a real Expo app of 42 TypeScript files with **zero** test files.
 Its CI job has three steps: install, `npm run typecheck`, and
@@ -24397,6 +24466,34 @@ The web app is gated on 13,500 tests and a mobile device matrix; the mobile app
 is gated on "it compiles and its config parses". Separately, nothing audits the
 mobile dependency tree — `npm audit --package-lock-only` there reports 14
 moderate advisories, while the root tree reports zero of any severity.
+
+**Status (Pass C1-K): mostly mitigated; one part re-scoped, one part needs a
+build this sandbox cannot do.** Re-measured, and the headline was wrong:
+
+- *"Zero test files"* counted inside `mobile/` only. **Sixteen root test files**
+  exercise the mobile app and run in the root Vitest job CI already gates on:
+  every `*-core` module (`auth`, `chores`, `voice`, `assistant`, `theme`), plus
+  `format`, `chunked-storage`, `config`, `api`, auth session, family session,
+  sign-out, i18n, the owner render, and `mobile-imports-stay-bundleable`, which
+  keeps those imports Metro-resolvable. The core modules say so in their own
+  headers (*"Pure — unit-tested from the repo root"*). The mobile CI job also
+  runs `scripts/auth-storage-errors.test.mjs` via `pretypecheck`.
+- *No lint, no native build* — still true.
+- *14 moderate advisories* — confirmed, and there are exactly **two** root causes:
+  - `uuid <11.1.1`, via `xcode` → `@expo/config-plugins` / `@expo/cli`. This is
+    **build-time tooling** for native project generation; it does not ship to
+    a device.
+  - `decode-uri-component <=0.4.2`, via `query-string` → `expo-router`. This one
+    **is** runtime: a malformed percent-encoded deep link can drive exponential
+    decoding (GHSA-vcc3-ghjq-m6fr).
+
+  `npm audit` offers only `--force`, i.e. breaking major upgrades of Expo
+  tooling and the router. Section A of this document records that the mobile
+  app has never been *run*, only read — so a forced upgrade made here could be
+  typechecked but not built or launched, and a router upgrade that breaks
+  navigation would pass every check this sandbox can run. Left for someone who
+  can do an `expo prebuild` and a device run; `expo-router` is the one to
+  prioritise, since it is the only runtime path.
 
 ## Verified clean in Pass C
 
@@ -25745,3 +25842,1591 @@ NO
 
 ## Final Sign-Off
 Pending
+
+# Pass C1-K — section C: the client code paths behind the swept tables
+
+Session `01KRUgA6hD6QgzmtpSP6TUmP`, working the "Auditable now" list: the
+sensitive tables were swept at the RLS layer, and what had never been examined
+is the client code around them — reads, writes, delete handling, error
+reporting. Two defects, one withdrawn hypothesis, two modules swept clean.
+
+> A note on this file: the copy on `main` is 4,362 lines and does not contain
+> Passes S/T or the C1-S6-* findings, so this pass was written without being
+> able to read them. If they land later, the overlap to check first is
+> `medical-records-module`.
+
+## C1-K-01 · HIGH · A write RLS refused was reported as a write that happened
+
+`health_providers`, `insurance_policies` and `medical_profiles` are
+`SELECT is_family_member` but `UPDATE`/`DELETE can_manage_family`. That gate
+works — Pass T was right about it. The defect is on the client side of it.
+
+A teen, child or caregiver sees the provider list, the insurance cards and the
+medical profile, and can press Delete on any of them. **RLS does not refuse
+those statements with an error.** It matches zero rows and returns success. All
+five write handlers in `medical-records-module` read
+
+```ts
+if (err) { toastError(...); return; }
+success('Deleted');
+```
+
+so they announced a deletion that did not happen, and "Profile saved" over
+allergies and emergency contacts that never changed.
+
+Measured in `docs/audit/health-write-gate-check.sql` against the replayed
+schema: a teen's `DELETE` on `health_providers` affects **0 rows and raises
+nothing** while the teen can still `SELECT` it (the control — otherwise
+"cannot delete" would only mean "cannot see"), a teen's `UPDATE` on
+`insurance_policies` likewise, and a parent's `DELETE` affects 1.
+
+Fixed by giving each of the five writes `.select('id')` and refusing on an
+empty result with `actions.onlyAParentGuardianCan16` — a key that already
+exists in all seven locales, so no half-translated string ships with the fix.
+Inserts blocked by RLS *do* raise, so only the update paths needed the count.
+
+## C1-K-03 · HIGH · The same lie in five more modules
+
+The blast radius was not one module. **33 tables** are member-read /
+manager-write; a sweep for client `update`/`delete`/`upsert` on any of them
+found **20 writes across 7 files**, and every one but a single already-correct
+handler in `family-module` reported success on `!error` alone:
+
+| Module | Tables | What a non-manager was told |
+| --- | --- | --- |
+| `medications-module` | `medications`, `medication_schedules` | "Medication deleted", "Medication updated", and a silent no-op on the active toggle |
+| `medical-records-module` | `health_providers`, `insurance_policies`, `medical_profiles` | "Deleted", "Profile saved" |
+| `rewards-module` | `rewards` | "Reward deleted" |
+| `billing-module` | `bills`, `financial_accounts` | "Bill removed", "Bill marked as paid", "Account removed" |
+| `bills-view` | `bills` | "Marked paid", "Auto Pay on", "Deleted" |
+| `family-module` | `family_members` | "Member removed", "Member updated" |
+| `settings-module` | `families`, `family_members` | "Family name updated", "Member removed", "Member updated" |
+
+`medications` deserves its own line: it is the data this product treats as most
+sensitive, and a teen pressing Delete on a prescription was told it was gone.
+
+All 20 now carry `.select('id')` and refuse an empty result.
+`tests/manager-gated-writes-report-refusals.test.ts` pins the class per module
+per table, so a module added later has to answer for it — it caught two writes
+(the member EDIT paths in `family-module` and `settings-module`) that this
+pass's own sweep had missed.
+
+## Correction to an earlier claim of mine
+
+A previous pass in this session reported that **no member-removal path exists**
+in the app, and closed a question about stale `social_access_permissions` rows
+on that basis. That was wrong. Removal is
+`family_members.update({ is_active: false })` in both `family-module` and
+`settings-module`; the earlier grep looked for `.delete()` under two directories
+and missed it. **The stale-social-access question is therefore open again**:
+`getSocialAccess` grants on an explicit row even when the membership row is
+gone, so a removed member with a surviving `status = 'active'` row keeps their
+social role. Not fixed here — it needs a decision about whether removal should
+revoke or whether the row should be read through membership.
+
+## C1-K-02 · MEDIUM · A best-effort log could lose the capture it was logging
+
+`run()` in `voice-module` saves the capture, then writes the voice history
+under a comment stating the contract: *"best-effort — a logging failure must
+not lose the thing we just created"*. The write sat inside the same `try`,
+awaited bare. supabase-js **resolves** an API error (which the bare await
+ignored, honouring the contract) but **rejects** a transport failure — and that
+rejection jumped to the catch, which reported "Could not run that command",
+offered no Undo for the thing that had been created, and wrote a `failed` row
+into the history it was trying to keep honest. The capture survived in the
+database with no route back to it from the UI.
+
+The second insert has the same shape *inside* the catch, where a rejection
+replaces the real failure with its own.
+
+Both now terminate their own promise with an `onRejected` handler and log.
+
+## Withdrawn · `medications` is not unguarded
+
+Listing the policies on `medications` shows a `can_manage_family` gate sitting
+beside an `is_family_member` policy for insert/update/delete — which reads as a
+manager gate defeated by a broad one, since permissive policies are OR'd. They
+are not both permissive: the `can_manage_family` ones are **RESTRICTIVE**, so
+they AND. A teen cannot write medications.
+
+Recorded because the listing that misled me is the obvious one — it omits
+`polpermissive` — and the probe now asserts the true invariant so the next
+reader gets the answer from the database instead of the policy names.
+
+## Swept clean
+
+- **`locator-module`** (live location, the highest-priority entry). Reads
+  capture `locationsError`/`placesError`/`eventsError` and short-circuit to an
+  `ErrorState` with retry *before* the map renders, so a failed read cannot
+  show an empty map as "nobody is anywhere". Every write goes through a server
+  action and checks `res.ok`.
+- **`health-visits-module`**. `health_visits` is `ALL is_family_member`, so no
+  manager gate exists to be misreported; its delete confirms first and reports
+  both branches.
+
+## C1-K-04 · MEDIUM · A server action that threw left a button spinning and said nothing
+
+Six client call sites await a `Promise<void>` server action bare inside
+`startTransition`. Those actions signal failure by THROWING a translated
+Error — `requireSocialPermission` raises `SocialAccessError`, the paperwork and
+contact actions throw their own `tr(...)` messages — so:
+
+```ts
+startTransition(async () => {
+  await setPaperworkStatusAction({ itemId, status });
+  setBusyKey(null);          // ← never runs when the await throws
+});
+```
+
+The button span forever and the reason, already translated, went nowhere. In
+`account-row` the thrown reason is precisely *"you do not have permission to
+connect accounts"*, which is the one thing the person needed to be told.
+
+Fixed at all six (`paperwork-module` ×3, `contact-timeline-module` ×2,
+`account-row`): catch, show the thrown message, clear the busy state in a
+`finally`.
+
+`contact-timeline-module` reports **inline** rather than through a toast — the
+component is rendered on its own in tests and otherwise has no `<ToastProvider>`
+dependency, and adding one would make it crash anywhere it renders outside the
+provider. The reason a delete failed also belongs beside the timeline it failed
+on.
+
+### A harness that had to move with it
+
+`tests/contact-timeline-localization.test.ts` (another session's) mocks React
+state **by slot index**, with a comment recording the coupling: *"Slots are the
+component's two states followed by the real drafter's five."* The new
+`actionError` state shifted every index by one and failed 7 of its 43 cases.
+The index was realigned 4 → 5 and the comment updated to say so. Verified not
+vacuous: blanking the `contactTimeline.writing` label still fails those same 7.
+
+## C1-K-05 · MEDIUM · The same silence across the auto and home sections
+
+Following C1-K-04 out mechanically: **24 more call sites across 11 files**
+await a throwing `Promise<void>` action bare inside a transition — every save
+and delete in `auto/{insurance,licenses,registration,rentals,service,vehicles}`
+and `home/{pros,service,warranties}`, both family switchers in `app-shell`, and
+the card-issuing loop in `money-cards-view`.
+
+Two of those deserve naming:
+
+- **`app-shell.switchTo` / `switchFamily`.** A throw closed the menu and did
+  nothing else — no navigation, no message. Switching household is the one
+  action where "nothing happened" is indistinguishable from "it worked and this
+  is the new one".
+- **`money-cards-view.issueAllVirtual`.** A loop with no error handling: a throw
+  part-way left the button stuck, skipped the remaining children, and the toast
+  named the number of cards *intended*, not issued. It now counts what actually
+  issued and says so.
+
+Fixed with one shared helper rather than 24 hand-written catches:
+`components/ui/action-error.tsx` — `useActionError()` catches, keeps the thrown
+(already translated) message and returns whether the action got through, so
+`setOpen(false)` can be gated on success; `<ActionError>` renders it beside the
+thing that failed.
+
+Deliberately **not** a toast. These components render on their own in tests with
+no `<ToastProvider>` above them, so a toast would turn a failed save into a
+crash — which is how C1-K-04's first attempt broke 38 tests.
+
+## C1-K-06 · MEDIUM · Promise chains with no rejection path
+
+`.then(onFulfilled)` with one argument and no `.catch()` cannot report a
+failure. supabase-js and the server actions REJECT on a transport failure —
+they only *resolve* `{ ok: false }` for a request that was answered — so these
+chains turned an outage into an unhandled rejection.
+
+Earlier passes fixed exactly this in `meals-module`, `event-detail-modal`,
+`quick-post` and `app-lock-settings`, each leaving a comment saying so. It had
+not reached eight more:
+
+| Where | What the silence looked like |
+| --- | --- |
+| `social-feed-module`'s shared `run()` | a rejection skipped `setBusy(null)`: control disabled, spinner spinning, nothing said — **every** control in the module goes through it |
+| `routines-panel`, `moments-view` | an **Undo** that looked done; the events were still on the calendar |
+| `ai-settings` | `{ ok: false }` handled, a rejection not — the skeleton stayed forever |
+| `medical-records`' `CardImage` | a failed signing left the placeholder, which reads exactly like "this card was never uploaded" |
+| `workload-module` | a weekly snapshot silently not saved |
+| `service-tooltip`, `free-tier-sidebar` | cosmetic, but invisible when broken |
+
+Each now has a rejection path that logs, and reports to the person wherever
+there is somewhere to report. `social-feed`'s `run()` was the highest-leverage
+of them — one helper behind every control in that module.
+
+The insurance card now says *Unavailable* rather than showing the same
+placeholder it shows for an absent card. Those are different facts.
+
+## C1-K-07 · MEDIUM · 19 API writes whose answer was never read
+
+Section C also names ~57 unaudited API routes. Sweeping every `app/api/**/route.ts`
+for a write with nothing destructured found **19 across 13 routes**.
+
+PostgREST **resolves** an RLS refusal, a missing column and a constraint
+violation as `{ error }` — it does not throw — so even the routes that wrap the
+call in `try/catch` never saw those.
+
+Two are worth naming:
+
+- **`app/api/contact`.** Its `support_tickets` insert is deliberately
+  best-effort *because* "the email below is the primary path", and the comment
+  promises the ticket "surfaces in the admin console even if email delivery is
+  unavailable". A resolved error meant that documented fallback silently did
+  not exist — a support request accepted and lost.
+- **`app/api/cron/family-routines`** (×3). These writes record that a routine
+  was filed. A lost status update lets the next pass file the same routine
+  again, so here the silence costs **correctness**, not just observability.
+
+The rest are AI logs, usage events and sync preferences — genuinely
+best-effort, and a silent logging failure is exactly what makes an audit
+impossible.
+
+All 19 now capture and log their error. None blocks its response: the point is
+a trace, which is the difference between degrading and vanishing.
+
+## C1-K-08 · MEDIUM · A page that could not read answered as if it had
+
+The server-page half of section C's "reads". `settleAll` turns a rejected read
+into `{ data: null, error }` so one unreachable table cannot cost a whole page —
+the right default. But 15 pages destructure only `data` and render
+`data ?? []`, which turns a failed read into a confident answer. Two of those
+answers are wrong rather than merely thin:
+
+- **`/dashboard/conflicts`** — `detectConflicts([])` is an empty list, which
+  the page renders as the **all-clear**. A conflict detector that could not
+  read the calendar must not say there are no clashes.
+- **`/dashboard/family-access`** (Kid Logins) — an unreadable `child_logins`
+  makes every child look as though they have *no* login, on the page whose
+  whole purpose is deciding who to give one to. A parent then creates a
+  second login for a username that is already taken.
+
+Both now stop with an `ErrorState` (messages in all seven locales), and the
+check is asserted to run *before* the detector / the roster is built — a check
+placed after would be decoration.
+
+The two guardian pages keep their documented degradation ("one unreachable
+table costs its own list, not the page") and gain the log they lacked. The
+other 11 are lists where empty-on-failure is an honest degradation; recorded,
+not changed.
+
+## C1-K-09 · Convergence after a week of `main`
+
+105 commits landed while this branch waited. In three files another session had
+fixed the same defect as this pass — each time **more** thoroughly — and the
+merge was resolved towards theirs:
+
+- **`lib/social/access.ts`** now *throws* `SocialAccessUnavailableError` rather
+  than returning `null`, so "could not check" is distinguishable from "not
+  allowed", and it requires a live membership row. **That closes the
+  stale-social-access question** this pass re-opened in C1-K-03's correction:
+  a removed member with a surviving explicit row now gets nothing.
+- **`voice-module`** routes both history writes through `recordVoiceHistory`,
+  which settles *and* catches and is called with `void`, so the capture is
+  neither lost nor delayed by its own log.
+- **`medications` / `rewards`** moved to `.select('id').single()` inside a
+  `mutate()` that throws on error — `.single()` turns zero rows into PGRST116 —
+  and adds a read-back confirmation. The guard here now accepts that form.
+
+Taking theirs wholesale for `medical-records-module` **dropped two fixes they
+did not have**: the row check on the `medical_profiles` upsert (the one that
+said "Profile saved" over unchanged allergies and emergency contacts) and
+`CardImage`'s rejection path. Both were re-applied on top. The lesson for the
+next merge: a comment-only conflict can sit on a file whose *other* hunks
+differ, and `--theirs` takes those too.
+
+Two of another session's tests had to move with the code, and both were
+re-calibrated afterwards so they are provably still live:
+`child-login-session-adoption`'s fake learned the throttle's predicated
+`insert`/`update` (a blind upsert there would bring back C1 finding 5's lost
+update), and still goes red if the store swallows a write failure.
+
+`finance-operation-sql`, red on two earlier heads of this branch, was not this
+branch's: a `pg_isready`-vs-`POSTGRES_DB` readiness race in the workflow, which
+`main` had already fixed and the merge carried in verbatim.
+
+## C1-K-10 · HIGH · "Assistant key revoked" when nothing was revoked
+
+The server-side mirror of C1-K-01. `revokeAssistantLinkAction` writes through
+the service client, scoped by id **and** family so an id from elsewhere cannot
+revoke another household's key — correct. But an id that matches nothing
+(another family's, or one deleted in another tab) raises no error; it updates
+zero rows. The action checked only `error`, then replied
+
+> Assistant key revoked. It stops working immediately.
+
+Of every false "done" this audit has found, this is the one where the lie is a
+**security claim**: a parent told a leaked key is dead stops worrying about it.
+
+It now asks for the row back and refuses on zero rows, with the message in all
+seven locales; nothing is written to the audit log for a revocation that did
+not happen. Calibrated: dropping the row check fails exactly the zero-row case,
+while the manager pre-check and the real-error path hold in both directions.
+
+A sweep of every other credential-shaped write (`sync_accounts`,
+`sync_tokens`, `child_logins`, `social_account_tokens`, `push_devices`,
+`permission_grants`, `trust_delegations`) found no second instance:
+`account-tokens.ts` names its results `claimed` / `consumed` / `retired` and
+checks each, and the two disconnect routes delete an `account.id` they have
+just read under the family scope, where zero rows means "already gone" — which
+is true.
+
+**Process note.** The first version of this fix re-serialised all seven locale
+files with sorted keys (a ~7,100-line diff), because `main` no longer keeps
+them sorted. It was reverted before commit and the key inserted as one line per
+file. With other sessions editing the same catalogues, a re-sort is a
+guaranteed merge conflict for all of them.
+
+## Swept clean · every service-client API route has a gate
+
+27 routes reach `createServiceClient()` (which bypasses RLS) with no gate a
+simple pattern recognises. Read individually, every one is either public by
+design or authenticated by something the pattern missed:
+
+- **Inbound provider webhooks** (`guardian/inbound/{sms,voice,whatsapp}`,
+  `guardian/screen`, `guardian/status/voicemail`, `contact-center/*`) verify
+  `X-Twilio-Signature`. The validator fails closed (`if (!TWILIO_AUTH_TOKEN)
+  return false`) and compares with `timingSafeEqual`. Verification is gated on
+  `NODE_ENV === 'production'`, which covers every Vercel deployment including
+  previews, since `next build` sets it; only `next dev` skips it.
+- **`guardian/escalate`**, which sends SMS and places calls, is internal-only
+  behind a fail-closed shared secret, and says so.
+- **`assistant`** resolves a hashed link token and 401s without one;
+  **`assistant/alexa`** additionally verifies Amazon's request signature;
+  **`sync/feeds/[token]`** checks its feed token.
+- The rest are public by purpose: tracking pixels, the contact form,
+  unsubscribe links, `blog/like`, `forms/submit`.
+
+Two things this confirmed about C1-K-10: `resolveAssistantLink` filters
+`.is('revoked_at', null)`, so a key that *is* revoked genuinely stops working —
+the revocation message is now true in both halves. And `blog/like` /
+`blog/save`, whose writes C1-K-07 made log-only, can't mislead either: each
+re-reads the real state after writing and returns *that*, so a failed unlike
+still reports "liked".
+
+Recorded as a fragility, not a defect: gating a signature check on
+`NODE_ENV` rather than on the presence of the secret means a staging box run
+with `next dev` would accept unsigned webhooks.
+
+## C1-K-11 · HIGH · A sign-in could end on a page the attacker chose
+
+A post-authentication **open redirect**, found by measuring where each
+destination actually lands rather than by reading the guard.
+
+`lib/auth/redirect.ts` `safeInternalRedirect` checked the **raw** input for a
+`//` prefix, backslashes and encoded slashes, then parsed it and returned the
+parser's **normalized** path. Dot-segment removal is part of normalization, and
+it rebuilds exactly what the raw check had just refused:
+
+```
+new URL('/.//evil.com', base).pathname   ===  '//evil.com'
+```
+
+The origin check passed — the value was parsed as a *path* on our base, not as a
+host — so `//evil.com` was returned as a safe internal path. A browser resolves
+it against the page to `https://evil.com`.
+
+`login-form` and `phone-auth` take that value from a **single** pass and call
+`router.push(destination)` after a **successful** sign-in. So
+
+```
+https://www.bubaly.com/login?redirect=/.//evil.com
+```
+
+let someone sign in on the real site and then delivered them to a lookalike
+"session expired, sign in again" page — the textbook credential-phishing use of
+an open redirect. The auth-callback path was safe only by accident:
+`callback-completion` happened to validate the value a *second* time, and
+`//evil.com` fails the raw check on the second pass.
+
+Fixed at the source, so every consumer is covered: the **normalized output** is
+checked as well. That also closes encodings the raw check never listed —
+`%2e` is a dot segment to the URL parser, so `/%2e//evil.com` escaped too.
+
+`tests/a-sign-in-redirect-stays-on-bubaly.test.ts` asserts, for twelve payloads,
+the **origin a browser would actually navigate to**. Calibrated by removing the
+output check: all seven dot-segment and encoded payloads land on `evil.com`,
+plus the finding case and the login-selection case (9 failures). The five
+payloads the raw checks already caught, and the legitimate-path controls
+(query and hash preserved, benign `/a/./b/../c` → `/a/c`), pass in both
+directions.
+
+**Method note.** The first fuzz flagged nine "leaks" by string-matching `evil`
+in the output, and seven were false: `/%20/evil.com` is a same-origin path that
+happens to contain the word. The finding only became precise once the test
+asked *where the browser goes* — `new URL(out, page).origin` — instead of *what
+the string contains*.
+
+## C1-K-12 · MEDIUM · The SSRF guard did not unwrap NAT64
+
+The same *validate one form, use another* shape as C1-K-11, found by fuzzing
+the address classifier through its injectable lookup rather than by reading it.
+
+`lib/server/public-calendar-fetch.ts` guards every family-supplied URL (calendar
+feeds, RSS). It is strong: it resolves **all** of a hostname's addresses, refuses
+private, loopback, link-local, CGNAT, multicast and documentation ranges,
+follows redirects manually and re-validates each hop, and unwraps IPv4-mapped
+(`::ffff:`) and IPv4-compatible (`::`) IPv6. Every literal encoding tried —
+decimal `2130706433`, hex `0x7f000001`, octal `0177.0.0.1`, short `127.1`,
+bracketed `[::ffff:127.0.0.1]` — was refused.
+
+It did not unwrap **NAT64**. `64:ff9b::/96` (RFC 6052) carries an IPv4 address in
+its low 32 bits and, on a NAT64 network, routes to it: `64:ff9b::7f00:1` is
+`127.0.0.1` and `64:ff9b::a9fe:a9fe` is the cloud metadata endpoint. A hostname
+resolving to either passed the guard.
+
+Fixed by unwrapping the well-known prefix exactly like the `::ffff:` form — so
+NAT64 to a *public* host still works — and refusing the local-use range
+(`64:ff9b:1::/48`, RFC 8215) outright. `tests/a-user-url-cannot-reach-an-internal-address.test.ts`
+covers 19 resolved addresses, 8 URL literals and 2 public controls. Calibrated
+by removing the two lines: exactly the four NAT64 cases fail; the other 25 hold
+both ways.
+
+Practical reach on the current host is low — serverless functions rarely sit on
+a NAT64 network — but the guard's job is to hold wherever it runs, and its
+`::ffff:` handling shows the embedding class was meant to be covered.
+
+### Recorded, not fixed: DNS rebinding
+
+`fetchPublicText` validates a hostname by resolving it, then calls `fetch()`
+with the **hostname** URL, which resolves it again. An attacker's DNS server can
+answer the first lookup with a public address and the second, with a zero TTL,
+with an internal one. Every redirect hop has the same gap.
+
+The robust fix is to pin the connection to the address that was validated — an
+`undici` `Agent` whose `connect.lookup` returns the pre-checked address, passed
+as the fetch `dispatcher`. That is a transport change on a security-critical
+path, and it needs real DNS to verify, which this sandbox cannot exercise;
+practical reach from a serverless function is also low. So it is written down
+with the fix named rather than changed blind.
+
+## C1-K-13 · HIGH (conditional) · Super-admin is granted by the email claim alone — owner verification needed
+
+Found while hunting the *validate one form, use another* shape, and recorded
+rather than patched, because the facts that decide it are not in the repository.
+
+Super-admin is decided **purely by an email address**, in both places that grant it:
+
+- **code** — `isSuperAdminEmail(auth.user.email)` against a built-in allowlist
+  plus `SUPER_ADMIN_EMAILS` (`lib/constants/super-admins.ts`), used by
+  `lib/supabase/auth.ts`, `lib/auth/callback-server.ts`, `lib/server/ai-access.ts`
+  and others;
+- **database** — `public.is_super_admin()` (0008):
+  `WHERE email = lower(auth.jwt()->>'email')`.
+
+Neither binds the role to a user id or checks how the email was established. So
+the whole privilege rests on one assumption: that **no one can hold a session
+whose email is the allowlisted address unless they control that inbox.** Two
+things decide whether that holds, and neither is visible from the repo:
+
+1. **Password sign-up confirmation in the production project.**
+   `supabase/config.toml` sets `enable_signup = true` and does not set
+   `[auth.email] enable_confirmations` (which defaults off locally). If
+   production also has "Confirm email" off, Supabase **auto-confirms** at
+   sign-up — so anyone could register as the allowlisted address with any
+   password, receive a session, and be super-admin. *This only works while that
+   address is unregistered in the project*: sign-up with an existing email does
+   not create a second user. The owner almost certainly already has an account
+   in production, so the live risk is lowest there and highest on a fresh
+   preview or staging database.
+2. **How each OAuth provider asserts email.** Google, Microsoft and others are
+   wired up. A provider that returns an email it has not verified would carry
+   that email into the JWT.
+
+**Why no code change.** The obvious patch — require `email_confirmed_at` — does
+not close variant 1, because auto-confirm *sets* `email_confirmed_at`. And
+patching only the code path would leave `is_super_admin()` granting on the same
+claim; fixing that needs a migration, and migrations from 0296 on are inert in
+production (F-001). A half-fix here would read as closed and not be.
+
+**Owner actions, in order:**
+1. Confirm "Confirm email" is **on** in the production Supabase project (and in
+   every preview/staging project that shares this allowlist).
+2. Confirm the enabled OAuth providers only assert verified emails.
+3. Longer term, bind super-admin to **user ids** rather than emails, in both the
+   code allowlist and `super_admins`, so the role cannot follow an address to a
+   different account.
+
+## C1-K-14 · HIGH · TwiML was built without escaping — a broken screening call, and a fallback number that could add verbs
+
+Every TwiML builder in `lib/guardian/twilio.ts` interpolated its values into
+XML, and only spoken text was escaped (`& < >`, not quotes). Three defects came
+out of that one shape.
+
+1. **AI screening could not be heard.** `app/api/guardian/screen/route.ts` and
+   `inbound/voice` put `…/screen?sessionId=${id}&turn=${n}` into a `<Gather
+   action="…">`. A bare `&` is not well-formed XML (`&turn` reads as an
+   unterminated entity), and Twilio parses TwiML strictly, so a call routed to
+   screening got a document parse failure (Twilio 12100) instead of the
+   question. Confirmed with a strict XML parser on the exact string.
+2. **The Contact Center fallback number reached the TwiML as typed.**
+   `updateConciergeAction` stored `input.forwardTo` with no validation;
+   `contact-center/voice` dialled it as `<Dial>${number}</Dial>`. Any parent on
+   a Family+ plan could save `+1555…</Dial><Redirect>https://…</Redirect><Dial>`
+   and have their family line hand live calls, on Bubaly's Twilio account, to a
+   TwiML document anywhere. `guardian/screen` also dialled a member's phone as
+   raw `<Dial>${memberPhone}</Dial>`, outside the builder.
+3. **Urgent SMS forwarding never sent for the format the form suggests.** The
+   field's placeholder is `+1 555 123 4567`. Stored verbatim, it failed
+   `sendSmsWithReceipt`'s E.164 check on every urgent message, which the
+   receipt records as *rejected* — the parent set up a fallback that could not
+   fire.
+
+**Fix.** One `xml()` escape (`& < > " '`) for every text and attribute value in
+the builders; `guardian/screen` now dials through `twimlDial`.
+`toCallableE164` (`lib/contact-center/phone.ts`) accepts only phone punctuation
+before normalizing — `toE164` alone keeps the digits of whatever it is given and
+would make a number out of a URL. The action stores E.164 or refuses with a
+translated message (`actions.forwardingNumberNotCallable`, 7 locales); empty
+clears. Numbers saved in the old format are normalized where they are used:
+the voice route dials one that reads as a number and otherwise takes a message;
+urgent delivery sends to the normalized number and still lets anything else be
+rejected visibly rather than treating it as "no number".
+
+**Test.** `a-forwarding-number-is-a-number` (8): a strict well-formedness check
+over Gather/Record/Say/Dial output with `&`, quotes and closing tags; an
+injected number yields only `Response` and `Dial` elements; normalization of the
+placeholder formats; refusal of text; the action writes E.164, clears on empty,
+and writes nothing for an injection. Reverting the fix fails 6 of 8.
+
+**Owner item (not code).** Forwarding to a number the customer chooses is the
+feature, so premium-rate and international destinations are a Twilio account
+setting, not something this code can decide: confirm **Voice Geographic
+Permissions** and **SMS Geo Permissions** in the Twilio console allow only the
+countries Bubaly serves.
+
+## C1-K-15 · MEDIUM · Family-wide notifications: a bin that did nothing, and one read flag for the whole family
+
+A mechanical sweep, using the live policies from the harness: every client
+`.update()`/`.delete()` without a row count, kept only where the table's
+policy for that command is narrower than "any active member". Of 35 hits, most
+were membership written out longhand (see *Swept clean* below). Three tables
+are genuinely narrower: `ai_conversations` (own rows, and SELECT is equally
+narrow — nothing to refuse), `marketplace_listings` (own rows; the UI's
+`isOwner` and the policy's `marketplace_member_id` resolve the same member, so
+only a race reaches zero rows), and `notifications`.
+
+`notifications` is gated per row. SELECT and UPDATE are *own row OR
+family-wide* (`user_id is null`); DELETE is *own row OR can_manage_family*.
+
+1. **Fixed — the bin.** The list shows every member a delete button on every
+   row, including family-wide ones only a manager can delete. A refused
+   delete matches nothing and raises nothing; `remove()` checked only `error`,
+   so the bin silently did nothing and the row came back on refresh. It now
+   counts rows and says `errors.thatChangeWasNotSaved`. Pinned in
+   `manager-gated-writes-report-refusals` (fails without the fix).
+2. **Recorded, not fixed — one `is_read` for everyone.** Family-wide rows carry
+   a single `is_read`. Any member who opens one, or taps *Mark all read*,
+   clears it from every member's bell and list. Family-wide rows include the
+   Contact Center's urgent-message notice (`urgent-delivery.ts`), Guardian SMS
+   alerts, and medication/approval/deadline reminders when no manager is
+   resolved — so a teen tapping *Mark all read* takes the badge off the
+   parent's urgent notice. Push is unaffected (it keys on `pushed_at`), and
+   email never carries family-wide rows. Messages already solved the same
+   problem with a per-user `read_by uuid[]`.
+
+   **Why not fixed here.** Per-user read state needs a schema change the code
+   then *depends on* (the bell, the list, `listUnread`, the briefing), and
+   migrations from 0296 on are not applied in production (F-001). The
+   constraint-only migrations other sessions are landing work with or without
+   the ledger repair; this one would not. **Proposed shape:** `read_by uuid[]
+   not null default '{}'` on `notifications`; family-wide rows are unread for
+   a user when `not (read_by @> array[auth.uid()])`; mark-read appends through
+   a SECURITY DEFINER RPC that adds only the caller's id; own rows keep
+   `is_read`. Ship with the F-001 repair.
+
+## Swept clean · a removed member reaches nothing
+
+Removing a member sets `is_active = false`. Ten tables (`family_messages`,
+`family_conversations`, `family_photos`, `family_albums`, `family_contacts`,
+`family_reminders`, `family_recipes`, `family_tree_nodes`, `todo_lists`,
+`todo_items`) use a longhand policy — `family_id IN (SELECT family_id FROM
+family_members WHERE user_id = auth.uid())` — with no `is_active`. They are
+still closed to a removed member, for a reason the policy never states: the
+subquery reads `family_members` under the caller's own RLS, and `fm_select` is
+`is_family_member(family_id)`, so a removed member cannot see even their own
+row.
+
+That makes `fm_select` load-bearing for all ten. A policy as natural as *a user
+may see their own membership rows* would reopen every one of them to each
+former partner or ended caregiver who still has a session.
+`docs/audit/removed-member-access-check.sql` pins it: control (active member
+reads all ten), then deactivated (reads, updates, inserts and deletes nothing).
+Calibrated by adding exactly that own-row policy: **22 breaches**. Probes now
+**41/41**.
+
+Also swept clean for refusal-as-success, against the live policies:
+`sleep_logs`, `bedtime_routines`, `sleep_checkins` and `care_log` are
+`is_family_member` for every command, so a zero-row write can only be a race;
+`rides` is manager-gated and `rides-module` already counts rows on every
+update and delete.
+
+## C1-K-16 · CI · The mobile-menu E2E failed whenever the service worker won a race
+
+`tests/e2e/marketing-public.spec.ts` › *the mobile menu becomes usable when its
+client code is ready* failed on `main`'s own head (`ad742c2b`, iPad) and on this
+branch (`0b38e5db`, iPad and Pixel), at `expect.poll(() => heldScripts)`: the
+test holds every `/_next/static/*.js` request so it can see the toggle disabled
+before hydration, and it held none.
+
+**Root cause.** `beforeEach` loads the homepage in the same browser context, and
+that page registers `public/sw.js`, which calls `clients.claim()` and serves
+scripts cache-first. The test's second page is then controlled by the worker,
+and a request the worker answers never reaches `page.route`. Measured directly
+against a production build, with the worker given time to take control:
+
+| context | first page controlled | scripts seen by `page.route` on the second page |
+| --- | --- | --- |
+| service workers allowed | yes | **0** |
+| service workers blocked | no | 16 |
+
+Whether CI failed depended on whether the worker activated before the second
+page loaded, which is why it was intermittent and why it did not reproduce in
+20 local runs of the unfixed test.
+
+**Fix.** The test is about a first visit, so it now runs with
+`serviceWorkers: 'block'` (a `test.describe` with `test.use`), scoped to that
+one test. With the fix, 20/20 pass locally on Pixel and iPad. No application
+code changed; the service worker's behavior is correct for real users.
+
+The other E2E red on this PR, three `phone-auth-http` cases, is also on `main`
+(`ad742c2b` and the three pushes before it) and is not this branch's; it stalls
+after a successful OTP request, before any `/auth/v1/verify` POST. It was
+explained in a PR comment. No fix exists yet, and it could not be reproduced
+here (no Docker daemon, so no local GoTrue).
+
+## AUTHZ-003 closed in the repository (was ❌ FAIL)
+
+The master ledger's Critical AUTHZ-003 was held open since 2026-09-12 only by
+that cycle's no-SQL rule. Reproduced against the replayed schema: an adult
+pinned to `read_only` deleted their own `social_access_permissions` row, then
+resolved to `marketing_manager` and could publish. 0034 had tightened INSERT and
+UPDATE and left DELETE on the generic `is_family_member` policy.
+`0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql` gives DELETE
+the UPDATE predicate. `docs/audit/social-restriction-delete-check.sql` fails 3
+ways before it and passes after; a parent can still lift the restriction.
+The ledger row and detailed record are updated to 🛠 FIXED + PASS in the
+repository; production carries it only after the F-001 ledger repair.
+
+## C1-K-17 · HIGH · Guardian: an emergency alert that could not be dismissed, and AUTHZ-005 closed
+
+Working AUTHZ-005 (Critical-path FAIL) turned up three defects beside it.
+
+1. **The Emergency Alert banner could never be acknowledged.**
+   `acknowledgeEscalationAction` updated `guardian_escalations` through the
+   parent's own session. That table is SELECT-only for members (the webhook
+   writes it), so RLS filtered the update to zero rows without an error.
+   Measured on the replayed schema: the parent sees the escalation (1 row) and
+   the update touches 0. The action answered "Escalation acknowledged", the
+   dashboard refreshed, and the red banner came straight back — every time,
+   for every family. **Fix:** after its manager check, the action writes
+   through the service role, scoped to id and family and to unacknowledged
+   rows, and requires a row back; zero rows is success only if the escalation
+   is already acknowledged (the first acknowledgement is kept), and each real
+   acknowledgement is audited.
+2. **A parent-run learning scan was never audited, and ran on from failed
+   reads.** `runLearningForFamily` wrote its audit row through the caller's
+   client — refused by RLS in a parent's session — and discarded the result
+   with `.then(() => {}, () => {})`. Its three reads dropped their errors; a
+   failed read of the pending queue meant de-duplication found nothing and the
+   run re-filed every open suggestion. **Fix:** the action passes a service
+   client for the audit write and failures are logged; a failed read stops the
+   run (the cron already isolates per-family failures, the action now reports
+   it).
+3. **Every Guardian dashboard control could spin forever.** Scan, context
+   change, suggestion review and acknowledge awaited their server actions with
+   no rejection path, so a dropped connection or a server throw skipped the
+   reset below the await. All four now catch, say so, and release in a
+   `finally`.
+
+**AUTHZ-005** itself (manager-only writes for contacts, member profiles and
+suggestions) is migration 0319 — see its ledger record. A first version also
+dropped the member INSERT on `guardian_communications`; CI's signed-ingress
+suites rely on member-written rows on purpose, so that part was reverted and
+left to the owner.
+
+**Test.** `a-guardian-escalation-is-actually-acknowledged` (10): acknowledge
+scoped to the family and audited; refused when nothing was acknowledged;
+already-acknowledged is done without overwriting; non-managers still refused;
+the learning run stops on a failed pending read and writes nothing; the action
+passes an audit client; all four dashboard handlers have a rejection path.
+Reverting the three source files fails 9 of 10 (the non-manager control holds
+both ways). Full unit suite: 16,908 pass; the 3 failures are the known
+Node-22-container-only cases.
+
+## C1-K-18 · CRITICAL (half) · SEC-001: a previous family's photos served offline from the worker cache
+
+The last master-ledger FAIL. SEC-001 has two halves, and one is fixed.
+
+**Fixed — the cache.** Family photos live on the Supabase origin, which the
+service worker skips. Next's image optimizer re-serves them from this origin at
+`/_next/image`, and `public/sw.js` cached every same-origin image cache-first,
+with no partition by session and no regard for `Cache-Control`. Sign-out clears
+cookies and the query cache, not Cache Storage. On a shared device, the next
+person to open the app was served the previous family's photos, offline. The
+worker now never caches an optimizer response or anything marked `private` or
+`no-store`, still caches content-hashed static assets and public images, and
+moves to `bubaly-v5` so every device purges what v4 holds.
+`tests/a-private-image-does-not-outlive-logout.test.ts` runs the real worker
+file against a fake Cache Storage and network; 4 of 5 fail on the old worker,
+all pass now, and the static-asset control passes both ways. Then natively:
+real Chromium, the real registered worker and the real Next image optimizer
+against a production build. The old worker stored the `/_next/image` response
+(bubaly-v4); the new one stores none (bubaly-v5) and, after a reload, still
+caches 18 static assets. The optimizer answers `public, max-age=60`, so it is
+the explicit `/_next/image` exclusion, not the Cache-Control check, that
+catches it. SUPPORT-98FD1D4C44AD moves to 🛠 FIXED + PASS.
+
+**Still open — the bucket.** `family-media` is `public = true` (0216 and the
+replayed catalog), so an object URL is the only credential; unguessable object
+names (`familyMediaPath`) are the mitigation in place. Closing it is an owner
+decision between a membership-checked same-origin media route (immediate
+revocation; costs serverless bandwidth, Range support for Safari video, and
+strict safe-type serving) and short-lived signed URLs (keeps the CDN; brings
+expiry and offline problems). The SEC-001 record lays both out. Either way,
+every reader moves first and the bucket goes private last. SEC-001 stays
+❌ FAIL until then.
+
+## C1-K-19 · HIGH · Calendar sync: another member's connection, and a second account that broke "Sync now"
+
+From the sweep of API routes never named in this file (`sync/[provider]/*`).
+The OAuth start and callback are sound: a 32-byte state in a provider-scoped
+httpOnly cookie, compared in constant time, and the identity taken from the
+session, never the query. Four defects sit around them.
+
+1. **Any member could disconnect or rewrite another member's calendar, and
+   forge the sync history.** Every `sync_*` table shipped with one policy,
+   "family member access" FOR ALL. Measured on the replayed schema: a teen
+   deleted a parent's Google connection, created one in the parent's name,
+   inserted a forged audit entry and erased a real one.
+   `0320_a_calendar_connection_belongs_to_its_owner.sql`: `sync_accounts`
+   stays readable to the family and is writable only by its own user;
+   `sync_audit_logs` is read-only to members (every writer is the service
+   role). `docs/audit/calendar-connection-owner-check.sql` fails 6 ways
+   before and passes after; 44/44 probes. `sync_tokens` was already
+   service-only.
+2. **The provider page showed a spouse's connection as yours.** It read
+   `sync_accounts` by family and provider with no `user_id`, so another
+   member's Google account rendered as "Connected" above a Sync now that then
+   answered "not connected", and two connected members made `maybeSingle` fail
+   the page. It now reads the viewer's own accounts.
+3. **A second account of one provider broke "Sync now".** A personal and a
+   work account are two rows (`sync_accounts` is unique on user_id, provider,
+   external_id; the disconnect route already handles it). `/api/sync/run` and
+   `/api/sync/google/sync` read with `maybeSingle`, which errors on the second
+   row, so the whole sync answered 503 "sync failed". Both now sync every
+   account and combine the results (`lib/sync/run-results.ts`), keeping any
+   account's error so a failed one does not hide behind one that worked.
+4. **The status probe said "not connected" to someone connected twice**, for
+   the same reason. It now asks for up to one row.
+
+**Test.** `a-second-calendar-account-is-not-a-failure` (5): both accounts
+synced and combined, a failing account still surfaces, the not-connected case
+holds, the Google route and the provider page read correctly. All 5 fail with
+the source reverted. The status-route harness now models `limit(1)`. Full
+suite: 16,919 pass; the 3 failures are the known Node-22-container-only cases.
+
+**Follow-up, since closed (C1-K-30):** the other `sync_*` tables (calendar
+events, mappings, conflicts, jobs, reminders) still granted any member FOR ALL.
+The writer inventory found only the service-role engine and the owner's own
+onboarding mappings; migration 0329 tightens all eighteen.
+
+## C1-K-20 · HIGH · A failed read published an empty calendar to every subscriber
+
+`/api/sync/feeds/[token]` is the iCalendar URL that Apple Calendar, Outlook and
+Google poll for as long as a subscription lives. They treat each answer as the
+truth, so an empty `VCALENDAR` deletes every Bubaly event on the device. The
+route ignored the error from its paged events read: a transient database
+failure published an empty feed, with `Cache-Control: public, s-maxage=900`, so
+the edge kept serving it for fifteen minutes. A failed calendar lookup answered
+404, which some clients take as "this feed was deleted".
+
+**Fix.** A failed read answers 503 with `no-store` and `Retry-After`, and the
+client keeps what it has. `readAll` also reports hitting its cap as an error,
+and that case is not a failure: exactly 2,000 rows are the nearest events in
+order, so a very busy calendar still publishes them (logged). A clean "no such
+enabled feed" is still 404. **Test:** `a-failed-feed-read-does-not-empty-a-calendar`
+(5); the two failure cases fail with the fix reverted, and the controls and the
+cap case hold both ways.
+
+## C1-K-21 · MEDIUM · Paid AI limits that a failed count lifted
+
+Four routes metered paid model calls by counting today's audit rows — the
+child and family Money Coach, the Money Mentor (`ai/invest`) and the
+relationship helper — and the public gift link capped pending pledges the same
+way: `if ((count ?? 0) >= limit)`. A failed count is `{ count: null, error }`,
+`?? 0` made it zero, and the limit was lifted for as long as the read kept
+failing. Each now refuses (503, or a gift error) when the count cannot be read.
+
+The child coach also coached on reads it had not checked: a failed ledger,
+bucket or goal read told a child their balance was zero. It now stops (503),
+as does the family coach, and a failed wallet lookup is no longer "not found".
+
+**Test:** `an-unreadable-meter-is-not-zero` scans `app/` and `lib/` for any
+count destructured without its error and then compared as `?? 0`, and pins the
+five sites; all 6 fail with the fixes reverted.
+
+**Recorded, not changed:** `wallet_audit_logs` accepts INSERT from any family
+member, so a member can forge financial audit entries (and pad the AI meter).
+Every writer uses the member's own session (`logWalletAudit`), so closing it
+means moving those writes to the service role first.
+
+## C1-K-22 · MEDIUM · Three audit trails that the people they record could rewrite
+
+Following C1-K-19's forgeable sync history, a scan of every audit- and log-
+shaped table's live policies. Most `*_logs` tables are family content (sleep,
+workouts, habits) where member writes are the feature. Three are genuine
+audit trails that any member could **edit or erase** directly against the API:
+`social_audit_logs` (the trail behind social-access changes; 0034's generic
+loop gave it member UPDATE and DELETE), `vacation_audit_logs` and
+`sync_change_logs` (both member FOR ALL). Measured on the replayed schema: a
+teen rewrote and erased a row in each — 6 breaches.
+
+`0321_an_audit_trail_is_append_only.sql` leaves members SELECT and INSERT and
+removes UPDATE and DELETE. No application code updates or deletes any of them,
+family deletion reaches them by foreign-key cascade (which RLS does not gate),
+and the service role is unaffected. `docs/audit/audit-trail-append-only-check.sql`
+fails 6 ways before and passes after; 45/45 probes.
+
+**Recorded, not changed:** members can still INSERT into these three and into
+`audit_logs` and `wallet_audit_logs`, because the app writes those trails from
+members' own sessions (`logAudit`, `logWalletAudit`). A forged entry cannot
+erase a real one any more, but making the trails service-only means moving
+those writers to the service role first. *Since narrowed:* 0329 and 0330 remove
+member INSERT on `sync_change_logs` and `social_audit_logs`, whose only writers
+are the engine and a SECURITY DEFINER trigger; 0334 (C1-K-35) makes a member's
+`audit_logs` / `wallet_audit_logs` entry name the member as its actor.
+
+## C1-K-23 · HIGH · A social admin could hand out social access, including owner to themselves
+
+Closing AUTHZ-002 (Critical, IN PROGRESS) needed its database half verified.
+The social role matrix exists twice — `lib/social/roles.ts`, which the app
+enforces, and `social_has_permission`, which RLS enforces and whose comment says
+it mirrors the JS. They disagreed on one cell: JS `admin` excludes
+`manage_access`, SQL `admin` was `true`. `manage_access` is precisely what the
+`social_access_permissions` write policies check, so any member a parent had
+made a social `admin` could — directly against the API — rewrite anyone's
+social role, and promote themselves to `owner`. Measured on the replayed
+schema before the fix: the admin held manage_access, promoted themselves (1
+row) and rewrote another member's role (1 row). Parents are unaffected; they
+pass those policies through `is_family_admin`.
+
+`0322_a_social_admin_cannot_manage_access.sql` redefines the function with
+admin = everything except manage_access; nothing else changes.
+`docs/audit/social-permission-matrix-check.sql` also pins AUTHZ-002's database
+half (an explicit owner row grants nothing to an inactive member; read_only
+restricts) and fails 4 ways before 0322, passing after; 46/46 probes.
+`tests/social-permission-matrix-matches-the-database.test.ts` parses the latest
+SQL definition and compares all 9 roles × 11 permissions with
+`ROLE_PERMISSIONS`; without 0322 it fails on `admin` alone, which also shows
+the parser reads the other eight correctly. AUTHZ-002 moves to 🛠 FIXED + PASS
+in the repository.
+
+## C1-K-24 · HIGH · A child could fill their own savings goal, or erase a funded one
+
+Every wallet table is manager-write — `child_wallets`, `wallet_buckets` and
+`wallet_transactions` carry `can_manage_family` policies and restrictive
+guards — except `wallet_goals`, which kept "Members manage wallet_goals" FOR
+ALL. Only `wallet_fund_goal` (0208, SECURITY DEFINER, manager-gated) is meant to
+move `saved_cents`, together with the Save-bucket debit that pays for it; the
+app creates goals only through `createGoalAction`, which checks `isManager`.
+Measured on the replayed schema: a child set their goal's `saved_cents` to the
+target (reached, no money moved), deleted a funded goal (the goal row is the
+only record of what a parent set aside after the Save debit), and created a
+pre-filled goal.
+
+`0323_a_savings_goal_is_a_manager_write.sql`: members read, managers write;
+the RPC is unaffected. `docs/audit/wallet-goal-manager-write-check.sql` fails
+before and passes after (child reads; parent edits and deletes); 47/47 probes;
+26 wallet test files pass.
+
+## C1-K-25 · HIGH · A child could redirect a sibling's gift money before a parent approved it
+
+A sweep of the ~290 tables that grant writes on membership alone, narrowed to
+those that hold money, authority or safety state and carry no guarding
+trigger. (Chores, redemptions and invest orders already have decision
+triggers from other sessions.) Three route money from relatives into a
+child's wallet and were member FOR ALL:
+
+- `gift_payments` — pending gifts from a public gift link. `wallet_approve_gift`
+  (SECURITY DEFINER, manager-gated) credits the row's `child_wallet_id` with
+  its `amount_cents` as stored. Measured on the replayed schema: sibling A
+  repointed B's pending gift from Grandma at A's own wallet, raised its amount
+  a hundredfold, and filed a pledge that never happened — each of which a
+  parent's approval would turn into real ledger money.
+- `pay_handles` — public Pay-IDs bound to a child's wallet: A repointed B's.
+- `gift_links` — public payment tokens: A created one.
+
+`0324_gift_money_routes_are_manager_writes.sql`: members read, managers
+write. Every application writer is the service role (public gift action and
+pages) or an `isManager`-gated action, and approval is the RPC.
+`docs/audit/gift-money-route-check.sql` reproduces all five before and passes
+after, with a control that the parent's approval of the untouched gift credits
+the intended child; 48/48 probes.
+
+## C1-K-26 · MEDIUM · A child could switch off their own screen-time limit, from the app
+
+Same sweep. `screen_time_limits` holds each member's daily allowance; the table
+was member FOR ALL and the screen-time module showed "set daily limit" to every
+member, so a child could raise their own limit to 24 hours from the app itself
+— no API trick needed. Measured on the replayed schema: a child raised,
+deleted and re-created their own limit.
+
+`0325_a_screen_time_limit_is_set_by_a_manager.sql`: members read, managers
+write; the module renders the control for managers only. Self-logged usage
+(`screen_time_entries`) is unchanged — logging your own time is the feature.
+`docs/audit/screen-time-limit-check.sql` fails before and passes after (child
+reads; parent sets); 49/49 probes. `a-child-cannot-set-their-own-screen-time-limit`
+pins the UI gate (fails with the module reverted).
+
+## C1-K-27 · HIGH · Any member could fake another member's location or safety check-in
+
+Same sweep. `member_locations` (live position and sharing flag),
+`location_events` (the arrived/left timeline behind "Kid arrived at school")
+and `safety_check_ins` ("I'm safe" / "I need help") let any member write any
+member's rows. Measured on the replayed schema: a teen moved a sibling's live
+location, switched off the sibling's sharing, wrote the sibling's arrival,
+checked the sibling in as safe, and deleted the sibling's "need help".
+
+Every application writer reports the caller's own member row (the locator
+actions, the check-in view), so
+`0326_a_members_location_is_theirs_to_report.sql` scopes INSERT, UPDATE and
+DELETE to "your own member row (`is_self_member`), or a family manager".
+Reads are unchanged: who may see whose location is the open owner decision in
+the 0297 read-scope list; who may write it is not a product question.
+`docs/audit/member-location-owner-check.sql` fails 5 ways before and passes
+after, with controls that a member still reports their own location and
+check-in and a parent can still manage a child's row; 50/50 probes.
+
+## C1-K-28 · HIGH · Forgeable affiliate commissions, and network consent a child could give
+
+Same sweep.
+
+1. **Affiliate commissions a family member could file.** `affiliate_referrals`
+   is one row per referral an outside affiliate earns commission on; the admin
+   affiliates page sums `commission_cents` over `converted` rows and "mark
+   paid" settles them — real money to a partner. The table carried member
+   INSERT, UPDATE and DELETE policies that nothing in the application uses
+   (referrals are recorded and settled by the service role). Measured on the
+   replayed schema: a family member converted a pending referral while raising
+   its commission a thousandfold, and filed a new converted referral against
+   an affiliate. Member writes are dropped; member SELECT is kept.
+2. **Network consent a child could give.** `network_consent` is the family's
+   opt-in to contributing anonymised data to cohort insights. Member-writable,
+   and the intelligence module showed the toggles to everyone: a child opted
+   the family in. A minor's toggle is not consent. Writes need
+   `can_manage_family`; the module shows the setting read-only to other
+   members.
+
+`0327_consent_and_commission_are_not_a_members_write.sql`;
+`docs/audit/consent-and-commission-check.sql` passes after (51/51 probes),
+with controls that a parent can opt in and a child can still read the setting;
+the pre-fix behaviour was measured directly under the old policies.
+`network-consent-is-a-managers-decision` pins the UI gate (fails with the
+module reverted).
+
+## C1-K-29 · HIGH · Checkout emails to any address, a forgeable terms acceptance, self-awarded rewards, and a sitter's phone a child could change
+
+Same sweep. Every application writer of these six tables is the service role
+or a manager-gated server action, but RLS let any family member write them.
+Measured on the replayed schema before the fix, as a child: 9 breaches.
+
+1. **Bubaly's checkout email, sent to anyone.** The abandoned-checkout cron
+   fires the `checkout_abandoned` automation for every `checkout_sessions` row
+   left `pending` for an hour, emailing its `email` and addressing it to its
+   `name`. The table had member INSERT/UPDATE/DELETE policies that nothing uses
+   (the billing routes and the Stripe webhook write it with the service role),
+   so any member could file pending rows with any address and any text as the
+   name, and Bubaly would send its nudge there. Member writes are dropped;
+   member SELECT is kept.
+2. **A wallet-terms acceptance a child could forge or erase.**
+   `compliance_disclosures` is the record `activateFamilyWalletAction` writes
+   as an "immutable audit" of the parent accepting the wallet terms. It was
+   member FOR ALL: a child filed an acceptance with `accepted_by` set to the
+   parent, and deleted the real one. Now a manager inserts their own
+   acceptance (`accepted_by = auth.uid()`), and nobody rewrites or deletes one.
+3. **Self-awarded chore rewards.** `kid_progress` (XP, level, streak) and
+   `member_badges` are written on approval by the service role (auto-approve)
+   or a manager (`approveSubmissionAction`). A child raised their own XP to
+   999,999 and awarded themselves `streak_7`. Writes need `can_manage_family`.
+4. **A sitter's phone number a child could change.** `babysitter_profiles`
+   (name, phone, email, rate) and `babysitter_payments` (receipts) are written
+   only by parent-only wallet actions, but a child changed the sitter's phone
+   and deleted a receipt. Writes need `can_manage_family`.
+
+`0328_checkout_rewards_and_babysitters_are_not_a_childs_write.sql`;
+`docs/audit/checkout-rewards-babysitter-check.sql` fails 9 ways before and
+passes after (52/52 probes), with controls that the child still reads their
+progress and the sitter, and a parent still awards a badge, updates the
+sitter, and records their own acceptance. Chore-reward, wallet-action and
+billing unit suites pass unchanged (22/22).
+
+Left open from this batch, deliberately: `medication_doses` is still any
+member's write, because the medications module lets every member log any
+member's dose by design (a teen logging a sibling's dose while babysitting).
+The risk is real (a deleted "taken" row invites a second dose, and
+`logged_by` is not pinned to the caller), but narrowing it changes a product
+flow, so it is an owner decision, not a fix.
+
+## C1-K-30 · HIGH · Any member could make the sync engine delete or rewrite a parent's Google Calendar events
+
+The two-way sync engine (`lib/sync/engine/generic.ts`, `google.ts`) runs with
+the service role and acts with the connected account owner's OAuth token. It
+reads its instructions from rows: a deleted `internal` event that has a mapping
+becomes `adapter.deleteEvent(mapping.external_id)`; a changed one becomes
+`patchEvent`; an unmapped one becomes `insertEvent`; reminders the same; and any
+`sync_calendars` row with `feed_enabled` is served publicly, with no login, at
+`/api/sync/feeds/<feed_token>`.
+
+Every one of the engine's 18 tables still carried the original
+`family member access` FOR ALL policy (or member INSERT). So any family
+member, a child included, could insert a deleted internal event on a parent's
+synced calendar together with a mapping naming an event on the parent's Google
+Calendar, and the next sync deleted that event with the parent's token. The
+same approach patched a parent's event with the child's own content, or wrote
+new events into it. A member could also switch on a public feed for any family
+calendar, with a token of their choosing. No application path does that (no
+code writes `feed_enabled`). Measured on the replayed schema: 7 breaches.
+
+Writers, from the code: the engine and the sync API routes (service role) for
+all of them, plus `lib/services/onboarding-calendar`, which writes
+`sync_external_mappings` in the account owner's own session for their own
+account. `0329_the_sync_engines_tables_are_not_a_members_write.sql` makes the
+engine tables member-read-only and lets a mapping be written only for an
+account the caller owns (`sync_accounts.user_id = auth.uid()`, same family,
+never in another user's name). This closes the "other sync_* tables FOR ALL"
+follow-up recorded under C1-K-19. `docs/audit/sync-engine-write-check.sql`
+fails 7 ways before and passes after (53/53 probes), with controls that the
+child still reads the calendar and the owner still writes and updates
+mappings on their own account; onboarding-calendar, sync-policy and briefing
+suites pass (207/207).
+
+## C1-K-31 · HIGH · The social permission matrix was enforced only by the app
+
+`lib/social/roles.ts` said so itself: the matrix is "for most permissions, the
+ONLY enforcement". The social tables kept the plain `is_family_member` RLS from
+0034, and `social_has_permission` guarded one policy
+(`social_publish_jobs_insert`). A child's default social role is `read_only`.
+Measured on the replayed schema, straight against the API, that child
+disconnected the family's connected social account, switched off
+`require_approval`, rewrote and deleted a post, created a post, and erased usage
+records; a teen (`content_creator`) also switched off approval. 7 breaches.
+
+`0330_social_writes_need_the_social_permission.sql` gives each write the
+permission its server action already checks. `connect_accounts` covers
+accounts, `manage_settings` settings, `upload_media` the media library and
+`generate_ai` AI generations. Inserting or deleting posts, variants, targets,
+assets, schedules and calendar items needs `create_drafts`, `publish_posts` or
+`schedule_posts`, matching `createPostAction`'s per-intent check and rollback;
+updating them needs publish or schedule, because `runPublishNow` and the
+schedule path are the only updaters. Publish jobs and results need publish or
+schedule. Usage events are insert-only; comments can only be resolved
+(`view_feed`). Provider and service data (analytics, feed items, messages,
+provider errors) and `social_audit_logs` get no member writes; the audit log's
+only writer is the SECURITY DEFINER `social_write_audit` trigger, so members can
+no longer forge entries either. `docs/audit/audit-trail-append-only-check.sql`
+now asserts that. Reads, the service-role paths, the family news reader and
+`social_access_permissions` are unchanged.
+
+`docs/audit/social-write-permission-check.sql` passes after (54/54 probes),
+with controls that a content creator can still draft and a parent (`admin`)
+can still change settings and move a post to publishing. The 495 social unit
+tests pass unchanged. Still open, recorded rather than changed: a content
+creator can still insert a post with any `approval_status`, and approval has no
+server action yet (`approve_posts` exists only in the matrix). That belongs
+with the approval flow when it is built.
+
+## C1-K-32 · MEDIUM · A child could queue outbound calls and unlock their own dashboard
+
+Same sweep, tables whose every application writer is manager-gated:
+
+- `concierge_calls`: every action is manager-only, and the request action's
+  own comment said "RLS is only family-scoped (any member), so the server
+  action is the authorization gate". Directly, a child queued a call to any
+  number with any goal and redirected a queued call. Nothing dials yet (the
+  place cron parks due calls as `action_needed`), so this was latent, but it
+  becomes live, with telephony costs, the day a voice provider is wired.
+- `family_dashboard_settings`: the switches that decide whether a child may
+  customise their dashboard at all. A child turned
+  `allow_child_customization` on and `lock_to_family_default` off.
+- `dashboard_layouts`: a child overwrote the family default layout and deleted
+  a sibling's layout.
+
+`0331_concierge_calls_and_the_family_dashboard_are_manager_writes.sql`: call
+and settings writes need `can_manage_family`; a layout is writable by its own
+user (`scope = 'user'`, `user_id = auth.uid()`) or a manager.
+`docs/audit/concierge-and-dashboard-check.sql` fails 5 ways before and passes
+after (55/55), with controls that a child still saves their own layout and a
+parent still requests calls and changes settings. Dashboard and concierge
+suites pass (198/198).
+
+Checked and left as designed: `wallet_cards`, `wallet_passes` and
+`wallet_rewards` are added by any member through un-gated wallet-hub actions
+by design (loyalty cards, passes); `concierge_plan_actions` is written when any
+member applies a plan, subject to the trust evaluation.
+
+## C1-K-33 · MEDIUM · Marketplace reports filed in someone else's name, or pre-dismissed
+
+`marketplace_reports` feeds the platform Trust & Safety queue, and a report's
+verdict is stored in `status`, `resolution`, `reviewed_by` and `reviewed_at`,
+which the super-admin writes with the service role. The member INSERT policy
+checked only family membership. A member filed a report naming a sibling as
+`reporter_member`, and filed one already `dismissed` with a resolution, so it
+never reached the open queue. `reportListingAction` writes none of the verdict
+columns and names the caller's own member row.
+`0332_a_marketplace_report_is_filed_open_by_its_reporter.sql` makes INSERT
+require exactly that: `is_self_member(reporter_member)`, `status = 'open'`, and
+no verdict columns set. `docs/audit/marketplace-report-check.sql` fails 2 ways
+before and passes after (56/56), with a control that a member still files their
+own report. Marketplace and report suites pass (312/312).
+
+Checked and left: `family_onboarding` (the questionnaire, used only for
+marketing segments) and `onboarding_imports` (the time-to-first-value metric)
+are low impact.
+
+## C1-K-34 · MEDIUM · Fake marketplace ratings: reviews without an exchange, and orders a member could file
+
+Seller ratings on the marketplace (the creator pages show them) come from
+`marketplace_reviews`, which `leaveReviewAction` writes only for a completed
+order the caller was party to, about the other party. The INSERT policy
+checked only `reviewer_member = self`. Any member could rate any member, on an
+order they were not part of or one not yet completed, and any family member
+could edit or delete anyone's review. Separately, every order is created by a
+SECURITY DEFINER function (`marketplace_buy_now`, `_accept_offer`,
+`_close_auction`, `_negotiation_respond`), but member INSERT and DELETE policies
+were still present: a member could file a "completed" order between any two
+members, which is also a way to unlock reviews, or delete a real order.
+Measured: 5 breaches.
+
+`0333_a_marketplace_review_needs_a_completed_exchange.sql` drops the unused
+order INSERT and DELETE (the party-scoped lifecycle UPDATE stays). Review
+INSERT now requires a completed order in the family with the reviewer and
+reviewee on the matching sides, and the unused review UPDATE and DELETE are
+dropped. `docs/audit/marketplace-review-check.sql` fails 5 ways before and
+passes after (57/57), with a control that the buyer still reviews their own
+completed exchange. Marketplace suites pass (580/580).
+
+## C1-K-35 · MEDIUM · A child could write "the parent approved this" into the audit trail
+
+`audit_logs` and `wallet_audit_logs` are append-only for members (0321), but
+their INSERT policies checked only family membership, so a member could append
+an entry naming any actor, or none. Measured: a child wrote a wallet audit
+entry reading "Parent approved $200 to Kid" as the parent, a general audit
+entry as the parent, and an unattributed one. Every writer that runs in a
+member's session (`logAudit` from 16 call sites, `logWalletAudit`, the AI-run
+controls, the household activity trail) records the caller's own user id. The
+writers that record no actor or someone else (the allowance cron, card
+issuing, the site-admin tools) run as the service role.
+`0334_an_audit_entry_is_written_as_yourself.sql` makes a member's INSERT name
+the caller (`actor_id` / `actor_user_id = auth.uid()`).
+`docs/audit/audit-actor-check.sql` fails 3 ways before and passes after
+(58/58), with a control that the child's own entries still land. This narrows
+the C1-K-22 follow-up. The remaining step, making the trails fully
+service-written, is unchanged.
+
+Also swept this pass and left as designed: `family_app_installs` (the app-store
+list; nothing consumes an install), `family_connections` (connection labels;
+the module lets any member disconnect), `smart_devices` (a manual inventory, no
+device control), `calendar_feeds` (the feeds page lets any member subscribe
+the family to an ICS URL; the fetcher's SSRF guard is C1-K's NAT64 fix).
+
+## C1-K-36 · LOW · Ballot stuffing in family polls, meal votes and the watchlist
+
+`family_poll_votes`, `meal_vote_ballots` and `watchlist_votes` let any member
+write any member's vote. Measured: a teen cast a poll vote as a sibling,
+flipped the sibling's watchlist vote, and deleted the sibling's poll vote.
+Every writer (the voting, meals and watchlist modules and the recipe-vote
+action) writes the caller's own member row.
+`0335_a_vote_is_cast_by_its_voter.sql` requires `is_self_member(member_id)` for
+writes, and also lets a manager remove a vote. `docs/audit/vote-owner-check.sql`
+fails 3 ways before and passes after (59/59), with controls that a member
+votes as themselves and a parent can remove a vote. Vote, meal and watchlist
+suites pass (261/261).
+
+## C1-K-37 · LOW · Read receipts written for someone else
+
+`announcement_reads` (the announcements module's "read by") was member FOR ALL,
+while its only writer marks the caller's own member row. Measured: a teen
+marked a sibling as having read an announcement, and erased the sibling's
+receipt. `0336_a_read_receipt_is_the_readers.sql` requires
+`is_self_member(member_id)`. `docs/audit/read-receipt-check.sql` fails 2 ways
+before and passes after (60/60).
+
+Checked this pass and left:
+- `family_announcements`: the module lets any member post, pin and delete, by
+  design.
+- `approval_requests`: already hardened. INSERT is pinned to a pending row with
+  no decision fields, and decisions are manager-only.
+- `parent_approvals`: executes by reference and amount, and decisions are
+  manager-only.
+- `chore_disputes`: resolving a dispute mints nothing; approval is
+  trigger-guarded.
+- Chores, submissions, redemptions and invest orders: price, decision and
+  economics triggers are confirmed present.
+
+## C1-K-38 · MEDIUM · A forged "Autopilot suggestion" could win the AI a standing permission
+
+When the family keeps approving the same AI action, Autopilot offers to trust
+Bubaly with it: a `policy` suggestion whose payload names the domain,
+capability and tool, plus evidence text such as "Approved 4 times since 12 Aug,
+never rejected". A manager's accept (`acceptPolicySuggestionAction`) wrote an
+`allow` trust policy for the AI straight from that payload. The table is
+family-writable, and has to be: the on-demand scan runs in the caller's
+session, and non-managers may run it. So any member could file a "suggestion"
+proposing, say, `finances / wallet.transfer` with invented evidence, and a
+parent accepting what looked like Bubaly's own recommendation would hand the
+AI that permission. Tightening RLS would have broken scans run by non-managers
+(the scan throws on a refused insert), so the fix is at the point of trust.
+Accept now re-derives the family's current candidates from the real approval
+and tool-call history (`loadPolicyCandidates`). It refuses a proposal that
+history does not support, and writes the policy from the re-derived candidate,
+evidence and counts included, never from the row. A proposal the family
+already holds is still just closed, with nothing written.
+`tests/autopilot-persistence-boundaries.test.ts` gains two cases: a forged
+suggestion is refused, and the written policy uses the re-derived evidence,
+not the row's. Both fail with the action reverted. 15/15 pass, and the
+autopilot, trust and policy suites pass (481).
+
+## C1-K-39 · HIGH · A child could approve a stranger to pick up the kids
+
+`family_emergency_contacts` holds who to call in an emergency and who is
+"Allowed to pick up kids" (`can_pickup`, shown as "Pickup approved").
+`family_emergency_plans` holds where to meet and what to do. The generic family
+actions treat both as manager-only (`lib/family/actions.ts` `MANAGER_ONLY`), but
+the tables were member FOR ALL. Measured: a child added a new contact approved
+for pickup, changed a grandparent's phone number, and rewrote the fire meeting
+place. `0337_the_emergency_plan_is_a_managers_write.sql` makes writes need
+`can_manage_family`. `docs/audit/emergency-plan-check.sql` fails 3 ways before
+and passes after (61/61), with controls that the child still reads both and a
+parent still updates a contact.
+
+Also found and left: `family_digital_twin_profiles` is in the same
+`MANAGER_ONLY` set but is also written by the Autopilot scan, which runs in
+the caller's session and which non-managers may run. Tightening it needs that
+writer moved first, so it is recorded rather than changed.
+
+## C1-K-40 · HIGH · "Private, just for you" journals that every family member could read and rewrite
+
+The journal module promises "A private space to reflect, process, and grow —
+just for you". Every entry is created with `is_private = true` (the column
+default), and the app only ever reads or writes the signed-in member's own
+entries (the module and the AI journal-prompt route). But 0087 gave the table
+the family-wide FOR ALL policy "for consistency". Measured: a sibling read
+another teen's journal, rewrote an entry, deleted one, and wrote a new entry
+in their name. The parent could read the private entries too.
+`0338_a_private_journal_is_private.sql` makes writes the owner's alone.
+Reads belong to the owner, plus a family manager for an entry explicitly
+marked not private. That is the owner-or-manager design
+`lib/trust/sharing-presets.ts` records for M23, bounded by the flag each entry
+already carries. `docs/audit/private-journal-check.sql` fails before and passes
+after (62/62), with controls that the owner reads and edits their own entries
+and a parent sees an entry marked not private. Journal suites pass (28/28). This
+applies the "own row only" triage, which the 0297 read-scope list suggested,
+to the one table where the product copy already promises it.
+
+## C1-K-41 · MEDIUM · A teen could erase their own speeding trip from the driving log
+
+`driving_trips` is the teen-driving safety log a parent reviews: max speed,
+hard brakes, rapid acceleration, seconds on the phone, and a score. It was
+member FOR ALL and the driving-safety view offered delete to everyone, so a
+teen could erase, from the app itself, the trip where they hit 90 mph with
+four minutes on the phone. The view also reported "Deleted" for a delete that
+removed nothing. `0339_a_driving_record_is_not_the_drivers_to_erase.sql` keeps
+logging open to any member, because trips are entered by hand for any driver,
+and makes editing and deleting a manager's. The view shows delete only to
+managers and reports a zero-row delete as not saved.
+`docs/audit/driving-record-check.sql` fails before and passes after (63/63),
+with controls that a teen still logs a trip and a parent deletes one.
+`tests/a-driver-cannot-erase-their-own-trip.test.ts` pins the UI gate (3/3; all
+three fail with the view reverted).
+
+## C1-K-42 · MEDIUM · A child could keep their screen-time limit and delete the hours that broke it
+
+0325 made the daily screen-time limit a manager's. The usage it is measured
+against, `screen_time_entries`, stayed member FOR ALL, and the module offered
+delete to everyone. Measured: a child edited a 5-hour entry down to 20 minutes
+and deleted it. `0340_a_screen_time_log_is_not_the_childs_to_erase.sql` keeps
+logging open, and makes editing and deleting a logged entry a manager's. The
+module shows delete only to managers and reports a zero-row delete as not
+saved. `docs/audit/screen-time-log-check.sql` fails 2 ways before and passes
+after (64/64), with controls that a child still logs time and a parent
+deletes an entry. `tests/a-child-cannot-set-their-own-screen-time-limit.test.ts`
+gains the delete-gate case (screen-time suites 27/27).
+
+## C1-K-43 · HIGH · Family chat messages could be posted as someone else, or rewritten after they were read
+
+`family_messages` had one policy: FOR ALL to anyone in the family, with no WITH
+CHECK. `sender_id` and `sender_name` are ordinary columns. Measured: a teen
+posted "You can skip school tomorrow" as Mom, rewrote Mom's "Home by 10." to
+"Home by 2am.", and soft-deleted and hard-deleted her message. Every writer
+sends as the caller (the messages module, `lib/services/messages`), and only
+the sender deletes (`.eq('sender_id', userId)`). Other members legitimately
+update someone else's message in three ways: reactions, read receipts and
+pinning. `0341_a_message_is_its_senders.sql`:
+- INSERT requires `sender_id = auth.uid()`.
+- Hard DELETE is the sender's.
+- A BEFORE UPDATE trigger (`family_message_edit_guard`) lets anyone other than
+  the sender change only `reactions`, `read_by` and `is_pinned`. Nobody may
+  change a message's sender, family or conversation, and the service role is
+  unaffected.
+
+`docs/audit/message-sender-check.sql` fails 4 ways before and passes after
+(65/65), with controls that a member still reacts to, marks read and pins
+someone's message, and sends and deletes their own. Messaging suites pass
+(48/48).
+
+**Owner decision found alongside, not changed:** direct messages are not
+private. A "Direct message" conversation (`family_conversations.kind =
+'direct'`, with `participant_ids`) is listed to every family member by the
+messages module itself, and `family_messages` SELECT is family-wide. A child
+sees and reads their parents' DM thread. Whether DMs should be
+participant-only, or visible to managers for oversight, is a product call. It
+belongs with the 0297 read-scope list, and it is the most visible entry on
+it.
+
+## C1-K-44 · HIGH · A child could delete the Family Chat, and every message in it
+
+`family_conversations` carried the same FOR ALL-to-the-family policy as its
+messages. Deleting a conversation cascades to every message in it. Measured: a
+child deleted the parent-created Family Chat, and its messages went with it.
+The child also created a conversation in the parent's name. The application
+only ever INSERTs conversations, naming the caller as `created_by`, and
+`last_message_at` is kept by a SECURITY DEFINER trigger.
+`0342_a_conversation_is_not_anyones_to_wipe.sql` makes INSERT name the caller,
+and UPDATE and DELETE the creator's or a manager's.
+`docs/audit/conversation-owner-check.sql` fails 3 ways before and passes after
+(66/66), with controls that a child still starts their own conversation and
+the Family Chat keeps its messages.
+
+## C1-K-45 · MEDIUM · Anyone with the anon key could list every public bucket, including feedback screenshots
+
+`avatars`, `feedback-attachments` and `marketplace-photos` are public buckets.
+Their objects are served at `/storage/v1/object/public/…` without consulting
+RLS. Each also carried a policy named "… are publicly readable":
+`FOR SELECT USING (bucket_id = '…')` to PUBLIC. RLS SELECT on `storage.objects`
+is what the storage LIST endpoint runs, so that policy let anyone list the
+whole bucket, every user id and every object name, using the anon key that
+ships in every page. Pass N made those names unguessable because, for a public
+bucket, the name is the boundary; a listable bucket has no boundary.
+`feedback-attachments` holds screenshots of the product (F-E05).
+
+Measured: the anon role, and another signed-in user, each listed all three
+buckets' objects in someone else's folder. Public URLs do not need a SELECT
+policy, and everything the app does through the API is in the caller's own
+folder (upload, avatar upsert, remove).
+`0343_a_public_bucket_is_not_a_public_listing.sql` replaces the three public
+SELECT policies with "your own folder". `docs/audit/public-bucket-listing-check.sql`
+fails 2 ways before and passes after (67/67), with a control that the owner
+still sees their own objects. Storage and marketplace-photo suites pass
+(800/800). This narrows F-E05; the bucket itself staying public is still that
+item's owner decision.
+
+Swept this pass and left as designed: `family_albums`, `family_photos`,
+`family_recipes`, `family_contacts`, `family_reminders`, `family_tree_nodes`,
+`todo_lists` and `todo_items`. These are shared family content whose older
+subquery-style policies my earlier query had not matched, and which are
+edited collaboratively by design.
+
+## Owner decision · an adult can make themselves the family's Admin, or demote the parents
+
+`family_members` writes need `can_manage_family`, which is true for `parent`
+and `adult`. The family module offers every role, including `parent` (shown
+as "Admin"), to any manager. So an adult, for example a grandparent or nanny
+added as `adult` rather than `caregiver`, can promote themselves to
+parent/Admin. That unlocks everything gated on `is_family_admin`, such as
+social access management. They can also demote or deactivate the parents.
+`trg_family_keeps_a_manager` only guarantees that *a* manager remains, and the
+adult is one. The UI and the database agree on this, so it is not a bypass. The
+question is whether "adult" is meant to be a co-owner. If not, the fix is small:
+role changes that touch `parent` need `is_family_admin`, in the fm_update
+policy (a trigger comparing OLD/NEW role) and in the module's role options.
+Not changed without that answer.
+
+## C1-K-46 · LOW · A sibling could make someone's marketplace offer vanish
+
+`marketplace_offers` INSERT and UPDATE were already the offerer's, or the
+seller's for a decision, but DELETE was open to any family member. Nothing in
+the application deletes an offer: offers are withdrawn or declined by UPDATE.
+`0344_an_offer_is_withdrawn_not_deleted.sql` drops the member DELETE policy.
+`docs/audit/marketplace-offer-check.sql` fails before and passes after (68/68).
+
+## C1-K-47 · LOW · Listing questions asked as a sibling, or answered on the seller's behalf
+
+`marketplace_questions` let any family member write any row. Measured: a child
+asked "Is it stolen?" as a sibling, answered a buyer's question as the seller,
+and rewrote the buyer's question. The listing-questions component asks as the
+caller and shows the answer form only to the listing's owner.
+`0345_a_listing_question_is_asked_and_answered_in_your_own_name.sql`:
+- INSERT names the caller as asker.
+- UPDATE is the listing owner's, answering as themselves.
+- DELETE is the asker's, the owner's or a manager's.
+
+`docs/audit/listing-question-check.sql` fails 3 ways before and passes after
+(69/69). Marketplace suites pass (282/282).
+
+## C1-K-48 · MEDIUM · Anyone in the family could confirm, cancel or re-arrange someone else's marketplace pickup
+
+The hand-off actions (`app/(app)/marketplace/handoff/actions.ts`) decided the
+caller's side with `order.seller_member === me ? 'seller' : 'buyer'`, so every
+family member who was not the seller counted as the buyer. Any sibling could
+propose a pickup for someone else's order, confirm the seller's proposal
+(which mints the hand-off code and drops the pickup on the family calendar),
+or cancel it. `marketplace_handoffs` RLS was family-wide, so the same was
+possible directly. Measured: a non-party confirmed a pickup and set its code,
+cancelled it, and proposed another. Completion was already safe: it runs
+through the SECURITY DEFINER `marketplace_complete_handoff`, which checks the
+party.
+
+Fix, at both layers:
+- The actions resolve the caller to `buyer`, `seller` or nobody, and refuse
+  nobody at propose, confirm and cancel.
+- `0346_a_pickup_is_arranged_by_the_two_parties.sql` adds
+  `is_marketplace_order_party(order_id)` and requires it for handoff writes.
+
+`tests/only-the-two-parties-arrange-a-pickup.test.ts` (2/2; the refusal case
+fails with the actions reverted) and `docs/audit/marketplace-handoff-check.sql`
+(3 breaches before, 70/70 after) pin it. Marketplace suites pass (284/284).
+
+## C1-K-49 · MEDIUM · A sibling could submit proof on someone else's chore
+
+`submitProofAction` loaded the assignment by id (same family through RLS) but
+never compared its member to the caller. A sibling could therefore submit
+proof on another child's chore. That runs the AI verification and can
+auto-approve the chore, which pays its reward, or get it rejected with junk
+proof. It also uploads into the other child's proof folder. The action now
+requires the caller to be the assignee or a manager (a parent submitting on a
+young child's behalf). `tests/a-sibling-cannot-submit-your-chore-proof.test.ts`
+pins it: the sibling is refused before anything is written, and the test fails
+with the action reverted. Chore and mission suites pass (186/186).
+
+## C1-K-50 · MEDIUM · A paid chore could be disputed back open, by anyone in the family
+
+`disputeSubmissionAction` checked neither who was disputing nor what. Any
+family member could dispute any submission. It also accepted an *approved*
+submission, which it reset to `disputed` and whose assignment it put back to
+`submitted`, after the reward had been paid. No component calls the action
+today, but it is exported from a `'use server'` module whose other actions are
+used, so it cannot be assumed unreachable. It now requires the submitter or a
+manager, and only a `rejected` or `needs_improvement` verdict.
+`tests/a-sibling-cannot-submit-your-chore-proof.test.ts` gains both cases;
+both fail with the action reverted (3/3 now).
+
+## Swept clean · the API routes this file never named
+
+The C1 brief listed routes the audit had never named; 13 remained on this
+branch. `sync/[provider]/*` and `sync/feeds/[token]` are C1-K-19/20. The rest:
+
+- `ai/runs/[id]` (+ `answer`, `cancel`, `pause`, `resume`, `rerun`): the
+  detail read goes through the caller's client and returns the page's `RunView`
+  (another family's run is "not found", never "forbidden"); `answer`, `resume`
+  and `rerun` restart work and carry the same concierge access gate as intake;
+  `rerun` is manager-only in `controls.ts`.
+- `ai/wallet/child/[childId]`: family-scoped wallet lookup; reads are
+  family-wide by RLS design. Its fail-open reads are C1-K-21.
+- `cron/library-feeds`: cron-authorized; batches the stalest 40 feeds; a
+  failing feed advances `last_fetched_at`, so broken feeds cannot starve
+  healthy ones; feeds are fetched through `public-document-fetch`, whose
+  address policy allows only global unicast (so NAT64 is excluded) and pins the
+  connection to the validated address (DNS rebinding closed). One stale comment
+  contradicting the status code was removed.
+
+## The master ledger's open list, worked to the end
+
+The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
+*integration verification pending*, not *unfixed*. Filtering on each finding's
+**original** status leaves seven that were genuinely open. Their state now:
+
+| Finding | State | Why |
+| --- | --- | --- |
+| **F-C07** 19 undocumented env vars | ✅ closed this pass | all documented; a guard fails on any new undocumented `process.env.X` |
+| **F-C09** credentials fail at first use | ✅ mitigated (no change) | the boot guard it asks for already existed (`1fa0ac5b`) and is tested; *not* hard-failing is a stated, tested decision |
+| **F-C10** mobile has no tests | ◐ mostly mitigated | 16 root test files cover it; the one runtime advisory (`expo-router`) needs a device build to upgrade safely |
+| **F-K05** member-writable medical tables | owner decision | an asymmetry the UI and database agree on, not a lie; needs a product call and a held migration. C1-K-01's probe measured the same boundary independently |
+| **F-C08** forward release pinned in the past | operator | code half already closed upstream; the release needs production credentials |
+| **F-001** production ledger at `0001–0003` | operator | credentialed repair; agents must not apply migrations |
+| **F19** AI endpoints unmetered | pricing decision | not a code defect |
+
+Nothing on that list is now closable from a sandbox without either
+credentials, a device, or a decision that belongs to the owner.
+
+## Swept clean · no service-client write takes its family from the request
+
+52 service-role writes set `family_id`. With RLS bypassed, one sourced from
+the request body would be a cross-family write. Traced individually, every one
+derives from the session (`ctx.active.familyId`), from a row already fetched
+under a family scope, or — for the Twilio screening callback — from a
+server-owned session row keyed by an id our server issued, which the webhook
+signature covers because it signs the full URL including the query string.
+`billing/change-plan`'s `preferredFamilyId` is matched against the caller's own
+memberships, so it cannot name a foreign household.
+
+## Converged with another session on C1-K-01/03
+
+While this pass was running, another session found the **same class
+independently** and landed `wroteNoRows()` in `lib/supabase/errors.ts` with a
+test of its own. Its header carries the measurement that explains the whole
+defect, and states it better than this document did:
+
+> `using` (UPDATE/DELETE) **filters** silently to zero rows; `with check`
+> (INSERT) **raises**. Measured on Postgres 16 against the policy shape 0309
+> installs, as a non-manager.
+
+That is why only the update/delete paths needed a row count — and it is
+independent corroboration of `health-write-gate-check.sql`, reached from the
+opposite direction.
+
+The merge conflicted in `rewards-module`. Resolved **towards theirs**: one
+shared helper beats two spellings, and `errors.thatChangeWasNotSaved` is the
+more accurate message — zero rows can also mean the row was deleted
+concurrently, not only that permission was refused. The three modules only this
+pass had fixed (`medical-records`, `family-module`, `settings-module`) were
+migrated to the same helper and key, and both sessions' guards now assert the
+**property** rather than either spelling.
+
+## Verification
+
+`tsc` clean · `next lint` 0 errors · **14,056 tests / 1,232 files** ·
+**40/40 probes** (330 migrations replayed, 0 failed).
+
+Every fix calibrated by reverting it: removing the row checks fails 2 of the 8
+assertions in `a-refused-health-write-does-not-say-saved` and the per-table
+assertion in `manager-gated-writes-report-refusals`; removing one rejection
+handler fails 2 of 5 in `a-voice-log-failure-does-not-lose-the-capture`;
+removing one catch fails 2 of 16 in
+`a-thrown-action-does-not-leave-a-button-spinning`. Controls hold in both
+directions — the pre-existing error branches still fire, and Undo still appears
+on success.
+
+## Swept clean, mechanically, and worth recording as such
+
+- **Every write on a manager-gated table now carries a row check.** A sweep of
+  all 33 gated tables across `components/` *and* `app/` returns **zero**
+  remaining `update`/`delete`/`upsert` without `.select('id')`. Closed by the
+  two sessions combined.
+- **Optimistic UI that never reconciles: not found.** 109 raw candidates
+  narrowed to 26, and every one is either a busy flag under another name
+  (`setDismissing`, `setPlanning`, `setMarkingAll`) or a setter that runs
+  *after* the write succeeded (`setReviewedCount(0)`, `setNote('')`). No module
+  shows a change the database refused.
+- **Writes whose error is captured then ignored: none.** The three the detector
+  flagged all check, just further down than a 400-character window reached.
+- **Section C's priority list is fully covered**: `locator-module`,
+  `health-visits`, `immunizations`, `trust-sharing-section` and
+  `trust-activity-tab` clean; `medical-records`, `medications`, `paperwork` and
+  `voice` fixed above.
+
+### Recorded, not fixed
+
+`career-module.setPrimary` clears `is_primary` on every other resume and *then*
+sets it on the target. If the second update fails, the family is left with no
+primary resume at all. The user is told it failed, and making it atomic needs a
+transaction or an RPC rather than two client statements — so it is written down
+here rather than half-fixed.
+
+### Also swept clean
+
+- Every `useRealtimeQuery` call in every component binds its `error`, and none
+  binds one it never uses. The "empty list shown as nothing-here" class does not
+  exist in this codebase.
+- `trust-activity-tab` already guards it explicitly ("A failed read renders the
+  retryable error state, never an empty ledger"); `trust-sharing-section` and
+  `paperwork-module`'s AI draft path check `res.ok`.

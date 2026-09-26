@@ -42,7 +42,12 @@ export function useServiceDescriptions(): Record<string, string> {
   );
   useEffect(() => {
     let active = true;
-    void fetchOverrides().then((ov) => { if (active) setMap(mergeServiceDescriptions(ov)); });
+    void fetchOverrides().then(
+      (ov) => { if (active) setMap(mergeServiceDescriptions(ov)); },
+      // Cosmetic: the built-in descriptions still render. Logged so a failing
+      // override read is findable rather than invisible.
+      (err: unknown) => console.error('[service-tooltip] overrides read failed', err),
+    );
     return () => { active = false; };
   }, []);
   return map;

@@ -100,13 +100,14 @@ export async function POST() {
     }
   }
 
-  await supabase.from('home_ai_logs').insert({
+  const { error: writeError1 } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'utility_savings',
     input: { bills: bills.length, monthly_cents: summary.monthlyTotalCents },
     output: { findings: findings.length, aiUsed },
     status: aiUsed ? 'succeeded' : 'fallback',
     created_by: ctx.user.id,
   });
+  if (writeError1) console.error('[ai/home/utility-savings] home_ai_logs write failed', writeError1);
 
   return NextResponse.json({
     findings,
