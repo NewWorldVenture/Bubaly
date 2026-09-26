@@ -6,13 +6,24 @@
 // chrome and never appear here. Persists to Supabase
 // (user_preferences.notification_prefs.sidebarNav + .sidebarNavChildren) and
 // broadcasts SIDEBAR_NAV_EVENT so the live rail updates instantly.
+//
+// This editor reads and writes the WHOLE saved layout, so it resolves against
+// ALL_SERVICES_KEYS (every pinnable route, all tiers) and not NAV_CATALOG_KEYS
+// (free-only). saveSidebarNavAction replaces sidebarNav wholesale, so a list
+// filtered to the free catalog on the way in and out would silently delete the
+// higher-tier services the member pinned from the rail's "All Services"
+// launcher. Only the *add* picker below stays free-only — that is a product
+// choice about what this screen offers, not about what it is allowed to destroy.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUp, ArrowDown, Plus, X, RotateCcw, Compass, Check, ChevronDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, Plus, X, RotateCcw, Compass, Check, ChevronDown, Lock, EyeOff } from 'lucide-react';
 import {
-  NAV_CATALOG, NAV_CATALOG_BY_HREF, NAV_CATALOG_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
-  NAV_CHILD_CATALOG_BY_PARENT, NAV_CHILD_KEYS_BY_PARENT, type NavItem,
+  NAV_CATALOG, ALL_SERVICES_BY_HREF, ALL_SERVICES_KEYS, DEFAULT_SIDEBAR_NAV_KEYS,
+  NAV_CHILD_CATALOG_BY_PARENT, NAV_CHILD_KEYS_BY_PARENT, isNavItemVisibleToRole, type NavItem,
 } from '@/lib/constants/navigation';
+import { isManager } from '@/lib/constants/roles';
+import { featureAccessByTier, type FeatureAccess } from '@/lib/features/tiers';
+import { useApp } from '@/components/app/app-context';
 import {
   resolveNavKeys, sanitizeNavKeys, resolveChildKeys, sanitizeChildMap, MAX_SIDEBAR_NAV,
   SIDEBAR_NAV_STORAGE_KEY, SIDEBAR_NAV_CHILDREN_STORAGE_KEY, SIDEBAR_NAV_EVENT, type NavChildMap,
@@ -40,6 +51,8 @@ function childArrayIsDefault(parent: string, arr: string[]): boolean {
 export function NavigationChoices() {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
+  const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
+  const manager = isManager(role);
 
   // Seed from the localStorage cache for an instant render, then reconcile with
   // Supabase (authoritative). `loaded` gates the disabled state on first paint.
@@ -48,7 +61,7 @@ export function NavigationChoices() {
     try {
       const raw = window.localStorage.getItem(SIDEBAR_NAV_STORAGE_KEY);
       if (raw) {
-        const cached = sanitizeNavKeys(JSON.parse(raw), NAV_CATALOG_KEYS);
+        const cached = sanitizeNavKeys(JSON.parse(raw), ALL_SERVICES_KEYS);
         if (cached.length) return cached;
       }
     } catch { /* ignore */ }
@@ -75,17 +88,44 @@ export function NavigationChoices() {
       if (!active) return;
       if (error) { setLoadError(error); setLoaded(false); return; }
       setLoadError(null);
-      setKeys(resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, NAV_CATALOG_KEYS));
+      setKeys(resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS));
       setChildMap(sanitizeChildMap(children ?? {}, NAV_CHILD_KEYS_BY_PARENT));
       setLoaded(true);
     }).catch(() => { if (active) { setLoadError('unavailable'); setLoaded(false); } });
     return () => { active = false; };
   }, [reload]);
 
+  // Follow layout changes broadcast in this tab — above all a pin made from the
+  // rail's "All Services" launcher while this screen is open. Without this the
+  // next edit here would save this screen's stale list wholesale and delete
+  // that pin. It moves the list only; `loaded` still means OUR read landed.
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ nav?: string[]; children?: NavChildMap }>).detail;
+      if (detail?.nav) setKeys(resolveNavKeys(detail.nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS));
+      if (detail?.children) setChildMap(sanitizeChildMap(detail.children, NAV_CHILD_KEYS_BY_PARENT));
+    };
+    window.addEventListener(SIDEBAR_NAV_EVENT, onChange);
+    return () => window.removeEventListener(SIDEBAR_NAV_EVENT, onChange);
+  }, []);
+
+  // What the rail will do with a pin (free-tier-sidebar.tsx primaryNav: role
+  // first, then this href's admin tier against the family's plan). Shown here,
+  // never applied: a pin the rail locks or hides is still part of the saved
+  // layout this screen edits, so it stays listed — dropping it from the list
+  // would delete it on the next save — and is marked for what the rail does.
+  function railAccess(item: NavItem): FeatureAccess {
+    if (!isNavItemVisibleToRole(item, { isManager: manager, isSuperAdmin })) return 'hidden';
+    return featureAccessByTier(featureTiers[item.href], planLevel, isSuperAdmin);
+  }
+
   const items = useMemo(
-    () => keys.map((href) => NAV_CATALOG_BY_HREF.get(href)).filter((i): i is NavItem => Boolean(i)),
+    () => keys.map((href) => ALL_SERVICES_BY_HREF.get(href)).filter((i): i is NavItem => Boolean(i)),
     [keys],
   );
+  // The "add a destination" picker offers the free catalog only; higher-tier
+  // services are pinned from the rail's "All Services" launcher. Anything
+  // already in `keys` is filtered out, whichever catalog it came from.
   const available = useMemo(() => NAV_CATALOG.filter((i) => !keys.includes(i.href)), [keys]);
   const isDefault = useMemo(() => {
     const keysDefault = keys.length === DEFAULT_SIDEBAR_NAV_KEYS.length && keys.every((k, i) => k === DEFAULT_SIDEBAR_NAV_KEYS[i]);
@@ -96,7 +136,7 @@ export function NavigationChoices() {
   // Persist a full layout: optimistic state + cache + broadcast, then Supabase.
   async function persist(nextKeys: string[], nextChildren: NavChildMap) {
     if (!loaded || saving) return false;
-    const cleanKeys = sanitizeNavKeys(nextKeys, NAV_CATALOG_KEYS);
+    const cleanKeys = sanitizeNavKeys(nextKeys, ALL_SERVICES_KEYS);
     const cleanChildren = sanitizeChildMap(nextChildren, NAV_CHILD_KEYS_BY_PARENT);
     const prevKeys = keys;
     const prevChildren = childMap;
@@ -236,6 +276,7 @@ export function NavigationChoices() {
           const byHref = hasGroup ? new Map(catalog!.map((c) => [c.href, c])) : null;
           const kidItems = byHref ? kids.map((h) => byHref.get(h)).filter((c): c is NavItem => Boolean(c)) : [];
           const kidAvailable = catalog ? catalog.filter((c) => !kids.includes(c.href)) : [];
+          const access = railAccess(item);
           return (
             <li key={item.href} className="rounded-xl border border-border bg-surface/40">
               <div className="flex items-center gap-3 px-3 py-2.5">
@@ -244,6 +285,13 @@ export function NavigationChoices() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{item.label}</p>
+                  {access !== 'visible' && (
+                    <p className="flex items-center gap-1 text-xs text-muted">
+                      {access === 'locked'
+                        ? <><Lock className="h-3 w-3 shrink-0" aria-hidden /> {t('navigationChoices.notInYourPlanShowsLocked')}</>
+                        : <><EyeOff className="h-3 w-3 shrink-0" aria-hidden /> {t('navigationChoices.unavailableNotShownInSidebar')}</>}
+                    </p>
+                  )}
                   {hasGroup && (
                     <button type="button" onClick={() => toggleGroup(item.href)}
                       className="inline-flex items-center gap-1 text-xs text-muted transition hover:text-fg">
@@ -337,6 +385,9 @@ export function NavigationChoices() {
               </button>
             ))}
           </div>
+          {/* This picker is free-only (see the file header), so a higher-tier pin
+              removed above cannot be re-added here — say where it lives. */}
+          <p className="mt-2 text-xs text-muted">{t('navigationChoices.pinMoreFromAllServices')}</p>
         </div>
       )}
 
