@@ -79,7 +79,9 @@ describe('Connect Outlook button', () => {
   it('degrades to a usable control when the status probe itself fails', () => {
     // The catch settles to not-connected so the Connect link renders; the
     // alternative (leaving it null) would hide the button on a transient blip.
-    expect(mod).toContain('.catch(() => setOutlookStatus({ configured: true, connected: false }))');
+    // (Guarded by the effect's `active` flag since MAIN-F-D09, so a probe that
+    // lands after unmount sets nothing; the settled value is unchanged.)
+    expect(mod).toContain('.catch(() => { if (active) setOutlookStatus({ configured: true, connected: false }); })');
   });
 
   it('probes Outlook independently of Google', () => {

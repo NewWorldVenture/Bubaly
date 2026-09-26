@@ -214,3 +214,38 @@ export function clickOnlyElements(file: string, text?: string): Site[] {
   visit(sf);
   return out;
 }
+
+const CANCELLATION = /\blet\s+(active|current|cancelled|canceled|alive|ignore|live|mounted|disposed)\s*=\s*(true|false)|new AbortController\(|\bgeneration\b|\bisCurrent\(/;
+/**
+ * `if (fired.current) return; fired.current = true;` makes an effect run once
+ * for the component's life, so no later run can supersede it. (A cancel flag
+ * there would be wrong: under StrictMode's dev double-invoke the cleanup would
+ * cancel the only run, and the second returns early.)
+ */
+const ONE_SHOT = /if\s*\((\w+)\.current\)\s*return;\s*\1\.current\s*=\s*true;/;
+
+/**
+ * An effect that sets state after an `await` or inside a `.then(`, with no
+ * way to tell that the effect has gone: no flag, no AbortController, no
+ * generation counter. When its dependencies change (a family switch, a new
+ * search) or the component unmounts, the old request can still land and
+ * overwrite the newer answer (MAIN-F-D09). A setter that runs BEFORE the
+ * first await is synchronous and does not count.
+ */
+export function uncancelledAsyncEffects(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const visit = (n: ts.Node) => {
+    if (ts.isCallExpression(n) && /^(useEffect|useLayoutEffect)$/.test(n.expression.getText()) && n.arguments[0]) {
+      const body = n.arguments[0].getText();
+      const firstAsync = body.search(/\bawait\b|\.then\(/);
+      const setAfter = firstAsync >= 0 && /\bset[A-Z]\w*\(/.test(body.slice(firstAsync));
+      if (setAfter && !CANCELLATION.test(body) && !ONE_SHOT.test(body)) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(n.getStart()).line + 1, what: body.replace(/\s+/g, ' ').slice(0, 70) });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}

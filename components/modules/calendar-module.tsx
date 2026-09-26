@@ -249,7 +249,8 @@ export function CalendarModule() {
   const fetchEnd = useMemo(() => { const d = new Date(monthGridStart); d.setDate(d.getDate() + 42); return d; }, [monthGridStart]);
 
   useEffect(() => {
-    fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => setGcalConnected(d.connected)).catch(() => setGcalConnected(false));
+    let active = true; // no provider status lands after unmount (MAIN-F-D09)
+    fetch('/api/google/calendar/sync').then(r => r.json()).then((d: { connected: boolean }) => { if (active) setGcalConnected(d.connected); }).catch(() => { if (active) setGcalConnected(false); });
     // Independent of the Google probe on purpose: one provider being unreachable
     // must never decide what the other's control says. On any failure this
     // settles to "configured, not connected", which renders the Connect link —
@@ -257,12 +258,14 @@ export function CalendarModule() {
     // /api/sync/microsoft/auth redirects to the setup page rather than erroring.
     fetch('/api/sync/microsoft/status')
       .then(r => r.json())
-      .then((d: { configured?: boolean; connected?: boolean }) =>
-        setOutlookStatus({ configured: d.configured !== false, connected: d.connected === true }))
-      .catch(() => setOutlookStatus({ configured: true, connected: false }));
+      .then((d: { configured?: boolean; connected?: boolean }) => {
+        if (active) setOutlookStatus({ configured: d.configured !== false, connected: d.connected === true });
+      })
+      .catch(() => { if (active) setOutlookStatus({ configured: true, connected: false }); });
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
     else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
+    return () => { active = false; };
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to 7am on mount
