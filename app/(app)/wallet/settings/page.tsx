@@ -8,7 +8,10 @@ import { isManager } from '@/lib/constants/roles';
 import { normalizeSplit } from '@/lib/wallet/ledger';
 import { WalletSettingsView, type ChildRuleRow } from '@/components/wallet/wallet-settings-view';
 
-export const metadata: Metadata = { title: 'Wallet Settings' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.walletSettings') };
+}
 
 export default async function WalletSettingsPage() {
   const t = await getTranslations();

@@ -11,7 +11,10 @@ import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { safeSocialLink } from '@/lib/social/links';
 
-export const metadata: Metadata = { title: 'Feed · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('dashboardSocialAccounts.feed')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 type SP = { platform?: string; media?: string; q?: string };

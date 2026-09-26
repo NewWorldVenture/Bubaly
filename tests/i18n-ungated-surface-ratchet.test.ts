@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scanPaths } from '../scripts/i18n-scan.mjs';
+import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 
 // `app/` + `components/` is deliberately NOT in GATED_SURFACES, and the reason
 // in scripts/i18n-scan.mjs is a good one: it was gated once on the strength of a
@@ -110,7 +110,9 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then batch 2, including the English text beside each template (the family
 // dashboard's suggestion buttons, budget messages, auction states), 2,654 -> 2,646.
 // Then batches 3 and 4, including most of the assistants page, 2,646 -> 2,627.
-const CEILING = 2627;
+// Then the page titles (I18N-004): 248 English `metadata.title` strings moved
+// into generateMetadata() and the catalogue, 2,627 -> 2,379.
+const CEILING = 2379;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -118,7 +120,10 @@ describe('the ungated i18n surface does not get worse', () => {
 
   it('scans the surface it claims to (non-vacuity)', () => {
     // A scanner that silently found nothing would satisfy the ceiling forever.
-    expect(findings.length).toBeGreaterThan(400);
+    // Counted as files READ, not files with findings: the latter falls every
+    // time a page is translated (it was > 400; 362 after the page titles), so
+    // it measured progress, not whether the scanner was looking.
+    expect(scannedFileCount(['app', 'components'])).toBeGreaterThan(900);
     expect(total).toBeGreaterThan(1000);
   });
 

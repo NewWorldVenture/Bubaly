@@ -8,7 +8,10 @@ import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/famil
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'AI Conflict Resolution' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.aiConflictResolution') };
+}
 export const dynamic = 'force-dynamic';
 
 function whenLabel(startsAt: string, endsAt: string | null, locale: string): string {

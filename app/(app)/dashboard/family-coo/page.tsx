@@ -13,7 +13,10 @@ import { ErrorState } from '@/components/ui/states';
 import { fmtRelative, firstName } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family COO' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyCoo') };
+}
 export const dynamic = 'force-dynamic';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

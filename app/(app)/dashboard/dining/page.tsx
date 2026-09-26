@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { DiningModule, type DiningRow } from '@/components/modules/dining-module';
 
-export const metadata: Metadata = { title: 'Dining Out' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.diningOut') };
+}
 export const dynamic = 'force-dynamic';
 
 const COLS = 'id, name, kind, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at';

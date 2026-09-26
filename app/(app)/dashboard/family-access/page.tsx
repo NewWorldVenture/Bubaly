@@ -8,7 +8,10 @@ import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Kid Logins' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.kidLogins') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyAccessPage() {

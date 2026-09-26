@@ -10,7 +10,10 @@ import type { SocialPlatform } from '@/lib/social/capabilities';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { formatScheduledTime, scheduleDisplayTimezone, scheduledDay, scheduleStatusKey } from '@/lib/social/schedule-time';
 
-export const metadata: Metadata = { title: 'Calendar · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('navLabel.calendar')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function CalendarPage() {

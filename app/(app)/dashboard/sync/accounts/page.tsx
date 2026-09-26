@@ -11,7 +11,10 @@ import {
 } from '@/lib/sync/capabilities';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sync accounts' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.syncAccounts') };
+}
 export const dynamic = 'force-dynamic';
 
 const PROVIDERS: SyncProvider[] = ['google', 'microsoft', 'apple'];

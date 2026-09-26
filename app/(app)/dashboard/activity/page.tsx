@@ -8,7 +8,10 @@ import { mergeActivity, type ActivityItem } from '@/lib/activity/feed';
 
 import { ActivityFeed } from './activity-feed';
 
-export const metadata: Metadata = { title: 'Activity' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('activity.activity') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function ActivityPage() {

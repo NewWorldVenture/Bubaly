@@ -4,7 +4,10 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { ExpensesModule } from '@/components/modules/expenses-module';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Expense Splitting' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.expenseSplitting') };
+}
 
 export default async function ExpensesPage() {
   const ctx = await requireFeature('/dashboard/expenses');

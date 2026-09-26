@@ -13,7 +13,10 @@ import { DeleteButton } from '@/components/family/record-actions';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Emergency' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familyEmergency') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyEmergencyPage() {

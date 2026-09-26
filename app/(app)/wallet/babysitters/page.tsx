@@ -7,7 +7,10 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { BabysittersView, type BabysitterRow, type PaymentRow } from '@/components/wallet/babysitters-view';
 
-export const metadata: Metadata = { title: 'Babysitters' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.babysitters') };
+}
 
 export default async function WalletBabysittersPage() {
   const t = await getTranslations();

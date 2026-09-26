@@ -4,7 +4,10 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getPosts } from '@/lib/social/queries';
 import { PostsList, PostTabs } from '@/components/social/posts-list';
 
-export const metadata: Metadata = { title: 'Failed · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('conciergeCalls.stateFailed')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FailedPage() {

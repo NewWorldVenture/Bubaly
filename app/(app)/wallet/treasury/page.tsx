@@ -11,7 +11,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Family Treasury' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('treasury.familyTreasury') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function WalletTreasuryPage() {

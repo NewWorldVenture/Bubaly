@@ -11,7 +11,10 @@ import { cn } from '@/lib/utils/cn';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Food & Nutrition' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFood.foodAmpNutrition') };
+}
 export const dynamic = 'force-dynamic';
 
 const fmtDay = (d: string | null, locale: string) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '');

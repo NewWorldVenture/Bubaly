@@ -13,7 +13,10 @@ import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Family Assistant | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyAssistant') };
+}
 export const dynamic = 'force-dynamic';
 
 const HOUR = 3_600_000;

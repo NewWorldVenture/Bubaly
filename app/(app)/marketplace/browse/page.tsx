@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { MarketplaceModule } from '@/components/modules/marketplace-module';
@@ -6,7 +7,10 @@ import { MarketplaceMatchesStrip } from '@/components/marketplace/matches-strip'
 import { loadAndSnapshotMatches } from '@/lib/marketplace/matches-server';
 import { KIND_ORDER, type ListingKind, type ListingCategory, CATEGORY_LABELS } from '@/lib/marketplace/listings';
 
-export const metadata: Metadata = { title: 'Browse · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('more.browse')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 // The full browse/post board (the original marketplace module), driven by the

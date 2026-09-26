@@ -13,7 +13,10 @@ import { fmtTime } from '@/lib/utils/format';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Planning & Organization' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardPlanning.planningAmpOrganization') };
+}
 export const dynamic = 'force-dynamic';
 
 const fmtDay = (d: string | null, locale: string) =>

@@ -4,7 +4,10 @@ import { PageHeader } from '@/components/app/page-header';
 import { FridgeChef } from '@/components/meals/fridge-chef';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Fridge Chef | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFridgeChef.fridgeChef') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FridgeChefPage() {

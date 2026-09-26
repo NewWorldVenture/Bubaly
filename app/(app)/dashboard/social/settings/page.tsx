@@ -12,7 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Settings · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('navLabel.settings')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SocialSettingsPage() {

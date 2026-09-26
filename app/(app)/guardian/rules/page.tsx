@@ -6,7 +6,10 @@ import { RulesEditor } from '@/components/guardian/rules-editor';
 import { Zap, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Routing Rules · AI Call Guardian · Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('guardianRules.routingRules')} · ${t('navLabel.aiCallGuardian')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function RulesPage() {

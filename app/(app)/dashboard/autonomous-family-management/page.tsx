@@ -16,7 +16,10 @@ import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Autonomous Management' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.autonomousManagement') };
+}
 export const dynamic = 'force-dynamic';
 
 const PRIORITY_DOT: Record<string, string> = { high: 'bg-rose-500', medium: 'bg-amber-400', low: 'bg-emerald-500' };

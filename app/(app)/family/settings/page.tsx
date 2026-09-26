@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { SettingsModule } from '@/components/modules/settings-module';
 
-export const metadata: Metadata = { title: 'Family Settings' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('family.familySettings') };
+}
 
 export default function FamilySettingsPage() {
   return <SettingsModule />;

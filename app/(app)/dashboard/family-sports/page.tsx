@@ -10,7 +10,10 @@ import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Sports' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familySports') };
+}
 export const dynamic = 'force-dynamic';
 
 const RESULT_STYLE: Record<string, string> = { win: 'text-emerald-300', loss: 'text-rose-300', tie: 'text-amber-300' };

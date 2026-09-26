@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
 import { CalendarModule } from '@/components/modules/calendar-module';
 
-export const metadata: Metadata = { title: 'Calendar' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.calendar') };
+}
 
 export default function CalendarPage() {
   return <><RelatedOutcomes href="/dashboard/calendar" /><CalendarModule /></>;

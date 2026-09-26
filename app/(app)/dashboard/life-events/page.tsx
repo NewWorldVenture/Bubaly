@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { LifeEventsModule } from '@/components/modules/life-events-module';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { settleAll } from '@/lib/supabase/settle';
 
-export const metadata: Metadata = { title: 'Life & Milestones | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.lifeMilestones') };
+}
 export const dynamic = 'force-dynamic';
 
 /** School events whose title reads like the start of a term or a school year. */

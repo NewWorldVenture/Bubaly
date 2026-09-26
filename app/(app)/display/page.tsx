@@ -24,7 +24,10 @@ import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.kitchenDisplay'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 type LoadedDisplay = { data: DisplayData; initialTiles: Tile[]; initialSettings: DisplaySettings };

@@ -15,7 +15,10 @@ import {
 } from '@/lib/sync/capabilities';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sync' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardSync.sync') };
+}
 export const dynamic = 'force-dynamic';
 
 const ITEM_KINDS: { key: SyncItemKind; label: string; icon: React.ComponentType<{ className?: string }> }[] = [

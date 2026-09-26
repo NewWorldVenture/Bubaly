@@ -12,7 +12,10 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Deals · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('deals.deals')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;

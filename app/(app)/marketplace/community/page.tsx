@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -6,7 +7,10 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import { CommunityModule } from '@/components/marketplace/community-module';
 import type { CircleLite, CircleMemberLite, ShareLite, SharedListingLite } from '@/lib/marketplace/community';
 
-export const metadata: Metadata = { title: 'Community Circles' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('community.communityCircles') };
+}
 export const dynamic = 'force-dynamic';
 
 /**

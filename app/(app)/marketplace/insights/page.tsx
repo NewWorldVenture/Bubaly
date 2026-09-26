@@ -11,7 +11,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Pulse · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.pulse')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const kindLabel = (k: string) => KIND_LABELS[k as ListingKind] ?? k;

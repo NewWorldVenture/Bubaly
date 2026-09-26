@@ -8,7 +8,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Analytics · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('consentUi.analyticsLabel')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {

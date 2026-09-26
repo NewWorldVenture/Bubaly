@@ -7,7 +7,10 @@ import { IndependenceModule } from '@/components/modules/independence-module';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Independence' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('behavior.independence') };
+}
 export const dynamic = 'force-dynamic';
 
 /** Age-banded growth ladder: responsibilities that grow as kids mature. */

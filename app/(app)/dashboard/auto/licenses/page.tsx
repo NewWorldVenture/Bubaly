@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getLicenses } from '@/lib/auto/queries';
 import { LicensesClient } from '@/components/auto/licenses-client';
 
-export const metadata: Metadata = { title: 'Licenses · Auto' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.licenses')} · ${t('displayComfort.auto')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function LicensesPage() {

@@ -11,7 +11,10 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('marketplaceStore.myStore')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceStorePage() {

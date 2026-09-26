@@ -39,7 +39,10 @@ import { ErrorState } from '@/components/ui/states';
 import { StatusBadge } from '@/components/concierge/status-badge';
 import { cn } from '@/lib/utils/cn';
 
-export const metadata: Metadata = { title: 'Run history' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('concierge.runHistory') };
+}
 export const dynamic = 'force-dynamic';
 
 const RUNS_PATH = '/dashboard/concierge/runs';

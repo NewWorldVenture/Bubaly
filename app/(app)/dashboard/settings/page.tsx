@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { SettingsModule } from '@/components/modules/settings-module';
 import { ProfileNudge } from '@/components/marketing/profile-nudge';
 import { DisplayComfort } from '@/components/app/display-comfort';
@@ -6,7 +7,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getReferralConfigResult } from '@/lib/referrals/server';
 import type { ReferralConfig } from '@/lib/referrals/core';
 
-export const metadata: Metadata = { title: 'Settings' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.settings') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {

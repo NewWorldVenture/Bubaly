@@ -4,7 +4,10 @@ import { MedicalRecordsModule } from '@/components/modules/medical-records-modul
 import { HealthVisitsModule } from '@/components/modules/health-visits-module';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Dental Records' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.dentalRecords') };
+}
 
 export default async function DentalPage() {
   const t = await getTranslations();

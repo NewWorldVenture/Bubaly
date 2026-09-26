@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { notFound } from 'next/navigation';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { MarketplaceSeedScreen } from '@/components/marketplace/seed-screen';
 
-export const metadata: Metadata = { title: 'Seed Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.seedMarketplace') };
+}
 
 export default async function MarketplaceSeedPage() {
   await requireUserContext();

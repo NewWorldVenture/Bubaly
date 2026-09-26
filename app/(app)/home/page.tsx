@@ -56,7 +56,10 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
-export const metadata: Metadata = { title: 'Home' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.home') };
+}
 export const dynamic = 'force-dynamic';
 
 // ── Small shared UI ───────────────────────────────────────────────────────────

@@ -10,7 +10,10 @@ import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 import { NewAssistantKey, RevokeAssistantKey } from './controls';
 
-export const metadata: Metadata = { title: 'Assistants' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.assistants') };
+}
 export const dynamic = 'force-dynamic';
 
 type LinkRow = {

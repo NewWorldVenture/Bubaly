@@ -618,6 +618,11 @@ function filesUnder(paths) {
   return files;
 }
 
+/** How many files a scan of `paths` reads: the non-vacuity check counts these, not files with findings. */
+export function scannedFileCount(paths) {
+  return filesUnder(paths).length;
+}
+
 export function scanPaths(paths) {
   const results = [];
   for (const file of filesUnder(paths)) {

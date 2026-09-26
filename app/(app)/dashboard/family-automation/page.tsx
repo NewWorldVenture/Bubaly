@@ -12,7 +12,10 @@ import { fmtRelative } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Automation' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familyAutomation') };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

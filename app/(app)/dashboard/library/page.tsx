@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { Library, Rss, BookOpen, CircleAlert } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -10,7 +11,10 @@ import { fmtDate } from '@/lib/utils/format';
 import { AddBookForm, FeedControls, ItemRow, SubscribeForm, type PlayableItem } from './player';
 import { settleAll } from '@/lib/supabase/settle';
 
-export const metadata: Metadata = { title: 'Library' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.library') };
+}
 export const dynamic = 'force-dynamic';
 
 const ITEM_LIMIT = 200;

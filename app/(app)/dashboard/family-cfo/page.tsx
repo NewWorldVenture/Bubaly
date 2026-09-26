@@ -20,7 +20,10 @@ import { buildCashflowTimeline, DEFAULT_BUFFER, money, pretty, type BuildTimelin
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Family CFO' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyCfo') };
+}
 export const dynamic = 'force-dynamic';
 
 const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);

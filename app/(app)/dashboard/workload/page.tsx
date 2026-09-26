@@ -7,7 +7,10 @@ import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Workload Balance' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('chores.workloadBalance') };
+}
 export const dynamic = 'force-dynamic';
 
 /** Who is carrying the household — mental-load measurement + one-tap rebalance. */

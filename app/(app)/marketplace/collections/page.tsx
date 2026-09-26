@@ -10,7 +10,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('marketplaceCollections.collections')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceCollectionsPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {

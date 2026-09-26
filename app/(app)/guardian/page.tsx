@@ -8,7 +8,10 @@ import { Shield } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 import { startOfLocalDay } from '@/lib/time/zoned';
 
-export const metadata: Metadata = { title: 'AI Call Guardian · Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.aiCallGuardian') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianPage() {

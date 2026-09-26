@@ -12,7 +12,10 @@ import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { safeSocialLink } from '@/lib/social/links';
 
-export const metadata: Metadata = { title: 'Inbox · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('navLabel.inbox')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function InboxPage() {

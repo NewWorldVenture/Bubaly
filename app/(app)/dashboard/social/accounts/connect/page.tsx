@@ -6,7 +6,10 @@ import { PLATFORMS, isProviderConfigured, type SocialPlatform } from '@/lib/soci
 import { ConnectGrid } from '@/components/social/connect-grid';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Connect accounts · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.connectAccounts')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function ConnectPage() {

@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { getVehicles, getPolicies } from '@/lib/auto/queries';
 import { AccidentClient } from '@/components/auto/accident-client';
 
-export const metadata: Metadata = { title: 'Accident Help · Auto' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.accidentHelp')} · ${t('displayComfort.auto')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function AccidentPage() {

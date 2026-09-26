@@ -5,7 +5,10 @@ import { HealthVisitsModule } from '@/components/modules/health-visits-module';
 import { ImmunizationsModule } from '@/components/modules/immunizations-module';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Medical Records' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.medicalRecords') };
+}
 
 export default async function MedicalPage() {
   const t = await getTranslations();

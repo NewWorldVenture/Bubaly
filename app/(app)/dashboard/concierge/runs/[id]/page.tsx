@@ -37,7 +37,10 @@ import { RunControls, type EditableStep, type FailedStep } from '@/components/co
 import { ClarificationCard } from '@/components/concierge/clarification-card';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Bubaly is on it' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.bubalyIsOnIt') };
+}
 export const dynamic = 'force-dynamic';
 
 const RERUNNABLE_STEP_STATES: readonly StepState[] = ['failed', 'blocked', 'cancelled'];

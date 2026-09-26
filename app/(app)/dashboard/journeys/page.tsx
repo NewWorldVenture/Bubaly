@@ -12,7 +12,10 @@ import {
 import { getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Journey Analytics' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardJourneys.journeyAnalytics') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function JourneysPage() {

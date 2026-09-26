@@ -11,7 +11,10 @@ import { loadApprovalBasedOn, loadTrustActivity, type BasedOn } from '@/lib/trus
 import { TrustModule, type TrustData } from '@/components/modules/trust-module';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Trust & Permissions' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.trustPermissions') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function TrustPage() {

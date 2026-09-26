@@ -19,7 +19,10 @@ import {
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Memories' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.memories') };
+}
 export const dynamic = 'force-dynamic';
 
 type TabKey = 'highlights' | 'photos' | 'albums' | 'videos' | 'stories';

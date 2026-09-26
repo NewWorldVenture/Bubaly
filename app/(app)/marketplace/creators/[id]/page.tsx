@@ -19,7 +19,10 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Storefront · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.storefront')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {

@@ -21,7 +21,10 @@ import {
   FrontDeskModule, type FrontDeskChannel, type FrontDeskVoiceMessage,
 } from '@/components/modules/front-desk-module';
 
-export const metadata: Metadata = { title: 'AI Front Desk' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.aiFrontDesk') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FrontDeskPage() {

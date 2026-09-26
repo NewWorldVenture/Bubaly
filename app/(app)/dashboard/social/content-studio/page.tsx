@@ -11,7 +11,10 @@ import { PostsList } from '@/components/social/posts-list';
 import { Card } from '@/components/ui/card';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Content Studio · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('dashboardSocialContentStudio.contentStudio')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function ContentStudioPage() {

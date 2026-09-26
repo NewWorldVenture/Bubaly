@@ -12,7 +12,10 @@ import type { ReasoningQuestionId } from '@/lib/reasoning/engine';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Reasoning' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyReasoning') };
+}
 export const dynamic = 'force-dynamic';
 
 const Q_ICON: Record<ReasoningQuestionId, React.ComponentType<{ className?: string }>> = {

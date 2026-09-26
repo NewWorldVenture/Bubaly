@@ -9,7 +9,10 @@ import { Settings, ArrowLeft } from 'lucide-react';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Settings · AI Call Guardian · Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('navLabel.settings')} · ${t('navLabel.aiCallGuardian')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianSettingsPage() {

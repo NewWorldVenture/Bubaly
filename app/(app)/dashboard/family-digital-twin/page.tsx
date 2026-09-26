@@ -13,7 +13,10 @@ import { ActivityProjection, type SavedSim } from '@/components/twin/activity-pr
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Digital Twin' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFamilyDigitalTwin.familyDigitalTwin') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyDigitalTwinPage() {

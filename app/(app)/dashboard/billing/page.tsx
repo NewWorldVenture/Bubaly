@@ -7,7 +7,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { serviceFeeEnabled, resolveServiceFeeCents, formatServiceFee } from '@/lib/stripe/service-fee';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Finances' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.finances') };
+}
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   // Default = the family Finances dashboard. The full manager (Transactions /

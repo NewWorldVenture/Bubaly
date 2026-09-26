@@ -10,7 +10,10 @@ import { AllowanceView, type AllowanceRow } from '@/components/wallet/allowance-
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Wallet Allowance' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.walletAllowance') };
+}
 
 export default async function WalletAllowancePage() {
   const t = await getTranslations();

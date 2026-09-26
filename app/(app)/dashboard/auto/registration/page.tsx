@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { getRegistrations, getInspections, getVehicles } from '@/lib/auto/queries';
 import { RegistrationClient } from '@/components/auto/registration-client';
 
-export const metadata: Metadata = { title: 'Registration & Inspection · Auto' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.registrationInspection')} · ${t('displayComfort.auto')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function RegistrationPage() {

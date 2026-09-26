@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { ProfileModule, type ProfileStats } from '@/components/modules/profile-module';
 
-export const metadata: Metadata = { title: 'Profile' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('settingsModule.tabProfile') };
+}
 export const dynamic = 'force-dynamic';
 
 /** Personal identity surface: who you are here + what you've contributed. */

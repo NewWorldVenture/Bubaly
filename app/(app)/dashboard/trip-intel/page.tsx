@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { TripIntelModule, type UpcomingEvent, type SavedTripPlan, type SavedDeparturePlan } from '@/components/modules/trip-intel-module';
 
-export const metadata: Metadata = { title: 'Trip Intelligence | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.tripIntelligence') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function TripIntelPage() {

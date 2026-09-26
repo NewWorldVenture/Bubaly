@@ -10,7 +10,10 @@ import { ErrorState } from '@/components/ui/states';
 import { fmtDate, fmtDateTime } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family School' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familySchool') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilySchoolPage() {
