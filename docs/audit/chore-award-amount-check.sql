@@ -14,6 +14,68 @@
 -- Judged on ROW COUNTS: an UPDATE refused by a policy raises, but one refused
 -- by nothing simply lands, and an exception-only assertion would report a
 -- boundary that is not there.
+--
+-- NEGATIVE CONTROL, and it runs FIRST, before the refusals it gives meaning to
+-- ---------------------------------------------------------------------------
+-- MECHANISM. This boundary is not RLS. `chore_assignments` carries
+-- `0004_rls.sql`'s role-blind CRUD set — four policies, all
+-- `is_family_member(family_id)` — and no later migration replaces them:
+-- grepping `chore_assignments_update` and its three siblings across
+-- supabase/migrations returns 0004 and nothing else. What refuses checks 2-5 is
+-- a BEFORE INSERT OR UPDATE TRIGGER, `trg_chore_assignment_decision_guard`.
+--
+-- And the body under test is the LAST one written, not 0223's and not 0305's.
+-- `0223` created the function, `0305` added the award-amount rule, and
+-- `0331_ai_score_is_not_the_childs_to_write.sql` (~L114) does `create or
+-- replace` on it for the third time and re-creates the trigger. 0331 is the
+-- last of the three hits for `chore_assignment_decision_guard` across
+-- supabase/migrations, so 0331's body is the one running; it carries 0305's
+-- amount rule through verbatim, which is why the checks below still read the
+-- way 0305 wrote them.
+--
+-- In that body the amount branch is exactly one question:
+--
+--   amount_changed and not (service_role or auth.uid() is null
+--                           or public.can_manage_family(new.family_id))
+--
+-- One question is all the boundary is, so the control is the same child, the
+-- same trigger and the same two verbs in a SECOND family where that child IS a
+-- manager: the same actor through the same predicate with the answer the other
+-- way, which must land. `ctl_fam` is a household the child created, so
+-- `can_manage_family` answers YES there for the very user it answers no for in
+-- `fam`. Nothing else about the statements changes.
+--
+-- Without it, checks 2-5 are refusals with no attribution:
+--
+--   * each catches `insufficient_privilege` and credits the guard — but a
+--     missing or revoked table GRANT raises 42501, a column-level denial on
+--     `points_awarded` or `cash_awarded_cents` raises 42501, a dead
+--     `auth.uid()` raises 42501, and another guard trigger raises 42501. This
+--     repository refuses writes with guard triggers in 0223, 0305, 0326 and
+--     0331, and two more already fire on this very table — 0311's pair of
+--     `reference_shares_family` triggers — so that is not hypothetical;
+--   * each also passes on ZERO ROWS, and a row this session cannot see or
+--     cannot write reports zero just as readily as a guard does.
+--
+-- The control's UPDATE names THE SAME THREE COLUMNS check 4 writes — `status`,
+-- `points_awarded` AND `cash_awarded_cents` — and that is not decoration. A
+-- `revoke update (cash_awarded_cents) on public.chore_assignments from
+-- authenticated` sails straight past a control that only touches `status`,
+-- which is all step 1 does: step 1 is a real positive control for the
+-- member-allowed path, but it proves nothing about the two guarded columns
+-- because it never names them. Postgres checks column privileges against the
+-- SET list and not against the values, so writing both amounts onto the
+-- control's OWN row — in the family the child DOES manage — is the whole of
+-- that proof. The control's INSERT names check 5's column list for the same
+-- reason.
+--
+-- Step 7's manager write does not cover either: it proves the guard lets
+-- SOMEBODY through, not that the CHILD's session could have written these two
+-- columns at all.
+--
+-- If the control is refused, the probe reports this boundary as UNPROVEN
+-- rather than as holding, and stops — every check after it would be
+-- unreadable, and a build that cannot tell is red either way.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -27,9 +89,22 @@ declare
   asg uuid;
   n int;
   failures int := 0;
+  -- ── the negative control's own household ─────────────────────────────────
+  -- A SECOND family the SAME child manages, so `can_manage_family(new.family_id)`
+  -- — the one question the guard asks — answers yes for the very user it answers
+  -- no for in `fam`. Checked unique across docs/audit and supabase/migrations:
+  -- 65 probes share one database and seeded rows outlive the probe that wrote
+  -- them, so a reused anchor would silently rewrite somebody else's assertion.
+  ctl_fam   uuid := '00000000-0000-4000-8000-00000000ca02';
+  ctl_mid   uuid;
+  ctl_chore uuid;
+  ctl_asg   uuid;
+  ctl_fail  text[] := '{}';
 begin
   delete from public.chore_assignments where family_id = fam;
   delete from public.chores where family_id = fam;
+  delete from public.chore_assignments where family_id = ctl_fam;
+  delete from public.chores where family_id = ctl_fam;
 
   insert into auth.users (id, email) values
     (parent_uid, 'chore-parent@example.com'), (child_uid, 'chore-child@example.com')
@@ -46,6 +121,32 @@ begin
   insert into public.chore_assignments (family_id, chore_id, member_id, status)
     values (fam, chore_id, child_mid, 'todo') returning id into asg;
 
+  -- ── the negative control's household ─────────────────────────────────────
+  -- Seeded here, while the trusted server's exemption is still in force
+  -- (`auth.uid()` is null until the set_config below), exactly as `fam` is. The
+  -- control's chore and member live in ctl_fam because 0311's two
+  -- `reference_shares_family` triggers require a row's references to share the
+  -- row's family — a control that tripped THOSE would fail for a reason that is
+  -- not the control's.
+  insert into public.families (id, name, created_by)
+    values (ctl_fam, 'Chore Awards (the child manages this one)', child_uid)
+  on conflict (id) do nothing;
+  -- on_family_created already files the creator as a 'parent'; upsert rather
+  -- than assume, because a seed whose roles are wrong would fail the control
+  -- for a reason that is not the control's either.
+  insert into public.family_members (family_id, user_id, display_name, role, is_active)
+    values (ctl_fam, child_uid, 'Child (a manager here)', 'parent', true)
+  on conflict (family_id, user_id) do update set role = 'parent', is_active = true;
+  select id into ctl_mid from public.family_members where family_id = ctl_fam and user_id = child_uid;
+
+  insert into public.chores (family_id, title, points)
+    values (ctl_fam, 'Dishes (control house)', 5) returning id into ctl_chore;
+  -- No amounts on the seeded row, deliberately: the control's UPDATE has to be
+  -- an actual CHANGE to both columns or `amount_changed` is false and the guard
+  -- is never reached, which would make the control pass without testing it.
+  insert into public.chore_assignments (family_id, chore_id, member_id, status)
+    values (ctl_fam, ctl_chore, ctl_mid, 'todo') returning id into ctl_asg;
+
   -- ── as the child ─────────────────────────────────────────────────────────
   -- Set BEFORE dropping role, or auth.uid() is null and the guard waves it
   -- through as the trusted server — every assertion below would pass falsely.
@@ -57,6 +158,65 @@ begin
   end if;
   if public.can_manage_family(fam) then
     raise exception 'CONTROL FAILED: acting as a manager, so nothing below is a child boundary';
+  end if;
+  -- The control's own precondition: the SAME session must be a manager of
+  -- ctl_fam, or the control is not this predicate answered the other way and
+  -- its failure would say nothing about the guard.
+  if not public.can_manage_family(ctl_fam) then
+    raise exception 'CONTROL FAILED: this child is not a manager of the control family %, so the control below is not the same predicate with the answer the other way', ctl_fam;
+  end if;
+
+  -- 0. NEGATIVE CONTROL — the same child, the same trigger, the other answer.
+  --    Runs BEFORE checks 2-5, because it is what makes their refusals mean
+  --    "the guard said no" rather than "something said no". Both legs must
+  --    LAND. If either does not, this session never held the access those
+  --    checks are supposed to be measuring: a revoked table GRANT, a
+  --    column-level revoke on either amount column, or a second guard trigger
+  --    on this table would refuse the control here too, and then 2-5 are
+  --    42501s credited to a guard that may have been loosened.
+  begin
+    -- The same three columns check 4 writes, and the same values.
+    update public.chore_assignments
+       set status = 'done', points_awarded = 9999, cash_awarded_cents = 500000
+     where id = ctl_asg;
+    get diagnostics n = row_count;
+    if n <> 1 then
+      ctl_fail := array_append(ctl_fail, format(
+        'this child''s UPDATE of status + points_awarded + cash_awarded_cents in the family they DO manage changed %s rows, not 1 — so the zero-row halves of checks 2-5 would prove nothing: a row this session cannot see or cannot write reports zero either way', n));
+    end if;
+  exception when others then
+    ctl_fail := array_append(ctl_fail, format(
+      'this child was refused status + points_awarded + cash_awarded_cents in the family they DO manage (%s: %s) — so checks 2-4 catching insufficient_privilege would prove only that something said no, not that the award guard said it', sqlstate, sqlerrm));
+  end;
+
+  begin
+    -- Check 5's column list, in the family the child manages.
+    insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded, cash_awarded_cents)
+    values (ctl_fam, ctl_chore, ctl_mid, 'done', 9999, 500000);
+    get diagnostics n = row_count;
+    if n <> 1 then
+      ctl_fail := array_append(ctl_fail, format(
+        'this child''s INSERT of an assignment carrying both award amounts in the family they DO manage stored %s rows, not 1', n));
+    end if;
+  exception when others then
+    ctl_fail := array_append(ctl_fail, format(
+      'this child was refused an INSERT carrying both award amounts in the family they DO manage (%s: %s) — so check 5''s insufficient_privilege would prove only that something said no', sqlstate, sqlerrm));
+  end;
+
+  -- The control's rows do not outlive the control. Unconditional: a stray
+  -- assignment carrying 9999 points and $5,000 in a second family is exactly
+  -- the quiet contamination that turns one unattributed check here into one
+  -- false failure in a probe that runs later against the same database.
+  reset role;
+  delete from public.chore_assignments where family_id = ctl_fam;
+  perform set_config('request.jwt.claim.sub', child_uid::text, true);
+  set local role authenticated;
+
+  -- A failed control makes every refusal below unreadable. The boundary is not
+  -- reported as holding and it is not reported as broken: it is reported as
+  -- unproven, here, while the reason is still in hand.
+  if array_length(ctl_fail, 1) is not null then
+    raise exception 'chore award amount boundary UNPROVEN (the control this probe rests on did not hold): %', array_to_string(ctl_fail, ' | ');
   end if;
 
   -- 1. Ticking a chore done is theirs to do — the positive control. A guard
