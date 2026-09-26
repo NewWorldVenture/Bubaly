@@ -6943,6 +6943,13 @@
   "locatorModule.placeDeleted": "Local eliminado",
   "locatorModule.seeWhereYourFamilyIs": "Veja onde está a sua família e mantenha todos seguros.",
   "locatorModule.validCoordinatesAreRequired": "São necessárias coordenadas válidas",
+  "locatorModule.somethingWentWrong": "Algo não correu bem.",
+  "locatorModule.couldNotUpdateYourLocation": "Não foi possível atualizar a tua localização.",
+  "locatorModule.sharedYoureAtPlace": "Partilhado — estás em {place}",
+  "locatorModule.locationShared": "Localização partilhada",
+  "locatorModule.placeUpdated": "Local atualizado",
+  "locatorModule.placeAdded": "Local adicionado",
+  "locatorModule.deleteNamed": "Eliminar «{name}»?",
   "login.continueWithPhone": "Continuar com telemóvel",
   "login.createAnAccount": "Criar uma conta",
   "login.email": "E-mail",
@@ -13699,6 +13706,9 @@
   "contactSmsReply.failed": "Falha no envio da resposta",
   "contactSmsReply.failedDetail": "O fornecedor comunica uma falha no envio. A resposta não será reenviada automaticamente.",
   "actions.unknownTimeZone": "Fuso horário desconhecido. Use um nome como America/Chicago.",
+  "actions.couldNotSaveThatPlace": "Não foi possível guardar esse local.",
+  "actions.couldNotDeleteThatPlace": "Não foi possível eliminar esse local.",
+  "actions.couldNotUpdateThatGeofence": "Não foi possível atualizar essa geocerca.",
   "errors.thatChangeWasNotSaved": "Essa alteração não foi guardada — poderá não ter permissão. Atualize e tente novamente.",
   "familyModule.unknownTimeZone": "Fuso horário desconhecido. Use um nome como America/Chicago."
 }

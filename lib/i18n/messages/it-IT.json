@@ -6943,6 +6943,13 @@
   "locatorModule.placeDeleted": "Luogo eliminato",
   "locatorModule.seeWhereYourFamilyIs": "Guarda dov’è la tua famiglia e tieni tutti al sicuro.",
   "locatorModule.validCoordinatesAreRequired": "Sono necessarie coordinate valide",
+  "locatorModule.somethingWentWrong": "Qualcosa è andato storto.",
+  "locatorModule.couldNotUpdateYourLocation": "Non è stato possibile aggiornare la tua posizione.",
+  "locatorModule.sharedYoureAtPlace": "Condiviso — sei a {place}",
+  "locatorModule.locationShared": "Posizione condivisa",
+  "locatorModule.placeUpdated": "Luogo aggiornato",
+  "locatorModule.placeAdded": "Luogo aggiunto",
+  "locatorModule.deleteNamed": "Eliminare “{name}”?",
   "login.continueWithPhone": "Continua con il telefono",
   "login.createAnAccount": "Crea un account",
   "login.email": "E-mail",
@@ -13699,6 +13706,9 @@
   "contactSmsReply.failed": "Invio della risposta non riuscito",
   "contactSmsReply.failedDetail": "Il fornitore segnala che l’invio non è riuscito. La risposta non verrà inviata di nuovo automaticamente.",
   "actions.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago.",
+  "actions.couldNotSaveThatPlace": "Non è stato possibile salvare questo luogo.",
+  "actions.couldNotDeleteThatPlace": "Non è stato possibile eliminare questo luogo.",
+  "actions.couldNotUpdateThatGeofence": "Non è stato possibile aggiornare questa geofence.",
   "errors.thatChangeWasNotSaved": "Quella modifica non è stata salvata: potresti non avere l'autorizzazione. Aggiorna e riprova.",
   "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago."
 }

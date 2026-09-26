@@ -29027,3 +29027,67 @@ under `TZ=America/Los_Angeles`, `npm run lint` exit 0 at 10 warnings against a
 budget of 12, `npm run typecheck` exit 0, `npm run build` exit 0, `i18n:gate`
 clean across eight surfaces, catalogue integrity green across all seven
 populated locales.
+
+---
+
+## Q51 — The locator module: a switch that says ARMED over a row nothing changed
+
+First of the Section C modules, and picked first because it is the one where
+being wrong is not cosmetic: live location, and the geofence that tells a parent
+when a child arrives somewhere.
+
+The **reads** are sound. Three `useRealtimeQuery` fetchers, all
+`.eq('family_id', familyId)`, all on tables whose row count is bounded by the
+household (one position per member, a family's places) except
+`location_events`, which is explicitly `.limit(120)`. Nothing here can reach
+PostgREST's `db-max-rows` and answer short without saying so.
+
+The **writes** all go through server actions returning `{ ok, error }`, and every
+call site branches on `res.ok`. That part was already right. What was not:
+
+**All three `family_places` writes branched on `error` alone.** RLS filters a
+write; it does not refuse one. `update family_places set geofence_enabled = true
+where id = $1 and family_id = $2` under a predicate no row satisfies updates the
+rows the predicate admits — none — and PostgREST answers `error: null`. So the
+action returned `{ ok: true }` for a write that changed nothing.
+
+The `.eq('family_id')` on all three already closes the cross-family case, so
+this is not a tenancy hole. What is left is a **stale id**, which on a shared
+family surface is the ordinary case rather than the exotic one: two parents on
+the locator page at once, one deletes a place, the other toggles it.
+
+Ranked by what the lie costs:
+
+- **`setGeofenceEnabled`** — the switch flips to armed, the family believes an
+  arrival alert is watching a child, and it will never fire. Nothing else in the
+  product would say so.
+- **`deletePlace`** — "Place deleted", over a place still on the map.
+- **`savePlace`** — an edit reported as saved and not saved.
+
+All three now `.select('id')` and refuse on an empty result, through the same
+`changedNothing(rows)` predicate spelled exactly as the trust surface spells it,
+so a reader who has seen one recognises the other.
+
+**And the module was translated until something went wrong.** Ten toasts beside
+`tr(...)` calls shipped English literals: `'Failed to update location'`,
+`'Failed'` four times, `` `Shared — you're at ${res.place}` ``,
+`'Location shared'`, `'Place updated'`, `'Place added'`, and a
+`window.confirm(`Delete "${p.name}"?`)`. A product whose success path is
+translated and whose failure path is not is a product that speaks your language
+right up until the moment you need it to. Ten keys, seven locales.
+
+**Filed rather than fixed:** `updateMyLocation` logs and swallows a failed
+`location_events` insert (`console.error`, then continues and reports success).
+Failing the whole action would discard the position too, which is worse, so
+logging is defensible — but the person is told "Shared — you're at Home" with no
+hint that the arrival event the family's history and alerts are built on was
+never written. The honest shapes are a queued retry or a distinct partial
+result; both are product decisions, so both are filed rather than guessed at.
+
+**Verified:** `tests/a-geofence-that-reports-armed-is-armed.test.ts` — eight
+assertions covering the readback, the family scope, the manager gate and the
+catalogue keys on all three writes, calibrated by removing the geofence guard and
+watching it name that action. 17,119 tests, 17,116 green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`; the three failures are this container's Node 22 against
+the declared 24.21.0. Lint exit 0, typecheck exit 0, i18n gate clean, catalogue
+integrity green across seven locales.

@@ -156,10 +156,10 @@ export function LocatorModule() {
       const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number }> };
       const battery = nav.getBattery ? await nav.getBattery().then((b) => Math.round(b.level * 100)).catch(() => null) : null;
       const res = await updateMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null, battery });
-      if (!res.ok) { toastError(res.error ?? 'Failed to update location'); return; }
+      if (!res.ok) { toastError(res.error ?? tr('locatorModule.couldNotUpdateYourLocation')); return; }
       setSharing(true);
       void refreshLocations(); void refreshEvents();
-      success(res.place ? `Shared — you're at ${res.place}` : 'Location shared');
+      success(res.place ? tr('locatorModule.sharedYoureAtPlace', { place: res.place }) : tr('locatorModule.locationShared'));
     } catch (e) {
       toastError(geoErrorMessage(e));
     } finally { setUpdating(false); }
@@ -167,7 +167,7 @@ export function LocatorModule() {
 
   async function toggleShareOff() {
     const res = await setLocationSharing(false);
-    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    if (!res.ok) { toastError(res.error ?? tr('locatorModule.somethingWentWrong')); return; }
     setSharing(false); void refreshLocations(); success(tr('locatorModule.locationSharingOff'));
   }
 
@@ -197,13 +197,13 @@ export function LocatorModule() {
     setSavingPlace(true);
     const res = await savePlace({ id: placeForm.id || undefined, name: placeForm.name.trim(), icon: placeForm.icon, address: placeForm.address.trim() || null, latitude: lat, longitude: lng, radius_m: Number(placeForm.radius_m) || 150 });
     setSavingPlace(false);
-    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
-    success(placeForm.id ? 'Place updated' : 'Place added'); setPlaceModal(false); void refreshPlaces();
+    if (!res.ok) { toastError(res.error ?? tr('locatorModule.somethingWentWrong')); return; }
+    success(placeForm.id ? tr('locatorModule.placeUpdated') : tr('locatorModule.placeAdded')); setPlaceModal(false); void refreshPlaces();
   }
   async function removePlace(p: Place) {
-    if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(tr('locatorModule.deleteNamed', { name: p.name }))) return;
     const res = await deletePlace(p.id);
-    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    if (!res.ok) { toastError(res.error ?? tr('locatorModule.somethingWentWrong')); return; }
     success(tr('locatorModule.placeDeleted')); void refreshPlaces();
   }
   async function toggleGeofence(p: Place) {
@@ -211,7 +211,7 @@ export function LocatorModule() {
     setTogglingGeo(p.id);
     const res = await setGeofenceEnabled(p.id, !p.geofence_enabled);
     setTogglingGeo(null);
-    if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
+    if (!res.ok) { toastError(res.error ?? tr('locatorModule.somethingWentWrong')); return; }
     void refreshPlaces();
   }
 

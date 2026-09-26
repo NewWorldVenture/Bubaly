@@ -6943,6 +6943,13 @@
   "locatorModule.placeDeleted": "Plaats verwijderd",
   "locatorModule.seeWhereYourFamilyIs": "Zie waar je gezin is en houd iedereen veilig.",
   "locatorModule.validCoordinatesAreRequired": "Geldige coördinaten zijn vereist",
+  "locatorModule.somethingWentWrong": "Er is iets misgegaan.",
+  "locatorModule.couldNotUpdateYourLocation": "Je locatie kon niet worden bijgewerkt.",
+  "locatorModule.sharedYoureAtPlace": "Gedeeld — je bent bij {place}",
+  "locatorModule.locationShared": "Locatie gedeeld",
+  "locatorModule.placeUpdated": "Plek bijgewerkt",
+  "locatorModule.placeAdded": "Plek toegevoegd",
+  "locatorModule.deleteNamed": "“{name}” verwijderen?",
   "login.continueWithPhone": "Doorgaan met telefoon",
   "login.createAnAccount": "Account aanmaken",
   "login.email": "E-mail",
@@ -13699,6 +13706,9 @@
   "contactSmsReply.failed": "Verzenden van antwoord mislukt",
   "contactSmsReply.failedDetail": "De provider meldt dat het verzenden is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden.",
   "actions.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",
+  "actions.couldNotSaveThatPlace": "Deze plek kon niet worden opgeslagen.",
+  "actions.couldNotDeleteThatPlace": "Deze plek kon niet worden verwijderd.",
+  "actions.couldNotUpdateThatGeofence": "Deze geofence kon niet worden bijgewerkt.",
   "errors.thatChangeWasNotSaved": "Die wijziging is niet opgeslagen — je hebt mogelijk geen toestemming. Ververs de pagina en probeer het opnieuw.",
   "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago."
 }

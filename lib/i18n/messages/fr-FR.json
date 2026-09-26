@@ -6943,6 +6943,13 @@
   "locatorModule.placeDeleted": "Lieu supprimé",
   "locatorModule.seeWhereYourFamilyIs": "Voyez où est votre famille et gardez tout le monde en sécurité.",
   "locatorModule.validCoordinatesAreRequired": "Des coordonnées valides sont requises",
+  "locatorModule.somethingWentWrong": "Une erreur est survenue.",
+  "locatorModule.couldNotUpdateYourLocation": "Impossible de mettre à jour votre position.",
+  "locatorModule.sharedYoureAtPlace": "Partagé — vous êtes à {place}",
+  "locatorModule.locationShared": "Position partagée",
+  "locatorModule.placeUpdated": "Lieu mis à jour",
+  "locatorModule.placeAdded": "Lieu ajouté",
+  "locatorModule.deleteNamed": "Supprimer «{name}» ?",
   "login.continueWithPhone": "Continuer avec un téléphone",
   "login.createAnAccount": "Créer un compte",
   "login.email": "E-mail",
@@ -13699,6 +13706,9 @@
   "contactSmsReply.failed": "Échec de l’envoi de la réponse",
   "contactSmsReply.failedDetail": "Le prestataire signale un échec de l’envoi. La réponse ne sera pas renvoyée automatiquement.",
   "actions.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
+  "actions.couldNotSaveThatPlace": "Impossible d’enregistrer ce lieu.",
+  "actions.couldNotDeleteThatPlace": "Impossible de supprimer ce lieu.",
+  "actions.couldNotUpdateThatGeofence": "Impossible de mettre à jour cette zone.",
   "errors.thatChangeWasNotSaved": "Cette modification n'a pas été enregistrée : vous n'avez peut-être pas l'autorisation. Actualisez et réessayez.",
   "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago."
 }

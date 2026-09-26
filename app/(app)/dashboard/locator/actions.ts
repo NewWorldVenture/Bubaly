@@ -137,6 +137,12 @@ export async function setLocationSharing(enabled: boolean): Promise<LocationResu
   return { ok: true };
 }
 
+/** `rows` empty means the write matched nothing — see savePlace for why that is
+ *  not the same as an error, and why `error` alone cannot tell them apart. */
+function changedNothing(rows: unknown[] | null): boolean {
+  return !rows || rows.length === 0;
+}
+
 export async function savePlace(input: {
   id?: string; name: string; icon?: string | null; address?: string | null;
   latitude: number; longitude: number; radius_m?: number;
@@ -150,32 +156,49 @@ export async function savePlace(input: {
     name: input.name.trim(), icon: input.icon ?? null, address: input.address ?? null,
     latitude: input.latitude, longitude: input.longitude, radius_m: input.radius_m ?? 150,
   };
-  const { error } = input.id
-    ? await supabase.from('family_places').update(fields).eq('id', input.id).eq('family_id', c.active.familyId)
-    : await supabase.from('family_places').insert({ ...fields, family_id: c.active.familyId, created_by: c.user.id });
+  // RLS FILTERS a write; it does not refuse one. An UPDATE whose predicate no
+  // row satisfies removes nothing, changes nothing, and PostgREST answers
+  // `error: null` — so branching on `error` alone cannot tell "saved" from "that
+  // place is not there any more", and the caller was told the edit landed. The
+  // `.eq('family_id')` above already bounds this to one household, so what is
+  // left is a STALE id: a place another parent deleted a moment ago, reported as
+  // updated. `.select('id')` makes the empty result an answer.
+  const { data: rows, error } = input.id
+    ? await supabase.from('family_places').update(fields).eq('id', input.id).eq('family_id', c.active.familyId).select('id')
+    : await supabase.from('family_places').insert({ ...fields, family_id: c.active.familyId, created_by: c.user.id }).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotSaveThatPlace') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
 
 export async function deletePlace(id: string): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
-  const { error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId);
+  const { data: rows, error } = await supabase.from('family_places').delete()
+    .eq('id', id).eq('family_id', c.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotDeleteThatPlace') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
 
 /** Toggle a place's geofence on/off (drives the Geofences rail switches). */
 export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
-  const { error } = await supabase.from('family_places')
-    .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);
+  // The sharpest of the three. A switch that reports "armed" over a row nothing
+  // updated means the family believes a geofence is watching a child when it is
+  // not, and the arrival alert they are relying on will never fire. Nothing else
+  // in the product would say so.
+  const { data: rows, error } = await supabase.from('family_places')
+    .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotUpdateThatGeofence') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }

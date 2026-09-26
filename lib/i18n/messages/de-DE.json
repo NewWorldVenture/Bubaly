@@ -6943,6 +6943,13 @@
   "locatorModule.placeDeleted": "Ort gelöscht",
   "locatorModule.seeWhereYourFamilyIs": "Sehen, wo Ihre Familie ist, und alle sicher wissen.",
   "locatorModule.validCoordinatesAreRequired": "Gültige Koordinaten sind erforderlich",
+  "locatorModule.somethingWentWrong": "Etwas ist schiefgelaufen.",
+  "locatorModule.couldNotUpdateYourLocation": "Dein Standort konnte nicht aktualisiert werden.",
+  "locatorModule.sharedYoureAtPlace": "Geteilt – du bist {place}",
+  "locatorModule.locationShared": "Standort geteilt",
+  "locatorModule.placeUpdated": "Ort aktualisiert",
+  "locatorModule.placeAdded": "Ort hinzugefügt",
+  "locatorModule.deleteNamed": "„{name}“ löschen?",
   "login.continueWithPhone": "Mit Telefonnummer fortfahren",
   "login.createAnAccount": "Konto erstellen",
   "login.email": "E-Mail",
@@ -13699,6 +13706,9 @@
   "contactSmsReply.failed": "Antwort konnte nicht gesendet werden",
   "contactSmsReply.failedDetail": "Der Anbieter meldet einen Sendefehler. Die Antwort wird nicht automatisch erneut gesendet.",
   "actions.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",
+  "actions.couldNotSaveThatPlace": "Dieser Ort konnte nicht gespeichert werden.",
+  "actions.couldNotDeleteThatPlace": "Dieser Ort konnte nicht gelöscht werden.",
+  "actions.couldNotUpdateThatGeofence": "Dieser Geofence konnte nicht aktualisiert werden.",
   "errors.thatChangeWasNotSaved": "Diese Änderung wurde nicht gespeichert – möglicherweise fehlt dir die Berechtigung. Aktualisiere die Seite und versuche es erneut.",
   "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago."
 }
