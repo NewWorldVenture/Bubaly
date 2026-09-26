@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "Het zakgeldschema is niet bijgewerkt.",
   "actions.amountMustBeGreaterThan": "Het bedrag moet groter dan $ 0 zijn.",
   "actions.anAdminRecordIsRequired": "Een beheerdersrecord is vereist.",
+  "actions.anotherPutAwayWasRunning": "Deze lijst werd twee keer tegelijk aan je voorraadkast toegevoegd, dus deze aankoop is niet vastgelegd. Voeg hem met de hand toe als de andere dat niet heeft gedaan.",
   "actions.appliedThePlanButCould": "Het plan is toegepast, maar de uitvoering kon niet worden vastgelegd. Vernieuw en probeer het opnieuw.",
   "actions.approvalThresholdMustBeA": "De goedkeuringsdrempel moet een positief bedrag zijn.",
   "actions.assetNotFound": "Bezit niet gevonden.",

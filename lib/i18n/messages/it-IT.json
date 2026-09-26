@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "Il calendario delle paghette non è stato aggiornato.",
   "actions.amountMustBeGreaterThan": "L’importo deve essere maggiore di 0 $.",
   "actions.anAdminRecordIsRequired": "È richiesto un record amministratore.",
+  "actions.anotherPutAwayWasRunning": "Questa lista veniva aggiunta alla tua dispensa due volte nello stesso momento, quindi questo acquisto non è stato registrato. Aggiungilo a mano se l’altra operazione non l’ha fatto.",
   "actions.appliedThePlanButCould": "Il piano è stato applicato ma non è stato possibile registrare l’esecuzione. Aggiorna e riprova.",
   "actions.approvalThresholdMustBeA": "La soglia di approvazione deve essere un importo positivo.",
   "actions.assetNotFound": "Bene non trovato.",

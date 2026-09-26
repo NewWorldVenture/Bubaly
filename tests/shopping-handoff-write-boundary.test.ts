@@ -302,6 +302,93 @@ describe('a failed pantry write leaves its own line on the list', () => {
   });
 });
 
+describe('two put-aways at once count one purchase once (C1-S9-88)', () => {
+  // The race C1-S9-65 recorded: two phones, or a double tap, both read the
+  // bought lines, both incremented the pantry, and only then removed the line
+  // — so one gallon of milk became two. Each line is now CLAIMED (un-ticked
+  // only where it is still ticked) before the pantry is touched.
+  beforeEach(() => {
+    db.seed('grocery_items', [
+      { id: 'i-1', family_id: FAMILY, list_id: LIST, name: 'Milk', quantity: '1', is_checked: true },
+      { id: 'i-2', family_id: FAMILY, list_id: LIST, name: 'Eggs', quantity: '12', is_checked: true },
+    ]);
+    db.seed('pantry_items', [{ id: 'p-1', family_id: FAMILY, name: 'Milk', quantity: 1 }]);
+  });
+
+  it('the pantry is incremented once per line, the list empties, and one charge is written', async () => {
+    const [a, b] = await Promise.all([
+      recordShoppingTripAction({ listId: LIST, amount: 30 }),
+      recordShoppingTripAction({ listId: LIST, amount: 30 }),
+    ]);
+    if (!a.ok || !b.ok) throw new Error('both put-aways should complete');
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 2 });
+    expect(pantryFor('Eggs')).toMatchObject({ quantity: 12 });
+    expect(pantry()).toHaveLength(2);
+    expect(itemsOn()).toEqual([]);
+    // Every line was put away by exactly one of the two calls.
+    expect([...a.pantryUpdated, ...b.pantryUpdated].sort()).toEqual(['Eggs', 'Milk']);
+    // Never charged twice. Purchases carry no idempotency key, so racing calls
+    // that split the lines cannot agree on one to charge: neither does, and
+    // each says so — the family adds it once by hand.
+    expect(db.table('transactions').length).toBeLessThanOrEqual(1);
+    for (const r of [a, b]) {
+      expect(r.purchaseRecorded || typeof r.purchaseError === 'string', 'an amount was given: charged, or told why not').toBe(true);
+    }
+  });
+
+  it('a call whose lines were all claimed first charges nothing and says why', async () => {
+    // Deterministic: every claim loses, as if another put-away got there first.
+    const realFrom = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table);
+      if (table !== 'grocery_items') return builder;
+      const losing = builder as unknown as Record<string, unknown>;
+      const realUpdate = (losing.update as (v: unknown) => unknown).bind(builder);
+      losing.update = (values: Record<string, unknown>) => {
+        if (values.is_checked !== false) return realUpdate(values);
+        const chain: Record<string, unknown> = { eq: () => chain, select: async () => ({ data: [], error: null }) };
+        return chain;
+      };
+      return builder;
+    }) as typeof db.from);
+    const result = await recordShoppingTripAction({ listId: LIST, amount: 30 });
+    if (!result.ok) throw new Error(result.error);
+    expect(result.pantryUpdated).toEqual([]);
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 1 });
+    expect(pantryFor('Eggs')).toBeUndefined();
+    expect(result.purchaseRecorded).toBe(false);
+    expect(result.purchaseError).toMatch(/twice at the same time/);
+    expect(db.table('transactions')).toHaveLength(0);
+  });
+
+  it('a claimed line whose pantry write fails is handed back, ticked, for the retry', async () => {
+    const realFrom = db.from.bind(db);
+    const fromSpy = vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table);
+      if (table !== 'pantry_items') return builder;
+      const failing = builder as unknown as Record<string, unknown>;
+      failing.insert = () => ({
+        select: () => ({
+          single: async () => ({ data: null, error: { code: '23505', message: 'pantry is full', details: null, hint: null } }),
+          maybeSingle: async () => ({ data: null, error: { code: '23505', message: 'pantry is full', details: null, hint: null } }),
+        }),
+      });
+      return builder;
+    }) as typeof db.from);
+    const first = await recordShoppingTripAction({ listId: LIST });
+    if (!first.ok) throw new Error(first.error);
+    expect(first.pantryFailed.map((f) => f.name)).toEqual(['Eggs']);
+    // Released: still on the list AND still ticked, so the retry picks it up.
+    expect(itemsOn()).toMatchObject([{ name: 'Eggs', is_checked: true }]);
+    fromSpy.mockRestore();
+    const retry = await recordShoppingTripAction({ listId: LIST });
+    if (!retry.ok) throw new Error(retry.error);
+    expect(retry.pantryUpdated).toEqual(['Eggs']);
+    expect(pantryFor('Milk')).toMatchObject({ quantity: 2 });
+    expect(itemsOn()).toEqual([]);
+  });
+});
+
 describe('parsePurchasedQuantity', () => {
   it('reads the leading amount and its unit', () => {
     expect(parsePurchasedQuantity('2 lb')).toEqual({ delta: 2, unit: 'lb' });

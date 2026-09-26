@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-228 finding IDs from four workers and two parallel sessions; none of it was
+229 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 238 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 239 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34699,7 +34699,8 @@ put-away racing this one, so **the pantry was incremented twice for one
 purchase**. It cannot be undone from there. The fix is to claim the line
 *before* incrementing, which is a reordering of a money-adjacent flow and not a
 write-sweep change. It is now logged instead of silent. **OPEN** as a design
-item.
+item. **CLOSED by `C1-S9-88`** (each line is claimed before the pantry is
+touched).
 
 **Deliberate (3).** The two legacy concierge automation-run closes (not every
 approval has such a row) and the meal-plan rollback clear. That last one is
@@ -36314,6 +36315,72 @@ eight `C1-S9-86` mutations (all red).
 
 ---
 
+### `[CLAUDE-1][MEDIUM][GROCERIES + MONEY]` C1-S9-88 — two put-aways that counted one purchase twice, and a charge nobody could de-duplicate
+
+**Closes the design gap `C1-S9-65` recorded.** "Put it in the pantry"
+(`recordShoppingTrip`) walked the ticked lines. For each, it **incremented
+the pantry, then removed the line**. Two put-aways at once, from two phones or
+a double tap, both read the same ticked lines and both incremented, so one
+gallon of milk became two. `C1-S9-65` made the second clear's zero rows
+visible in the log. It could not undo the increment.
+
+**Fix: claim each line before touching the pantry.**
+- The claim un-ticks the line **only where it is still ticked**
+  (`update({ is_checked: false }).eq('is_checked', true)`), confirmed. In
+  Postgres that is atomic: the second of two concurrent claims re-evaluates
+  the condition after the first commits and matches nothing. A lost claim
+  skips the line and names it in a new `alreadyClaimed` field.
+- **If the pantry write then fails,** the line is handed back, ticked, so the
+  retry finds it as before. If that hand-back fails too, the line shows as
+  unbought: a missed count the family can see, never a double one.
+- **If the claim succeeds and the clear then matches nothing,** someone
+  removed the line by hand after the claim. The pantry has it once. That is
+  logged, not failed.
+
+**The money half had the same race, one level up, and a naive fix was
+wrong.** The action records the purchase ("Groceries — $30") when the trip
+completed. My first gate was "this call put something away". The
+**behavioural race test** (two `recordShoppingTripAction` calls under
+`Promise.all` on the in-memory client) still showed **two charges**. The two
+calls had split the lines, one each, so each had put something away and each
+charged the full amount.
+
+`createTransaction` has **no idempotency key**, so two racing calls cannot
+agree on which one charges. The rule is now:
+- a call that found **any** line already claimed does not charge;
+- it returns `purchaseError`: "This list was being added to your pantry twice
+  at the same time, so this purchase wasn't recorded. Add it by hand if the
+  other one didn't." That is a new key, `actions.anotherPutAwayWasRunning`,
+  in all 7 base catalogues, phrased to each catalogue's register and to the
+  module's own "added to your pantry" wording;
+- the UI already shows `purchaseError` beside the stocked count.
+
+The trade is deliberate. In a split, the family enters one purchase by hand
+and is told so. They are never charged twice without seeing it.
+
+**Tests (3 new, all behavioural):**
+- two concurrent put-aways: the pantry is counted once, the list empties,
+  **at most one** charge, and every call given an amount either charged or
+  says why not;
+- a claimed line whose pantry write fails is handed back ticked, and the
+  retry lands it;
+- every claim lost, deterministically: no increment, no charge, and the
+  message.
+
+The existing 23 cases (partial failure, clear failure, no amount, zero
+amount) pass unchanged.
+
+**5 mutations, all red:**
+- no claim (the old order);
+- a claim not conditional on still-ticked;
+- no hand-back on pantry failure;
+- charging despite a concurrent claim;
+- no message for the missed charge.
+
+**Status:** FIXED. **Closes:** `C1-S9-65`'s put-away race.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -36383,8 +36450,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,531 passing / 17,534 across 1,371
-files.** (Unchanged by `C1-S9-87`, whose display change was run in full and whose test-only rule alignment was run by file; after `C1-S9-86`, green on its first run; 17,515 / 17,518 re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,534 passing / 17,537 across 1,371
+files.** (After `C1-S9-88`, green on its first run; 17,531 / 17,534 unchanged by `C1-S9-87`, whose display change was run in full and whose test-only rule alignment was run by file; after `C1-S9-86`, green on its first run; 17,515 / 17,518 re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
@@ -36401,6 +36468,13 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**No run on `345623f6` (pushed 19:01Z).** The Vercel and Supabase Preview
+checks saw that push, but the CI workflow never started for it: the branch's
+latest CI run stayed at `88cc1916`. No empty commit or re-run was used to kick
+it. The next real push (`C1-S9-87` and `-88`) triggers CI on a head that
+covers `C1-S9-85` to `-88` together, and that run is recorded as the
+twenty-fourth.
 
 **Twenty-third run, on `88cc1916` (run 36263500304): 1,293 passed, 3 failed, 0 flaky
 in 9.2m**, covering:

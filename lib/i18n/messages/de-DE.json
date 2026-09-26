@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "Der Taschengeldplan wurde nicht aktualisiert.",
   "actions.amountMustBeGreaterThan": "Der Betrag muss größer als 0 $ sein.",
   "actions.anAdminRecordIsRequired": "Ein Adminsatz ist erforderlich.",
+  "actions.anotherPutAwayWasRunning": "Diese Liste wurde gleichzeitig zweimal in die Vorratskammer übernommen, deshalb wurde dieser Einkauf nicht erfasst. Bitte von Hand eintragen, falls der andere Vorgang es nicht getan hat.",
   "actions.appliedThePlanButCould": "Der Plan wurde angewendet, aber der Lauf konnte nicht als ausgeführt erfasst werden. Aktualisieren Sie und versuchen Sie es erneut.",
   "actions.approvalThresholdMustBeA": "Der Genehmigungsschwellenwert muss ein positiver Betrag sein.",
   "actions.assetNotFound": "Gegenstand nicht gefunden.",

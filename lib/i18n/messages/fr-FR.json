@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "Le calendrier d’argent de poche n’a pas été mis à jour.",
   "actions.amountMustBeGreaterThan": "Le montant doit être supérieur à 0 $.",
   "actions.anAdminRecordIsRequired": "Un enregistrement administrateur est requis.",
+  "actions.anotherPutAwayWasRunning": "Cette liste était ajoutée à votre garde-manger deux fois en même temps, cet achat n’a donc pas été enregistré. Ajoutez-le à la main si l’autre ne l’a pas fait.",
   "actions.appliedThePlanButCould": "Le plan a été appliqué, mais l’exécution n’a pas pu être enregistrée. Actualisez et réessayez.",
   "actions.approvalThresholdMustBeA": "Le seuil d’approbation doit être un montant positif.",
   "actions.assetNotFound": "Bien introuvable.",

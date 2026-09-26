@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "El calendario de pagas no se ha actualizado.",
   "actions.amountMustBeGreaterThan": "El importe debe ser mayor que 0 $.",
   "actions.anAdminRecordIsRequired": "Se requiere un registro de administrador.",
+  "actions.anotherPutAwayWasRunning": "Esta lista se estaba añadiendo a tu despensa dos veces a la vez, así que esta compra no se ha registrado. Añádela a mano si la otra no lo hizo.",
   "actions.appliedThePlanButCould": "Se ha aplicado el plan, pero no se ha podido registrar la ejecución. Actualiza e inténtalo de nuevo.",
   "actions.approvalThresholdMustBeA": "El umbral de aprobación debe ser un importe positivo.",
   "actions.assetNotFound": "No se ha encontrado el activo.",

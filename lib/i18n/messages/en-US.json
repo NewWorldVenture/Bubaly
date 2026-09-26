@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "Allowance schedule was not updated.",
   "actions.amountMustBeGreaterThan": "Amount must be greater than $0.",
   "actions.anAdminRecordIsRequired": "An admin record is required.",
+  "actions.anotherPutAwayWasRunning": "This list was being added to your pantry twice at the same time, so this purchase wasn’t recorded. Add it by hand if the other one didn’t.",
   "actions.appliedThePlanButCould": "Applied the plan but could not record the run as executed. Refresh and try again.",
   "actions.approvalThresholdMustBeA": "Approval threshold must be a positive amount.",
   "actions.assetNotFound": "Asset not found.",

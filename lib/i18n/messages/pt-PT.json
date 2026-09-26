@@ -82,6 +82,7 @@
   "actions.allowanceScheduleWasNotUpdated": "O calendário de mesadas não foi atualizado.",
   "actions.amountMustBeGreaterThan": "O valor tem de ser superior a 0 $.",
   "actions.anAdminRecordIsRequired": "É necessário um registo de administrador.",
+  "actions.anotherPutAwayWasRunning": "Esta lista estava a ser adicionada à sua despensa duas vezes ao mesmo tempo, por isso esta compra não foi registada. Adicione-a manualmente se a outra não o fez.",
   "actions.appliedThePlanButCould": "O plano foi aplicado, mas não foi possível registar a execução. Atualize e tente novamente.",
   "actions.approvalThresholdMustBeA": "O limiar de aprovação tem de ser um valor positivo.",
   "actions.assetNotFound": "Bem não encontrado.",
