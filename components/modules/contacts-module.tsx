@@ -206,7 +206,10 @@ export function ContactsModule() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold text-sm">{contact.name}</p>
+                        <p className="truncate font-semibold text-sm">
+                        {/* A real button, so the keyboard can select the contact; its click bubbles to the row (MAIN-F-D06). */}
+                        <button type="button" aria-pressed={isSelected} className="block max-w-full truncate text-left">{contact.name}</button>
+                      </p>
                         {contact.is_emergency && <Badge tone="danger" className="hidden sm:inline-flex">{t('contacts.emergency')}</Badge>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted">

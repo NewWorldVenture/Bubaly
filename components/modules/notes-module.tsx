@@ -270,7 +270,8 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
-                  <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
+                  {/* A real button, so the keyboard can open the note; its click bubbles to the row (MAIN-F-D06). */}
+                  <button type="button" className="block min-w-0 max-w-full truncate text-left text-sm font-semibold">{note.title ?? t('notes.untitled')}</button>
                   {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
@@ -314,7 +315,8 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               color.bg, color.ring,
             )}>
             {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}
-            {note.title && <p className="mb-2 pr-5 text-sm font-bold leading-tight">{note.title}</p>}
+            {/* A real button, so the keyboard can open the note; its click bubbles to the row (MAIN-F-D06). */}
+            <button type="button" className={cn('mb-2 pr-5 text-left text-sm font-bold leading-tight', !note.title && 'text-muted')}>{note.title ?? t('notes.untitled')}</button>
             {checklist ? (
               <div className="flex-1 space-y-0.5 overflow-hidden">
                 {note.body!.split('\n').slice(0, 5).map((line, i) => {

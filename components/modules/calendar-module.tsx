@@ -26,6 +26,7 @@ import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type Event = Tables<'calendar_events'>;
 
@@ -616,7 +617,7 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelected(e))} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
@@ -635,7 +636,7 @@ export function CalendarModule() {
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelected(e))} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
@@ -683,7 +684,7 @@ export function CalendarModule() {
                     {/* All-day events */}
                     <div className="mt-1 w-full space-y-0.5 px-1">
                       {col.allDay.map(e => (
-                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelected(e))} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                           {e.title}
                         </div>
                       ))}
@@ -728,7 +729,7 @@ export function CalendarModule() {
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
+                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelected(e))}
                             className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                             title={e.title}>
                             <div className="flex items-start justify-between gap-1">
@@ -812,7 +813,7 @@ export function CalendarModule() {
                   {label} &bull; {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
                 {events.map(e => (
-                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelected(e))} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (

@@ -15,6 +15,7 @@ import type { ExistingMember, ResolutionPlan } from '@/lib/migrate/resolve';
 import { commitImport, prepareImport, type ImportResult } from '@/app/(app)/dashboard/migrate/actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type ParsedFile = {
   id: string; name: string; kind: 'ics' | 'csv' | 'vcf';
@@ -370,6 +371,7 @@ export function MigrateWizard() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
             onClick={() => inputRef.current?.click()}
+            role="button" tabIndex={0} onKeyDown={activateOnKey(() => inputRef.current?.click())}
             className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/30 p-8 text-center transition hover:border-brand/40 hover:bg-elevated"
           >
             <Upload className="h-8 w-8 text-muted" />

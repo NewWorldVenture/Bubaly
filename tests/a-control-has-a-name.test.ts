@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { detachedLabels, sourceFiles, unnamedIconButtons, unnamedSelects } from './helpers/jsx-a11y-scan';
+import { clickOnlyElements, detachedLabels, sourceFiles, unnamedIconButtons, unnamedSelects } from './helpers/jsx-a11y-scan';
 
 // A11Y-002 counted the detached-label finding (MAIN-F-D02) as fixed because
 // `jsx-a11y/label-has-associated-control` reported a clean tree. The rule treats
@@ -30,6 +30,11 @@ describe('every control in the app has a name', () => {
     // wrapper, actually points at it; the old ratchet counted any id as a name.
     const sites = files.flatMap((f) => unnamedSelects(f)).map((s) => `${s.file}:${s.line} ${s.what}`);
     expect(sites, 'give each an aria-label from the fieldName.* keys, or a label that points at it').toEqual([]);
+  });
+
+  it('nothing answers only a mouse click (MAIN-F-D06)', () => {
+    const sites = files.flatMap((f) => clickOnlyElements(f)).map((s) => `${s.file}:${s.line} ${s.what}`);
+    expect(sites, 'use a <button>, or role="button" + tabIndex={0} + onKeyDown={activateOnKey(…)}').toEqual([]);
   });
 
   it('no <label> is attached to nothing (A11Y-002, MAIN-F-D02)', () => {
@@ -69,6 +74,20 @@ describe('the scanner sees what the lint rule does not', () => {
     expect(selects(`<label htmlFor="a">{tr('x')}</label><select id="a" />`)).toBe(0);
     expect(selects(`<select aria-label={tr('fieldName.status')} />`)).toBe(0);
     expect(selects(`<label><span>{tr('x')}</span><select /></label>`)).toBe(0);
+  });
+
+  it('a click-only element is caught; a dismiss layer or a keyboard-ready one is not', () => {
+    const clicks = (body: string) => {
+      const file = join(dir, `c${Math.random().toString(36).slice(2)}.tsx`);
+      writeFileSync(file, `export function F({ on, close, setOpen, k }: any) {\n  return (<div>${body}</div>);\n}\n`);
+      return clickOnlyElements(file).length;
+    };
+    expect(clicks(`<div onClick={() => on(1)}>open</div>`)).toBe(1);
+    expect(clicks(`<li onClick={on}>open</li>`)).toBe(1);
+    expect(clicks(`<div onClick={() => on(1)} role="button" tabIndex={0} onKeyDown={k}>open</div>`)).toBe(0);
+    expect(clicks(`<div onClick={() => setOpen(false)} />`)).toBe(0);
+    expect(clicks(`<div onClick={close} />`)).toBe(0);
+    expect(clicks(`<div onClick={(e) => e.stopPropagation()}><button>x</button></div>`)).toBe(0);
   });
 
   it('a name from aria-label, title, visible text or a wrapping label counts', () => {

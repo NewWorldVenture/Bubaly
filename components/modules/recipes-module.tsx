@@ -336,7 +336,10 @@ export function RecipesModule() {
 
                 {/* Info */}
                 <div className="flex flex-1 flex-col p-4">
-                  <h3 className="mb-1 line-clamp-2 font-semibold leading-tight">{recipe.name}</h3>
+                  <h3 className="mb-1 font-semibold leading-tight">
+                    {/* A real button, so the keyboard can open the recipe; its click bubbles to the card (MAIN-F-D06). */}
+                    <button type="button" className="line-clamp-2 text-left">{recipe.name}</button>
+                  </h3>
                   {recipe.description && <p className="mb-2 line-clamp-2 text-xs text-muted">{recipe.description}</p>}
 
                   <div className="mt-auto flex flex-wrap items-center gap-2 text-xs text-muted">

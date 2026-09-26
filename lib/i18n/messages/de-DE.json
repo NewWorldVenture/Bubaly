@@ -8854,6 +8854,7 @@
   "notes.searchNotes": "Notizen suchen…",
   "notes.titleOptional": "Titel (optional)",
   "notes.tooManyNoteAnalysisRequests": "Zu viele Anfragen zur Notizanalyse. Bitte versuchen Sie es in Kürze erneut.",
+  "notes.untitled": "Ohne Titel",
   "notes.updated": "Aktualisiert",
   "notesModule.aiAssistFailed": "Die KI-Unterstützung ist fehlgeschlagen",
   "notesModule.aiSummaryAddedToNote": "KI-Zusammenfassung zur Notiz hinzugefügt",

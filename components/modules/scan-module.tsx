@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type ProposedEvent = {
   title: string; starts_at: string; ends_at: string | null; all_day: boolean;
@@ -114,6 +115,7 @@ export function ScanModule() {
 
       <div
         onClick={() => !scanning && fileRef.current?.click()}
+        role="button" tabIndex={0} aria-disabled={scanning} onKeyDown={activateOnKey(() => { if (!scanning) fileRef.current?.click(); })}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (!scanning) onFile(e.dataTransfer.files?.[0] ?? null); }}
         className={cn(

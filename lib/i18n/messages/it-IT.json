@@ -8854,6 +8854,7 @@
   "notes.searchNotes": "Cerca note…",
   "notes.titleOptional": "Titolo (facoltativo)",
   "notes.tooManyNoteAnalysisRequests": "Troppe richieste di analisi delle note. Riprova tra poco.",
+  "notes.untitled": "Senza titolo",
   "notes.updated": "Aggiornato",
   "notesModule.aiAssistFailed": "Assistenza IA non riuscita",
   "notesModule.aiSummaryAddedToNote": "Riepilogo IA aggiunto alla nota",

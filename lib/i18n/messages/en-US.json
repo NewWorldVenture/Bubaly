@@ -8854,6 +8854,7 @@
   "notes.searchNotes": "Search notes…",
   "notes.titleOptional": "Title (optional)",
   "notes.tooManyNoteAnalysisRequests": "Too many note-analysis requests. Please try again shortly.",
+  "notes.untitled": "Untitled",
   "notes.updated": "Updated",
   "notesModule.aiAssistFailed": "AI assist failed",
   "notesModule.aiSummaryAddedToNote": "AI summary added to note",

@@ -21,6 +21,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type Goal = Tables<'goals'>;
 
@@ -131,7 +132,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   return (
     <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit}>
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit} role="button" tabIndex={0} onKeyDown={activateOnKey(onEdit)}>
           <div className="flex items-center gap-2">
             {goal.is_complete
               ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />

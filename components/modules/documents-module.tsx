@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type Document = Tables<'documents'>;
 
@@ -623,6 +624,7 @@ export function DocumentsModule() {
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
           <div
             onClick={() => fileInputRef.current?.click()}
+            role="button" tabIndex={0} onKeyDown={activateOnKey(() => fileInputRef.current?.click())}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
             className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
