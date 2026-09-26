@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T14:20:00Z
+- Last Updated: 2026-09-26T14:40:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26820,6 +26820,49 @@ with controls that a parent can opt in and a child can still read the setting;
 the pre-fix behaviour was measured directly under the old policies.
 `network-consent-is-a-managers-decision` pins the UI gate (fails with the
 module reverted).
+
+## C1-K-29 · HIGH · Checkout emails to any address, a forgeable terms acceptance, self-awarded rewards, and a sitter's phone a child could change
+
+Same sweep. Every application writer of these six tables is the service role
+or a manager-gated server action, but RLS let any family member write them.
+Measured on the replayed schema before the fix, as a child: 9 breaches.
+
+1. **Bubaly's checkout email, sent to anyone.** The abandoned-checkout cron
+   fires the `checkout_abandoned` automation for every `checkout_sessions` row
+   left `pending` for an hour, emailing its `email` and addressing it to its
+   `name`. The table had member INSERT/UPDATE/DELETE policies that nothing uses
+   (the billing routes and the Stripe webhook write it with the service role),
+   so any member could file pending rows with any address and any text as the
+   name, and Bubaly would send its nudge there. Member writes are dropped;
+   member SELECT is kept.
+2. **A wallet-terms acceptance a child could forge or erase.**
+   `compliance_disclosures` is the record `activateFamilyWalletAction` writes
+   as an "immutable audit" of the parent accepting the wallet terms. It was
+   member FOR ALL: a child filed an acceptance with `accepted_by` set to the
+   parent, and deleted the real one. Now a manager inserts their own
+   acceptance (`accepted_by = auth.uid()`), and nobody rewrites or deletes one.
+3. **Self-awarded chore rewards.** `kid_progress` (XP, level, streak) and
+   `member_badges` are written on approval by the service role (auto-approve)
+   or a manager (`approveSubmissionAction`). A child raised their own XP to
+   999,999 and awarded themselves `streak_7`. Writes need `can_manage_family`.
+4. **A sitter's phone number a child could change.** `babysitter_profiles`
+   (name, phone, email, rate) and `babysitter_payments` (receipts) are written
+   only by parent-only wallet actions, but a child changed the sitter's phone
+   and deleted a receipt. Writes need `can_manage_family`.
+
+`0328_checkout_rewards_and_babysitters_are_not_a_childs_write.sql`;
+`docs/audit/checkout-rewards-babysitter-check.sql` fails 9 ways before and
+passes after (52/52 probes), with controls that the child still reads their
+progress and the sitter, and a parent still awards a badge, updates the
+sitter, and records their own acceptance. Chore-reward, wallet-action and
+billing unit suites pass unchanged (22/22).
+
+Left open from this batch, deliberately: `medication_doses` is still any
+member's write, because the medications module lets every member log any
+member's dose by design (a teen logging a sibling's dose while babysitting).
+The risk is real (a deleted "taken" row invites a second dose, and
+`logged_by` is not pinned to the caller), but narrowing it changes a product
+flow, so it is an owner decision, not a fix.
 
 ## Swept clean · the API routes this file never named
 
