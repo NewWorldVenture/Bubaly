@@ -1,5 +1,44 @@
 # Audit status board
 
+## Pull request 510 integration — 2026-09-19
+
+CURRENT: Published phone/signout repair; AUTH-001/002 remain IN PROGRESS.
+FROZEN: f75e7febdf01bf944fa35a505745001533c80028; 9 source/test/workflow files.
+REPAIRS: Owned SMS verification and lifecycle guards; exact pending-cookie bridge.
+LOCAL: Combined 459/459 controlled browser cases across 17 files pass (1.1m).
+Both full unit zones pass 16,703/16,703 across 1,305 files. Lint (3 existing
+warnings), all 8 localization surfaces and query audit (491/86/146) pass.
+Final combined 252-page build passes; full strict types pass.
+VERIFIED APPLICATION: 2a5e7e7a, dpl_8oWh1TNVFNbmGissmnvmA11P6ECT, 21:28:59 UTC.
+Exact deployed public auth/phone readiness passes; no auth action or SMS sent.
+BASELINE: Published d954 public deployment checks PASS; hosted CI 1,251/1,252,
+sole durable-signout completion failure. Web/Database/Mobile pass. No rerun.
+HOSTED: CI 35470363378 Web/Database/Mobile SUCCESS. Web passes both full unit
+zones (16,703/1,305), build252/lint/types. E2E 105970089707 FAILS:1,293/1,296.
+Full discovery: 1,296 tests/54 files; authenticated/durable enabled, three real
+Next/GoTrue phone cases and repaired signout. All3 phone cases stop before code
+entry after Continue; verification unexecuted. Durable signout and six callbacks
+pass by exact-source all-other-cases inference, not individual success entries.
+Disposable test SMS configuration only; product config/SQL unchanged.
+INVENTORY: All 14,035 prior IDs retained. Only PhoneAuth COMPONENT NS→IN PROGRESS;
+ROLE stays NOT STARTED. Three new helper/test obligations IN PROGRESS.
+Current total14,038: 13,842 NOT STARTED, 192 IN PROGRESS, 1 FIXED+PASS, 3 FAIL (0.01%).
+AUTH-001/002/003 stay open; only existing narrow SEC-005 is closed.
+REPAIR: Pinned CLI disables SMS signup without a concrete provider even with a
+send-SMS hook; disposable test OTP config alone is insufficient. Existing workflow
+DEPLOY NS→IN PROGRESS. CI-only provider/hook repair passes types/lint/discovery3,
+guards66 and exact rewrite/negative controls. New hosted proof remains pending.
+NEXT: Publish two-file CI repair and four evidence docs; await new hosted phone run.
+Physical devices, production SMS delivery and full workflows remain open.
+DISCOVERY: SEC-001 six-writer/media-consumer map; no privacy repair applied.
+Actual worker handlers/Chromium cache/logout reproduce synthetic A image served
+offline to B after logout (desired RED). Existing SW SUPPORT NS→IN PROGRESS;
+no native worker installation, real optimizer or private production content.
+RECORD: docs/final-audit/auth-phone-ownership-cycle.md.
+MAPPING: docs/final-audit/discovery/auth-phone-ownership-inventory.json.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:47:17.467Z
+
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another
 worker lists it under FILES-TOUCHED, audit it and record a recommendation in
@@ -158,4 +197,3 @@ NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings
 FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modified by this worker.
 BLOCKERS: none.
 LAST-UPDATE: 2026-09-14
-

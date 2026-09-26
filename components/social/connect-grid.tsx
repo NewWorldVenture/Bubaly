@@ -27,6 +27,10 @@ export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, b
     start(async () => {
       const r = await connectAccountAction(fd);
       setBusyPlatform(null);
+      if (platform === 'x' && r.ok && 'authorizationUrl' in r && typeof r.authorizationUrl === 'string') {
+        window.location.assign(r.authorizationUrl);
+        return;
+      }
       if (!r.ok) {
         setMessage(r.error ?? 'Could not start connection.');
       } else if (r.requiresSetup) {

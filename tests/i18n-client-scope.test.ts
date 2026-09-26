@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
@@ -64,7 +64,7 @@ function translationKeys(modules: Set<string>): Map<string, string> {
 }
 
 const files = (patterns: string[]): string[] =>
-  patterns.flatMap((p) => execSync(`git ls-files '${p}'`, { encoding: 'utf8' }).split('\n')).filter(Boolean);
+  patterns.flatMap((p) => execFileSync('git', ['ls-files', '--', p], { encoding: 'utf8' }).split(/\r?\n/)).filter(Boolean);
 
 const messages = enUS as Record<string, string>;
 

@@ -9,7 +9,9 @@ import { RetryPublishButton } from '@/components/social/retry-button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { SocialPlatform } from '@/lib/social/capabilities';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { formatScheduledTime, scheduleDisplayTimezone, scheduleStatusKey } from '@/lib/social/schedule-time';
+import { safeSocialLink } from '@/lib/social/links';
 
 export const metadata: Metadata = { title: 'Post · Social' };
 export const dynamic = 'force-dynamic';
@@ -20,12 +22,19 @@ const TARGET_TONE: Record<string, 'neutral' | 'success' | 'danger' | 'warning' |
 
 export default async function PostDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const tr = await getTranslations();
+  const { locale } = await getLocaleContext();
   const { id } = await params;
   const ctx = await requireUserContext();
   const { post, variants, targets, results } = await getPost(ctx.active.familyId, id);
   if (!post) notFound();
+  const scheduleMessage = post.scheduled_for ? scheduleStatusKey(post.metadata) : '';
+  const postLink = safeSocialLink(post.link);
 
-  const canRetry = targets.some((t) => t.status === 'failed' || t.status === 'pending');
+  const awaitingConfirmation = post.status === 'publishing' || targets.some((t) => t.status === 'publishing')
+    || scheduleMessage === 'socialSchedule.awaitingConfirmation';
+  const canRetry = !awaitingConfirmation
+    && ['draft', 'scheduled', 'failed', 'partially_published'].includes(post.status)
+    && targets.some((t) => t.status === 'failed' || t.status === 'pending');
 
   return (
     <div className="space-y-4">
@@ -41,8 +50,11 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
           </Badge>
         </div>
         <p className="whitespace-pre-wrap text-sm text-muted">{post.body}</p>
-        {post.link && <a href={post.link} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-text underline" target="_blank" rel="noreferrer">{post.link} <ExternalLink className="h-3 w-3" /></a>}
-        {post.scheduled_for && <p className="mt-2 text-xs text-muted">{tr('dashboardSocialPosts.scheduledFor')} {new Date(post.scheduled_for).toLocaleString()}</p>}
+        {awaitingConfirmation && <p role="status" className="mt-2 text-sm text-warning">{tr('socialPost.awaitingConfirmation')}</p>}
+        {postLink ? <a href={postLink} className="mt-2 inline-flex items-center gap-1 text-sm text-brand-text underline" target="_blank" rel="noreferrer">{post.link} <ExternalLink className="h-3 w-3" /></a>
+          : post.link && <p className="mt-2 break-all text-sm text-muted">{post.link}</p>}
+        {post.scheduled_for && <p className="mt-2 text-xs text-muted">{tr('dashboardSocialPosts.scheduledFor')} {formatScheduledTime(post.scheduled_for, scheduleDisplayTimezone(post.metadata), locale.code)}</p>}
+        {scheduleMessage && <p role="status" className="mt-2 text-sm text-muted">{tr(scheduleMessage)}</p>}
       </Card>
 
       {variants.length > 0 && (
@@ -66,7 +78,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold">{tr('dashboardSocialPosts.publishTargets')}</h3>
-          {canRetry && <RetryPublishButton postId={post.id} />}
+          {canRetry && <RetryPublishButton postId={post.id} publishNow={post.status === 'scheduled'} />}
         </div>
         {targets.length === 0 ? (
           <p className="text-sm text-muted">{tr('dashboardSocialPosts.noPublishTargetsAddConnectedAccounts')}</p>
@@ -76,8 +88,8 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
               <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
                 <PlatformDot platform={t.platform as SocialPlatform} />
                 <Badge tone={TARGET_TONE[t.status] ?? 'neutral'}>{t.status}</Badge>
-                {t.permalink_url ? (
-                  <a href={t.permalink_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-text underline">{tr('posts.view')}{' '}<ExternalLink className="h-3 w-3" />
+                {safeSocialLink(t.permalink_url) ? (
+                  <a href={safeSocialLink(t.permalink_url)!} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-brand-text underline">{tr('posts.view')}{' '}<ExternalLink className="h-3 w-3" />
                   </a>
                 ) : (
                   <span className="ml-auto text-xs text-muted">{t.error ?? '—'}</span>
@@ -96,7 +108,10 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
               <div key={r.id} className="flex items-center gap-2 border-b border-border/50 pb-1.5">
                 <PlatformDot platform={r.platform as SocialPlatform} />
                 <Badge tone={TARGET_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
-                <span className="text-xs text-muted">{r.error_code ? `${r.error_code}: ${r.error_message}` : (r.permalink_url ?? 'confirmed')}</span>
+                <span className="text-xs text-muted">{r.status === 'publishing'
+                  ? (r.error_message || tr('socialPost.awaitingConfirmation'))
+                  : r.error_code ? `${r.error_code}: ${r.error_message ?? ''}`
+                  : r.error_message || r.permalink_url || (r.status === 'published' && r.provider_object_id ? 'confirmed' : '—')}</span>
                 <span className="ml-auto text-xs text-muted">{new Date(r.attempted_at).toLocaleString()}</span>
               </div>
             ))}

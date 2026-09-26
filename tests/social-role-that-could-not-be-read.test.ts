@@ -52,12 +52,21 @@ vi.mock('@/lib/supabase/server', () => ({
 const ok = (row: Row | null): Result => ({ data: row, error: null });
 const failed = (): Result => ({ data: null, error: { message: 'canceling statement due to statement timeout' } });
 
-const DEMOTED = { social_role: 'analyst', status: 'active' };
-const PARENT = { role: 'parent' };
+// Rows carry the identity columns because the resolver now checks them: a row
+// for another family, another user, or an inactive membership is refused
+// outright (see social-access-execution for those cases).
+const DEMOTED = { family_id: 'f-1', user_id: 'u-1', social_role: 'analyst', status: 'active' };
+const PARENT = { family_id: 'f-1', user_id: 'u-1', role: 'parent', is_active: true };
 
 async function access() {
   const { getSocialAccess } = await import('@/lib/social/access');
   return getSocialAccess('f-1');
+}
+
+/** The resolver's answer to a read it could not complete: an error, not null. */
+async function unavailable() {
+  const { SocialAccessUnavailableError } = await import('@/lib/social/access');
+  await expect(access()).rejects.toBeInstanceOf(SocialAccessUnavailableError);
 }
 
 describe('a social role that could not be read', () => {
@@ -85,10 +94,12 @@ describe('a social role that could not be read', () => {
     expect(a?.can('connect_accounts')).toBe(true);
   });
 
-  // The defect. Without the fix this resolves to 'admin'.
+  // The defect. Without the fix this resolves to 'admin'. The resolver now
+  // THROWS rather than returning null, so "could not check" is distinguishable
+  // from "not allowed" — a stronger answer another session landed.
   it('refuses rather than promoting a demoted member when the explicit read fails', async () => {
     explicitResult = failed();
-    expect(await access()).toBeNull();
+    await unavailable();
   });
 
   // Not an escalation on its own — the explicit row is authoritative, so this
@@ -98,13 +109,13 @@ describe('a social role that could not be read', () => {
   // consistent, and the test records which of the two it is.
   it('refuses when the membership read fails, even though an explicit row was readable', async () => {
     memberResult = failed();
-    expect(await access()).toBeNull();
+    await unavailable();
   });
 
   it('refuses when both reads fail', async () => {
     explicitResult = failed();
     memberResult = failed();
-    expect(await access()).toBeNull();
+    await unavailable();
   });
 
   // Identity control: no session is still null, by the earlier guard.

@@ -1,0 +1,24 @@
+# Independent care/delivery integration review
+
+Scope: the committed source delta from `05e1b69bf78bebe76a71f8b0eaf83a8921d171f3` through final source `608c93071a88bf8211f1dda5ecbce3454c18b751`. Root confirmed that reference after correcting an obsolete static health-test assertion. This review makes no application edits and does not substitute discovery for runtime verification.
+
+No material integration regression was found in the requested guardrails:
+
+- No SQL, migration, generated schema, shared navigation, app layout or middleware change appears in this delta. Mobile manifests and dependency lock entries are unchanged.
+- `package.json` and `package-lock.json` each contain only the approved root `engines.node = ">=24.15.0 <25"` insertion. Removing that insertion reproduces the baseline file exactly, after newline normalization. Parsed comparison also confirms every other field is unchanged, including dependency versions, resolved URLs and integrity hashes. Web quality and E2E CI use Node 24; the separate mobile and standalone cron-dispatch jobs retain their existing Node 22 configuration.
+- All seven base catalogues preserve all 13,477 previous values and their relative key order. Each adds the same 19 keys, for 13,496 keys per locale. No prior key is removed or replaced.
+- Email, SMS and voice-transcription handlers import the existing exported capture/attempt functions from the new urgent-delivery helper. The helper's server identity and Twilio receipt imports resolve to their actual exports. Required signature/secret guards remain before intake. The existing exact public callback allowlist still matches the handler paths; no broader Contact Center session exemption was introduced.
+- The new authenticated cron GET imports the actual drain helper and uses the existing cron authorization function before queue reads. The dispatcher adds `/api/cron/contact-center-urgent` every five minutes, and Vercel adds the same route at 01:00 UTC daily. Every configured Vercel route exists, and no previous cron schedule is removed or changed. The new route's 110-second budget remains below the dispatcher's 120-second request deadline.
+
+Independent comparison command: the read-only helper `C:/Users/Daniel/AppData/Local/Temp/bubaly-final-integration-check-20260912.cjs`, executed under the checksum-verified isolated Node 24.21.0. It compares baseline Git blobs with current files, verifies exact package insertions, checks every old locale value and key order, and compares Vercel schedules. Manual source inspection checked the callback/cron import chain and existing actual-handler test coverage. `git diff --check` passed. No additional broad suite or build was run in this review; root owns combined gates.
+
+The regenerated `discovery/care-delivery-inventory.json` was independently verified against the exact final source commit with `C:/Users/Daniel/AppData/Local/Temp/bubaly-care-inventory-verify-20260912.cjs 608c93071a88bf8211f1dda5ecbce3454c18b751`. Verification passed with no discrepancies:
+
+- The inventory contains the complete non-documentation changed-file set: **56 files**, including **15 new files**, **16 production source files**, **28 test files**, **7 catalogues** and **5 supporting/configuration files**.
+- Every source SHA256, baseline SHA256, byte count and new-file flag matches exact committed Git blob bytes. Working-tree newline conversions do not affect this comparison.
+- All **96 exported symbols** match an independent TypeScript parse of the committed sources, including function and arrow-function exports, types, classes and values. Export source lines, added symbols/functions, API paths, HTTP methods and directly referenced environment names match the inventory.
+- Catalogue metadata matches the committed old and new values, order, counts and added-key names in all seven locales.
+
+The final `3effbf41` → `608c9307` delta was independently inspected and contains only `tests/health-read-boundaries.test.ts` (four added lines, three removed). It replaces stale destructuring/refresh source-string assertions with the current combined loading/read-error expressions, retains the unavailable-data copy check, and points to the executing medication browser coverage. No production, runtime configuration, locale or dependency file changed between these references. The inventory verification was rerun after this correction, rather than assuming the prior inventory remained complete.
+
+At final verification, the only tracked uncommitted differences were root's audit state, regenerated inventory and rendered master report; no application source differed from the pinned commit. This review document is the only file owned by this review lane. Combined unit, browser, type and build results remain root's separately recorded evidence.

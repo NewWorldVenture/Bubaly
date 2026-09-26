@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServer } from '@/lib/supabase/server';
-import { isAuthCookieName } from '@/lib/auth/session';
+import { encodeSignOutBridge, prepareSignOutBridge, SIGNOUT_BRIDGE_COOKIE, SIGNOUT_BRIDGE_PATH } from '@/lib/auth/signout-bridge';
+import { isSecureRequest } from '@/lib/auth/session';
 
 /**
- * Sign out — the ONLY thing that ends a session. Everything else in the auth
- * path is built to keep a session alive, so this is the single place a user's
- * sign-in is deliberately thrown away.
+ * Compatibility for form POSTs made before hydration. Browser controls clear
+ * their intended session locally. This route never writes authentication
+ * cookies: a delayed response cannot delete a newer login.
  *
  * Scoped to this device by default. `signOut()` defaults to `global`, which
  * revokes every refresh token the user has anywhere — so signing out on the
@@ -15,20 +14,20 @@ import { isAuthCookieName } from '@/lib/auth/session';
  * signing out everywhere (for a lost device).
  */
 export async function POST(request: Request) {
-  const scope = await readScope(request);
-  const supabase = await createServer();
-  await supabase.auth.signOut({ scope });
-
-  const res = NextResponse.redirect(new URL('/login', new URL(request.url).origin), { status: 303 });
-
-  // Expire the auth cookies on the redirect itself. supabase-js clears them
-  // through the cookie store, and Next carries those mutations onto the
-  // response — but a session that outlives an explicit sign-out is the one
-  // failure this route must never have, so state it on the response too.
-  const jar = await cookies();
-  for (const cookie of jar.getAll()) {
-    if (isAuthCookieName(cookie.name)) res.cookies.set(cookie.name, '', { path: '/', maxAge: 0 });
+  const url = new URL(request.url);
+  const origin = request.headers.get('origin');
+  if ((origin !== null && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') {
+    return new NextResponse(null, { status: 403, headers: { 'Cache-Control': 'no-store' } });
   }
+  const scope = await readScope(request);
+  const bridge = await prepareSignOutBridge(scope);
+  const res = NextResponse.redirect(new URL(`${SIGNOUT_BRIDGE_PATH}?intent=${bridge.nonce}`, url.origin), { status: 303 });
+  res.headers.set('Cache-Control', 'no-store');
+  res.headers.set('Referrer-Policy', 'no-referrer');
+  res.cookies.set(SIGNOUT_BRIDGE_COOKIE, encodeSignOutBridge(bridge), {
+    httpOnly: true, sameSite: 'strict', path: SIGNOUT_BRIDGE_PATH, maxAge: 60,
+    secure: isSecureRequest({ forwardedProto: request.headers.get('x-forwarded-proto'), url: request.url }),
+  });
   return res;
 }
 

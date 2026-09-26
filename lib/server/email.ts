@@ -7,6 +7,26 @@ import { FROM_EMAIL, emailEnabled } from '@/lib/email';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 
+function mailboxDomain(address: string): string | null {
+  if (/\s/.test(address)) return null;
+  const match = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i.exec(address);
+  return match?.[1].toLowerCase() ?? null;
+}
+
+/** Use the family's mailbox only within the deployment's configured sender domain. */
+export function familyReplySender(familyLabel: string, familyAddress: string): string {
+  const configured = FROM_EMAIL.trim();
+  const sender = /^[^<>\r\n]*<([^<>\s]+)>$/.exec(configured)?.[1] ?? configured;
+  const familyDomain = mailboxDomain(familyAddress);
+  if (!familyDomain || familyDomain !== mailboxDomain(sender)) return FROM_EMAIL;
+  // Omit an unsafe label rather than letting it change mailbox/header syntax.
+  if (/[\u0000-\u001f\u007f-\u009f<>\u2028\u2029]/.test(familyLabel)) return familyAddress;
+  const label = familyLabel.trim();
+  if (!label) return familyAddress;
+  const quoted = label.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${quoted}" <${familyAddress}>`;
+}
+
 type SendArgs = {
   to: string; subject: string; html: string; replyTo?: string;
   /**

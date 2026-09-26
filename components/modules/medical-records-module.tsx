@@ -1,7 +1,5 @@
 'use client';
 
-import { wroteNoRows } from '@/lib/supabase/errors';
-
 import { useEffect, useMemo, useState } from 'react';
 import {
   Stethoscope, Smile, Plus, Pencil, Trash2, FileText, ClipboardList,
@@ -24,6 +22,7 @@ import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-shee
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -148,13 +147,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       is_primary: providerForm.is_primary,
       notes: providerForm.notes || null,
     };
-    // `.select('id')` is what makes a REFUSED write tell itself apart from a
-    // successful one. health_providers / insurance_policies / medical_profiles
-    // are SELECT is_family_member but UPDATE/DELETE can_manage_family, so a
-    // teen, child or caregiver SEES these records and cannot change them — and
-    // RLS does not refuse them with an error. It matches zero rows and returns
-    // success, so `if (error)` alone reported "saved" over an unchanged row.
-    // (An INSERT blocked by RLS does raise, so only the update path needs this.)
+    // A refused write is not an error: a manager-only RLS policy FILTERS the
+    // update/delete, so it matches nothing and succeeds. `.select('id')` asks
+    // for the rows back, which is the only way to tell.
     const { data: rows, error: err } = providerForm.id
       ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
@@ -245,6 +240,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: profileForm.notes || null,
       updated_by: userId,
     };
+    // The fifth manager-gated write in this module, and the one the other four
+    // fixes did not reach. An upsert that RLS filters is the UPDATE half
+    // matching nothing, so without a row count this said "Profile saved" over
+    // allergies and emergency contacts that never changed.
     const { data: rows, error: err } = await sb.from('medical_profiles')
       .upsert(payload, { onConflict: 'member_id' }).select('id');
     setSaving(false);

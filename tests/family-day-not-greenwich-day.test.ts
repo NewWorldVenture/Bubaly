@@ -22,6 +22,12 @@ import { describe, expect, it } from 'vitest';
 const ROOTS = ['app', 'lib'];
 const CODE = new Set(['.ts', '.tsx']);
 
+// Directory traversal uses the host separator; the reviewed registry uses
+// repository paths. Match the complete path on Windows and POSIX alike.
+function allowedFile(registry: Map<string, string>, file: string): boolean {
+  return registry.has(file.replaceAll('\\', '/'));
+}
+
 /**
  * Files that still derive a Greenwich day key next to a DATE filter, each with
  * the reason it has not been converted. Shrinking this list is the point of it;
@@ -110,7 +116,7 @@ describe("a family's day is not Greenwich's day", () => {
       for (const file of sourceFiles(root)) {
         const hit = greenwichDayNextToDateFilter(readFileSync(file, 'utf8'), cols);
         if (hit.length === 0) continue;
-        if (ALLOWED.has(file)) continue;
+        if (allowedFile(ALLOWED, file)) continue;
         offenders.push(`${file} — filters ${hit.join(', ')} with a Greenwich day key; use dayKeyInTz(now, tz)`);
       }
     }
@@ -136,6 +142,15 @@ describe("a family's day is not Greenwich's day", () => {
     // UTC key with no DATE filter beside it.
     expect(greenwichDayNextToDateFilter("dayKeyInTz(now, tz);\ntoISOString().slice(0, 10);\n.eq('plan_date', k)", cols2)).toEqual([]);
     expect(greenwichDayNextToDateFilter("now.toISOString().slice(0, 10);\n.eq('starts_at', k)", cols2)).toEqual([]);
+  });
+
+  it('normalizes separators without exempting an unlisted sibling', () => {
+    expect(allowedFile(ALLOWED, 'lib/network/aggregate-server.ts')).toBe(true);
+    expect(allowedFile(ALLOWED, 'lib\\network\\aggregate-server.ts')).toBe(true);
+    expect(allowedFile(ALLOWED, 'lib/network/another-aggregate-server.ts')).toBe(false);
+    expect(allowedFile(ALLOWED, 'lib\\network\\another-aggregate-server.ts')).toBe(false);
+    const unsafe = "const today = now.toISOString().slice(0, 10); .eq('plan_date', today)";
+    expect(greenwichDayNextToDateFilter(unsafe, new Set(['plan_date']))).toEqual(['plan_date']);
   });
 });
 
@@ -210,7 +225,7 @@ describe('a DATE column is never written a Greenwich day', () => {
       for (const file of sourceFiles(root)) {
         const hit = greenwichDayWrittenToDateColumn(readFileSync(file, 'utf8'), cols);
         if (hit.length === 0) continue;
-        if (WRITE_ALLOWED.has(file)) continue;
+        if (allowedFile(WRITE_ALLOWED, file)) continue;
         offenders.push(`${file} — writes ${hit.join(', ')} as a Greenwich day key; use todayInZone(tz)`);
       }
     }
@@ -239,5 +254,15 @@ describe('a DATE column is never written a Greenwich day', () => {
     expect(greenwichDayWrittenToDateColumn("{ label: new Date().toISOString().slice(0, 10) }", cols2)).toEqual([]);
     // The value of the NEXT property must not leak into this one.
     expect(greenwichDayWrittenToDateColumn("{ spent_on: row.day, note: new Date().toISOString().slice(0, 10) }", cols2)).toEqual([]);
+  });
+
+  it('uses the same exact repository identity for write exemptions on both hosts', () => {
+    expect(allowedFile(WRITE_ALLOWED, 'lib/reasoning/engine-server.ts')).toBe(true);
+    expect(allowedFile(WRITE_ALLOWED, 'lib\\reasoning\\engine-server.ts')).toBe(true);
+    expect(allowedFile(WRITE_ALLOWED, 'lib/reasoning/another-engine-server.ts')).toBe(false);
+    expect(allowedFile(WRITE_ALLOWED, 'lib\\reasoning\\another-engine-server.ts')).toBe(false);
+    expect(greenwichDayWrittenToDateColumn(
+      "{ as_of_date: new Date().toISOString().slice(0, 10) }", new Set(['as_of_date']),
+    )).toEqual(['as_of_date']);
   });
 });

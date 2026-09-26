@@ -2,6 +2,16 @@
 //
 // Kept free of Supabase / React so dose expansion and adherence math can be
 // unit tested deterministically.
+//
+// A dose slot is a reading on the FAMILY's clock, not on whichever clock
+// happens to be running the code. Pass the family's zone and both the browser
+// that logs a dose and the reminder cron that reads it back resolve
+// "2026-09-13T08:00" to the same instant. Omit it and slots resolve against the
+// runtime — right in a browser sitting in the family's zone, and UTC on a
+// server, which is how the cron came to read every already-taken dose as
+// pending and nag a household for pills it had swallowed.
+
+import { isValidTimezone, zonedLocalToInstant } from '@/lib/time/zoned';
 
 export type DoseStatus = 'taken' | 'skipped' | 'missed';
 
@@ -45,6 +55,23 @@ export function localDateKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Resolve the existing browser-local schedule contract without silently
+ * moving an invalid date/time (including a missing DST hour) to another slot. */
+export function doseSlotInstant(slotKey: string, timezone?: string | null): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(slotKey);
+  if (!match) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  if (timezone && isValidTimezone(timezone)) {
+    // Returns null for the same two cases as the runtime path below: a date
+    // that does not exist, and the hour spring-forward skips.
+    return zonedLocalToInstant(year, month, day, hour * 60 + minute, timezone)?.toISOString() ?? null;
+  }
+  const instant = new Date(year, month - 1, day, hour, minute);
+  if (instant.getFullYear() !== year || instant.getMonth() !== month - 1 || instant.getDate() !== day
+    || instant.getHours() !== hour || instant.getMinutes() !== minute) return null;
+  return instant.toISOString();
+}
+
 /** True when a schedule is active on the given local day-key and covers that weekday. */
 export function scheduleCoversDay(schedule: ScheduleLike, dayKey: string, weekday: number): boolean {
   if (schedule.starts_on && dayKey < schedule.starts_on) return false;
@@ -57,18 +84,18 @@ export function scheduleCoversDay(schedule: ScheduleLike, dayKey: string, weekda
  * with any existing log rows so the UI knows which are taken/skipped/pending.
  * Sorted by time of day.
  */
-export function dosesForDay(schedules: ScheduleLike[], logs: DoseLogLike[], day: Date): DueDose[] {
+export function dosesForDay(
+  schedules: ScheduleLike[], logs: DoseLogLike[], day: Date, timezone?: string | null,
+): DueDose[] {
   const dayKey = localDateKey(day);
   const weekday = day.getDay();
-  // A schedule fires at most once per local day, so (schedule_id + local day of
-  // the logged instant) uniquely identifies a dose slot. Matching this way is
-  // timezone-robust: a timestamp written from a local day round-trips to the
-  // same local day-key in the same browser.
+  // Match the database's unique (schedule_id, scheduled_for) slot. A schedule
+  // whose time changes must not consume or toggle an earlier dose that day.
   const logBySlot = new Map<string, DoseStatus>();
   for (const log of logs) {
     if (!log.schedule_id) continue;
-    const logDay = localDateKey(new Date(log.scheduled_for));
-    logBySlot.set(`${log.schedule_id}@${logDay}`, log.status);
+    const instant = new Date(log.scheduled_for).getTime();
+    if (Number.isFinite(instant)) logBySlot.set(`${log.schedule_id}@${instant}`, log.status);
   }
 
   const due: DueDose[] = [];
@@ -76,7 +103,10 @@ export function dosesForDay(schedules: ScheduleLike[], logs: DoseLogLike[], day:
     if (!scheduleCoversDay(s, dayKey, weekday)) continue;
     const time = shortTime(s.time_of_day);
     const slotKey = `${dayKey}T${time}`;
-    const status = logBySlot.get(`${s.id}@${dayKey}`) ?? 'pending';
+    const instant = doseSlotInstant(slotKey, timezone);
+    // Keep an unresolvable local time visible for review instead of silently
+    // dropping a scheduled dose or assigning it to a different clock time.
+    const status = instant ? logBySlot.get(`${s.id}@${new Date(instant).getTime()}`) ?? 'pending' : 'pending';
     due.push({ scheduleId: s.id, medicationId: s.medication_id, time, slotKey, status });
   }
   return due.sort((a, b) => a.time.localeCompare(b.time));

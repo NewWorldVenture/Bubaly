@@ -42,6 +42,23 @@ export function durableCookieOptions(secure: boolean): DurableCookieOptions {
   };
 }
 
+/**
+ * Renewal owns the session, not an unfinished sign-in. The SDK removes its
+ * PKCE verifier on every session save (including refresh), so shared clients
+ * must decline that cleanup. An explicit new initiation may still replace
+ * the verifier and remove its old chunks in the same batch. Callback exchange
+ * and explicit logout use separate storage with their own retirement rules.
+ */
+export function preservePendingPkceVerifier<T extends { name: string; options: { maxAge?: number } }>(
+  cookies: T[], supabaseUrl: string,
+): T[] {
+  const key = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token-code-verifier`;
+  const matches = (name: string) => name === key
+    || (name.startsWith(`${key}.`) && /^\d+$/.test(name.slice(key.length + 1)));
+  const replacement = cookies.some(cookie => matches(cookie.name) && cookie.options.maxAge !== 0);
+  return replacement ? cookies : cookies.filter(cookie => !matches(cookie.name) || cookie.options.maxAge !== 0);
+}
+
 /** True for https origins, false for anything else or unparseable. */
 export function isSecureOrigin(url: string | null | undefined): boolean {
   if (!url) return false;

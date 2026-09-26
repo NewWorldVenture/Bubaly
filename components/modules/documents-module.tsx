@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -227,10 +227,10 @@ export function DocumentsModule() {
     const next = !isFav(doc);
     setFavPending((p) => ({ ...p, [doc.id]: next }));
     const sb = createClient();
-    const { error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id);
-    if (err) {
+    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).select('id');
+    if (err || wroteNoRows(rows)) {
       setFavPending((p) => { const { [doc.id]: _drop, ...rest } = p; return rest; });
-      toastError(describeDbError(err));
+      toastError(err ? describeDbError(err) : tr('errors.thatChangeWasNotSaved'));
       return;
     }
     refresh();
@@ -249,9 +249,14 @@ export function DocumentsModule() {
   async function remove(doc: Document) {
     setConfirmDoc(null);
     const sb = createClient();
+    // NOTE the order: the storage object is removed FIRST, so a row delete the
+    // database refuses leaves a row pointing at a file that no longer exists.
+    // Verifying the delete at least makes that visible instead of reporting it
+    // as done; the ordering itself is recorded in audit/claude-1.md.
     if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
-    const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('documentsModule.fileDeleted')); refresh();
   }
 

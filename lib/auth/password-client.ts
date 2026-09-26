@@ -1,0 +1,231 @@
+import { createBrowserClient, isChunkLike, serializeCookieHeader, stringFromBase64URL, type CookieOptions } from '@supabase/ssr';
+import { AuthRetryableFetchError, isAuthError, type AuthTokenResponsePassword, type Session, type SignInWithPasswordCredentials } from '@supabase/supabase-js';
+import { durableCookieOptions, isSecureOrigin } from './session';
+import { captureBrowserSessionSnapshot } from './browser-session-storage';
+import { notifySessionStorageChanged } from './session-change';
+import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from './callback-witness';
+import { pkceInitiationCookieName, readPkceInitiationSlot } from './pkce-initiation';
+import { isLikelyE164, isValidOtp } from './otp';
+
+type Cookie = { name: string; value: string; options: CookieOptions };
+type Tokens = { access_token: string; refresh_token: string };
+/** Optional operation owner for callbacks captured before the exchange request. */
+export type OwnedSessionBoundary = {
+  isCurrent: () => boolean;
+  didAdopt: (session: Session) => void;
+};
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const interrupted = () => new AuthRetryableFetchError('Sign-in could not be completed. Please try again.', 0);
+const unavailable = (error: unknown): never => { throw isAuthError(error) ? error : interrupted(); };
+
+function claims(token: string): Record<string, unknown> | null {
+  try {
+    const part = token.split('.')[1];
+    if (!part || part.length > 64 * 1024) return null;
+    const value: unknown = JSON.parse(stringFromBase64URL(part));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+function validSession(value: unknown): value is Session {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const session = value as Partial<Session>;
+  const jwt = typeof session.access_token === 'string' ? claims(session.access_token) : null;
+  return typeof session.user?.id === 'string' && UUID.test(session.user.id)
+    && typeof session.access_token === 'string' && !!session.access_token.trim()
+    && typeof session.refresh_token === 'string' && !!session.refresh_token.trim()
+    && session.token_type === 'bearer' && Number.isFinite(session.expires_in) && session.expires_in! > 0
+    && Number.isFinite(session.expires_at) && session.expires_at! > Date.now() / 1000
+    && jwt?.sub === session.user.id && typeof jwt.exp === 'number' && Number.isFinite(jwt.exp) && jwt.exp > Date.now() / 1000;
+}
+
+/** Ownership check only: provider verification remains the source of authority. */
+export function isPasswordSessionCurrent(session: Session): boolean {
+  try {
+    const current = captureBrowserSessionSnapshot();
+    if (!current || current.userId !== session.user.id) return false;
+    const sid = claims(session.access_token)?.session_id;
+    return typeof sid === 'string' && current.sessionId ? sid === current.sessionId : current.accessToken === session.access_token;
+  } catch { return false; }
+}
+
+function sessionFromWrites(cookies: Cookie[], key: string): Session | null {
+  const parts = cookies.filter(cookie => isChunkLike(cookie.name, key) && cookie.options.maxAge !== 0);
+  if (!parts.length || parts.length > 128 || parts.reduce((size, part) => size + part.value.length, 0) > 256 * 1024) return null;
+  let encoded = parts.find(cookie => cookie.name === key)?.value ?? '';
+  if (encoded && parts.length !== 1) return null;
+  if (!encoded) for (let index = 0; index < parts.length; index++) {
+    const part = parts.find(cookie => cookie.name === `${key}.${index}`);
+    if (!part?.value) return null;
+    encoded += part.value;
+  }
+  try {
+    const value: unknown = JSON.parse(encoded.startsWith('base64-') ? stringFromBase64URL(encoded.slice(7)) : encoded);
+    return validSession(value) ? value : null;
+  } catch { return null; }
+}
+
+/** A disposable SDK operation owns its storage from before the first await. */
+async function withOwnedClient(
+  run: (client: ReturnType<typeof createBrowserClient>, owns: () => boolean) => Promise<AuthTokenResponsePassword>,
+  canCommitSession: () => boolean,
+  canAdoptSession: (session: Session) => boolean = () => true,
+  boundary?: OwnedSessionBoundary,
+  ownership?: { allowSessionRefresh: boolean; onLost: () => void },
+): Promise<AuthTokenResponsePassword> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+  const initiationKey = pkceInitiationCookieName(key);
+  const isSession = (name: string) => isChunkLike(name, key) || isChunkLike(name, `${key}-user`);
+  const isOwnership = (name: string) => isSession(name) || name === `${key}-logout-generation` || name === initiationKey;
+  const read = () => {
+    const cookies = parseCallbackAdmissionCookies(document.cookie);
+    if (!cookies || !readPkceInitiationSlot(cookies, key)) throw interrupted();
+    return cookies;
+  };
+  const snapshot = () => JSON.stringify(read().filter(cookie => isOwnership(cookie.name)).sort((a, b) => a.name.localeCompare(b.name)));
+  const decision = () => {
+    if (!ownership?.allowSessionRefresh) return snapshot();
+    const cookies = read(), material = callbackAdmissionMaterial(cookies, key);
+    if (!material) throw interrupted();
+    return JSON.stringify({ session: material.session, generation: material.generation,
+      initiation: readPkceInitiationSlot(cookies, key)!.raw });
+  };
+  let expected = snapshot();
+  let expectedDecision = decision();
+  let active = true;
+  let exposed = false;
+  let adopted: Session | null = null;
+  const sameDecision = () => canCommitSession() && (boundary ? boundary.isCurrent() : decision() === expectedDecision);
+  const owns = () => {
+    if (!active) return false;
+    if (sameDecision()) return true;
+    ownership?.onLost();
+    return false;
+  };
+  if (!boundary) {
+    // A deliberate password/child/SMS login claims the same pending decision slot
+    // before any await. Its marker cannot authorize PKCE exchange, and does not
+    // consume the previous verifier. Callback adoption retains its own proof.
+    if (!owns()) throw interrupted();
+    const reservation = 'session-v1-' + [...crypto.getRandomValues(new Uint8Array(16))]
+      .map(value => value.toString(16).padStart(2, '0')).join('');
+    const intended = new Map(read().filter(cookie => isOwnership(cookie.name)).map(cookie => [cookie.name, cookie.value]));
+    intended.set(initiationKey, reservation);
+    if (!owns()) throw interrupted();
+    document.cookie = serializeCookieHeader(initiationKey, reservation, durableCookieOptions(isSecureOrigin(window.location.origin)));
+    const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
+    if (snapshot() !== planned) throw interrupted();
+    expected = planned;
+    expectedDecision = decision();
+  }
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const client = createBrowserClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    isSingleton: false,
+    cookieOptions: { ...durableCookieOptions(isSecureOrigin(window.location.origin)), name: key },
+    auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, skipAutoInitialize: true, flowType: 'pkce' },
+    global: { fetch: (input, init) => {
+      if (!exposed || !owns()) throw interrupted();
+      return fetch(input, { ...init, signal: controller.signal, credentials: 'omit' });
+    } },
+    cookies: {
+      getAll: () => exposed ? read() : [],
+      setAll: cookies => {
+        // Password login must not consume a pending OAuth/signup verifier.
+        const writes = cookies.filter(cookie => isSession(cookie.name));
+        if (!writes.length) return;
+        const candidate = sessionFromWrites(writes, key);
+        if (!candidate || !canAdoptSession(candidate) || !exposed || !owns()) throw interrupted();
+        const intended = new Map(read().filter(cookie => isOwnership(cookie.name)).map(cookie => [cookie.name, cookie.value]));
+        for (const cookie of writes) {
+          if (cookie.options.maxAge === 0) intended.delete(cookie.name);
+          else intended.set(cookie.name, cookie.value);
+        }
+        // Recheck immediately before the synchronous browser writes.
+        if (!owns()) throw interrupted();
+        for (const cookie of writes) document.cookie = serializeCookieHeader(cookie.name, cookie.value, cookie.options);
+        expected = snapshot();
+        expectedDecision = decision();
+        const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
+        if (expected !== planned || !isPasswordSessionCurrent(candidate)) throw interrupted();
+        adopted = candidate;
+        boundary?.didAdopt(candidate);
+      },
+    },
+  });
+  try {
+    const work = (async () => {
+      await new Promise<void>(resolve => {
+        const initial = client.auth.onAuthStateChange(event => {
+          if (event === 'INITIAL_SESSION') { initial.data.subscription.unsubscribe(); resolve(); }
+        });
+      });
+      if (!owns()) throw interrupted();
+      exposed = true;
+      const result = await run(client, owns);
+      if (ownership && !owns()) throw interrupted();
+      if (result.error) return result;
+      if (!validSession(result.data.session) || !canAdoptSession(result.data.session) || !adopted || !active || !canCommitSession()
+        || (boundary && !boundary.isCurrent()) || (ownership && !owns()) || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
+      notifySessionStorageChanged();
+      return result;
+    })();
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { active = false; controller.abort(); reject(interrupted()); }, 20_000);
+    });
+    return await Promise.race([work, deadline]);
+  } catch (error) {
+    // A deadline or provider error stays visible unless a later browser/user
+    // decision retired this SMS attempt. Storage uncertainty is not retirement.
+    if (ownership) { try { if (!sameDecision()) ownership.onLost(); } catch { /* Preserve the original failure. */ } }
+    throw error;
+  } finally {
+    active = false;
+    if (timer) clearTimeout(timer);
+    controller.abort();
+    try { await client.auth.dispose(); }
+    finally {
+      // Disposal can yield after adoption. A newer decision must also retire
+      // the SMS receipt before the component is allowed to navigate with it.
+      if (ownership && !sameDecision()) { ownership.onLost(); throw interrupted(); }
+    }
+  }
+}
+
+export function signInWithOwnedSession(credentials: SignInWithPasswordCredentials, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
+  return withOwnedClient(client => client.auth.signInWithPassword(credentials), canCommitSession).catch(unavailable);
+}
+
+/** Verify SMS through isolated storage owned before the provider request begins. */
+export function verifySmsWithOwnedSession(credentials: { phone: string; token: string }, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
+  const phone = credentials?.phone, token = credentials?.token;
+  if (typeof phone !== 'string' || typeof token !== 'string'
+    || !isLikelyE164(phone) || token.length !== 6 || !isValidOtp(token)) return Promise.reject(interrupted());
+  let retired = false;
+  return withOwnedClient(async client => {
+    const result = await client.auth.verifyOtp({ phone, token, type: 'sms' });
+    if (result.error) return { data: { user: null, session: null }, error: result.error };
+    if (!result.data.user || !result.data.session) throw interrupted();
+    return { data: { user: result.data.user, session: result.data.session }, error: null };
+  }, canCommitSession, () => true, undefined, { allowSessionRefresh: true, onLost: () => { retired = true; } }).catch(error => {
+    if (retired) {
+      const changed = interrupted(); changed.name = 'AuthSessionInterruptedError'; throw changed;
+    }
+    return unavailable(error);
+  });
+}
+
+/** Capture browser ownership before the authorized server action produces tokens. */
+export function signInWithOwnedSessionTokens(receiveTokens: () => Promise<Tokens>, canCommitSession: () => boolean, boundary?: OwnedSessionBoundary): Promise<AuthTokenResponsePassword> {
+  let owner: { userId: string; sessionId: string | null } | null = null;
+  return withOwnedClient(async (client, owns) => {
+    const tokens = await receiveTokens();
+    if (!owns()) throw interrupted();
+    const submitted = typeof tokens?.access_token === 'string' ? claims(tokens.access_token) : null;
+    if (typeof submitted?.sub !== 'string' || !UUID.test(submitted.sub)) throw interrupted();
+    owner = { userId: submitted.sub, sessionId: typeof submitted.session_id === 'string' ? submitted.session_id : null };
+    return client.auth.setSession(tokens);
+  }, canCommitSession, session => !!owner && session.user.id === owner.userId
+    && (owner.sessionId === null || claims(session.access_token)?.session_id === owner.sessionId), boundary).catch(unavailable);
+}

@@ -1,0 +1,57 @@
+# Text messaging discovery
+
+Read-only discovery on 2026-09-12, while root completed AUTH-003. Latest inspected HEAD: `387e4d9e85d79c2a5fc01c4be610f6ddde08287e`; the inspected Guardian SMS route/shared callback helper had no working changes at that point. Root subsequently assigned a separate SMS intake repair. This document records the pre-repair behavior and does not claim that later implementation is complete. No real SMS, account operation, phone provisioning, provider configuration or SQL change occurred.
+
+**The repository has several separate messaging products. In-app family chat does not send carrier texts. Marketing SMS currently saves drafts. Real external text handling lives in Guardian and Contact Center, using Twilio; authentication codes use Supabase Auth.**
+
+## Actual products and permanent IDs
+
+| Product | Authoritative chain and supported behavior | Existing IDs |
+| --- | --- | --- |
+| Family messages | `/dashboard/messages` → `components/modules/messages-module.tsx:315` inserts `family_messages` in a `family_conversations` thread; attachment/voice-message paths also write these tables. `lib/services/messages` provides separate scoped family-message/announcement operations. There is no Twilio call in this compose path. | UI-ROUTE-0194; COMPONENT-E8159AD22642; DB-TBL-106; DB-TBL-124 |
+| Marketing SMS | `/admin/marketing/sms` renders campaign rows and a Save Draft form → `createSmsDraft` at `app/(app)/admin/marketing/actions.ts:404` → checked `marketing_sms_campaigns` insert with `status:'draft'`, then audit/revalidation. No SMS dispatch action/worker was found. | UI-ROUTE-0050; ROUTE-4FA1DCCD3B30; ACTION-3C20B106C849; DB-TBL-242 |
+| Guardian inbound SMS | `POST /api/guardian/inbound/sms` → signature/input checks → shared callback claim → active Guardian number/profile lookup → trust/routing pipeline and scam analysis → `guardian_communications` row → family notification/suggestions → callback processed. It screens incoming text; its imported `sendSms` is not called by the route. | API-BBD0A5DB630F; CALLBACK-07F1FB3AED21; LIBRARY-10D7AA8F3175; DB-TBL-160; DB-TBL-161 |
+| Guardian emergency texts | `POST /api/guardian/escalate` reads parent phone numbers, calls the older void-returning `sendSms`, optionally starts critical voice calls, then records booleans in `guardian_escalations`. | API-DE92C0D3E1A2; CALLBACK-71A417C2F077; OPS-INT-006 |
+| Family Contact Center | `/dashboard/contact-center` manages a dedicated number, concierge and forwarding destination, and displays the unified inbox. Its actions provision/configure/read/archive; no manual carrier-SMS compose/reply action appears. `POST /api/contact-center/sms` captures incoming text, invokes planner routing, performs durable urgent fallback handling, and can return an automatic TwiML reply. | COMPONENT-F2F9908ECC39; API-387E2B30BCD7; CALLBACK-24807E48E6E6; DB-TBL-104; DB-TBL-118; OPS-INT-007; INT-002 |
+| Provider transport | `lib/guardian/twilio.ts` owns raw REST calls, signature verification, SMS receipt interpretation and number provisioning. No Twilio npm SDK is used. | LIBRARY-8E49FD8EE110; OPS-INT-006; OPS-INT-007 |
+| Phone sign-in codes | `components/auth/phone-auth.tsx:48,62` calls Supabase `signInWithOtp({phone})` then `verifyOtp({phone,token,type:'sms'})`. This is an Auth-provider configuration path, not a call to the application's Twilio adapter. | Covered separately by AUTH-001; no new ID assigned here |
+
+## Concrete priorities before live verification
+
+**Guardian's shared boolean claim conflates unavailable storage with duplicate delivery.** `lib/guardian/callbacks.ts:25–49` returns false for any non-23505 insert error and also ignores failed reclaim reads/updates. The SMS route treats false as HTTP 200 with no intake work. After a successful claim, the required active-profile query ignores its error; absence is acknowledged and marked processed. The communication insert likewise destructures only `data`, permitting notification/processed completion without a saved message. `markGuardianCallbackProcessed` ignores update results and has no lease-owner predicate. These are source-backed failures; root has recorded their existing permanent IDs and assigned actual route/PostgREST reproduction. The old passing regex tests below do not disprove them.
+
+The existing schema already supplies useful repair boundaries: `0181_guardian_callback_replay.sql` gives `event_id` a primary key, callback type, processing/processed/error state, timestamps and an error field, with RLS enabled and no client policies. `01370_ai_call_guardian.sql:236` gives `guardian_communications.twilio_sms_sid` a unique constraint. An SMS-specific typed claim/lease can distinguish processed, busy and unavailable, fence completion/release to its owner, and verify duplicate communication identity without changing SQL. Shared voice/WhatsApp consumers need separate review; do not silently broaden a bounded SMS repair to all callback routes.
+
+**Contact Center urgent fallback durability does not cover automatic reply replay.** `app/api/contact-center/sms/route.ts` reaches `recordOutboundMessage` and returns `<Message>` on an accepted callback replay even when the inbound row already exists and `ai_handled` is true. `lib/contact-center/server.ts:408` inserts a new outbound timeline row without a provider reference or deterministic reply key. This can append another reply row and return another TwiML response; an actual replay/response-loss fixture is still needed to characterize provider-side duplicate behavior. Do not call this already fixed by INT-002's urgent SMS receipt.
+
+**Guardian emergency send booleans are weaker than durable provider receipts.** The route sets `smsSent=true` after `sendSms():Promise<void>`; that adapter discards the provider Message SID. A later escalation persistence error can occur after accepted external sends. The callback helper's age-based reclaim is not evidence that retrying those external sends is safe. The notification insert sets `pushSent=true` without inspecting returned storage errors. These are source-backed follow-up targets; this lane did not reproduce or repair them.
+
+**Marketing SMS is a draft product with overstated readiness copy.** The only campaign writer sets draft status; the schema contains scheduled/sending/sent fields, but fields alone are not an execution pipeline. The automation editor accepts `send_sms` as a stored action name; no corresponding dispatcher was found in `app`, `lib` or `scripts`. The page's connected banner is driven only by presence of three environment values and says SMS-consented contacts will receive messages. `canMarketSms` exists in `lib/marketing/consent.ts:77`, but no carrier send uses it because marketing sending is absent. Copy or future implementation should reflect that distinction; adding a provider key alone does not activate a sender.
+
+## Existing durable path and remaining external boundary
+
+INT-002's `lib/contact-center/urgent-delivery.ts` creates a deterministic service-owned receipt before capture, independently repairs an in-app notification, claims a provider attempt, retains ambiguous outcomes, and retries only confirmed rate limiting within a cap. Its `sendSmsWithReceipt` adapter validates accepted Message SIDs, treats 429 as retryable, and retains uncertainty after timeout/408/5xx/unverifiable success. Prior detailed evidence is in [contact-center-urgent-cycle.md](contact-center-urgent-cycle.md) and [contact-center-urgent-security-review.md](contact-center-urgent-security-review.md). A successful API acceptance is not proof of handset delivery. The reviewed application has no SMS MessageStatus/StatusCallback consumer; existing call/voicemail callbacks are different surfaces.
+
+Phone provisioning configures Twilio `SmsUrl`/`SmsMethod` in `lib/guardian/twilio.ts:199–209`; Contact Center points its number at `/api/contact-center/sms`. Environment names are `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `NEXT_PUBLIC_APP_URL`, and, for the urgent drain, `CRON_SECRET` / `CRON_BASE_URL`. Auth SMS uses the hosted Supabase project's own settings. No values were inspected. Number capabilities, actual webhook URL/signature agreement, sender registration/configuration, provider opt-out handling, handset receipt and delivery-status configuration remain unverified provider dependencies. This is a capability inventory, not legal/compliance advice or a live workflow pass.
+
+Returning HTTP 503 does **not** guarantee another Twilio callback. Twilio documents a default `ct` retry policy for connection failures; retrying HTTP 5xx requires the appropriate `rp` override. Default read timeout and total request budget are each 15 seconds. This audit did not inspect the deployed provider retry configuration. Guardian's synchronous AI processing before message persistence and a ten-minute processing lease exceed that default window. The SMS claim repair makes failure responses truthful and fences receipt ownership; durable queued intake is still needed to recover an abandoned callback independently of provider retries. [Twilio webhook connection overrides](https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides).
+
+## Executed evidence in this discovery
+
+Seven existing suites ran under isolated Node 24.21.0: **40/40 cases passed**.
+
+| Test file | Cases | Scope |
+| --- | ---: | --- |
+| `tests/guardian-callback-security.test.ts` | 9 | Two pure input/body helpers and seven source/schema-text assertions; does not execute claim failures or SMS route persistence. |
+| `tests/guardian-escalation-replay.test.ts` | 2 | Pure schema/idempotency-key logic plus source ordering; no accepted SMS followed by failed persistence execution. |
+| `tests/guardian-pipeline.test.ts` | 6 | Actual decision pipeline with per-table mock reads; routing precedence, not webhook delivery. |
+| `tests/marketing-delivery-action-boundaries.test.ts` | 2 | Static personalization/push source assertions; despite its name, no marketing SMS send execution. |
+| `tests/messages-overview.test.ts` | 6 | Pure in-app conversation display/grouping helpers. |
+| `tests/service-messages.test.ts` | 11 | Actual in-app message service with mocked database responses; not carrier SMS. |
+| `tests/contact-center-urgent-review.test.ts` | 4 | Actual durable intake/delivery modules with synthetic storage/provider; independent notification repair and binding regressions. |
+
+```powershell
+& 'C:/Users/Daniel/AppData/Local/Temp/bubaly-node24-perf002-20260912-v24.21.0/node.exe' node_modules/vitest/vitest.mjs run tests/guardian-callback-security.test.ts tests/guardian-escalation-replay.test.ts tests/guardian-pipeline.test.ts tests/marketing-delivery-action-boundaries.test.ts tests/messages-overview.test.ts tests/service-messages.test.ts tests/contact-center-urgent-review.test.ts --maxWorkers=1 --reporter=json --outputFile=C:/Users/Daniel/AppData/Local/Temp/bubaly-text-messaging-discovery-20260912.json
+```
+
+No browser journey, real provider request, phone provisioning, live database/RLS audit, full suite or build ran in this discovery. The smallest next execution work is the assigned Guardian actual PostgREST claim/route failure and replay fixture, followed separately by Contact Center automatic-reply replay and Guardian emergency accepted-send/finalization-failure cases. In-app compose lifetime and marketing send implementation remain distinct scopes.

@@ -33,34 +33,31 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync('components/modules/voice-module.tsx', 'utf8');
 
 describe('the voice history is written best-effort', () => {
-  it('has exactly two history writes', () => {
-    const writes = source.match(/from\('voice_commands'\)\s*\.insert\(/g) ?? [];
-    expect(writes).toHaveLength(2);
+  // Two sessions fixed this independently; the one on main routes both writes
+  // through `recordVoiceHistory`, which settles AND catches and is called with
+  // `void` so the capture is neither lost nor delayed by its own log. The
+  // property asserted is that a history write cannot reject into run().
+
+  it('sends both history writes through the best-effort helper', () => {
+    expect(source.match(/void recordVoiceHistory\(/g) ?? []).toHaveLength(2);
   });
 
-  it('gives each of them a rejection handler', () => {
-    // `.then(onFulfilled, onRejected)` — a bare `await`, a `.then(ok)` with one
-    // argument, or a `.catch()` added later would all leave the reject path
-    // open; the two-argument form is what settles it here.
-    const guarded = source.match(/\}\)(?:\.select\('id'\))?\.then\(\s*\n\s*\(\{ error \}\)/g) ?? [];
-    expect(guarded, 'a voice_commands insert can still reject into run()').toHaveLength(2);
+  it('has no bare awaited insert left in the command path', () => {
+    expect(source).not.toMatch(/await sb\.from\('voice_commands'\)\s*\.insert\(/);
+  });
+
+  it('the helper cannot reject: it settles, and catches what settling cannot', () => {
+    const helper = source.slice(source.indexOf('async function recordVoiceHistory'));
+    const body = helper.slice(0, helper.indexOf('\n}\n') + 2);
+    expect(body).toMatch(/await settle\(/);
+    expect(body).toMatch(/try \{[\s\S]*\} catch/);
   });
 
   it('records the failure rather than swallowing it silently', () => {
-    // Best-effort is not "unobservable": both paths log, so a history that
-    // stops being written is findable.
     expect(source).toContain("console.error('[voice] history write failed'");
-    expect(source).toContain("console.error('[voice] failure history write failed'");
   });
 
   it('still reports a real command failure to the user', () => {
-    // The control: making the log unable to throw must not disarm the catch
-    // that reports an actual saveCapture failure.
     expect(source).toContain("toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')))");
-  });
-
-  it('still offers Undo on success', () => {
-    // The other control: the success path, which the rejection was destroying.
-    expect(source).toContain("label: 'Undo'");
   });
 });

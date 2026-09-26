@@ -1964,3 +1964,69 @@ fetch URL goes through the guard or is named with the reason its host is fixed)
 link-local range, re-checks redirect targets, refuses credentials). Verified
 load-bearing both ways: a probe route calling `fetch(searchParam)` turns it red,
 and so does changing `redirect: 'manual'` to `'follow'`.
+
+---
+
+## [CLAUDE-1][HIGH][SECURITY / UX] Thirty-nine writes reported success for a change the database refused
+
+Full record in `finalaudit.md` Pass K. Summary: browser-direct UPDATE/DELETE on
+the forty-four manager-only tables reported success when RLS had filtered them.
+Proven on Postgres 16 — `UPDATE 0` / `DELETE 0` with **no error**, while INSERT
+raises 42501. All thirty-nine now `.select('id')` and treat zero rows as a
+refusal. Guard: `tests/a-refused-write-is-not-a-success.test.ts`.
+
+Plus five on the trust surface, where the claim is about **access**:
+`tests/a-revoke-that-revoked-nothing.test.ts`.
+
+## [CLAUDE-1][VERIFIED HEALTHY] The modules Section C named, audited
+
+- **locator-module** — writes through server actions that enforce `isManager`
+  server-side; `member_id` comes from the session, never client input; reads are
+  bounded (`location_events` `.limit(120)`) and error-checked. `is_sharing: true`
+  on every position write looked like sharing re-enabling itself and is not —
+  its only caller is the "Share now" button.
+- **paperwork-module** — server actions only, no browser-direct writes.
+- **trust actions** — ten of eleven call the shared `managerCtx()`; the
+  eleventh (`createSharingPresetAction`) delegates to `createDelegationAction`
+  deliberately, so the manager check, the expiry check and the domain filter
+  stay in one place. Its comment says why, and it holds.
+- **RLS is enabled on every health table checked** — `symptom_logs`,
+  `health_goals` (via a `DO` block in 00801), `appointments`, `health_metrics`,
+  `workout_logs` (via the generic sweep in 0004). A plain grep for
+  `ENABLE ROW LEVEL SECURITY` returns **zero** for all five, because every one
+  is enabled through dynamic SQL — recorded so the next sweep does not read that
+  zero as a finding.
+
+## [CLAUDE-1][MEDIUM][SECURITY — OWNER DECISION] Two medical tables are member-writable while their neighbours are manager-only
+
+- **Where:** `immunizations` (0069), `health_visits` (0068)
+- **Evidence:** both carry `FOR ALL … USING (is_family_member(family_id))`. On
+  the **same page** (`/dashboard/medical`), `medical_profiles`,
+  `health_providers` and `insurance_policies` are manager-only, and
+  `medications` was made manager-only by 0309. The page gate is
+  `requireFeature`, a **subscription** check, not a role check — so a child on a
+  qualifying plan reaches it.
+- **So:** any family member, including a child, can insert, edit or delete a
+  sibling's vaccination record and medical visit history, while the same child
+  cannot touch a medication or an insurance policy.
+- **This is NOT the 0309 shape.** Neither module gates its UI on `isManager`, so
+  the interface and the database **agree** — there is no hidden button making a
+  promise the database does not keep. It is an asymmetry, not a lie.
+- **Status: OPEN, owner decision.** Whether a teenager logging their own vaccine
+  should be allowed is a product judgement, and closing it needs a migration —
+  which two other workers are actively holding. Recorded with the evidence
+  rather than changed unilaterally. This is the shape 0309's own header named:
+  *"a class fixed where somebody remembered and left open where nobody did."*
+
+## OPEN — measured, recorded, not changed
+
+- **Sixteen server actions** write manager-only tables without verifying a row
+  and then return `ok: true` (`wallet/actions.ts` ×4, `concierge/actions.ts` ×3,
+  `account/actions.ts` ×2, `economy/actions.ts` ×2, `locator/actions.ts` ×3,
+  `admin/actions.ts`, `assistants/actions.ts`). Outside the permission surface a
+  stale id is a refresh prompt rather than a false claim about access, and each
+  needs its own judgement about what zero rows should mean there.
+- **The three document deletes remove the storage object before the row**, so a
+  refused row delete leaves a row pointing at a file that no longer exists.
+  Verification now makes it visible; reversing the order is the real fix and is
+  a behaviour change worth deciding deliberately.

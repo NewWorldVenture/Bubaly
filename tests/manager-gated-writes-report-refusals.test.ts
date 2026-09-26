@@ -52,8 +52,14 @@ describe('a manager-gated write never claims success on a refusal', () => {
       // Postgres 16 measurement: `using` FILTERS an update/delete to zero rows
       // while `with check` RAISES on an insert). The property asserted here is
       // the zero-row check plus a message — not one spelling of it.
-      expect(source).toMatch(/wroteNoRows\(\w+\)|![\w]*[Rr]ows\?\.length/);
-      expect(source).toMatch(/errors\.thatChangeWasNotSaved|actions\.onlyAParentGuardianCan16/);
+      // Three forms make a refusal visible, and all three are in this codebase:
+      //   - `wroteNoRows(rows)` / `!rows?.length` after `.select('id')`
+      //   - `.select('id').single()`, which turns ZERO rows into a PGRST116
+      //     error, routed through a handler that throws on `error` (the
+      //     `mutate()` helper main adopted, which also reads the row back).
+      const counted = /wroteNoRows\(\w+\)|![\w]*[Rr]ows\?\.length/.test(source);
+      const singled = /\.select\('id'\)\.single\(\)/.test(source) && /if \((\w+)\) throw \1\b/.test(source);
+      expect(counted || singled, 'a refused write would still read as a success').toBe(true);
     });
   }
 

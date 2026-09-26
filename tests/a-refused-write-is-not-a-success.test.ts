@@ -29,13 +29,38 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 // manager guard must ask for its rows back and treat zero as a refusal.
 const ROOTS = ['components'];
 
-/** Tables given a restrictive manager UPDATE/DELETE guard by the migrations. */
+/**
+ * Tables whose UPDATE/DELETE requires manager rights — the full set, not only
+ * the `restrictive` ones.
+ *
+ * A first version of this list held 19 tables, taken from policies declared
+ * `as restrictive`. That was too narrow by a factor of nearly three: a
+ * PERMISSIVE policy whose `using` clause requires `can_manage_family` filters
+ * a non-manager's update exactly as silently. Widening it exposed fourteen
+ * more call sites — the health providers and insurance policies, the password
+ * vault's soft delete, three document surfaces and the family name.
+ *
+ * `family_members` and `notifications` are deliberately ABSENT. Their policies
+ * are "own row OR manager" (`user_id = auth.uid() or …`), so a member's own
+ * write succeeds and zero rows is a normal outcome — "mark all read" with
+ * nothing unread affects no rows and must not be reported as a refusal.
+ */
 export const GUARDED_TABLES = new Set([
-  'allowance_rules', 'bills', 'budgets', 'child_wallets', 'family_wallets',
-  'financial_accounts', 'medication_schedules', 'medications', 'opportunities',
-  'renewals', 'rewards', 'rides', 'savings_goals', 'transactions', 'trip_items',
+  'allowance_rules', 'approval_requests', 'assistant_links', 'bills', 'budgets',
+  'child_wallets', 'currency_transactions', 'documents', 'driver_licenses',
+  'economy_redemptions', 'economy_rewards', 'event_rsvps', 'families',
+  'family_ai_settings', 'family_automation_rules', 'family_automation_runs',
+  'family_credentials', 'family_currencies', 'family_facts', 'family_places',
+  'family_wallets', 'financial_accounts', 'guardian_routing_rules',
+  'health_providers', 'insurance_policies', 'invest_holdings', 'invest_orders',
+  'invites', 'medical_profiles', 'medication_schedules', 'medications',
+  'opportunities', 'parent_approvals', 'renewals', 'rewards', 'rides',
+  'savings_goals', 'social_account_tokens', 'transactions', 'trip_items',
   'trips', 'wallet_buckets', 'wallet_rules', 'wallet_transactions',
 ]);
+
+/** Tables where a manager check is one branch of an OR with a self clause. */
+export const MANAGER_OR_SELF = new Set(['family_members', 'notifications']);
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -87,7 +112,7 @@ describe('a write RLS refused is not reported as a success', () => {
       return n + [...src.matchAll(/\.from\('([a-z_]+)'\)\s*\.(update|delete)\(/g)]
         .filter((m) => GUARDED_TABLES.has(m[1])).length;
     }, 0);
-    expect(total).toBeGreaterThan(20);
+    expect(total).toBeGreaterThan(35);
   });
 
   it('recognises the shape it forbids', () => {
@@ -98,6 +123,10 @@ describe('a write RLS refused is not reported as a success', () => {
     // An unguarded table is not this rule's business, and neither is an insert
     // (a `with check` violation raises, so the client already sees it).
     expect(unverifiedWrites("createClient();\nawait sb.from('grocery_items').delete().eq('id', x);")).toEqual([]);
+    // "own OR manager" tables are excluded: a member's own write succeeds, and
+    // zero rows is a normal outcome there rather than a refusal.
+    expect(unverifiedWrites("createClient();\nawait sb.from('notifications').update({ is_read: true }).eq('id', x);")).toEqual([]);
+    expect(MANAGER_OR_SELF.has('family_members')).toBe(true);
     expect(unverifiedWrites("createClient();\nawait sb.from('medications').insert({ a: 1 });")).toEqual([]);
   });
 

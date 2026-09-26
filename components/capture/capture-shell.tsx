@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useRef } from 'react';
+import { useLayoutEffect, useState, useRef } from 'react';
 import {
   Mic, Type, Camera, FileText, Sparkles, X, ArrowRight,
   Loader2, ChevronDown, Undo2,
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/toast';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
+import { CaptureSaveError, saveCapture, undoCapture, type CaptureSaveResult } from '@/lib/capture/save';
 import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -69,30 +69,67 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
   const [created, setCreated] = useState<(CaptureSaveResult & { destination: string }) | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [reviewHref, setReviewHref] = useState<string | null>(null);
+  const [intent, setIntent] = useState(0);
+  const owner = JSON.stringify([familyId, userId, selfMember?.id ?? null]);
+  const lifetime = useRef({ mounted: false, owner, intent: 0, pending: null as object | null, settled: false, review: false });
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const current = lifetime.current;
+    current.mounted = true; current.owner = owner; current.pending = null;
+    current.settled = false; current.review = false;
+    setIntent(++current.intent);
+    setText(initialText); setRouting(false); setUndoing(false); setCreated(null); setRouted(null); setReviewHref(null); setRecording(false);
+    return () => { current.mounted = false; current.intent++; current.pending = null; };
+  }, [owner, initialText]);
+
+  function isCurrent() {
+    const current = lifetime.current;
+    return current.mounted && current.owner === owner && current.intent === intent;
+  }
+
+  function nextIntent() {
+    lifetime.current.settled = false;
+    setIntent(++lifetime.current.intent);
+  }
 
   // One-tap undo: delete the rows the capture just created and restore the input
   // so the user can edit and re-file, or walk away. Frictionless safety net for
   // a mis-routed capture.
   async function undoCreated() {
-    if (!created) return;
+    if (!created || !isCurrent() || lifetime.current.pending || lifetime.current.review) return;
+    const attempt = {};
+    lifetime.current.pending = attempt;
     setUndoing(true);
     try {
-      await undoCapture(createClient(), created.undo);
+      await undoCapture(createClient(), created.undo, { isCurrent: () => isCurrent() && lifetime.current.pending === attempt });
+      if (!isCurrent()) return;
       const restore = text || created.title;
       success(t('captureShell.undone'));
+      nextIntent();
       setCreated(null);
       setText(restore);
       setMode('type');
       textRef.current?.focus();
     } catch (err) {
+      if (!isCurrent()) return;
+      // A failed or unconfirmed Undo is reviewed at the original destination;
+      // a retained callback must not issue the same delete again.
+      lifetime.current.review = true;
+      setReviewHref(created.href);
       toastError(describeDbError(err, t('captureShell.couldNotUndo')));
     } finally {
-      setUndoing(false);
+      const current = lifetime.current;
+      if (current.mounted && current.owner === owner && current.pending === attempt) {
+        current.pending = null; setUndoing(false);
+      }
     }
   }
 
   function handleInput(value: string) {
+    if (!isCurrent() || lifetime.current.pending || lifetime.current.review) return;
+    nextIntent();
     setText(value);
     setRouted(null);
     setCreated(null);
@@ -100,7 +137,9 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
 
   async function handleSubmit() {
     const value = text.trim();
-    if (!value) return;
+    if (!value || !familyId || !userId || !isCurrent() || lifetime.current.pending || lifetime.current.settled || lifetime.current.review) return;
+    const attempt = {};
+    lifetime.current.pending = attempt;
     setRouting(true);
     const route = routeCapture(value);
     const kind = URL_TO_KIND[route.url];
@@ -109,25 +148,42 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
     // instead of just navigating to an empty page.
     if (kind) {
       try {
-        const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null });
+        const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null, isCurrent: () => isCurrent() && lifetime.current.pending === attempt });
+        if (!isCurrent()) return;
+        lifetime.current.settled = true;
         setCreated({ ...res, destination: route.destination });
       } catch (err) {
-        toastError(describeDbError(err, t('captureShell.couldNotSave')));
+        if (!isCurrent()) return;
+        if (err instanceof CaptureSaveError && err.outcome === 'retired') return;
+        if (err instanceof CaptureSaveError && err.outcome === 'uncertain') {
+          lifetime.current.review = true;
+          setReviewHref(err.href);
+        } else {
+          toastError(describeDbError(err, t('captureShell.couldNotSave')));
+        }
       } finally {
-        setRouting(false);
+        const current = lifetime.current;
+        if (current.mounted && current.owner === owner && current.pending === attempt) {
+          current.pending = null; setRouting(false);
+        }
       }
       return;
     }
     setRouted(route);
+    lifetime.current.pending = null;
+    lifetime.current.settled = true;
     setRouting(false);
   }
 
   function goToDestination() {
+    if (!isCurrent() || lifetime.current.pending) return;
     if (created) router.push(created.href);
     else if (routed) router.push(routed.url);
   }
 
   function captureAnother() {
+    if (!isCurrent() || lifetime.current.pending || lifetime.current.review) return;
+    nextIntent();
     setCreated(null);
     setText('');
     setMode('type');
@@ -135,6 +191,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
   }
 
   function startVoice() {
+    if (!isCurrent() || lifetime.current.pending || lifetime.current.review) return;
     type SpeechResult = { transcript: string };
     type SRCtor = new () => {
       lang: string; interimResults: boolean;
@@ -147,18 +204,33 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
     const SR: SRCtor | undefined = (w['SpeechRecognition'] ?? w['webkitSpeechRecognition']) as SRCtor | undefined;
     if (!SR) { toastError(t('captureShell.voiceInputIsNotSupported')); return; }
     const recognition = new SR();
+    const voiceIntent = ++lifetime.current.intent;
+    setIntent(voiceIntent);
+    const isVoiceCurrent = () => lifetime.current.mounted && lifetime.current.owner === owner && lifetime.current.intent === voiceIntent;
     recognition.lang = 'en-US';
     recognition.interimResults = false;
+    setMode('voice');
     setRecording(true);
     recognition.onresult = (e) => {
+      if (!isVoiceCurrent()) return;
       const transcript = e.results[0]?.[0]?.transcript ?? '';
-      setText(transcript);
+      nextIntent(); setText(transcript); setRouted(null); setCreated(null);
       setRecording(false);
       setMode('type');
     };
-    recognition.onerror = () => { setRecording(false); toastError(t('captureShell.couldNotCaptureVoiceTry')); };
-    recognition.onend = () => setRecording(false);
+    recognition.onerror = () => { if (isVoiceCurrent()) { setRecording(false); toastError(t('captureShell.couldNotCaptureVoiceTry')); } };
+    recognition.onend = () => { if (isVoiceCurrent()) setRecording(false); };
     recognition.start();
+  }
+
+  function switchMode(next: CaptureMode) {
+    if (!isCurrent() || lifetime.current.pending || lifetime.current.review) return;
+    if (next === 'voice') { startVoice(); return; }
+    // A hidden text form and an old speech result cannot submit/change the
+    // replacement mode. Existing confirmed receipts remain settled.
+    setIntent(++lifetime.current.intent);
+    setRecording(false); setMode(next);
+    if (next === 'type') textRef.current?.focus();
   }
 
   return (
@@ -170,7 +242,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
             <h1 className="text-2xl font-bold">{t('captureShell.capture')}</h1>
             <p className="text-sm text-muted">{t('captureShell.speakTypeOrSnapAiRoutes')}</p>
           </div>
-          <button type="button" onClick={() => router.back()}
+          <button type="button" disabled={routing || undoing} onClick={() => { if (isCurrent() && !lifetime.current.pending) { nextIntent(); router.back(); } }}
             className="grid h-9 w-9 place-items-center rounded-full bg-elevated text-muted hover:text-fg">
             <X className="h-5 w-5" />
           </button>
@@ -179,12 +251,12 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
         {/* Mode picker */}
         <div className="mb-4 grid grid-cols-4 gap-2">
           {([
-            { id: 'type' as const, icon: Type, label: 'Type', action: () => { setMode('type'); textRef.current?.focus(); } },
-            { id: 'voice' as const, icon: Mic, label: 'Voice', action: () => { setMode('voice'); startVoice(); } },
-            { id: 'photo' as const, icon: Camera, label: 'Photo', action: () => setMode('photo') },
-            { id: 'document' as const, icon: FileText, label: 'Scan', action: () => setMode('document') },
-          ]).map(({ id, icon: Icon, label, action }) => (
-            <button key={id} type="button" onClick={action}
+            { id: 'type' as const, icon: Type, label: 'Type' },
+            { id: 'voice' as const, icon: Mic, label: 'Voice' },
+            { id: 'photo' as const, icon: Camera, label: 'Photo' },
+            { id: 'document' as const, icon: FileText, label: 'Scan' },
+          ]).map(({ id, icon: Icon, label }) => (
+            <button key={id} type="button" disabled={routing || undoing || !!reviewHref} onClick={() => switchMode(id)}
               className={cn(
                 'flex flex-col items-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition',
                 mode === id ? 'bg-brand/15 text-brand-text' : 'bg-elevated text-muted hover:bg-elevated/80 hover:text-fg',
@@ -206,12 +278,13 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
                 <span className="absolute inset-0 animate-ping rounded-full bg-brand/30" />
               </div>
               <p className="text-sm font-medium text-brand-text">Listening…</p>
-              <button type="button" onClick={() => setRecording(false)} className="text-xs text-muted underline">{t('captureShell.cancel')}</button>
+              <button type="button" onClick={() => { if (isCurrent()) { nextIntent(); setRecording(false); } }} className="text-xs text-muted underline">{t('captureShell.cancel')}</button>
             </div>
           ) : (
             <textarea
               ref={textRef}
               value={text}
+              disabled={routing || undoing || !!reviewHref}
               onChange={(e) => handleInput(e.target.value)}
               placeholder={'What\'s on your mind? "Buy milk", "Plan birthday party", "Schedule dentist"…'}
               className="min-h-[120px] w-full resize-none bg-transparent p-4 text-sm outline-none placeholder:text-muted"
@@ -222,10 +295,17 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
           {text && !recording && (
             <div className="flex items-center justify-between border-t border-border/60 px-4 py-2">
               <span className="text-xs text-muted">{text.length} chars</span>
-              <button type="button" onClick={() => handleInput('')} className="text-xs text-muted hover:text-fg">{t('captureShell.clear')}</button>
+              <button type="button" disabled={routing || undoing || !!reviewHref} onClick={() => handleInput('')} className="text-xs text-muted hover:text-fg">{t('captureShell.clear')}</button>
             </div>
           )}
         </div>
+
+        {reviewHref && (
+          <div role="alert" className="mb-4 space-y-2 rounded-xl border border-border bg-elevated p-3 text-sm">
+            <p>{created ? t('captureShell.couldNotUndo') : t('quickCapture.saveUncertain')}</p>
+            <a className="font-medium text-brand-text underline" href={reviewHref}>{t('quickCapture.reviewCapture')}</a>
+          </div>
+        )}
 
         {/* Created confirmation */}
         {created ? (
@@ -238,17 +318,17 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
                 </p>
                 {created.title && <p className="truncate text-xs text-muted">{created.title}</p>}
               </div>
-              <button type="button" onClick={undoCreated} disabled={undoing}
+              <button type="button" onClick={undoCreated} disabled={undoing || !!reviewHref}
                 className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-elevated hover:text-fg disabled:opacity-60">
                 {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} {t('captureShell.undo')}
               </button>
             </div>
             <div className="flex gap-2 border-t border-emerald-500/20 p-3">
-              <button type="button" onClick={goToDestination}
+              <button type="button" onClick={goToDestination} disabled={undoing}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600/90">
                 {t('captureShell.viewIn')} {created.destination} <ArrowRight className="h-4 w-4" />
               </button>
-              <button type="button" onClick={captureAnother}
+              <button type="button" onClick={captureAnother} disabled={undoing || !!reviewHref}
                 className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
                 {t('captureShell.captureAnother')}
               </button>
@@ -268,14 +348,14 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-semibold text-white hover:bg-brand/90">
                 {t('captureShell.goTo')} {routed.destination} <ArrowRight className="h-4 w-4" />
               </button>
-              <button type="button" onClick={() => setRouted(null)}
+              <button type="button" onClick={() => { if (isCurrent() && !lifetime.current.pending) { nextIntent(); setRouted(null); } }}
                 className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-elevated">
                 <ChevronDown className="h-4 w-4" /> {t('captureShell.change')}
               </button>
             </div>
           </div>
         ) : (
-          <button type="button" disabled={!text.trim() || routing} onClick={handleSubmit}
+          <button type="button" disabled={!text.trim() || routing || !!reviewHref} onClick={handleSubmit}
             className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-4 text-sm font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">
             {routing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             {routing ? 'Capturing…' : 'Capture with AI'}

@@ -1,17 +1,10 @@
 // lib/social/access.ts
 // Server-side resolution of the caller's social role + permission guards. Mirrors
 // the SQL helper public.social_has_permission (migration 0034). Use these in
-// server actions / route handlers BEFORE any privileged write.
-//
-// RLS is NOT a backstop for most of this. Migration 0034 templates
-// select/insert/update/delete on the social tables as plain
-// public.is_family_member(family_id); social_publish_jobs_insert is the only
-// policy that consults social_has_permission. So for connect_accounts,
-// manage_settings, approve_posts, schedule_posts and the rest, these guards are
-// the enforcement boundary, not a mirror of one.
+// server actions / route handlers BEFORE any privileged write; RLS is the backstop.
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import {
   ROLE_PERMISSIONS, defaultSocialRoleForMember, isSocialRole,
   type SocialRole, type SocialPermission,
@@ -25,6 +18,19 @@ export type SocialAccess = {
   can: (permission: SocialPermission) => boolean;
 };
 
+export class SocialAccessUnavailableError extends Error {
+  constructor() {
+    super('Social access is temporarily unavailable.');
+    this.name = 'SocialAccessUnavailableError';
+  }
+}
+
+function isMissingSession(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const missing = error as { name?: unknown; code?: unknown };
+  return missing.name === 'AuthSessionMissingError' || missing.code === 'session_missing';
+}
+
 /**
  * Resolve the caller's effective social role for a family: an explicit
  * social_access_permissions row wins; otherwise we fall back to a sensible
@@ -32,44 +38,43 @@ export type SocialAccess = {
  */
 export async function getSocialAccess(familyId: string): Promise<SocialAccess | null> {
   const supabase = await createServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const { data: auth, error: authError } = await settle(supabase.auth.getUser());
+  if (authError) {
+    if (!auth?.user && isMissingSession(authError)) return null;
+    throw new SocialAccessUnavailableError();
+  }
+  if (!auth?.user) return null;
 
-  const [{ data: explicit, error: explicitError }, { data: member, error: memberError }] = await settleAll([
+  const [{ data: explicit, error: permissionError }, { data: member, error: memberError }] = await settleAll([
     supabase
       .from('social_access_permissions')
-      .select('social_role, status')
+      .select('family_id, user_id, social_role, status')
       .eq('family_id', familyId)
       .eq('user_id', auth.user.id)
       .eq('status', 'active')
       .maybeSingle(),
     supabase
       .from('family_members')
-      .select('role')
+      .select('family_id, user_id, role, is_active')
       .eq('family_id', familyId)
       .eq('user_id', auth.user.id)
       .eq('is_active', true)
       .maybeSingle(),
   ]);
 
-  // A read that FAILED is not a row that is absent. The explicit row wins and
-  // may RESTRICT — a parent demoted to 'analyst' is ordinary configuration —
-  // so treating an unreadable row as "no explicit role" would hand them the
-  // household default of 'admin' instead. Refuse rather than guess: every
-  // caller already handles null (403, SocialAccessError, `access?.can()`), and
-  // migration 0034 templates the social tables on plain is_family_member, so
-  // for every permission but publish_posts this resolver IS the boundary.
-  if (explicitError || memberError) {
-    console.error('[social/access] role read failed', { familyId, explicitError, memberError });
-    return null;
+  // An unreadable override is not an absent override. A service-role provider
+  // write must never gain the household default by losing a required read.
+  if (permissionError || memberError) throw new SocialAccessUnavailableError();
+  if (!member) return null;
+  if (member.family_id !== familyId || member.user_id !== auth.user.id || member.is_active !== true) {
+    throw new SocialAccessUnavailableError();
+  }
+  if (explicit && (explicit.family_id !== familyId || explicit.user_id !== auth.user.id ||
+    explicit.status !== 'active' || !isSocialRole(explicit.social_role))) {
+    throw new SocialAccessUnavailableError();
   }
 
-  // Not a member of this family at all → no access (RLS would block anyway).
-  if (!member && !explicit) return null;
-
-  const role: SocialRole = isSocialRole(explicit?.social_role)
-    ? explicit!.social_role
-    : defaultSocialRoleForMember(member?.role);
+  const role: SocialRole = explicit ? explicit.social_role : defaultSocialRoleForMember(member.role);
 
   const permissions = ROLE_PERMISSIONS[role] ?? [];
   return {

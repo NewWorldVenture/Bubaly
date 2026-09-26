@@ -6,6 +6,7 @@ import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, 
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
@@ -106,7 +107,8 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       const sb = createClient();
       const { data: latest } = await sb.from('vacation_travel_scores').select('score').eq('vacation_id', vacationId).order('computed_at', { ascending: false }).limit(1).maybeSingle();
       if (latest?.score === readiness.score) return;
-      await sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never });
+      const { error } = await settle(sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never }));
+      if (error) console.error('[trip] readiness snapshot failed', { message: error.message });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readiness.score, loading, trip, familyId, vacationId]);

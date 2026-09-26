@@ -24,21 +24,23 @@ describe('deliveryRate', () => {
 });
 
 describe('canSendPush', () => {
-  it('allows draft/failed only', () => {
+  it('allows a fresh draft and only a failed attempt proven to precede dispatch', () => {
     expect(canSendPush('draft')).toBe(true);
-    expect(canSendPush('failed')).toBe(true);
+    expect(canSendPush('failed')).toBe(false);
+    expect(canSendPush('failed', { push_delivery: { version: 1, attemptId: 'fixture', phase: 'preflight_failed' } })).toBe(true);
+    expect(canSendPush('failed', { push_delivery: { version: 1, attemptId: 'fixture', phase: 'review' } })).toBe(false);
     expect(canSendPush('sent')).toBe(false);
     expect(canSendPush('sending')).toBe(false);
   });
 });
 
 describe('summarizePush', () => {
-  it('rolls up totals and delivery rate', () => {
+  it('rolls up counts without dividing device acceptances by recipient users', () => {
     const s = summarizePush([
       { status: 'sent', recipients: 10, sent: 9 },
       { status: 'sent', recipients: 10, sent: 7 },
       { status: 'draft', recipients: 0, sent: 0 },
     ]);
-    expect(s).toEqual({ campaigns: 3, sentCampaigns: 2, totalSent: 16, totalRecipients: 20, deliveryRate: 80 });
+    expect(s).toEqual({ campaigns: 3, sentCampaigns: 2, totalSent: 16, totalRecipients: 20, reviewCampaigns: 0 });
   });
 });

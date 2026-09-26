@@ -46,6 +46,21 @@ export function getAnonymousId(): string {
   return id;
 }
 
+/** Observe attribution without creating or replacing a browser identity. */
+export function captureAnonymousId(): string | null {
+  try { return readCookie(VID_KEY); } catch { return null; }
+}
+
+/** A verified account switch may fork only the attribution it started with. */
+export function resetAnonymousId(expected: string | null): boolean {
+  if (!expected || captureAnonymousId() !== expected) return false;
+  const id = uuid();
+  writeCookie(VID_KEY, id, VID_MAX_AGE);
+  if (captureAnonymousId() !== id) return false;
+  try { localStorage.setItem(VID_KEY, id); } catch { /* Mirroring is optional. */ }
+  return true;
+}
+
 /** Browser Global Privacy Control / Do-Not-Sell signal. */
 export function detectGPC(): boolean {
   if (typeof navigator === 'undefined') return false;
