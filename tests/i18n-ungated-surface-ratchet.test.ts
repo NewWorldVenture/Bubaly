@@ -76,7 +76,15 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // caller's status), the admin feedback and ticket-status messages, and the
 // voice module's route confirmations. Every template finding the scanner can
 // see is now translated; what remains here is ordinary strings.
-const CEILING = 2794;
+//
+// Raised 2,794 -> 2,936 for the one legitimate reason (I18N-003): the scanner
+// now also reads a template literal in a copy-carrying attribute (aria-label,
+// title, placeholder, alt, label, description) and one standing alone as a JSX
+// child. Measured with the tree held fixed: 142 attribute templates, 0 JSX-child
+// ones (the tree's child templates are separators such as ` · ${when}`), every
+// one an existing English string a screen reader or tooltip already shows. The
+// gated surfaces stay at zero.
+const CEILING = 2936;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -133,5 +141,34 @@ describe('the scanner sees a failure message written as a template literal (I18N
     expect(texts).toContain('Blocked by household policy: …');
     expect(texts).toContain('Could not save ….');
     expect(texts).toContain('Upload failed: …');
+  });
+});
+
+describe('the scanner sees copy written as a template in an attribute or a JSX child (I18N-003)', () => {
+  it('reports the copy shapes and leaves expressions alone', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-scan-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      'export function Row({ title, n, name, id }: { title: string; n: number; name: string; id: string }) {',
+      '  return (',
+      '    <li className={`row ${id}`} key={`row-${id}`}>',
+      '      <button aria-label={`Approve: ${title}`} title={`${name} — upgrade to unlock`} />',
+      '      <p>{`${n} items left`}</p>',
+      '      <p>{` · ${name}`}</p>',
+      '      <a href={`/items/${id}`}>{name}</a>',
+      '    </li>',
+      '  );',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Approve: …');
+    expect(texts).toContain('… — upgrade to unlock');
+    expect(texts).toContain('… items left');
+    // A class list, a key, an href and a bare separator are not copy.
+    expect(texts.some((t: string) => /row|items\/|^·/.test(t) && !t.includes('left'))).toBe(false);
   });
 });

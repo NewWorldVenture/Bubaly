@@ -392,6 +392,21 @@ const TEMPLATE_ACTION_ERROR_PATTERN =
   new RegExp(String.raw`(?:\berror:\s*|describeActionError\([^,()]+,\s*)` + TEMPLATE_BODY, 'g');
 
 /**
+ * Template literals in two more places that are unambiguously copy (I18N-003).
+ *
+ * An attribute that carries words — `aria-label={`Approve: ${title}`}` is what
+ * a screen reader says, `title={`${name} — upgrade to unlock`}` is a tooltip —
+ * and a template standing alone as a JSX child, `{`${n} items left`}`. The
+ * backtick rule in NOT_COPY hid all of them, the same blind spot I18N-002 closed
+ * for toasts and action errors. Excluded on purpose: `${` nesting and any other
+ * `attr={`…`}` (a className, a key or an href is not copy), and templates
+ * assigned to variables, which are as often a class list or a URL as a sentence.
+ */
+const TEMPLATE_COPY_ATTR_PATTERN = new RegExp(
+  String.raw`\b(aria-label|title|placeholder|alt|label|description)=\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
+const TEMPLATE_JSX_CHILD_PATTERN = new RegExp(String.raw`(?<![$=]\s*)\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
+
+/**
  * A prose argument to a helper that puts it in front of a user.
  *
  * Every name here was read before it was listed — `actionFailure` returns the
@@ -541,6 +556,10 @@ export function scanFile(file) {
   // read `<em>${topicLabel}</em> — wrote:</p>` inside an HTML email template as
   // page copy — and that email goes to the operator, not to the visitor.
   if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
+  if (file.endsWith('.tsx')) {
+    for (const m of source.matchAll(TEMPLATE_COPY_ATTR_PATTERN)) push(m[2].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+    for (const m of source.matchAll(TEMPLATE_JSX_CHILD_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+  }
   for (const m of source.matchAll(PROP_PATTERN)) {
     // `data-*` is machine state and `aria-hidden`/`aria-live` are enum values;
     // `aria-label` is the one ARIA attribute that carries a sentence.
