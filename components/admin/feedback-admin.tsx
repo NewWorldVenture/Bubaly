@@ -6,6 +6,7 @@
 // actions that revalidate the public /feedback board instantly.
 
 import Link from 'next/link';
+import { feedbackAttachmentPathFromUrl } from '@/lib/storage/feedback-attachment-url';
 import { useId, useMemo, useState, useTransition } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
@@ -268,7 +269,10 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           <h3 className="mt-1 text-sm font-bold text-fg">{idea.title}</h3>
           {idea.problem && <p className="mt-1 text-xs text-muted"><span className="font-semibold">Problem:</span> {idea.problem}</p>}
           {idea.body && <p className="mt-1 line-clamp-3 text-xs text-muted">{idea.body}</p>}
-          {idea.image_url && (
+          {/* Only this project's own feedback attachment is fetched: a row can be
+              inserted with any image_url, and rendering an arbitrary one makes the
+              admin's browser report to whoever chose it. */}
+          {idea.image_url && feedbackAttachmentPathFromUrl(idea.image_url, process.env.NEXT_PUBLIC_SUPABASE_URL) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={idea.image_url} alt="" className="mt-2 max-h-40 rounded-lg border border-border object-cover" referrerPolicy="no-referrer" />
           )}

@@ -3,16 +3,16 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-26T16:55:00Z
-- Total Audit Items: 14171
-- Not Started: 13898
-- In Progress: 271
+- Total Audit Items: 14173
+- Not Started: 13896
+- In Progress: 275
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. See Q56–Q60.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. See Q56–Q61.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -4686,7 +4686,7 @@ PRODUCTION READY: NO
 | CONTROL-92F3FEDF6C96 | CONTROL | CallDetail at line 485 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2F44DFF31DD6 | CONTROL | button at line 577 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2C7CEB567A30 | CONTROL | button at line 639 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-2B95338B57F6 | COMPONENT | components/admin/feedback-admin.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-2B95338B57F6 | COMPONENT | components/admin/feedback-admin.tsx | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | See Q61. |
 | CONTROL-9885C8ED84C3 | CONTROL | button at line 104 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AFFD24659155 | CONTROL | button at line 109 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4EB5EC08C6DC | CONTROL | Link at line 133 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9877,7 +9877,7 @@ PRODUCTION READY: NO
 | LIBRARY-2F432EF713D3 | LIBRARY | lib/family-tree/tree.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-C6D71A70CBB4 | LIBRARY | lib/features/tiers.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-6ED73EA873C5 | LIBRARY | lib/feedback/admin.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-73DD439E7CD0 | LIBRARY | lib/feedback/board.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-73DD439E7CD0 | LIBRARY | lib/feedback/board.ts | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | See Q61. |
 | LIBRARY-FBCF98112820 | LIBRARY | lib/feedback/github-map.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-76068B87917E | LIBRARY | lib/feedback/github-sync.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-0B3375B4C43A | LIBRARY | lib/feedback/notify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -14300,6 +14300,8 @@ PRODUCTION READY: NO
 | COMPONENT-14BBCA62DA12 | COMPONENT | components/media/family-media-img.tsx | 🔄 IN PROGRESS | High | tests/a-family-media-reference-is-never-rendered-raw.test.ts pins that src comes only from the signed lookup | New 2026-09-26 (Q59): the one <img> for a stored family-media reference; placeholder of the same box while signing or when denied | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
 | LIBRARY-8869B0D28BB8 | LIBRARY | lib/utils/safe-link.ts | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts | New 2026-09-26 (Q60): http(s)-only, no credentials, no whitespace, ≤4096 — SEC-004's rule, generalised | Guard passes; calibrated | Discovered 2026-09-26 as new source. See Q60. |
 | SEC-006 | SEC | Stored typed links must not become active-content links outside social | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts: 17 refused spellings (javascript/JavaScript/leading-space/data/vbscript/file/credentials/whitespace/bare host/overlength), and a source guard over every href on a stored link field; calibrated by reverting the wishlist site, which the guard names | 12 sites now render href={safeWebLink(x) ?? undefined}: reminders, wishlists, renewals, signups, projects, career, recipes (source), relationship gifts, weekend (feed and event), pros website, public review links. A refused link renders as text with no anchor | tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | New 2026-09-26: React 18.3 renders javascript: hrefs with only a warning and type="url" accepts them, so a member-saved link ran script in whoever clicked it. Admin notification urls are server-written constants and named as such. No browser execution attempted or claimed. See Q60. |
+| LIBRARY-9AB7D5480A54 | LIBRARY | lib/storage/feedback-attachment-url.ts | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | New 2026-09-26 (Q61): the pure own-attachment URL parser, split out of feedback-attachments.ts so the no-Supabase feedback engine can use it; re-exported unchanged | Guard passes; calibrated — disabling the submit check fails it. tsc clean | Discovered 2026-09-26 as new source. See Q61. |
+| SEC-007 | SEC | A feedback screenshot must not make the super admin's browser fetch an arbitrary URL | 🔄 IN PROGRESS | Medium | tests/a-feedback-screenshot-is-not-a-beacon.test.ts (own URL accepted; tracker, other bucket, non-uuid folder, traversal and javascript: refused; admin render re-check pinned) | 2026-09-26 (Q61): image_url accepted only as this project's own feedback-attachments URL, at submit (normalizeIdea) and at the admin render | Guard passes; calibrated — disabling the submit check fails it. tsc clean | New 2026-09-26: feedback_ideas.image_url was free text rendered as <img> in the super-admin console, so any signed-in user could plant a beacon reporting when (and from what address) an admin viewed their idea. No script execution — img src is inert — and no browser run claimed. See Q61. |
 
 ## Inventory and evidence rules
 
@@ -29912,9 +29914,40 @@ review links (written by a super admin, read by the public).
   `safeSocialLink`, and a source guard over every `href` on a stored link field.
   Calibrated: reverting the wishlist site fails it and names the file.
 
-Status 🔄, not PASS: no browser execution was attempted, and other free-text URL
-fields rendered through a local variable rather than a member expression are not
-covered by the guard's pattern.
+Status 🔄, not PASS: no browser execution was attempted. The guard's pattern matches
+member expressions (`x.url`), not links passed through a local variable, so those
+were checked by hand: of the external hrefs fed from a variable, the social feed
+already goes through `safeSocialLink`, mission proof links are URLs the server signs
+from the private `chore-proof` bucket, and the concierge and AI-card links are
+constant app paths built in `lib/home/needs-sources.ts`. None needed a change.
+
+## Q61 — SEC-007: a feedback screenshot is not a beacon
+
+Checked next because Q59 filed the public `feedback-attachments` bucket as "separate".
+The bucket turned out to be public **by design**: the idea board is readable by every
+signed-in customer (0197, `feedback_ideas_select using (auth.uid() is not null)`), and
+its uploader already names objects unguessably. That is a product decision, not a leak,
+and it is left as it is.
+
+What the check did find is in the field beside it. `feedback_ideas.image_url` was
+free text, and the super-admin console rendered it as `<img src>`. Any signed-in user
+could set it — through the form, or by inserting the row directly, which RLS permits —
+to a URL on their own server, and the admin's browser would fetch it when the idea was
+opened: a beacon reporting when an admin looked, and from what address. `img src` does
+not run script, so this is disclosure, not XSS.
+
+- `normalizeIdea` now accepts `imageUrl` only as this project's own
+  feedback-attachments URL — the only thing the uploader produces — and refuses the
+  rest with a message pointing at the upload button.
+- The admin console re-checks before rendering, because a row can be inserted without
+  passing through the action.
+- The pure URL parser moved to `lib/storage/feedback-attachment-url.ts` (re-exported
+  unchanged) so `lib/feedback/board.ts`, which promises "no Supabase", can use it.
+
+`tests/a-feedback-screenshot-is-not-a-beacon.test.ts`: the own URL and no attachment
+accepted; a tracker, another bucket, a non-uuid folder, a traversal and `javascript:`
+refused; the render re-check pinned. Calibrated: disabling the submit check fails it.
+Status 🔄 — no browser run.
 
 # Final Regression
 
@@ -29973,7 +30006,7 @@ Status: 🔄 IN PROGRESS — unattached-label ratchet held at 16 (three label-le
 Earlier: 🔄 IN PROGRESS — complete accessibility verification pending.
 
 ## Security
-Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (Q58) and every family-media consumer now reads through a URL signed with the viewer's session, with no fallback (Q59) — the bucket flip itself is an operator step after release, so SEC-001 stays ❌. Stored typed links in twelve places could carry `javascript:` into another member's session; all now pass `safeWebLink` (SEC-006, Q60). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
+Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (Q58) and every family-media consumer now reads through a URL signed with the viewer's session, with no fallback (Q59) — the bucket flip itself is an operator step after release, so SEC-001 stays ❌. Stored typed links in twelve places could carry `javascript:` into another member's session; all now pass `safeWebLink` (SEC-006, Q60). A feedback idea's image could make the super admin's browser fetch any URL; now only the project's own attachment (SEC-007, Q61). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
 
 Earlier: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
 
