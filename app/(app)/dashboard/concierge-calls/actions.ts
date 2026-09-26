@@ -29,8 +29,8 @@ export async function requestCallAction(input: {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   // An outbound AI call places real-world bookings/cancellations on the family's
-  // behalf and can incur telephony cost — a manager-only action. RLS is only
-  // family-scoped (any member), so the server action is the authorization gate.
+  // behalf and can incur telephony cost — a manager-only action. RLS enforces
+  // the same (0331: concierge_calls writes need can_manage_family).
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanRequest') };
   const supabase = await createServer();
 

@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:10:00Z
+- Last Updated: 2026-09-26T18:15:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26931,6 +26931,35 @@ tests pass unchanged. Still open, recorded rather than changed: a content
 creator can still insert a post with any `approval_status`, and approval has no
 server action yet (`approve_posts` exists only in the matrix). That belongs
 with the approval flow when it is built.
+
+## C1-K-32 · MEDIUM · A child could queue outbound calls and unlock their own dashboard
+
+Same sweep, tables whose every application writer is manager-gated:
+
+- `concierge_calls`: every action is manager-only, and the request action's
+  own comment said "RLS is only family-scoped (any member), so the server
+  action is the authorization gate". Directly, a child queued a call to any
+  number with any goal and redirected a queued call. Nothing dials yet (the
+  place cron parks due calls as `action_needed`), so this was latent, but it
+  becomes live, with telephony costs, the day a voice provider is wired.
+- `family_dashboard_settings`: the switches that decide whether a child may
+  customise their dashboard at all. A child turned
+  `allow_child_customization` on and `lock_to_family_default` off.
+- `dashboard_layouts`: a child overwrote the family default layout and deleted
+  a sibling's layout.
+
+`0331_concierge_calls_and_the_family_dashboard_are_manager_writes.sql`: call
+and settings writes need `can_manage_family`; a layout is writable by its own
+user (`scope = 'user'`, `user_id = auth.uid()`) or a manager.
+`docs/audit/concierge-and-dashboard-check.sql` fails 5 ways before and passes
+after (55/55), with controls that a child still saves their own layout and a
+parent still requests calls and changes settings. Dashboard and concierge
+suites pass (198/198).
+
+Checked and left as designed: `wallet_cards`, `wallet_passes` and
+`wallet_rewards` are added by any member through un-gated wallet-hub actions
+by design (loyalty cards, passes); `concierge_plan_actions` is written when any
+member applies a plan, subject to the trust evaluation.
 
 ## Swept clean · the API routes this file never named
 
