@@ -469,16 +469,28 @@ export async function finalizeOnboardingAction(input: {
     return onboardingFailure('parent membership upsert', ownerErr, t('actions.couldNotFinishSettingUp2'));
   }
 
-  // 2c. Ensure a trial subscription exists (the trigger may have created one;
-  //     only insert when missing so we never duplicate). Non-fatal.
-  const { data: existingSub } = await admin
+  // 2c. Ensure a trial subscription exists (provisioning normally made one;
+  //     only insert when missing so we never duplicate). Fatal when it cannot
+  //     be ensured — this comment used to say "Non-fatal" above a
+  //     `return onboardingFailure`.
+  //
+  //     A refused read used to fall through to the insert as if no row
+  //     existed. The unique index on family_id (0285) then refused the insert,
+  //     and onboarding failed AFTER the family and membership were created —
+  //     exactly as a double submit racing itself did. A unique violation here
+  //     means the row this step ensures is present, so it counts as success.
+  //     Deliberately NOT an upsert on family_id: 0285 skips that index where
+  //     duplicate rows already exist, and ON CONFLICT (family_id) would then
+  //     fail every onboarding. Audit C1-S9-75.
+  const { data: existingSub, error: existingSubError } = await admin
     .from('subscriptions').select('id').eq('family_id', familyId).limit(1);
-  if (!existingSub || existingSub.length === 0) {
+  if (existingSubError) console.error('[onboarding] subscription check failed; ensuring by insert', { familyId, error: existingSubError });
+  if (existingSubError || !existingSub || existingSub.length === 0) {
     const { error: subErr } = await admin.from('subscriptions').insert({
       family_id: familyId, plan: 'free', status: 'trialing',
       current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
     });
-    if (subErr) return onboardingFailure('trial subscription creation', subErr, t('actions.couldNotFinishSettingUp2'));
+    if (subErr && subErr.code !== '23505') return onboardingFailure('trial subscription creation', subErr, t('actions.couldNotFinishSettingUp2'));
   }
 
   // 3. Set this as the active family (service-role + logged: if this silently

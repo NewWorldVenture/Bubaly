@@ -153,9 +153,11 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
   if (!limited.ok) return { ok: false, error: tr('inboxActions.tooManyRequestsRightNow') };
 
-  const { data: item } = await supabase
+  const { data: item, error: itemReadError } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (itemReadError) return { ok: false, error: describeActionError(itemReadError, tr('actions.couldNotCheckThatRefresh')) };
   if (!item) return { ok: false, error: tr('actions.paperworkNotFound') };
   if (isPaperworkExtractionPartial(item.meta)) return { ok: false, error: tr('paperwork.partialExtractionWarning') };
 

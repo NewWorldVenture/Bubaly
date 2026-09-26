@@ -60,10 +60,13 @@ export async function stitchVisitorIdentity(
         }
       }
     } else {
-      const { data: created } = await admin.from('crm_contacts').insert({
+      const { data: created, error: createError } = await admin.from('crm_contacts').insert({
         email, owner_id: params.userId,
         lead_source: 'signup', lead_status: 'customer', lifecycle_stage: 'customer',
       } as never).select('id').single();
+      // The catch below sees only a throw; a refused insert resolves. It was a
+      // silent noop — a customer with no CRM contact. Logged. Audit C1-S9-75.
+      if (createError) console.error('[identity] contact insert refused', { error: createError });
       if (!created) return { decision: 'noop', contactId: null };
       contactId = created.id;
     }

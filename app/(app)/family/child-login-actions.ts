@@ -13,7 +13,7 @@ import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import { logAudit } from '@/lib/server/audit';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -94,9 +94,11 @@ export async function createChildLoginAction(input: {
 
   const admin = createServiceClient();
 
-  const { data: member } = await admin.from('family_members')
+  const { data: member, error: memberReadError } = await admin.from('family_members')
     .select('id, family_id, display_name, user_id')
     .eq('id', input.memberId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
   if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
 
@@ -194,8 +196,9 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   if (!isValidPin(input.pin)) return { ok: false, error: t('childLoginActions.pinMustBe4Digits') };
 
   const admin = createServiceClient();
-  const { data: row } = await admin.from('child_logins')
+  const { data: row, error: rowReadError } = await admin.from('child_logins')
     .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
+  if (rowReadError) return { ok: false, error: describeActionError(rowReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
 
   // A parent reset must also lift any brute-force lockout on that username, so

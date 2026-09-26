@@ -119,6 +119,7 @@
   "actions.couldNotArchiveThatBabysitter": "No se ha podido archivar a ese canguro.",
   "actions.couldNotAssignThatAddress": "No se ha podido asignar esa dirección.",
   "actions.couldNotCheckPayId": "No se ha podido comprobar la disponibilidad de la Pay-ID.",
+  "actions.couldNotCheckThatRefresh": "No se ha podido comprobar ahora mismo. Actualiza e inténtalo de nuevo.",
   "actions.couldNotClaimThatPay": "No se ha podido reclamar esa Pay-ID.",
   "actions.couldNotClearThatMeal": "No se ha podido borrar esa comida.",
   "actions.couldNotClearThatPermission": "No se ha podido retirar esa concesión de permiso.",

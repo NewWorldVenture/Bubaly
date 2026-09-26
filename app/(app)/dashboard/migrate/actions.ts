@@ -236,8 +236,11 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     let listId: string | null = null;
     // Reuse the import list only while it is live: adopting an archived one
     // hides the whole import behind the archive the family put it in.
-    const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('name', listName)
+    // A refused read used to fall through to the create below, filing the
+    // import under a second "Imported Groceries" list. Audit C1-S9-75.
+    const { data: list, error: listReadError } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('name', listName)
       .eq('is_archived', false).is('archived_at', null).maybeSingle();
+    if (listReadError) return partialFailure('grocery list', listReadError);
     listId = list?.id ?? null;
     if (!listId) {
       const { data: createdList, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: listName, created_by: userId }).select('id').single();

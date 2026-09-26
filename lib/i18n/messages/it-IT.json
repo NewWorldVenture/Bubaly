@@ -119,6 +119,7 @@
   "actions.couldNotArchiveThatBabysitter": "Impossibile archiviare quel babysitter.",
   "actions.couldNotAssignThatAddress": "Impossibile assegnare quell’indirizzo.",
   "actions.couldNotCheckPayId": "Impossibile verificare la disponibilità del Pay-ID.",
+  "actions.couldNotCheckThatRefresh": "Non è stato possibile verificarlo in questo momento. Aggiorna e riprova.",
   "actions.couldNotClaimThatPay": "Impossibile rivendicare quel Pay-ID.",
   "actions.couldNotClearThatMeal": "Impossibile rimuovere quel pasto.",
   "actions.couldNotClearThatPermission": "Impossibile revocare quella concessione di permesso.",

@@ -21,7 +21,12 @@ describe('onboarding failure safety', () => {
     const source = readFileSync('app/onboarding/actions.ts', 'utf8');
 
     expect(source).toContain('describeActionError(');
-    expect(source).toContain('if (subErr) return onboardingFailure');
+    // Re-pointed under C1-S9-75 from the exact `if (subErr) return …`. The
+    // subscription write still fails closed; the one exception is a unique
+    // violation, which means the row this step ensures already exists — the
+    // case a refused read or a double submit used to turn into a failed
+    // onboarding. Nothing else may be excused.
+    expect(source).toContain("if (subErr && subErr.code !== '23505') return onboardingFailure");
     expect(source).toContain('if (activeErr) return onboardingFailure');
     expect(source).toContain('if (detailsErr) return onboardingFailure');
     expect(source).toContain('if (memberErr) return onboardingFailure');

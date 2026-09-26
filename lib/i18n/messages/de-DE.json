@@ -119,6 +119,7 @@
   "actions.couldNotArchiveThatBabysitter": "Dieser Babysitter konnte nicht archiviert werden.",
   "actions.couldNotAssignThatAddress": "Diese Adresse konnte nicht zugewiesen werden.",
   "actions.couldNotCheckPayId": "Die Verfügbarkeit der Pay-ID konnte nicht geprüft werden.",
+  "actions.couldNotCheckThatRefresh": "Das konnte gerade nicht geprüft werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "actions.couldNotClaimThatPay": "Diese Pay-ID konnte nicht beansprucht werden.",
   "actions.couldNotClearThatMeal": "Diese Mahlzeit konnte nicht entfernt werden.",
   "actions.couldNotClearThatPermission": "Diese Berechtigungserteilung konnte nicht aufgehoben werden.",

@@ -10,7 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 const BUCKET = 'chore-proof';
 const MAX_FILE = 50 * 1024 * 1024;
@@ -132,10 +132,13 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   if (!assignmentId) return { ok: false, error: t('actions.missingAssignment') };
 
   // Load the assignment + its chore (RLS guarantees same-family).
-  const { data: assignment } = await supabase
+  const { data: assignment, error: assignmentReadError } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (assignmentReadError) return { ok: false, error: describeActionError(assignmentReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
-  const { data: chore } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
+  const { data: chore, error: choreReadError } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
+  if (choreReadError) return { ok: false, error: describeActionError(choreReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!chore) return { ok: false, error: t('actions.choreNotFound') };
 
   const proofKind = (chore.proof_required as string) ?? 'none';

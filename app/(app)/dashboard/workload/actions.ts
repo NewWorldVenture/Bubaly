@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -17,8 +18,10 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: target } = await supabase.from('family_members')
+  const { data: target, error: targetReadError } = await supabase.from('family_members')
     .select('id').eq('id', toMemberId).eq('family_id', ctx.active.familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (targetReadError) return { ok: false, error: describeActionError(targetReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!target) return { ok: false, error: t('actions.thatFamilyMemberWasNot') };
 
   // Confirmed by COUNT rather than by `.select()`: `count: 'exact'` sends

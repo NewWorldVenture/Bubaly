@@ -5,6 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * Public survey submission — NO auth (respondents may be anonymous). Writes go
@@ -24,13 +25,15 @@ export async function submitResponseAction(input: {
   if (!limited.ok) return { ok: false, error: t('actions.tooManySurveyResponsesPlease') };
 
   const slug = typeof payload.slug === 'string' ? payload.slug.trim().slice(0, 200) : '';
-  const { data: survey } = await supabase
+  const { data: survey, error: surveyReadError } = await supabase
     .from('surveys')
     .select('id, status, scale_min, scale_max')
     .eq('slug', slug)
     .is('deleted_at', null)
     .maybeSingle();
 
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (surveyReadError) return { ok: false, error: describeActionError(surveyReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!survey) return { ok: false, error: t('actions.surveyNotFound') };
   if (survey.status !== 'active') return { ok: false, error: t('actions.thisSurveyIsNoLonger') };
 

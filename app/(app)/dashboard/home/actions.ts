@@ -172,12 +172,14 @@ export async function deleteServiceRecordAction(id: string) {
 export async function scheduleRecommendedTasksAction(assetId: string): Promise<{ ok: boolean; created: number; error?: string }> {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { data: asset } = await supabase
+  const { data: asset, error: assetReadError } = await supabase
     .from('home_assets')
     .select('id, name, category, last_serviced_on')
     .eq('id', assetId)
     .eq('family_id', familyId)
     .maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (assetReadError) return { ok: false, created: 0, error: describeActionError(assetReadError, tr('actions.couldNotCheckThatRefresh')) };
   if (!asset) return { ok: false, created: 0, error: tr('actions.assetNotFound') };
 
   const cadences = DEFAULT_CADENCES[asset.category ?? ''] ?? [];

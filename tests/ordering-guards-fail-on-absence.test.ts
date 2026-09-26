@@ -27,7 +27,12 @@ describe('ordering guards fail when the statement they name is absent', () => {
       // explanation is the defect one rung up.
       const lines = readFileSync(`tests/${file}`, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-        .replace(/\/\/[^\n]*/g, '')
+        // Whole-line comments, and `//` after whitespace — not every `//`: a
+        // needle string like '// 2c. …' sat inside an at() call, and stripping
+        // from it to the end of the line hid a slice(at(), at()) from this very
+        // scan (found under C1-S9-75). Same rule as the write scanner's.
+        .replace(/^[^\S\n]*\/\/.*$/gm, '')
+        .replace(/(?<=[ \t])\/\/[^\n]*/g, '')
         .split('\n');
       lines.forEach((line, i) => {
         if (line.includes('.indexOf(') && ORDERING.test(line)) offenders.push(`tests/${file}:${i + 1}`);
@@ -57,7 +62,12 @@ describe('ordering guards fail when the statement they name is absent', () => {
       if (!file.endsWith('.test.ts')) continue;
       const lines = readFileSync(`tests/${file}`, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-        .replace(/\/\/[^\n]*/g, '')
+        // Whole-line comments, and `//` after whitespace — not every `//`: a
+        // needle string like '// 2c. …' sat inside an at() call, and stripping
+        // from it to the end of the line hid a slice(at(), at()) from this very
+        // scan (found under C1-S9-75). Same rule as the write scanner's.
+        .replace(/^[^\S\n]*\/\/.*$/gm, '')
+        .replace(/(?<=[ \t])\/\/[^\n]*/g, '')
         .split('\n');
       lines.forEach((line, i) => {
         // `.slice(at(x, a), at(x, b))` — use between() so the degenerate case

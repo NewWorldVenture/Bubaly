@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-215 finding IDs from four workers and two parallel sessions; none of it was
+216 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 225 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 226 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35344,6 +35344,87 @@ prefixed with `void` is not covered, for example
 **Status:** FIXED (11). Deliberate (3), with reasons in the guard. OPEN (the
 OAuth referral badge).
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-75 — a refused read answered as an absence
+
+**Two shapes, both from a read that bound only `data`.**
+
+**"Not found": a smaller answer, but a false one.** Fourteen reads in ten
+server-action files answered a read that never saw the row with a claim about
+the row. Examples: "Plan not found", "no winner yet", "that recipe has no
+ingredients", "this gift link is no longer active", "that family member was
+not found". The action failed either way, but it told the family something
+untrue about their data. Each now binds the error and answers *"Could not check
+that just now. Refresh and try again."* through `describeActionError`, as one
+new key in the seven base catalogues. The `concierge` and `paperwork`
+materialise instances were fixed under `C1-S9-72` and `C1-S9-73`.
+
+**Get-or-create: a different answer, where the absence then CREATED.** A
+census for a data-only read followed by an insert found these:
+- **Moment grocery add.** A refused list read created a second "Groceries"
+  list. A refused read of what was already on the list re-added every item,
+  breaking the file's own promise that "tapping twice never duplicates".
+- **Recipe vote → add the winner to groceries.** A refused list read created
+  a second "Groceries" list.
+- **Migrate import.** A refused list read filed the import under a second
+  "Imported Groceries" list.
+- **Admin plan assignment, two defects in one lookup.**
+  - A refused read inserted a second subscription and wrote
+    `previous_plan: null` into the admin audit trail.
+  - Independently, it looked only at `active` and `trialing` rows. But
+    `subscriptions` is one row per family (0285's unique index; the Stripe
+    webhook updates by `family_id`), and a cancelled Stripe subscription leaves
+    its row behind as `canceled`. So **every plan assignment to a family whose
+    subscription had been cancelled** inserted, hit the unique index, and
+    reported *"Could not create the family"*. It now takes the newest row of
+    any status.
+- **Onboarding step 2c.** A refused subscription check fell through to the
+  insert, the unique index refused it, and onboarding failed *after* the family
+  and the owner's membership had been created. A double submit racing itself
+  did the same. Now a refused check is logged, the insert still ensures the
+  row, and a unique violation (23505) counts as success, because it means the
+  row exists. This is **deliberately not** an `ON CONFLICT (family_id)` upsert:
+  0285 *skips* `uq_subscriptions_family` where duplicate rows already exist,
+  and an upsert would then fail **every** onboarding. Which state production is
+  in cannot be seen from here (no hosted access). The step's comment said
+  "Non-fatal" above a `return onboardingFailure`; the comment now matches the
+  code.
+
+**Logged, as smaller answers.** The `onboarding_progress` read in
+`ensure-family` (its `unique (user_id)` makes the fall-through safe), and the
+CRM identity contact insert (a resolved error is invisible to the `catch`
+around it). **Left as it is:** `ab/track`, whose `{ recorded: false }` was
+triaged as true under `C1-S9-37`.
+
+**A fifteenth exact-statement guard went red on an improvement.**
+`onboarding-failure-safety` pinned `if (subErr) return onboardingFailure`. It
+is re-pointed at the property: the subscription write still fails closed, with
+the single exception of 23505.
+
+**An instrument defect, found by my own test evading it.** The ordering
+meta-guard (`ordering-guards-fail-on-absence`) stripped from *any* `//` to the
+end of the line, including inside a string literal. My new guard sliced
+`slice(at(src, '// 2c. …'), at(src, …))`, the shape the meta-guard exists to
+refuse, and it passed unseen. The stripper now uses the write scanner's rule:
+whole-line comments, or `//` after whitespace. Proved both ways: the evasion
+is red under the new rule and green under the old one. My test now uses
+`between()`.
+
+**Guard: `a-refused-read-is-not-an-absence`** (14 cases):
+- behavioural cases for the moment grocery add and the admin plan tool
+  (including a cancelled row being updated, not collided with);
+- source cases for onboarding;
+- **two ratchets.** (A) No server action answers an absence from a read that
+  bound only `data`. (B) No get-or-create in `app/` or `lib/` creates on such
+  a read; `ab/track` is the only accepted entry, with a stale-entry check.
+
+**11 mutations, all red**, including an over-tightening (the moment add never
+creating a list). The meta-guard fix is proved by two more.
+
+**Status:** FIXED. **Not established:** whether 0285 created or skipped
+`uq_subscriptions_family` in production. If it was skipped, a refused
+onboarding check can still insert a duplicate row, which was the behaviour
+before this entry.
+
 ---
 
 ## What this pass did NOT establish
@@ -35415,8 +35496,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,397 passing / 17,400 across 1,366
-files.** (Re-run after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,407 passing / 17,410 across 1,367
+files.** (Re-run after `C1-S9-75`; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

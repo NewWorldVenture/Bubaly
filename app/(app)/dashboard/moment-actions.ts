@@ -8,7 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 const PREF_KEY = 'momentPrep';
 
@@ -71,9 +71,15 @@ export async function addMomentGroceryAction(input: {
   // Grocery module uses, so the moment's items land exactly where the family shops.
   // Both archive columns: only `archived_at` is ever written (the shopping
   // module stamps it), so `is_archived` alone calls an archived list active.
-  const { data: lists } = await supabase.from('grocery_lists')
+  //
+  // Both reads below used to drop their errors. A refused list read created a
+  // second "Groceries" list; a refused read of what is already on it re-added
+  // every item — the "tapping twice never duplicates" promise above, broken by
+  // one failed query. Audit C1-S9-75.
+  const { data: lists, error: listReadError } = await supabase.from('grocery_lists')
     .select('id').eq('family_id', input.familyId).eq('is_archived', false).is('archived_at', null)
     .order('created_at').limit(1);
+  if (listReadError) return { ok: false, error: describeActionError(listReadError, t('actions.couldNotCheckThatRefresh')) };
   let listId = lists?.[0]?.id;
   if (!listId) {
     const { data: created, error: listErr } = await supabase.from('grocery_lists')
@@ -84,8 +90,9 @@ export async function addMomentGroceryAction(input: {
   }
 
   // Skip items already present (unchecked) so re-tapping is idempotent.
-  const { data: existing } = await supabase.from('grocery_items')
+  const { data: existing, error: existingReadError } = await supabase.from('grocery_items')
     .select('name').eq('list_id', listId).eq('is_checked', false);
+  if (existingReadError) return { ok: false, error: describeActionError(existingReadError, t('actions.couldNotCheckThatRefresh')) };
   const have = new Set((existing ?? []).map((r) => r.name.trim().toLowerCase()));
   const toAdd = names.filter((n) => !have.has(n.toLowerCase()));
   if (toAdd.length === 0) return { ok: true, added: 0, ids: [] };

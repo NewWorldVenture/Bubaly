@@ -7,7 +7,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['grocery_items']['Insert'];
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -111,11 +111,15 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const { data: vote } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
+  const { data: vote, error: voteReadError } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (voteReadError) return { ok: false, error: describeActionError(voteReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!vote?.winner_option_id) return { ok: false, error: t('actions.noWinnerYetCloseThe') };
-  const { data: option } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
+  const { data: option, error: optionReadError } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
+  if (optionReadError) return { ok: false, error: describeActionError(optionReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!option?.recipe_id) return { ok: false, error: t('actions.theWinningOptionIsNot') };
-  const { data: recipe } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
+  const { data: recipe, error: recipeReadError } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
+  if (recipeReadError) return { ok: false, error: describeActionError(recipeReadError, t('actions.couldNotCheckThatRefresh')) };
   const ingredients = (recipe?.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [];
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
@@ -123,8 +127,12 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   // Both archive columns, as lib/services/groceries explains: only `archived_at`
   // is ever written, so an `is_archived`-only reader hands the shopping list a
   // list the family already put away.
-  const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
+  //
+  // A refused read left `list` null, and "get or create" then CREATED: a second
+  // "Groceries" list beside the one the family shops from. Audit C1-S9-75.
+  const { data: list, error: listReadError } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
     .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
+  if (listReadError) return { ok: false, error: describeActionError(listReadError, t('actions.couldNotCheckThatRefresh')) };
   let listId = list?.id;
   if (!listId) {
     const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();

@@ -119,6 +119,7 @@
   "actions.couldNotArchiveThatBabysitter": "Kan die oppas niet archiveren.",
   "actions.couldNotAssignThatAddress": "Kan dat adres niet toewijzen.",
   "actions.couldNotCheckPayId": "Kan de beschikbaarheid van de Pay-ID niet controleren.",
+  "actions.couldNotCheckThatRefresh": "Dat kon nu niet worden gecontroleerd. Vernieuw en probeer het opnieuw.",
   "actions.couldNotClaimThatPay": "Kan die Pay-ID niet claimen.",
   "actions.couldNotClearThatMeal": "Kan die maaltijd niet wissen.",
   "actions.couldNotClearThatPermission": "Kan die machtigingstoekenning niet intrekken.",

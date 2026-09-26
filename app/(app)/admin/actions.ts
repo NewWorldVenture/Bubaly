@@ -247,8 +247,9 @@ const ASSIGNABLE_PLANS = new Set<PlanId>(['free', 'basic', 'basic_annual', 'plus
 
 /**
  * Set a family's subscription plan directly (e.g. comp a family, or downgrade to
- * Free). Updates the family's active/trialing subscription, or creates one if
- * none exists. 'free' yields planLevel 0. Super-admin only, audited.
+ * Free). Updates the family's subscription row (one per family, of any status),
+ * or creates one if none exists. 'free' yields planLevel 0. Super-admin only,
+ * audited.
  */
 export async function adminSetFamilyPlanAction(input: { familyId: string; plan: string }): Promise<Result> {
   const t = await getTranslations();
@@ -260,11 +261,23 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
   if (!input.familyId) return { ok: false, error: t('actions.aFamilyIsRequired') };
 
   const supabase = createServiceClient();
-  // Update the family's current active/trialing subscription if it has one;
-  // otherwise create one. Keeps a single source of truth for the plan.
-  const { data: existing } = await supabase.from('subscriptions')
+  // Update the family's subscription row if it has one; otherwise create one.
+  // Keeps a single source of truth for the plan.
+  //
+  // Two defects in the lookup, both answering "no subscription" when there was
+  // one (Audit C1-S9-75):
+  //  - A refused read left `existing` null, so this INSERTED a second row and
+  //    audited `previous_plan: null`.
+  //  - It looked only at `active`/`trialing` rows. `subscriptions` is one row
+  //    per family (0285's unique index; the Stripe webhook updates by
+  //    family_id), and a cancelled Stripe subscription leaves its row behind as
+  //    `canceled` — so assigning a plan to that family always inserted, hit the
+  //    unique index, and reported "Could not create the family". The newest row
+  //    of any status is the family's subscription.
+  const { data: existing, error: existingReadError } = await supabase.from('subscriptions')
     .select('id, plan').eq('family_id', input.familyId)
-    .in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (existingReadError) return actionFailure(existingReadError, t('actions.couldNotCheckThatRefresh'));
 
   const previousPlan = existing?.plan ?? null;
   if (existing) {
@@ -403,7 +416,9 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
   if (!guard.ok) return guard;
 
   const supabase = createServiceClient();
-  const { data: invite } = await supabase.from('invites').select('*').eq('id', inviteId).maybeSingle();
+  const { data: invite, error: inviteReadError } = await supabase.from('invites').select('*').eq('id', inviteId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (inviteReadError) return { ok: false, error: describeActionError(inviteReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!invite || invite.status !== 'pending') return { ok: false, error: t('actions.inviteIsNoLongerPending') };
 
   const { data: family } = await supabase.from('families').select('name').eq('id', invite.family_id).maybeSingle();

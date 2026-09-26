@@ -119,6 +119,7 @@
   "actions.couldNotArchiveThatBabysitter": "Could not archive that babysitter.",
   "actions.couldNotAssignThatAddress": "Could not assign that address.",
   "actions.couldNotCheckPayId": "Could not check Pay-ID availability.",
+  "actions.couldNotCheckThatRefresh": "Could not check that just now. Refresh and try again.",
   "actions.couldNotClaimThatPay": "Could not claim that Pay-ID.",
   "actions.couldNotClearThatMeal": "Could not clear that meal.",
   "actions.couldNotClearThatPermission": "Could not clear that permission grant.",
