@@ -284,8 +284,14 @@ export function AssistantModule() {
 
   async function deleteConversation(id: string) {
     if (!confirm(t('assistantModule.deleteThisConversation'))) return;
-    const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
-    if (error) {
+    // 0255 ("ai runtime lockdown") narrows writes on ai_conversations, and RLS
+    // FILTERS a delete rather than refusing it — so without the readback a
+    // removal the policy blocked answered `error: null` and the row was dropped
+    // from the list on screen while staying in the table. `family_id` answers a
+    // different question from the readback: whose conversation it was.
+    const { data: rows, error } = await createClient().from('ai_conversations').delete()
+      .eq('id', id).eq('family_id', family.id).select('id');
+    if (error || !rows || rows.length === 0) {
       console.error('[assistant] conversation delete failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
       return;
@@ -297,8 +303,9 @@ export function AssistantModule() {
   async function renameConversation(id: string, current: string) {
     const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
-    const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
-    if (error) {
+    const { data: rows, error } = await createClient().from('ai_conversations')
+      .update({ title: title.slice(0, 80) }).eq('id', id).eq('family_id', family.id).select('id');
+    if (error || !rows || rows.length === 0) {
       console.error('[assistant] conversation rename failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
       return;

@@ -117,7 +117,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     // Verifying the delete at least makes that visible instead of reporting it
     // as done; the ordering itself is recorded in audit/claude-1.md.
     if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
-    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -130,7 +130,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     setBusy(id);
     // `is_secure` moves a file between the shared area and the vault — a toggle
     // that silently did nothing leaves it where it was, reported as moved.
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.moveFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -139,7 +139,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function toggleFavorite(id: string) {
     const d = byId.get(id); if (!d) return;
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).eq('family_id', familyId).select('id');
     if (err) return toastError(t('filesHubModule.updateFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     refresh();

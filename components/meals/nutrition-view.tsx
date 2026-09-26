@@ -40,8 +40,13 @@ export function NutritionView() {
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
   async function remove(id: string) {
-    const { error } = await createClient().from('nutrition_logs').delete().eq('id', id);
-    if (error) toastError(error.message);
+    // RLS filters this delete rather than refusing it, so the silent path was a
+    // removal that did not happen and said nothing at all — this function had no
+    // success toast either, which made the no-op completely invisible.
+    const { data: rows, error } = await createClient().from('nutrition_logs').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
+    if (error) { toastError(error.message); return; }
+    if (!rows || rows.length === 0) toastError(t('actions.couldNotDeleteThatRecord'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an

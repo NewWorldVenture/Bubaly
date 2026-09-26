@@ -7210,6 +7210,9 @@
   "marketplaceModule.sizeAgeWhyYouRe": "Maat, leeftijd, waarom je het doorgeeft…",
   "marketplaceModule.theUploadedPhotoCouldNot": "De geüploade foto kon niet worden opgeruimd.",
   "marketplaceModule.youAlreadyReachedOutAbout": "Je hebt hier al contact over opgenomen",
+  "marketplaceModule.listingUpdated": "Advertentie bijgewerkt",
+  "marketplaceModule.postedToTheFamilyMarketplace": "Geplaatst op de familiemarktplaats",
+  "marketplaceModule.removeNamed": "“{title}” verwijderen?",
   "marketplaceNav.marketplaceSections": "Marktplaatssecties",
   "marketplaceNav.postAnItem": "Item plaatsen",
   "marketplaceNav.sellRentLendBorrowAmpMore": "Verkopen, verhuren, uitlenen, lenen en meer",
@@ -13720,6 +13723,12 @@
   "actions.couldNotDeleteThatPlace": "Deze plek kon niet worden verwijderd.",
   "actions.couldNotUpdateThatGeofence": "Deze geofence kon niet worden bijgewerkt.",
   "actions.couldNotSaveThatRecord": "Dit record kon niet worden opgeslagen.",
+  "actions.couldNotUpdateThatMessage": "Dit bericht kon niet worden bijgewerkt.",
+  "actions.couldNotSaveThatListing": "Deze advertentie kon niet worden opgeslagen.",
+  "actions.couldNotDeleteThatListing": "Deze advertentie kon niet worden verwijderd.",
+  "actions.couldNotDeleteThatNotification": "Deze melding kon niet worden verwijderd.",
   "errors.thatChangeWasNotSaved": "Die wijziging is niet opgeslagen — je hebt mogelijk geen toestemming. Ververs de pagina en probeer het opnieuw.",
-  "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago."
+  "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",
+  "familyModule.memberUpdated": "Lid bijgewerkt",
+  "familyModule.memberAdded": "Lid toegevoegd"
 }

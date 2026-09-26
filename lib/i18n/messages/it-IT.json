@@ -7210,6 +7210,9 @@
   "marketplaceModule.sizeAgeWhyYouRe": "Taglia, età, perché lo passi ad altri…",
   "marketplaceModule.theUploadedPhotoCouldNot": "Non è stato possibile ripulire la foto caricata.",
   "marketplaceModule.youAlreadyReachedOutAbout": "Hai già contattato per questo",
+  "marketplaceModule.listingUpdated": "Annuncio aggiornato",
+  "marketplaceModule.postedToTheFamilyMarketplace": "Pubblicato nel mercatino della famiglia",
+  "marketplaceModule.removeNamed": "Rimuovere “{title}”?",
   "marketplaceNav.marketplaceSections": "Sezioni del marketplace",
   "marketplaceNav.postAnItem": "Pubblica un articolo",
   "marketplaceNav.sellRentLendBorrowAmpMore": "Vendi, affitta, presta, prendi in prestito e altro",
@@ -13720,6 +13723,12 @@
   "actions.couldNotDeleteThatPlace": "Non è stato possibile eliminare questo luogo.",
   "actions.couldNotUpdateThatGeofence": "Non è stato possibile aggiornare questa geofence.",
   "actions.couldNotSaveThatRecord": "Non è stato possibile salvare questo record.",
+  "actions.couldNotUpdateThatMessage": "Non è stato possibile aggiornare questo messaggio.",
+  "actions.couldNotSaveThatListing": "Non è stato possibile salvare questo annuncio.",
+  "actions.couldNotDeleteThatListing": "Non è stato possibile eliminare questo annuncio.",
+  "actions.couldNotDeleteThatNotification": "Non è stato possibile ignorare questa notifica.",
   "errors.thatChangeWasNotSaved": "Quella modifica non è stata salvata: potresti non avere l'autorizzazione. Aggiorna e riprova.",
-  "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago."
+  "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago.",
+  "familyModule.memberUpdated": "Membro aggiornato",
+  "familyModule.memberAdded": "Membro aggiunto"
 }

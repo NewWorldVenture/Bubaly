@@ -29163,3 +29163,117 @@ lose one; calibrated by removing the scope from `journal-module`'s update and
 watching it named by file and table. 17,116 of 17,119 green under both `TZ=UTC`
 and `TZ=America/Los_Angeles`, lint exit 0, typecheck exit 0, i18n gate clean
 across all eight declared surfaces.
+
+---
+
+## Q53 — The list of gated tables was 19. The database says 92.
+
+`tests/a-filtered-delete-is-not-a-deletion.test.ts` enforces a client rule: on a
+table whose RLS filters some members' writes, a write must be family-scoped and
+must read the row back, because RLS FILTERS rather than refuses and PostgREST
+answers `error: null` either way.
+
+The rule was right. The **list** it was applied to was hand-written, so it
+lagged every migration that added to it — 19 tables against the 92 the catalog
+actually reports. Q52 found six sites the list had never covered; this is the
+measurement that explains why there were six, and finds the rest.
+
+### Three attempts to derive it from the migration text, and why the third failure is the interesting one
+
+1. **A non-greedy `\((.*?)\)`** truncated every predicate at its first inner
+   parenthesis, so a policy reading `using (EXISTS (SELECT 1 FROM …))` was
+   classified on the fragment `EXISTS (SELECT 1 FROM …`.
+2. **Matching `auth.uid`** classed the *inlined* spelling of plain family
+   membership as a restriction, putting `concierge_plans`, `trip_plans`,
+   `reminder_lists` and the relationship tables on a list they do not belong on.
+   Both of those are ordinary bugs; a balanced-paren extractor fixed them.
+3. **The third failure is structural.** A large share of these policies are
+   generated inside PL/pgSQL loops:
+
+   ```sql
+   execute format('create policy %1$s_mng_update on public.%1$I for update
+                   to authenticated using (public.can_manage_family(family_id))', t);
+   ```
+
+   The table is a loop variable. It appears nowhere in the `create policy` text,
+   so **no scanner over `*.sql` can enumerate these at all** — which is exactly
+   why the list was hand-written in the first place, and why it drifted.
+
+### So it is measured where it can be measured
+
+`docs/audit/gated-write-tables-check.sql` queries `pg_policies` on a database
+with all 345 migrations applied — the job `Database (migration replay · RLS
+boundary probes)` already builds one. There the policy exists, its predicate is
+normalised by the catalog, and `permissive` says whether it is ORed or ANDed.
+
+The classification needs both halves, and the calibration proved both on a real
+database with a synthetic table:
+
+| policy shape | classified | why |
+|---|---|---|
+| only a narrowing permissive policy | **filters** | nothing lets a plain member through |
+| a plain permissive policy alongside it | does not filter | PERMISSIVE policies are **ORed** |
+| plus a narrowing RESTRICTIVE policy | **filters** | RESTRICTIVE policies are **ANDed** |
+
+A first draft of the calibration "passed" twice — on `calendar_events` and
+`medications` — and both times the classification was right and my test case was
+wrong: `calendar_events` already has a plain permissive UPDATE policy, and
+`medications` already carries restrictive guards. A calibration that cannot change
+the answer proves nothing about the code.
+
+The vitest guard now **reads its list out of the probe**, so there is one copy of
+the data: the probe asserts it against the live catalog, the guard applies it to
+the client, and a migration that narrows a new table fails the probe with the
+table named and the two files to change.
+
+### 33 live sites, all fixed
+
+Replacing 19 tables with 92 turned a passing guard into one naming 33 real sites
+across 20 files. Twenty-one already read the row back and needed only
+`.eq('family_id', …)`. Twelve needed both. Ranked by what being wrong costs:
+
+**`marketplace-module`'s `remove` is data loss, not a wrong toast.** 0154's
+delete policy is seller-scoped. A filtered delete answers `error: null`, and the
+very next statement removes the listing's photo from storage — so removing
+someone else's listing left the listing in place, **destroyed its picture**, and
+said "Removed".
+
+**`settings-module`'s member edit changes a ROLE.** `fm_update` (0211) is
+manager-gated, and the handler ends in `window.location.reload()` — so a
+non-manager saw "Member updated" and then the old role, with nothing saying why.
+Its sibling `removeMember`, and `family-module`'s removal modal, had the same
+shape: a soft delete that hid the row until the next read put it back.
+
+The rest — `documents` (three modules), `bills`, `financial_accounts`,
+`family_credentials`, `renewals`, `rides`, `opportunities`, `trips`/`trip_items`,
+`driving_trips`, `nutrition_logs`, `ai_conversations`, `family_communications`,
+`notifications` — are the same fix at lower stakes.
+
+### One place the rule genuinely does not apply, and how the guard learned it
+
+`notifications-module`'s `markAllRead` is `update … .eq('family_id', f).eq('is_read',
+false)`, and its existing comment already says the right thing: *"Zero rows here is
+NORMAL — nothing was unread."* A readback cannot tell that from a refusal, so
+demanding one would add a check whose result nobody can judge — worse than no
+check, because it reads as covered.
+
+The distinguishing feature is checkable: a write naming one row by `.eq('id', …)`
+touches exactly one row, so empty means refused; a write filtered by a set does
+not. The guard now requires the readback only for the first, and that rule has its
+own calibration so the exemption cannot widen.
+
+### A stub narrower than the builder it stands in for
+
+`tests/files-hub-localization.test.ts` died in all seven locales with
+`update(...).eq(...).eq is not a function`: its `chainEq` helper modelled ONE
+filter. It chains now, as PostgREST does — and the two assertions that read
+`toHaveBeenLastCalledWith('id', 'file-1')` now assert **both** filters rather than
+being retargeted at whichever is last, so the family scope the fix added is pinned
+rather than merely tolerated.
+
+**Verified:** 54/54 boundary probes pass with the new one in the glob, run twice;
+the new probe calibrated in all three policy shapes and in both drift directions
+(a table added, a table widened). 17,118 of 17,121 tests green (the three are this
+container's Node 22 against the declared 24.21.0). Lint exit 0 at 10 of 12
+warnings, typecheck exit 0, i18n gate clean across eight surfaces, Supabase query
+audit 491 tables / 91 functions / 146 routes, migration ledger 345 files.

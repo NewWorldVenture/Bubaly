@@ -103,7 +103,7 @@ export function RenewalsModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = form.id
-      ? await sb.from('renewals').update(fields).eq('id', form.id).select('id')
+      ? await sb.from('renewals').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('renewals').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -117,7 +117,7 @@ export function RenewalsModule() {
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('renewals').update({
       expires_at: rollForward(r.expires_at, 12), status: 'active',
-    }).eq('id', r.id).select('id');
+    }).eq('id', r.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('renewalsModule.renewedForAnotherYear'));
@@ -126,7 +126,7 @@ export function RenewalsModule() {
   async function remove(r: Renewal) {
     if (!confirm(`Delete "${r.title}"?`)) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('renewals').delete().eq('id', r.id).select('id');
+    const { data: rows, error: err } = await sb.from('renewals').delete().eq('id', r.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('renewalsModule.renewalDeleted'));

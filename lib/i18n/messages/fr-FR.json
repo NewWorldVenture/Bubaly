@@ -7210,6 +7210,9 @@
   "marketplaceModule.sizeAgeWhyYouRe": "Taille, âge, pourquoi vous le donnez…",
   "marketplaceModule.theUploadedPhotoCouldNot": "La photo envoyée n’a pas pu être nettoyée.",
   "marketplaceModule.youAlreadyReachedOutAbout": "Vous avez déjà pris contact à ce sujet",
+  "marketplaceModule.listingUpdated": "Annonce mise à jour",
+  "marketplaceModule.postedToTheFamilyMarketplace": "Publié sur la place de marché familiale",
+  "marketplaceModule.removeNamed": "Retirer «{title}» ?",
   "marketplaceNav.marketplaceSections": "Sections de la marketplace",
   "marketplaceNav.postAnItem": "Publier un article",
   "marketplaceNav.sellRentLendBorrowAmpMore": "Vendre, louer, prêter, emprunter et plus",
@@ -13720,6 +13723,12 @@
   "actions.couldNotDeleteThatPlace": "Impossible de supprimer ce lieu.",
   "actions.couldNotUpdateThatGeofence": "Impossible de mettre à jour cette zone.",
   "actions.couldNotSaveThatRecord": "Impossible d’enregistrer cette fiche.",
+  "actions.couldNotUpdateThatMessage": "Impossible de mettre à jour ce message.",
+  "actions.couldNotSaveThatListing": "Impossible d’enregistrer cette annonce.",
+  "actions.couldNotDeleteThatListing": "Impossible de supprimer cette annonce.",
+  "actions.couldNotDeleteThatNotification": "Impossible de masquer cette notification.",
   "errors.thatChangeWasNotSaved": "Cette modification n'a pas été enregistrée : vous n'avez peut-être pas l'autorisation. Actualisez et réessayez.",
-  "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago."
+  "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
+  "familyModule.memberUpdated": "Membre mis à jour",
+  "familyModule.memberAdded": "Membre ajouté"
 }

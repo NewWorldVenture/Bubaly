@@ -7210,6 +7210,9 @@
   "marketplaceModule.sizeAgeWhyYouRe": "Größe, Alter, warum Sie es weitergeben …",
   "marketplaceModule.theUploadedPhotoCouldNot": "Das hochgeladene Foto konnte nicht bereinigt werden.",
   "marketplaceModule.youAlreadyReachedOutAbout": "Sie haben dazu bereits Kontakt aufgenommen",
+  "marketplaceModule.listingUpdated": "Anzeige aktualisiert",
+  "marketplaceModule.postedToTheFamilyMarketplace": "Im Familien-Marktplatz veröffentlicht",
+  "marketplaceModule.removeNamed": "„{title}“ entfernen?",
   "marketplaceNav.marketplaceSections": "Marktplatz-Bereiche",
   "marketplaceNav.postAnItem": "Artikel einstellen",
   "marketplaceNav.sellRentLendBorrowAmpMore": "Verkaufen, vermieten, verleihen, leihen und mehr",
@@ -13720,6 +13723,12 @@
   "actions.couldNotDeleteThatPlace": "Dieser Ort konnte nicht gelöscht werden.",
   "actions.couldNotUpdateThatGeofence": "Dieser Geofence konnte nicht aktualisiert werden.",
   "actions.couldNotSaveThatRecord": "Dieser Eintrag konnte nicht gespeichert werden.",
+  "actions.couldNotUpdateThatMessage": "Diese Nachricht konnte nicht aktualisiert werden.",
+  "actions.couldNotSaveThatListing": "Diese Anzeige konnte nicht gespeichert werden.",
+  "actions.couldNotDeleteThatListing": "Diese Anzeige konnte nicht gelöscht werden.",
+  "actions.couldNotDeleteThatNotification": "Diese Benachrichtigung konnte nicht entfernt werden.",
   "errors.thatChangeWasNotSaved": "Diese Änderung wurde nicht gespeichert – möglicherweise fehlt dir die Berechtigung. Aktualisiere die Seite und versuche es erneut.",
-  "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago."
+  "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",
+  "familyModule.memberUpdated": "Mitglied aktualisiert",
+  "familyModule.memberAdded": "Mitglied hinzugefügt"
 }

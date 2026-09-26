@@ -481,9 +481,16 @@ export function FamilyModule() {
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
               const sb = createClient();
-              const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
+              // `family_members` is manager-gated (fm_update, 0211), and RLS FILTERS
+              // an UPDATE rather than refusing it — so a member a non-manager tried
+              // to remove was reported as removed and stayed in the family. The soft
+              // delete makes that worse than a no-op: the row disappears from the
+              // list on screen until the next read puts it back.
+              const { data: rows, error: err } = await sb.from('family_members')
+                .update({ is_active: false }).eq('id', removeMember.id).eq('family_id', familyId).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
+              if (!rows || rows.length === 0) { toastError(t('actions.couldNotUpdateThatMember')); return; }
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
@@ -544,15 +551,19 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    const { error: err } = member
-      ? await sb.from('family_members').update(payload).eq('id', member.id)
+    // Same manager gate as the removal above: an UPDATE the policy filters comes
+    // back `error: null` with nothing changed. The INSERT needs no readback —
+    // RLS refuses an insert with an error rather than filtering it away.
+    const { data: rows, error: err } = member
+      ? await sb.from('family_members').update(payload).eq('id', member.id).eq('family_id', familyId).select('id')
       : await sb.from('family_members').insert({
           ...payload, family_id: familyId, is_active: true,
           color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
-        });
+        }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success(member ? 'Member updated' : 'Member added');
+    if (!rows || rows.length === 0) { toastError(t('actions.couldNotUpdateThatMember')); return; }
+    success(member ? t('familyModule.memberUpdated') : t('familyModule.memberAdded'));
     onSaved();
   }
 

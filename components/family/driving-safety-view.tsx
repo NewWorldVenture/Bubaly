@@ -37,8 +37,16 @@ export function DrivingSafetyView() {
 
   async function remove(id: string) {
     if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
-    const { error } = await createClient().from('driving_trips').delete().eq('id', id);
-    if (error) toastError(error.message); else success(tr('drivingSafetyView.deleted'));
+    // 0319 ("a driving score is not the driver's to grade") narrows writes here,
+    // and RLS FILTERS a delete rather than refusing it — so without the readback
+    // a removal the policy blocked came back `error: null` and was reported as
+    // "Deleted". The family scope answers a different question from the readback:
+    // whose row it was, rather than whether anything went.
+    const { data: rows, error } = await createClient().from('driving_trips').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
+    if (error) { toastError(error.message); return; }
+    if (!rows || rows.length === 0) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
+    success(tr('drivingSafetyView.deleted'));
   }
 
   return (

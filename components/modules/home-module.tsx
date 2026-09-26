@@ -445,7 +445,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     // database refuses leaves a row pointing at a file that no longer exists.
     // Verifying the delete at least makes that visible instead of reporting it
     // as done; the ordering itself is recorded in audit/claude-1.md.
-    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
+    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).eq('family_id', familyId).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));

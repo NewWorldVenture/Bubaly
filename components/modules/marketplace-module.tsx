@@ -145,25 +145,41 @@ export function MarketplaceModule({
       location: form.location.trim() || null,
       photo_url: form.photo_url.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('marketplace_listings').update(fields).eq('id', form.id)
-      : await sb.from('marketplace_listings').insert({ ...fields, family_id: familyId, member_id: selfId, created_by: userId });
+    // 0154 scopes these writes to the listing's own seller, and RLS FILTERS an
+    // UPDATE rather than refusing it, so editing someone else's listing answered
+    // `error: null` and was reported as saved. The INSERT needs no readback: RLS
+    // refuses an insert with an error rather than filtering it away.
+    const { data: rows, error: err } = form.id
+      ? await sb.from('marketplace_listings').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
+      : await sb.from('marketplace_listings').insert({ ...fields, family_id: familyId, member_id: selfId, created_by: userId }).select('id');
     setSaving(false);
     if (err) {
       await cleanupOwnedPhoto();
       toastError(describeDbError(err));
       return;
     }
-    success(form.id ? 'Listing updated' : 'Posted to the family marketplace');
+    if (!rows || rows.length === 0) {
+      await cleanupOwnedPhoto();
+      toastError(t('actions.couldNotSaveThatListing'));
+      return;
+    }
+    success(form.id ? t('marketplaceModule.listingUpdated') : t('marketplaceModule.postedToTheFamilyMarketplace'));
     setOwnedPhotoPath(null);
     setModalOpen(false);
   }
 
   async function remove(l: Listing) {
-    if (!confirm(`Remove "${l.title}"?`)) return;
+    if (!confirm(t('marketplaceModule.removeNamed', { title: l.title }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
+    // The sharpest case on this whole sweep, because the consequence is not a lie
+    // but DATA LOSS. 0154's delete policy is seller-scoped; a filtered delete
+    // answers `error: null`, and the next statement removes the listing's photo
+    // from storage — so removing someone else's listing left the listing in place
+    // and destroyed its picture, then said "Removed".
+    const { data: rows, error: err } = await sb.from('marketplace_listings').delete()
+      .eq('id', l.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (!rows || rows.length === 0) { toastError(t('actions.couldNotDeleteThatListing')); return; }
     if (l.photo_url) {
       const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
       if (photoError) toastError(t('marketplaceModule.listingRemovedButItsUploaded'));

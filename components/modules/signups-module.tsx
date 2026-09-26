@@ -113,7 +113,7 @@ export function SignupsModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = form.id
-      ? await sb.from('opportunities').update(fields).eq('id', form.id).select('id')
+      ? await sb.from('opportunities').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -124,7 +124,7 @@ export function SignupsModule() {
 
   async function setStatus(o: Opportunity, status: OpportunityStatus) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id).select('id');
+    const { data: rows, error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
   }
@@ -132,7 +132,7 @@ export function SignupsModule() {
   async function remove(o: Opportunity) {
     if (!confirm(`Delete "${o.title}"?`)) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).select('id');
+    const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('signupsModule.signupDeleted'));

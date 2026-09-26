@@ -69,8 +69,15 @@ export function NotificationsModule() {
 
   async function markRead(id: string) {
     const supabase = createClient();
-    const { error } = await settle(supabase.from('notifications').update({ is_read: true }).eq('id', id));
+    // 0118's notif_update is "own row OR manager", and RLS FILTERS an UPDATE
+    // rather than refusing it — so `error: null` did not mean this notification
+    // was marked read. Logged rather than toasted, deliberately: an unrecorded
+    // read receipt is not worth interrupting someone over. The readback is what
+    // makes the log true.
+    const { data: rows, error } = await settle(supabase.from('notifications')
+      .update({ is_read: true }).eq('id', id).eq('family_id', familyId).select('id'));
     if (error) console.error('[notifications] mark-read failed', { message: error.message });
+    else if (!rows || rows.length === 0) console.error('[notifications] mark-read changed no row', { id });
     void refresh();
   }
 
@@ -88,8 +95,13 @@ export function NotificationsModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    const { data: rows, error } = await supabase.from('notifications').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    // A dismissal that did not happen must say so: `refresh()` puts the row
+    // straight back, which looks like the list is broken rather than like the
+    // delete was refused.
+    if (!rows || rows.length === 0) return toastError(t('actions.couldNotDeleteThatNotification'));
     void refresh();
   }
 

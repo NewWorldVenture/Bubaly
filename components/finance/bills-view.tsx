@@ -56,20 +56,20 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).select('id');
+    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).eq('family_id', familyId).select('id');
     if (error) { toastError(error.message); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(next === 'paid' ? 'Marked paid' : 'Reopened');
   }
   async function toggleAutopay(b: Bill) {
-    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).select('id');
+    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).eq('family_id', familyId).select('id');
     if (error) { toastError(error.message); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
     if (!confirm(t('billsView.deleteThisBill'))) return;
-    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).select('id');
+    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) { toastError(error.message); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('billsView.deleted'));

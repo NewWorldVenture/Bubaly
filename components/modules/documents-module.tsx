@@ -243,7 +243,7 @@ export function DocumentsModule() {
     const next = !isFav(doc);
     setFavPending((p) => ({ ...p, [doc.id]: next }));
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).eq('family_id', familyId).select('id');
     if (err || wroteNoRows(rows)) {
       setFavPending((p) => { const { [doc.id]: _drop, ...rest } = p; return rest; });
       toastError(err ? describeDbError(err) : tr('errors.thatChangeWasNotSaved'));
@@ -270,7 +270,7 @@ export function DocumentsModule() {
     // Verifying the delete at least makes that visible instead of reporting it
     // as done; the ordering itself is recorded in audit/claude-1.md.
     if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
-    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('documentsModule.fileDeleted')); refresh();

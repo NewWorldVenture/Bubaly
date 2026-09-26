@@ -7210,6 +7210,9 @@
   "marketplaceModule.sizeAgeWhyYouRe": "Talla, edad, por qué te desprendes de ello…",
   "marketplaceModule.theUploadedPhotoCouldNot": "No se ha podido limpiar la foto subida.",
   "marketplaceModule.youAlreadyReachedOutAbout": "Ya te has puesto en contacto por esto",
+  "marketplaceModule.listingUpdated": "Anuncio actualizado",
+  "marketplaceModule.postedToTheFamilyMarketplace": "Publicado en el mercado familiar",
+  "marketplaceModule.removeNamed": "¿Quitar «{title}»?",
   "marketplaceNav.marketplaceSections": "Secciones del marketplace",
   "marketplaceNav.postAnItem": "Publicar un artículo",
   "marketplaceNav.sellRentLendBorrowAmpMore": "Vende, alquila, presta, toma prestado y más",
@@ -13720,6 +13723,12 @@
   "actions.couldNotDeleteThatPlace": "No se pudo eliminar ese lugar.",
   "actions.couldNotUpdateThatGeofence": "No se pudo actualizar esa geocerca.",
   "actions.couldNotSaveThatRecord": "No se pudo guardar ese registro.",
+  "actions.couldNotUpdateThatMessage": "No se pudo actualizar ese mensaje.",
+  "actions.couldNotSaveThatListing": "No se pudo guardar ese anuncio.",
+  "actions.couldNotDeleteThatListing": "No se pudo eliminar ese anuncio.",
+  "actions.couldNotDeleteThatNotification": "No se pudo descartar esa notificación.",
   "errors.thatChangeWasNotSaved": "Ese cambio no se guardó: puede que no tengas permiso. Actualiza e inténtalo de nuevo.",
-  "familyModule.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago."
+  "familyModule.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago.",
+  "familyModule.memberUpdated": "Miembro actualizado",
+  "familyModule.memberAdded": "Miembro añadido"
 }
