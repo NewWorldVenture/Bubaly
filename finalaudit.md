@@ -26672,6 +26672,10 @@ five sites; all 6 fail with the fixes reverted.
 member, so a member can forge financial audit entries (and pad the AI meter).
 Every writer uses the member's own session (`logWalletAudit`), so closing it
 means moving those writes to the service role first.
+*Since narrowed (C1-K-35, 0334):* a member's entry must name the member as its
+actor, so forging an entry in someone else's name is closed. A member can
+still append entries in their own name, which at most pads their own family's
+meter. Moving the writers to the service role remains the full fix.
 
 ## C1-K-22 · MEDIUM · Three audit trails that the people they record could rewrite
 
