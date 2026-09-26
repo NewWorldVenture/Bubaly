@@ -8,26 +8,29 @@
 
 import type { InsurancePolicyType, PremiumFrequency } from '@/lib/database.types';
 
-export const POLICY_TYPES: { value: InsurancePolicyType; label: string; emoji: string }[] = [
-  { value: 'health', label: 'Health', emoji: '🩺' },
-  { value: 'dental', label: 'Dental', emoji: '🦷' },
-  { value: 'vision', label: 'Vision', emoji: '👓' },
-  { value: 'auto', label: 'Auto', emoji: '🚗' },
-  { value: 'home', label: 'Home', emoji: '🏠' },
-  { value: 'renters', label: 'Renters', emoji: '🔑' },
-  { value: 'life', label: 'Life', emoji: '🛡️' },
-  { value: 'disability', label: 'Disability', emoji: '♿' },
-  { value: 'umbrella', label: 'Umbrella', emoji: '☂️' },
-  { value: 'pet', label: 'Pet', emoji: '🐾' },
-  { value: 'travel', label: 'Travel', emoji: '✈️' },
-  { value: 'other', label: 'Other', emoji: '📄' },
+// `label` is the English identifier (the AI tools and tests read it); what a
+// person sees is `labelKey`, and a policy's own heading is `titleKey`, a whole
+// phrase per type ("Krankenversicherung" is not "Gesundheit" + "Versicherung").
+export const POLICY_TYPES: { value: InsurancePolicyType; label: string; emoji: string; labelKey: string; titleKey: string }[] = [
+  { value: 'health', label: 'Health', emoji: '🩺' , labelKey: 'insurancePolicyType.health', titleKey: 'insurancePolicyType.healthTitle' },
+  { value: 'dental', label: 'Dental', emoji: '🦷' , labelKey: 'insurancePolicyType.dental', titleKey: 'insurancePolicyType.dentalTitle' },
+  { value: 'vision', label: 'Vision', emoji: '👓' , labelKey: 'insurancePolicyType.vision', titleKey: 'insurancePolicyType.visionTitle' },
+  { value: 'auto', label: 'Auto', emoji: '🚗' , labelKey: 'insurancePolicyType.auto', titleKey: 'insurancePolicyType.autoTitle' },
+  { value: 'home', label: 'Home', emoji: '🏠' , labelKey: 'insurancePolicyType.home', titleKey: 'insurancePolicyType.homeTitle' },
+  { value: 'renters', label: 'Renters', emoji: '🔑' , labelKey: 'insurancePolicyType.renters', titleKey: 'insurancePolicyType.rentersTitle' },
+  { value: 'life', label: 'Life', emoji: '🛡️' , labelKey: 'insurancePolicyType.life', titleKey: 'insurancePolicyType.lifeTitle' },
+  { value: 'disability', label: 'Disability', emoji: '♿' , labelKey: 'insurancePolicyType.disability', titleKey: 'insurancePolicyType.disabilityTitle' },
+  { value: 'umbrella', label: 'Umbrella', emoji: '☂️' , labelKey: 'insurancePolicyType.umbrella', titleKey: 'insurancePolicyType.umbrellaTitle' },
+  { value: 'pet', label: 'Pet', emoji: '🐾' , labelKey: 'insurancePolicyType.pet', titleKey: 'insurancePolicyType.petTitle' },
+  { value: 'travel', label: 'Travel', emoji: '✈️' , labelKey: 'insurancePolicyType.travel', titleKey: 'insurancePolicyType.travelTitle' },
+  { value: 'other', label: 'Other', emoji: '📄' , labelKey: 'insurancePolicyType.other', titleKey: 'insurancePolicyType.otherTitle' },
 ];
 
-export const PREMIUM_FREQUENCIES: { value: PremiumFrequency; label: string; perYear: number }[] = [
-  { value: 'monthly', label: 'Monthly', perYear: 12 },
-  { value: 'quarterly', label: 'Quarterly', perYear: 4 },
-  { value: 'semiannual', label: 'Every 6 months', perYear: 2 },
-  { value: 'annual', label: 'Annual', perYear: 1 },
+export const PREMIUM_FREQUENCIES: { value: PremiumFrequency; label: string; perYear: number; labelKey: string; shortKey: string }[] = [
+  { value: 'monthly', label: 'Monthly', perYear: 12 , labelKey: 'insuranceFrequency.monthly', shortKey: 'insuranceFrequency.monthlyShort' },
+  { value: 'quarterly', label: 'Quarterly', perYear: 4 , labelKey: 'insuranceFrequency.quarterly', shortKey: 'insuranceFrequency.quarterlyShort' },
+  { value: 'semiannual', label: 'Every 6 months', perYear: 2 , labelKey: 'insuranceFrequency.semiannual', shortKey: 'insuranceFrequency.semiannualShort' },
+  { value: 'annual', label: 'Annual', perYear: 1 , labelKey: 'insuranceFrequency.annual', shortKey: 'insuranceFrequency.annualShort' },
 ];
 
 export function policyTypeMeta(t: InsurancePolicyType) {

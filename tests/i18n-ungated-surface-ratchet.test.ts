@@ -103,7 +103,9 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then the medical and dental records page and its printed sheets: per-kind
 // catalogue sentences instead of "Add {Doctor}" and "{Dental} Providers",
 // 2,675 -> 2,664.
-const CEILING = 2664;
+// Then the Insurance Hub and Trip Planner's labels from lib/ constants, which
+// now carry catalogue keys, 2,664 -> 2,655.
+const CEILING = 2655;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

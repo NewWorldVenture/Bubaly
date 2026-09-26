@@ -91,7 +91,7 @@ export function InsuranceModule() {
               <ul className="mt-3 space-y-1.5">
                 {byType.map((b) => (
                   <li key={b.type} className="flex items-center justify-between text-xs">
-                    <span className="text-muted">{policyTypeMeta(b.type).emoji} {policyTypeMeta(b.type).label}</span>
+                    <span className="text-muted">{policyTypeMeta(b.type).emoji} {tr(policyTypeMeta(b.type).labelKey)}</span>
                     <span className="font-medium">{fmtMoney(b.annual)}/yr</span>
                   </li>
                 ))}
@@ -113,7 +113,7 @@ export function InsuranceModule() {
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
                 <div className="text-xs text-amber-200">
                   <span className="font-medium">{tr('insurance.possibleCoverageGaps')} </span>
-                  {summary.gaps.map((g) => `${policyTypeMeta(g).emoji} ${policyTypeMeta(g).label}`).join(', ')}.
+                  {summary.gaps.map((g) => `${policyTypeMeta(g).emoji} ${tr(policyTypeMeta(g).labelKey)}`).join(', ')}.
                   <span className="text-amber-200/70"> {tr('insurance.noActivePolicyOnFileAdd')}</span>
                 </div>
               </div>
@@ -125,7 +125,7 @@ export function InsuranceModule() {
                   <li key={r.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2', URGENCY_STYLE[r.urgency])}>
                     <CalendarClock className="h-4 w-4 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-fg">{policyTypeMeta(r.policyType).label} · {r.insurer}</p>
+                      <p className="truncate text-sm font-medium text-fg">{tr(policyTypeMeta(r.policyType).labelKey)} · {r.insurer}</p>
                       <p className="text-xs opacity-90">
                         {r.urgency === 'lapsed' ? `Lapsed ${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} ago` : `Renews in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'} (${fmtDate(r.renewalDate, locale)})`}
                       </p>
@@ -157,12 +157,12 @@ export function InsuranceModule() {
               >
                 <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand/10 text-3xl">{meta.emoji}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{meta.label}</p>
+                  <p className="truncate font-semibold">{tr(meta.labelKey)}</p>
                   <p className="truncate text-xs text-muted">{p.insurer}{covers ? ` · ${covers}` : ''}</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {p.premium_amount != null && (
                       <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-[10px] text-muted">
-                        {fmtMoney(p.premium_amount)}/{frequencyMeta(p.premium_frequency).label.toLowerCase().replace('every 6 months', '6mo')}
+                        {fmtMoney(p.premium_amount)}/{tr(frequencyMeta(p.premium_frequency).shortKey)}
                       </span>
                     )}
                     {p.renewal_date && u !== 'upcoming' && (
@@ -240,7 +240,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
     <Modal open title={tr('insurance.addAPolicy')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('insurance.type')}>{(id) => <Select id={id} name="policy_type" defaultValue="auto">{POLICY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}</Select>}</Field>
+          <Field label={tr('insurance.type')}>{(id) => <Select id={id} name="policy_type" defaultValue="auto">{POLICY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.emoji} {tr(t.labelKey)}</option>)}</Select>}</Field>
           <Field label={tr('insurance.insurer')} required>{(id) => <Input id={id} name="insurer" autoFocus placeholder={tr('insurance.stateFarm')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -249,7 +249,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('insurance.premium')}>{(id) => <Input id={id} name="premium_amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder="150" />}</Field>
-          <Field label={tr('insurance.billed')}>{(id) => <Select id={id} name="premium_frequency" defaultValue="monthly">{PREMIUM_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select>}</Field>
+          <Field label={tr('insurance.billed')}>{(id) => <Select id={id} name="premium_frequency" defaultValue="monthly">{PREMIUM_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{tr(f.labelKey)}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('insurance.coverageAmount')}>{(id) => <Input id={id} name="coverage_amount" type="number" step="1" min="0" placeholder="250000" />}</Field>
@@ -284,18 +284,18 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   const u = renewalUrgency(policy.renewal_date);
 
   const rows: { label: string; value: string | null }[] = [
-    { label: 'Insurer', value: policy.insurer },
-    { label: 'Policy #', value: policy.policy_number },
-    { label: 'Covers', value: coversName ?? 'Whole family' },
-    { label: 'Premium', value: policy.premium_amount != null ? `${fmtMoney(policy.premium_amount)} / ${frequencyMeta(policy.premium_frequency).label.toLowerCase()} (${fmtMoney(annual)}/yr)` : null },
-    { label: 'Coverage', value: policy.coverage_amount != null ? fmtMoney(policy.coverage_amount) : null },
-    { label: 'Deductible', value: policy.deductible != null ? fmtMoney(policy.deductible) : null },
-    { label: 'Effective', value: policy.effective_date ? fmtDate(policy.effective_date, locale) : null },
-    { label: 'Renews', value: policy.renewal_date ? fmtDate(policy.renewal_date, locale) : null },
+    { label: tr('insurance.insurer'), value: policy.insurer },
+    { label: tr('insurance.policyNumberShort'), value: policy.policy_number },
+    { label: tr('insurance.covers'), value: coversName ?? tr('insurance.wholeFamily') },
+    { label: tr('insurance.premium'), value: policy.premium_amount != null ? tr('insurance.premiumDetail', { amount: fmtMoney(policy.premium_amount), period: tr(frequencyMeta(policy.premium_frequency).shortKey), annual: fmtMoney(annual) }) : null },
+    { label: tr('insurance.coverage'), value: policy.coverage_amount != null ? fmtMoney(policy.coverage_amount) : null },
+    { label: tr('insurance.deductible'), value: policy.deductible != null ? fmtMoney(policy.deductible) : null },
+    { label: tr('insurance.effective'), value: policy.effective_date ? fmtDate(policy.effective_date, locale) : null },
+    { label: tr('insurance.renews'), value: policy.renewal_date ? fmtDate(policy.renewal_date, locale) : null },
   ];
 
   return (
-    <Modal open title={`${meta.label} insurance`} onClose={onClose}>
+    <Modal open title={tr(meta.titleKey)} onClose={onClose}>
       <div className="space-y-5">
         <div className="flex items-center gap-4">
           <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-brand/10 text-4xl">{meta.emoji}</span>

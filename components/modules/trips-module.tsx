@@ -21,7 +21,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
   tripDurationDays, daysUntil, isUpcoming, checklistProgress, progressByKind,
-  TRIP_STATUS_LABELS, TRIP_ITEM_KIND_LABELS, type TripLike, type TripItemLike, type TripItemKind,
+  TRIP_STATUS_LABELS, TRIP_STATUS_KEYS, TRIP_ITEM_KIND_KEYS, TRIP_ITEM_ADD_KEYS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
 import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
@@ -206,7 +206,7 @@ export function TripsModule() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl font-bold text-fg">{selected.name}</h1>
                 <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5', STATUS_STYLES[selected.status])}>
-                  {TRIP_STATUS_LABELS[selected.status]}
+                  {tr(TRIP_STATUS_KEYS[selected.status])}
                 </span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg/80">
@@ -257,7 +257,7 @@ export function TripsModule() {
               <div key={kind} className="rounded-2xl bg-surface/50 border border-border p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-fg uppercase tracking-wider flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-brand-text" /> {TRIP_ITEM_KIND_LABELS[kind]}
+                    <Icon className="h-4 w-4 text-brand-text" /> {tr(TRIP_ITEM_KIND_KEYS[kind])}
                     {kp.total > 0 && <span className="text-xs text-muted font-normal">{kp.done}/{kp.total}</span>}
                   </h3>
                   {canEdit && (
@@ -295,7 +295,7 @@ export function TripsModule() {
         </div>
 
         {/* Item modal */}
-        <Modal open={itemModal} onClose={() => setItemModal(false)} title={`Add ${TRIP_ITEM_KIND_LABELS[itemForm.kind].toLowerCase()} item`}>
+        <Modal open={itemModal} onClose={() => setItemModal(false)} title={tr(TRIP_ITEM_ADD_KEYS[itemForm.kind])}>
           <form onSubmit={saveItem} className="space-y-4">
             <Field label={tr('trips.item')} required>
               {(id) => <Input id={id} value={itemForm.label} onChange={(e) => setItemForm((f) => ({ ...f, label: e.target.value }))} placeholder={tr('trips.eGPassportsSunscreenHotelCheck')} autoFocus />}
@@ -359,7 +359,7 @@ export function TripsModule() {
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <h3 className="font-semibold text-fg truncate">{t.name}</h3>
-                  <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5 flex-shrink-0', STATUS_STYLES[t.status])}>{TRIP_STATUS_LABELS[t.status]}</span>
+                  <span className={cn('text-[10px] uppercase tracking-wide rounded border px-1.5 py-0.5 flex-shrink-0', STATUS_STYLES[t.status])}>{tr(TRIP_STATUS_KEYS[t.status])}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
                   {t.destination && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{t.destination}</span>}
@@ -400,7 +400,7 @@ export function TripsModule() {
           <Field label={tr('trips.status')}>
             {(id) => (
               <Select id={id} value={tripForm.status} onChange={(e) => setTripForm((f) => ({ ...f, status: e.target.value as TripStatus }))}>
-                {(Object.keys(TRIP_STATUS_LABELS) as TripStatus[]).map((s) => <option key={s} value={s}>{TRIP_STATUS_LABELS[s]}</option>)}
+                {(Object.keys(TRIP_STATUS_LABELS) as TripStatus[]).map((s) => <option key={s} value={s}>{tr(TRIP_STATUS_KEYS[s])}</option>)}
               </Select>
             )}
           </Field>
