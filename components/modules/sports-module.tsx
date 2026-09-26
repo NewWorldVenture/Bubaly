@@ -17,6 +17,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
@@ -304,13 +305,13 @@ export function SportsModule() {
                   const isTie = r.result === 'tie';
                   const label = isWin ? 'W' : isTie ? 'T' : 'L';
                   const scoreStr = r.our_score != null && r.their_score != null ? `${r.our_score}-${r.their_score}` : '—';
-                  const d = new Date(r.date);
+                  const d = parseCalendarDate(r.date);
                   return (
                     <div key={r.id} className="flex items-center gap-3">
                       <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black', isWin ? 'bg-emerald-500/20 text-emerald-300' : isTie ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-400')}>{label}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold">{team?.team_name ?? 'Unknown'} vs {r.opponent}</p>
-                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {d?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                       </div>
                       <p className="text-sm font-bold tabular-nums">{scoreStr}</p>
                     </div>

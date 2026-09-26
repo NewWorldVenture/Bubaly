@@ -48,6 +48,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
+import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import {
@@ -716,10 +717,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const currentYear = now.getFullYear();
 
   const currentMonthTransactions = useMemo(() =>
-    transactions.filter((tx) => {
-      const d = new Date(tx.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }),
+    transactions.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
     [transactions, currentMonth, currentYear],
   );
 
@@ -768,7 +766,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // Upcoming bills
   const upcomingBills = useMemo(() =>
-    bills.filter((b) => b.status === 'upcoming' || new Date(b.due_date) >= now).slice(0, 5),
+    bills.filter((b) => {
+      if (b.status === 'upcoming') return true;
+      const due = parseCalendarDate(b.due_date);
+      return due !== null && due >= startOfLocalDay(now);  // due today is still upcoming
+    }).slice(0, 5),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bills],
   );
@@ -839,7 +841,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const lastMonthExpenses = useMemo(() => {
     const d = new Date(currentYear, currentMonth - 1, 1);
     return transactions
-      .filter((tx) => tx.type === 'expense' && new Date(tx.date).getMonth() === d.getMonth() && new Date(tx.date).getFullYear() === d.getFullYear())
+      .filter((tx) => tx.type === 'expense' && isInMonth(tx.date, d.getFullYear(), d.getMonth()))
       .reduce((s, tx) => s + Math.abs(tx.amount), 0);
   }, [transactions, currentMonth, currentYear]);
   const spendDeltaPct = lastMonthExpenses > 0 ? Math.round(((expenses - lastMonthExpenses) / lastMonthExpenses) * 100) : 0;
@@ -852,8 +854,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const billsByDay: Record<number, Bill[]> = {};
     bills.forEach((b) => {
-      const d = new Date(b.due_date);
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+      const d = parseCalendarDate(b.due_date);
+      if (d && d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
         (billsByDay[d.getDate()] ??= []).push(b);
       }
     });
@@ -867,7 +869,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   function billDotColor(b: Bill): string {
     if (b.status === 'paid') return 'bg-emerald-500';
     if (b.status === 'overdue') return 'bg-rose-500';
-    return new Date(b.due_date) > now ? 'bg-amber-500' : 'bg-brand';
+    const due = parseCalendarDate(b.due_date);
+    return due !== null && due > now ? 'bg-amber-500' : 'bg-brand';
   }
 
   // ── CRUD helpers ────────────────────────────────────────────────────────

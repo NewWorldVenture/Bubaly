@@ -1,4 +1,4 @@
-import { parseISO } from 'date-fns';
+import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 // A birthday is a calendar date ('2015-03-04'), not an instant. `new Date()`
 // reads a date-only string as UTC midnight, which everywhere west of Greenwich
@@ -9,9 +9,7 @@ import { parseISO } from 'date-fns';
 
 /** The birthday as local midnight on that calendar day, or null if missing or unparseable. */
 export function parseBirthday(birthday: string | null | undefined): Date | null {
-  if (!birthday) return null;
-  const b = parseISO(birthday);
-  return Number.isNaN(b.getTime()) ? null : b;
+  return parseCalendarDate(birthday);
 }
 
 /** Whole years on `now`'s local calendar day, or null. The caller bounds it. */

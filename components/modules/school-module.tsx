@@ -22,6 +22,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -640,7 +641,7 @@ export function SchoolModule() {
                               </span>
                             ) : g.grade ?? '—'}
                           </td>
-                          <td className="px-4 py-3 text-muted">{new Date(g.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                          <td className="px-4 py-3 text-muted">{parseCalendarDate(g.date)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                         </tr>
                       );
                     })}
