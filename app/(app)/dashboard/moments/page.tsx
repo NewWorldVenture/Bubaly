@@ -82,10 +82,13 @@ export default async function Page() {
 
     // Log today's active moments (insert-only so a prior engaged/dismissed wins).
     if (live.length > 0) {
-      await supabase.from('moment_activations').upsert(
+      // Best-effort — the band renders either way — but its result was discarded
+      // whole, so a failing log was invisible. Logged now. Audit C1-S9-70.
+      const { error: activationError } = await supabase.from('moment_activations').upsert(
         live.map((m) => ({ family_id: familyId, moment_key: m.key, as_of_date: todayIso, status: 'active', reason: m.reason, priority: m.priority, created_by: ctx.user.id })),
         { onConflict: 'family_id,moment_key,as_of_date', ignoreDuplicates: true },
       );
+      if (activationError) console.error('[moments] activation log failed', { familyId, error: activationError.message });
     }
     organizerMoments = live.map((m) => ({ key: m.key, label: m.label, blurb: m.blurb, reason: m.reason, capabilities: m.capabilities }));
   } catch { /* organizing band is best-effort */ }

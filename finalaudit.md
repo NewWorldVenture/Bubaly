@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-210 finding IDs from four workers and two parallel sessions; none of it was
+211 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 220 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 221 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34979,6 +34979,65 @@ case, 10 mutations (two over-tightening), all killed. **Ratchet: 68 → 50 acros
 
 ---
 
+### `[CLAUDE-1][LOW][WRITES]` C1-S9-70 — the one upsert shape that can silently do nothing, and the write sweep closed
+
+**The sub-class both ratchets excluded.** Upserts were left out of the write
+ratchets because an upsert inserts or updates and cannot match zero rows. The
+exception is `ignoreDuplicates: true`, where a conflict resolves with **no error
+and no row**. A caller that reports what it wrote from its *input* rather than
+its *result* is then wrong on every duplicate. Nine sites; each was read.
+
+**One defect (fixed).** The playbook refresh returned `added: rows.length`,
+counting every suggestion it *offered*, including every duplicate the database
+ignored. So a refresh that found nothing new toasted **"Found 5 things Bubaly
+noticed"** instead of "No new patterns yet". With `ignoreDuplicates`,
+`.select()` returns only the rows actually inserted, which is exactly the count.
+
+**One result discarded whole (logged):** the moments page's activation log,
+best-effort in a render.
+
+**Seven correct, and how each knows:** the badge award and the marketing-run
+claim `.select()` only inserted rows; both AI conversation routes, the urgent
+contact notification and the onboarding invites confirm by **readback**; the
+prep-plan steps are an idempotent regeneration that reports plans, not steps.
+
+**Held by a classification test** (`an-ignore-duplicates-upsert-is-classified`):
+every site is listed with how it learns what it wrote, and a new or removed site
+fails until it is classified or pruned. Proved by reintroducing `rows.length`,
+and by adding an unclassified site.
+
+**Status:** FIXED.
+
+### The write sweep, closed
+
+From `C1-S9-46` (102 unconfirmed server-action writes) through this entry, a
+single question asked at every write in `app/` and `lib/`: *can this write
+report success for work that did not happen?*
+
+- **Server actions: 102 → 14 across 10 files**, every one deliberate, each with
+  its reason beside the code, enforced by `an-unconfirmed-write-ratchet`.
+- **Everything else: 137 → 50 across 35 files**, every one deliberate or held
+  by the parallel session under a named lock, enforced by
+  `an-unconfirmed-write-outside-actions-ratchet`. The lock exemption fails the
+  day its lock is released.
+- **`ignoreDuplicates` upserts: 9, all classified.**
+- **What it found that mattered most**, in the order it matters to a family: a
+  revoked assistant key still live; two privacy controls ("forget", "reset what
+  Bubaly learned") answering done over a no-op; a CRM claim, twice, that could
+  overwrite an owner; a bought phone number reported saved when it was not; a
+  voice assistant that could schedule a reminder twice; failing integrations
+  shown as healthy; an undo stack that counted a refusal as removed; and seven
+  counters that counted what had not happened.
+- **What it found about its instruments:** nine scanner defects, three of which
+  hid writes; thirteen test fakes that encoded the defect they were written
+  against; thirteen exact-statement guards red on an improvement; and one slip
+  of mine that only the schema-aware query linter could catch.
+- **OPEN design items it surfaced** rather than widened into: the groceries
+  put-away double-count race (`C1-S9-65`); durable tool-call finalize
+  (`C1-S9-66`); the marketing `run_count` read-modify-write race (`C1-S9-67`).
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -35048,8 +35107,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,330 passing / 17,333 across 1,359
-files.** (Re-run after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,333 passing / 17,336 across 1,360
+files.** (Re-run after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed
