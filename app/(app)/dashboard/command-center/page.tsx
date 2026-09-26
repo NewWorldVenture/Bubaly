@@ -134,11 +134,11 @@ export default async function CommandCenterPage() {
   const scoreColor = score >= 85 ? '#22c55e' : score >= 60 ? '#fbbf24' : '#f87171';
 
   const issues: Issue[] = [];
-  for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/conflicts', text: `Schedule conflict: “${c.a.title}” overlaps “${c.b.title}” (${fmtTime(c.a.starts_at)})` });
+  for (const c of conflicts) issues.push({ icon: CalendarClock, severity: 'high', href: '/dashboard/conflicts', text: t('commandCenter.scheduleConflict', { a: c.a.title, b: c.b.title, time: fmtTime(c.a.starts_at) }) });
   if (overdue.length) issues.push({ icon: CheckCircle2, severity: 'high', href: '/dashboard/chores', text: `${overdue.length} overdue ${overdue.length === 1 ? 'chore' : 'chores'}` });
-  if (unplannedDinners.length) issues.push({ icon: UtensilsCrossed, severity: 'medium', href: '/dashboard/meals', text: `${unplannedDinners.length} ${unplannedDinners.length === 1 ? 'day' : 'days'} this week without a planned dinner` });
+  if (unplannedDinners.length) issues.push({ icon: UtensilsCrossed, severity: 'medium', href: '/dashboard/meals', text: unplannedDinners.length === 1 ? t('commandCenter.unplannedDinnersOne') : t('commandCenter.unplannedDinnersMany', { n: unplannedDinners.length }) });
   for (const d of expiringDocs ?? []) issues.push({ icon: FileWarning, severity: 'medium', href: '/dashboard/documents', text: `“${d.title}” expires ${d.expires_at ? fmtDate(d.expires_at) : 'soon'}` });
-  if (unassignedEvents.length) issues.push({ icon: Users, severity: 'medium', href: '/dashboard/calendar', text: `${unassignedEvents.length} upcoming ${unassignedEvents.length === 1 ? 'event has' : 'events have'} no one assigned` });
+  if (unassignedEvents.length) issues.push({ icon: Users, severity: 'medium', href: '/dashboard/calendar', text: unassignedEvents.length === 1 ? t('commandCenter.unassignedEventsOne') : t('commandCenter.unassignedEventsMany', { n: unassignedEvents.length }) });
 
   const r = 52; const circ = 2 * Math.PI * r;
 

@@ -100,7 +100,7 @@ export default async function NegotiationsInboxPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{t}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {role === 'buyer' ? `Your offer to ${counterparty}` : `${counterparty} offered`} · asking {money(ask)}
+                    {role === 'buyer' ? tr('negotiations.yourOfferTo', { name: counterparty }) : tr('negotiations.nameOffered', { name: counterparty })} · asking {money(ask)}
                   </p>
                   <p className="mt-0.5 text-xs">{statusLine(neg(row), role)}</p>
                 </div>

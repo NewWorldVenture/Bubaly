@@ -282,7 +282,7 @@ export default async function BlogPage({ searchParams }: Props) {
 
             {/* Grid */}
             <h2 className="mb-5 text-lg font-bold">
-              {activeCategory ? `${activeCategory} Articles` : activeTag ? `Articles tagged ${activeTag}` : 'Latest Articles'}
+              {activeCategory ? t('blog.categoryArticles', { category: activeCategory }) : activeTag ? t('blog.articlesTagged', { tag: activeTag }) : t('blog.latestArticles')}
             </h2>
             {postsForGrid.length === 0 ? (
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-10 text-center">

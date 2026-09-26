@@ -71,10 +71,10 @@ export default async function MarketingDashboard() {
 
   // Recommended next actions — deterministic, derived from real data (not AI guesses).
   const recs: { text: string; href: string }[] = [];
-  if (m.lapsed > 0) recs.push({ text: `${m.lapsed} lapsed/churned customer${m.lapsed === 1 ? '' : 's'} — launch a win-back campaign.`, href: '/admin/marketing/campaigns/new' });
-  if (m.byLifecycle.free > 0) recs.push({ text: `${m.byLifecycle.free} famil${m.byLifecycle.free === 1 ? 'y is' : 'ies are'} on the free plan — target an upsell segment.`, href: '/admin/marketing/segments' });
-  if (m.newThisMonth > 0) recs.push({ text: `${m.newThisMonth} new customer${m.newThisMonth === 1 ? '' : 's'} this month — send an onboarding sequence.`, href: '/admin/marketing/email' });
-  if ((activeSegments ?? 0) === 0) recs.push({ text: 'No segments yet — create your first audience segment.', href: '/admin/marketing/segments' });
+  if (m.lapsed > 0) recs.push({ text: m.lapsed === 1 ? t('adminMarketing.lapsedOne') : t('adminMarketing.lapsedMany', { n: m.lapsed }), href: '/admin/marketing/campaigns/new' });
+  if (m.byLifecycle.free > 0) recs.push({ text: m.byLifecycle.free === 1 ? t('adminMarketing.freeFamiliesOne') : t('adminMarketing.freeFamiliesMany', { n: m.byLifecycle.free }), href: '/admin/marketing/segments' });
+  if (m.newThisMonth > 0) recs.push({ text: m.newThisMonth === 1 ? t('adminMarketing.newCustomersOne') : t('adminMarketing.newCustomersMany', { n: m.newThisMonth }), href: '/admin/marketing/email' });
+  if ((activeSegments ?? 0) === 0) recs.push({ text: t('adminMarketing.noSegmentsYet'), href: '/admin/marketing/segments' });
   if (aeoRows.length === 0) recs.push({ text: 'No AEO questions tracked — seed answer-engine opportunities.', href: '/admin/marketing/aeo' });
 
   const stats = [

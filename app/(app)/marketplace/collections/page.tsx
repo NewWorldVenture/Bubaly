@@ -64,7 +64,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
         <Link href="/marketplace/collections" className="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-brand-text">
           <ArrowLeft className="h-3 w-3" /> {t('marketplaceCollections.allCollections')}
         </Link>
-        <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? `${ids.length} items in this collection.`} />
+        <PageHeader title={`${open.emoji ?? '🗂️'} ${open.name}`} description={open.description ?? (ids.length === 1 ? t('marketplaceCollections.itemsInCollectionOne') : t('marketplaceCollections.itemsInCollectionMany', { n: ids.length }))} />
         {dataWarnings.length > 0 && (
           <div role="status" aria-label={t('marketplaceCollections.marketplaceCollectionsDataHealth')} className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

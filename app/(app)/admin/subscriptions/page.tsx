@@ -158,7 +158,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
                 </div>
                 <p className="mt-1 text-xs text-muted">{p.tagline}</p>
                 <p className="mt-3 text-2xl font-bold">{p.priceMonthly === 0 ? 'Free' : fmtMoney(p.priceMonthly)}<span className="text-sm font-normal text-muted">{p.priceMonthly > 0 && '/mo'}</span></p>
-                <p className="mt-1 text-xs text-muted">{p.seats === 'Unlimited' ? 'Unlimited members' : `Up to ${p.seats} members`}</p>
+                <p className="mt-1 text-xs text-muted">{p.seats === 'Unlimited' ? tr('adminSubscriptions.unlimitedMembers') : tr('adminSubscriptions.upToMembers', { n: p.seats })}</p>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
                   <span className="text-sm font-medium">{(countsByPlan.get(p.id) ?? 0).toLocaleString()} active</span>
                   <a href={`/admin/users?tab=all&plan=${p.id}`} className="text-xs font-medium text-brand-text hover:underline">{tr('subscriptions.viewSubscribers')}</a>

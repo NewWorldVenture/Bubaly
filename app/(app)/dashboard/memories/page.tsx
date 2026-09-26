@@ -312,7 +312,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
               )}
 
               {highlights.length === 0 && collections.length === 0
-                ? <EmptyBlock label={q ? `No memories match “${q}”.` : 'Your family memory lane is empty — add a favorite photo, create an album, or record a milestone.'} />
+                ? <EmptyBlock label={q ? tr('memories.noMemoriesMatch', { q }) : tr('memories.memoryLaneEmpty')} />
                 : <TimelineView />}
             </>
           )}

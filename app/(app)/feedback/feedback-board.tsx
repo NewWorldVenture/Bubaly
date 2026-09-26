@@ -53,7 +53,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
     e.preventDefault();
     start(async () => {
       const res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
-      if (!res.ok || !res.id) { error(res.error ?? `Could not submit your ${isBug ? 'bug report' : 'idea'}.`); return; }
+      if (!res.ok || !res.id) { error(res.error ?? (isBug ? t('feedback.couldNotSubmitBug') : t('feedback.couldNotSubmitIdea'))); return; }
       onCreated({
         id: res.id, title: title.trim(), problem: problem.trim() || null, body: body.trim() || null,
         category, impact, audience, kind, status: 'under_review', admin_note: null, image_url: imageUrl.trim() || null,

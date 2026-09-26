@@ -31,7 +31,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
   function toggle() {
     if (pending) return;
     const next = !on;
-    if (!window.confirm(next ? `Grant super-admin to ${email}?` : `Remove super-admin from ${email}?`)) return;
+    if (!window.confirm(next ? t('superAdminToggle.grantConfirm', { email }) : t('superAdminToggle.removeConfirm', { email }))) return;
     setOn(next); // optimistic
     start(async () => {
       const res = await adminSetSuperAdminAction({ email, makeAdmin: next });
@@ -40,7 +40,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
         toastError(res.error ?? 'Could not update super-admin access.');
         return;
       }
-      success(next ? `${email} is now a super-admin` : `Removed super-admin from ${email}`);
+      success(next ? t('superAdminToggle.nowSuperAdmin', { email }) : t('superAdminToggle.removedSuperAdmin', { email }));
       router.refresh();
     });
   }

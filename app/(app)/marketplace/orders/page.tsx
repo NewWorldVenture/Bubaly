@@ -160,7 +160,7 @@ export default async function MarketplaceOrdersPage() {
                   {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents)}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
+                  {role === 'buyer' ? t('orders.gettingFrom', { name: other }) : t('orders.gettingFromYou', { name: other })} · {o.kind}
                 </p>
                 {fee && (
                   <p className="mt-1 text-xs text-muted">

@@ -87,9 +87,9 @@ export default async function FamilyOperatingIndexPage() {
 
   const TrendIcon = trend == null ? Minus : trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
   const trendText = trend == null
-    ? 'First reading — check back tomorrow to see the trend.'
-    : trend === 0 ? 'No change since your last reading.'
-    : `${trend > 0 ? '+' : ''}${trend} vs. your last reading (${priorComposite}).`;
+    ? t('familyOperatingIndex.firstReading')
+    : trend === 0 ? t('familyOperatingIndex.noChange')
+    : t('familyOperatingIndex.trendVsLast', { trend: `${trend > 0 ? '+' : ''}${trend}`, prior: String(priorComposite) });
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">

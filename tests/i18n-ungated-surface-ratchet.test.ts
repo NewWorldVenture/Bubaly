@@ -105,7 +105,9 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // 2,675 -> 2,664.
 // Then the Insurance Hub and Trip Planner's labels from lib/ constants, which
 // now carry catalogue keys, 2,664 -> 2,655.
-const CEILING = 2655;
+// Then the first batch of sentence templates (two of them confirm prompts
+// this scanner already read), 2,655 -> 2,654.
+const CEILING = 2654;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

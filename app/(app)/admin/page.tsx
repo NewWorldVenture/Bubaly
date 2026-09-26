@@ -259,8 +259,8 @@ export default async function AdminDashboardPage() {
         {/* Main column */}
         <div className="space-y-4 lg:col-span-2">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label={tr('admin.totalFamilies')} value={familyCount?.toLocaleString() ?? '0'} sub={`${newFamiliesThisMonth} new this month`} />
-            <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label={tr('admin.activeUsers')} value={userCount?.toLocaleString() ?? '0'} sub={`${newUsersThisMonth} new this month`} />
+            <StatCard icon={Home} tint="text-violet-400 bg-violet-500/15" label={tr('admin.totalFamilies')} value={familyCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newFamiliesThisMonth })} />
+            <StatCard icon={Users} tint="text-blue-400 bg-blue-500/15" label={tr('admin.activeUsers')} value={userCount?.toLocaleString() ?? '0'} sub={tr('admin.newThisMonth', { n: newUsersThisMonth })} />
             <StatCard icon={CreditCard} tint="text-emerald-400 bg-emerald-500/15" label={tr('admin.subscriptions')} value={activeSubCount?.toLocaleString() ?? '0'} sub={`${activeMemberCount?.toLocaleString() ?? 0} active members`} />
             <StatCard icon={DollarSign} tint="text-amber-400 bg-amber-500/15" label={tr('admin.monthlyRevenue')} value={fmtMoney(monthlyRevenueCents)} sub={`from ${activeSubs.length} active plans`} />
           </div>
