@@ -23,11 +23,11 @@ export default async function ContactsPage() {
   // took out /dashboard while the database was reporting CONNECT_TIMEOUT; see
   // lib/supabase/settle.ts. Settling both means one unreachable table costs its
   // own list, not the page.
-  const [{ data: contacts }, { data: members }] = await Promise.all([
+  const [{ data: contacts, error: contactsError }, { data: members, error: membersError }] = await Promise.all([
     // The `as ReturnType<typeof supabase.from>` cast erases the row type, so
     // settle's inference has nothing to carry through — the shape is named here
     // instead. The page already re-casts at the consumption site below.
-    settle<{ data: unknown[] | null }>((db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+    settle<{ data: unknown[] | null; error: { message: string } | null }>((db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
       .order('name', { ascending: true })),
@@ -38,6 +38,12 @@ export default async function ContactsPage() {
       .eq('family_id', familyId)
       .eq('is_active', true)),
   ]);
+
+  // The degradation above is deliberate. The SILENCE was not: an empty contact
+  // list looked identical whether the family has no contacts or the table was
+  // unreachable, with nothing written down either way.
+  if (contactsError) console.error('[guardian/contacts] contact read failed', contactsError);
+  if (membersError) console.error('[guardian/contacts] member read failed', membersError);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">

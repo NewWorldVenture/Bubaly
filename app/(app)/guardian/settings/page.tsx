@@ -23,9 +23,9 @@ export default async function GuardianSettingsPage() {
   // Both settled: the guardian-tables read was not, so a transport failure —
   // DNS, TCP, TLS, a timed-out fetch — rejected the batch and took the page to
   // the error boundary rather than degrading. See lib/supabase/settle.ts.
-  const [{ data: profile }, { data: member }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: member, error: memberError }] = await Promise.all([
     // Same cast, same erasure — see the note in guardian/contacts.
-    settle<{ data: Record<string, unknown> | null }>((db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    settle<{ data: Record<string, unknown> | null; error: { message: string } | null }>((db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)
@@ -37,6 +37,12 @@ export default async function GuardianSettingsPage() {
       .eq('id', memberId)
       .maybeSingle()),
   ]);
+
+  // Degrades to the defaults, as above — but a settings page that silently
+  // shows defaults is how a family ends up believing a rule is off when it is
+  // simply unreadable.
+  if (profileError) console.error('[guardian/settings] profile read failed', profileError);
+  if (memberError) console.error('[guardian/settings] member read failed', memberError);
 
   const twilioEnabled = isTwilioConfigured();
   const guardianPhone = (profile as { guardian_phone?: string } | null)?.guardian_phone ?? null;
