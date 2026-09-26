@@ -2139,6 +2139,12 @@ export interface Database {
       >;
 
       // ---- Push devices (migration 0035) ----
+      // PUSH-003 (0339): one row per recipient a push was delivered to. Service-only.
+      notification_push_receipts: T<
+        { notification_id: string; user_id: string; delivered_at: string },
+        { notification_id: string; user_id: string; delivered_at?: string },
+        Partial<{ delivered_at: string }>
+      >;
       push_devices: T<
         { id: string; user_id: string; family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; device_key: string; user_agent: string | null; enabled: boolean; last_seen_at: string; created_by: string | null; updated_by: string | null; metadata: Json } & Stamps,
         { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },

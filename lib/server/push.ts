@@ -191,9 +191,12 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * haven't been resolved yet (pushed_at is null), then stamp successful or
  * deliberately withheld notifications. Whole-family notifications fan out to every
  * active member. Call after the notification engine runs (cron + on-demand).
- * Failed or unconfigured delivery stays pending for retry. Partial delivery or
- * an acknowledgement failure can repeat a successful send; this column alone
- * does not provide a per-device delivery receipt or a distributed worker claim.
+ * Failed or unconfigured delivery stays pending for retry, and the retry is
+ * per recipient (PUSH-003): `notification_push_receipts` records each person a
+ * notice reached, a retry skips them, and `pushed_at` is stamped only when every
+ * permitted recipient has a receipt. A process dying between a successful send
+ * and its receipt write can still repeat that one delivery — the at-least-once
+ * floor without provider idempotency, chosen over claiming first and losing it.
  * A service-only app_settings cursor advances through stable created_at/id
  * pages, then wraps, so permanently failing devices cannot monopolize the
  * oldest batch. Global and family-scoped scans keep separate progress. The
@@ -248,6 +251,23 @@ export async function dispatchPendingPushes(
   const last = rows[rows.length - 1];
   const nextCursor = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
   if (!nextCursor) throw new Error('Push notification cursor fields are invalid.');
+  // PUSH-003: who each notification has already reached. Read before the
+  // cursor moves, so a failed read sends nothing and skips nothing. A fan-out
+  // that partly failed stays pending; its retry sends only to the recipients
+  // without a receipt, so the phones that already buzzed do not buzz again.
+  const delivered = new Map<string, Set<string>>();
+  const { data: receipts, error: receiptReadError } = await supabase.from('notification_push_receipts')
+    .select('notification_id, user_id').in('notification_id', rows.map((n) => n.id));
+  if (receiptReadError) {
+    console.error('[push] delivery receipt read failed', { error: receiptReadError });
+    throw new Error('Push receipt read failed.');
+  }
+  for (const receipt of receipts ?? []) {
+    const seen = delivered.get(receipt.notification_id) ?? new Set<string>();
+    seen.add(receipt.user_id);
+    delivered.set(receipt.notification_id, seen);
+  }
+
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
   //
@@ -317,15 +337,29 @@ export async function dispatchPendingPushes(
   for (const n of rows) {
     const addressed = n.user_id ? [n.user_id] : [...new Set(await membersOf(n.family_id))];
     const recipients = addressed.filter((id) => !pushBlocked.has(id));
+    totals.withheld += addressed.length - recipients.length;
     // Still stamped below even when everyone was filtered out: the notification
     // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
-    const r = await sendPermittedPushes(supabase, recipients, { title: n.title, body: n.body, url });
-    totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
-    totals.withheld += addressed.length - recipients.length;
-    // Missing credentials/invalid registration are not intentional opt-outs.
-    // Keep the row pending so a later healthy run can deliver it.
-    if (r.failed > 0 || r.skipped > 0) continue;
+    const reached = delivered.get(n.id) ?? new Set<string>();
+    let complete = true;
+    for (const uid of recipients) {
+      if (reached.has(uid)) continue;
+      const r = await sendPushDevicesToUser(supabase, uid, { title: n.title, body: n.body, url });
+      totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
+      // Missing credentials/invalid registration are not intentional opt-outs.
+      // Keep this recipient pending so a later healthy run can deliver it.
+      if (r.failed > 0 || r.skipped > 0) { complete = false; continue; }
+      const { error: receiptError } = await supabase.from('notification_push_receipts')
+        .upsert({ notification_id: n.id, user_id: uid }, { onConflict: 'notification_id,user_id', ignoreDuplicates: true });
+      if (receiptError) {
+        // Delivered but unrecorded: the retry may repeat this one delivery.
+        complete = false;
+        totals.failed++;
+        console.error('[push] delivery receipt write failed', { notificationId: n.id, error: receiptError });
+      }
+    }
+    if (!complete) continue;
     const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
     if (stampError) {
       totals.failed++;

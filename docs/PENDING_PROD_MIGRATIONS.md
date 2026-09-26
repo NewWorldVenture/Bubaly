@@ -2667,3 +2667,34 @@ bucket was public stop working, which is the point. Objects are named with 122
 random bits (`lib/storage/object-name.ts`), so none were enumerable. If a
 specific family reports a leaked link, the fix is to re-upload and delete the
 old object; there is no per-URL revocation for a public object.
+
+## 0339 — per-recipient push delivery receipts (PUSH-003)
+
+`supabase/migrations/0339_push_delivery_receipts.sql`
+
+**Severity: high. DEPLOY-COUPLED — apply BEFORE (or with) the deploy that
+carries the new dispatcher.** This is the opposite order from 0338. The new
+`dispatchPendingPushes` reads `notification_push_receipts` before it sends,
+and refuses to send if that read fails, so the code deployed without this
+table stops every push until the migration is applied. The old code never
+touches the table, so applying it first is safe.
+
+`notifications.pushed_at` is one timestamp for a whole-family fan-out. When any
+recipient's delivery failed, the row stayed pending and the retry re-sent it to
+**every** recipient, so the members whose phones had already buzzed buzzed
+again on every run until the last one succeeded. 0339 adds a service-only
+receipt per (notification, recipient). The dispatcher skips receipted
+recipients, writes a receipt right after each successful delivery, and stamps
+`pushed_at` only when everyone permitted is receipted.
+
+The residual is a process dying between a successful send and its receipt
+write, which repeats that one delivery to that one person. That is the
+at-least-once floor without provider idempotency, and it was chosen over
+claiming first, which would lose the notification (a missed medication
+reminder is worse than a repeated one).
+
+Verified locally. `docs/audit/push-receipts-are-service-only-check.sql` shows
+a member can neither read, write nor delete receipts, one delivery keys once,
+and receipts cascade with their notification; it goes red on a grant plus a
+permissive policy. 61/61 probes on the local stack and on a fresh replay on the
+exact CI image, and the migration re-applies onto an existing schema.

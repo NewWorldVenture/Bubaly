@@ -49,6 +49,9 @@ function matches(row: PushFixtureRow, expression: string): boolean {
 /** Stateful execution fixture: filters, multi-column ordering, limits, keysets and writes all apply. */
 export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options: { maxRows?: number } = {}) {
   tables.app_settings ??= [];
+  // PUSH-003: per-recipient receipts. Present by default so every dispatch
+  // fixture exercises them, the way production does.
+  tables.notification_push_receipts ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();
   const emptyWrites = new Set<string>();
@@ -57,6 +60,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
   const calls: { table: string; operation: string; count: number; limit: number; filter?: string }[] = [];
   const from = (table: string) => {
     let operation = 'select', patch: PushFixtureRow = {}, limit = Infinity, expression: string | undefined;
+    let conflict = ['key'], ignoreDuplicates = false;
     // readAll() pages with .order().range(); without range support the whole
     // paged read threw, and a cron route that should answer 502 answered 500.
     let rangeFrom: number | undefined, rangeTo: number | undefined;
@@ -71,9 +75,11 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       if (faults.has(operationKey) || faults.has(`${operationKey}:${attempt}`)) return { data: null, error: { message: 'Fixture database unavailable' } };
       if (emptyWrites.has(`${table}:${operation}`)) return { data: [], error: null };
       if (operation === 'upsert') {
-        const existing = tables[table].find(row => row.key === patch.key);
-        if (existing) Object.assign(existing, patch);
-        else tables[table].push({ ...patch });
+        // Match on the declared conflict target, as PostgreSQL does; a
+        // key-only match would merge every receipt into the first row.
+        const existing = tables[table].find(row => conflict.every(column => row[column] === patch[column]));
+        if (existing && !ignoreDuplicates) Object.assign(existing, patch);
+        else if (!existing) tables[table].push({ ...patch });
         calls.push({ table, operation, count: 1, limit });
         return { data: [{ ...patch }], error: null };
       }
@@ -111,7 +117,12 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       range: (start: number, end: number) => { rangeFrom = start; rangeTo = end; return query; },
       limit: (value: number) => { limit = value; return query; },
       update: (value: PushFixtureRow) => { operation = 'update'; patch = value; return query; },
-      upsert: (value: PushFixtureRow) => { operation = 'upsert'; patch = value; return query; },
+      upsert: (value: PushFixtureRow, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
+        operation = 'upsert'; patch = value;
+        if (opts?.onConflict) conflict = opts.onConflict.split(',').map(column => column.trim());
+        ignoreDuplicates = opts?.ignoreDuplicates ?? false;
+        return query;
+      },
       delete: () => { operation = 'delete'; return query; },
       maybeSingle: async () => { const result = execute(); return { ...result, data: result.data?.[0] ?? null }; },
       then: (resolve: (result: ReturnType<typeof execute>) => unknown) => Promise.resolve(execute()).then(resolve),
