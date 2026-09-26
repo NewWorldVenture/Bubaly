@@ -141,7 +141,8 @@ function SpendingCardPreview({ child }: { child: Child }) {
       <div className="relative flex items-start justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{t('childDetail.bubalyFamily')}</p>
-          <p className="mt-0.5 text-base font-bold text-foreground">{child.name}</p>
+          {/* The child's name is the page's title, so it is its heading (MAIN-F-D05). */}
+          <h1 className="mt-0.5 text-base font-bold text-foreground">{child.name}</h1>
         </div>
         <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 py-1">
           <CreditCard className="h-3.5 w-3.5 text-muted" />

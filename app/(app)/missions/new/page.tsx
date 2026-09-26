@@ -27,6 +27,8 @@ export default async function NewMissionPage() {
   return (
     <div className="space-y-5">
       <Link href="/missions" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> {t('missionsNew.backToMissions')}</Link>
+      {/* The page's sections carry h2s; this is the heading they sit under (MAIN-F-D05). */}
+      <h1 className="sr-only">{t('missionsNew.pageTitle')}</h1>
 
       <PlanGenerator members={kids.map((m) => ({ id: m.id, name: m.display_name }))} />
 
