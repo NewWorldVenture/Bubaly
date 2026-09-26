@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:50:00Z
+- Last Updated: 2026-09-26T18:18:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -27062,6 +27062,29 @@ Checked this pass and left:
   trigger-guarded.
 - Chores, submissions, redemptions and invest orders: price, decision and
   economics triggers are confirmed present.
+
+## C1-K-38 · MEDIUM · A forged "Autopilot suggestion" could win the AI a standing permission
+
+When the family keeps approving the same AI action, Autopilot offers to trust
+Bubaly with it: a `policy` suggestion whose payload names the domain,
+capability and tool, plus evidence text such as "Approved 4 times since 12 Aug,
+never rejected". A manager's accept (`acceptPolicySuggestionAction`) wrote an
+`allow` trust policy for the AI straight from that payload. The table is
+family-writable, and has to be: the on-demand scan runs in the caller's
+session, and non-managers may run it. So any member could file a "suggestion"
+proposing, say, `finances / wallet.transfer` with invented evidence, and a
+parent accepting what looked like Bubaly's own recommendation would hand the
+AI that permission. Tightening RLS would have broken scans run by non-managers
+(the scan throws on a refused insert), so the fix is at the point of trust.
+Accept now re-derives the family's current candidates from the real approval
+and tool-call history (`loadPolicyCandidates`). It refuses a proposal that
+history does not support, and writes the policy from the re-derived candidate,
+evidence and counts included, never from the row. A proposal the family
+already holds is still just closed, with nothing written.
+`tests/autopilot-persistence-boundaries.test.ts` gains two cases: a forged
+suggestion is refused, and the written policy uses the re-derived evidence,
+not the row's. Both fail with the action reverted. 15/15 pass, and the
+autopilot, trust and policy suites pass (481).
 
 ## Swept clean · the API routes this file never named
 
