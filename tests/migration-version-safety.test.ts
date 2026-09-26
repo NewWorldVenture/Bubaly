@@ -245,10 +245,23 @@ describe('Supabase migration filename safety', () => {
     // on every member's calendar. Held by
     // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
     //
-    // The numbers between 0343 and 0360 are held by migrations still in
+    // 0357_a_member_only_rewrites_their_own_memory.sql re-creates
+    // family_facts_update and family_facts_delete with the rule the service
+    // applies — can_manage_family, or a memory about me, or one I wrote — on
+    // top of 0264's category clause: any member could rewrite a parent's
+    // household fact over /rest/v1. Held by
+    // docs/audit/a-member-only-rewrites-their-own-memory-check.sql.
+    //
+    // 0363_a_family_subscribes_to_a_calendar_url_once.sql makes (family_id,
+    // url) unique on calendar_feeds: a failed first sync left the row and the
+    // next press inserted the same URL again, so every school event came in
+    // two or three times. Held by
+    // docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql.
+    //
+    // The numbers between 0343 and 0363 are held by migrations still in
     // review; each lands with its own paragraph here. A number below the one
     // pinned is still free to land: the pin says only which number is next.
-    expect(audit.nextVersion).toBe('0361');
+    expect(audit.nextVersion).toBe('0364');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

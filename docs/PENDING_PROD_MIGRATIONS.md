@@ -2308,6 +2308,52 @@ runs its negative control first (a parent and an adult making the same writes
 must land) and went red on that control when the write grant was revoked with
 0352 in place.
 
+### `0357` gives family_facts the member rule the service already applied — unapplied
+
+`0357_a_member_only_rewrites_their_own_memory.sql` (SRV-001 lead `m21`). 0264
+narrowed `family_facts` UPDATE and DELETE by CATEGORY only — `medical` and
+`account` to managers — so on the seven ordinary categories any member of the
+household could rewrite or delete any row, including the household-level facts
+(`member_id` null, the Add form's default "The family") a parent entered for
+everyone. The service (`lib/services/memory/index.ts`) has carried the member
+rule since the knowledge module shipped, but `knowledge-base-module.tsx` and
+`life-events-module.tsx` read `family_facts` from the browser on the caller's
+own RLS-bound client, so the same client could issue the UPDATE directly; and
+`rememberConfirmed` probed by (family_id, ilike label, member_id) and UPDATEd
+whatever it found — re-typing "Emergency contact" into Add replaced the parent's
+number, no id needed.
+
+**What closes it**: `family_facts_update` and `family_facts_delete` are
+re-created with `mayChangeFact`'s rule — `can_manage_family(family_id) OR
+is_self_member(member_id) OR created_by = auth.uid()` — on top of 0264's
+category clause; SELECT and INSERT untouched. `drop policy if exists` before
+`create policy`, so a replay is clean.
+
+**Ships on its own.** The application half is live on merge (`m21`):
+`mayChangeFact` is applied on the create path as well as the pencil,
+`rememberConfirmed`'s label probe refuses a row the caller may not write, and
+Add applies the sensitive-category rule. Until 0357 is applied, a member with
+the browser client can still rewrite a parent's household fact over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-member-only-rewrites-their-own-memory-check.sql` —
+its negative control runs first (the same teen rewrites HER OWN ordinary memory
+with the very statement the refusals use, and it must land), then the teen's
+UPDATE, `created_by` claim, `member_id` re-point and DELETE of the household's
+and her sibling's memories must each be refused, with SELECT shown still open
+to the household. Mutation-tested three ways on private clones: as written
+(exit 0), the policy loosened to 0264's shape (red on a refusal), a decoy
+refusing every write with the guard intact (red on the control).
+`tests/the-add-form-is-not-a-way-around-the-memory-edit-gate.test.ts` covers the
+service half and reads this file's text for the rule it mirrors.
+
+**Not closed, named so it is not assumed closed.** Ownership keys on
+`created_by`, which is set on INSERT only: a manager who corrects a fact a teen
+filed does not take it over, so the teen can still rewrite the corrected value
+(recorded under SRV-001 as a residual). And INSERT stays open on the ordinary
+categories with no uniqueness on (family_id, member_id, label), so a second
+"Emergency contact" row can be filed beside the parent's over `/rest/v1`; the
+app's Add path refuses it, RLS does not.
+
 ### `0360` takes a head-out reminder off the calendar with its departure plan — unapplied
 
 `0360_a_head_out_reminder_goes_with_its_departure_plan.sql` (SRV-001 lead
@@ -2357,3 +2403,43 @@ and the family is told), the reminder stays. Making it atomic means moving both
 writes into one database function that every save depends on, which cannot ship
 while production cannot take migrations.
 
+### `0363` lets a family subscribe to a calendar URL once — unapplied
+
+`0363_a_family_subscribes_to_a_calendar_url_once.sql` (SRV-001 lead `m36`).
+0045 created `calendar_feeds` with `url text not null` and no uniqueness on it.
+`addCalendarFeed` inserted the row, committed it, then tried the first sync;
+when that sync failed (a school calendar behind a login, a timeout, a file over
+1 MiB) the row stayed and the panel kept the URL in the form, so the next press
+inserted a second row for the same URL, and the next a third. Once the URL
+answered, each row imported the same events under its own `feed_id` —
+`uq_calendar_events_feed_uid` (0285) is keyed on (feed_id, external_uid) — so
+every school event sat on the family calendar two or three times.
+
+**What closes it**: `create unique index if not exists
+uq_calendar_feeds_family_url on calendar_feeds (family_id, url)`, the shape
+`weekend_feeds` (0072) and `library_feeds` (0284) already carry. Before building
+it the migration looks for a family that already holds two rows for one URL and
+stops, naming each row with its status and event count, rather than letting
+Postgres's terse error say nothing: collapsing them is a data decision, because
+every duplicate owns its own imported events (`calendar_events.feed_id … on
+delete cascade`, 0045) and a member may have edited the copy that would go.
+
+**Ships on its own.** The application half is live on merge (`m36`):
+`addCalendarFeed` looks for the family's row for the URL first and re-syncs it,
+refuses a normalized URL over 2048 characters before it reaches the index,
+removes a row it created whose first sync failed (and says so when it cannot),
+and catches 23505 from the index by re-reading and syncing the winner's row.
+Until 0363 is applied, two members adding the same calendar in the same moment
+can still both insert.
+
+**Evidence.** `docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql`
+— its negative control runs first (the same member inserts a URL their family
+does not hold, and updates their own feed's URL to another the family does not
+hold; both must land), then the second insert of a URL the family holds, and an
+UPDATE that would make two rows share one, must each be refused with 23505 by
+`uq_calendar_feeds_family_url` and by nothing else.
+`tests/a-calendar-that-failed-to-add-is-not-a-subscription.test.ts` covers the
+action: a failed first sync leaves no row and is retried against one
+subscription, an already-subscribed URL is re-synced rather than added, the
+loser of a same-moment race syncs the winner's row, a failed lookup adds
+nothing, and an over-long link is refused before anything is saved.
