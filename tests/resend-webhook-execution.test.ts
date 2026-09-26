@@ -21,7 +21,7 @@ import { resolveRecipients } from '@/lib/marketing/send';
 const signingKey = Buffer.from('resend-execution-fixture-key');
 const eventId = 'msg_resend_execution_fixture';
 const failure = { data: null, error: { code: 'XX000', message: 'Injected persistence failure' } };
-type Operation = 'read' | 'insert' | 'update' | 'upsert';
+type Operation = 'read' | 'insert' | 'update' | 'upsert' | 'rpc';
 type Attempt = { table: string; operation: Operation; payload?: Row };
 type Interceptor = (attempt: Attempt) => Promise<typeof failure | null> | typeof failure | null;
 
@@ -40,7 +40,33 @@ function fixture() {
   } });
   const attempts: Attempt[] = [];
   let intercept: Interceptor = () => null;
+  // resend_apply_campaign_counter (0340), emulated with the SQL's semantics:
+  // mark the event's counter applied only if it is not yet, then increment the
+  // campaign atomically; a non-UUID campaign tag is an unknown campaign. The
+  // SQL itself is proved by docs/audit/resend-counter-applied-once-check.sql.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  function applyCounter(args: Row) {
+    const field = String(args.p_field);
+    if (!['opens', 'clicks', 'bounces', 'unsubscribes'].includes(field)) return { data: null, error: { code: '22023', message: 'unknown counter' } };
+    if (!UUID.test(String(args.p_campaign_id))) return { data: 'no_campaign', error: null };
+    const event = db.table('resend_webhook_events').find((row) => row.svix_id === args.p_svix_id);
+    if (!event) return { data: null, error: { code: 'P0002', message: 'no claimed event' } };
+    if (event.counter_applied_at) return { data: 'already_applied', error: null };
+    event.counter_applied_at = new Date().toISOString();
+    const campaign = db.table('marketing_email_campaigns').find((row) => row.id === args.p_campaign_id);
+    if (!campaign) return { data: 'no_campaign', error: null };
+    campaign[field] = ((campaign[field] as number | null) ?? 0) + 1;
+    return { data: 'applied', error: null };
+  }
   const client = {
+    async rpc(name: string, args: Row) {
+      const attempt = { table: `rpc:${name}`, operation: 'rpc' as Operation, payload: args };
+      attempts.push(attempt);
+      const injected = await intercept(attempt);
+      if (injected) return injected;
+      if (name !== 'resend_apply_campaign_counter') return { data: null, error: { code: 'PGRST202', message: `unknown function ${name}` } };
+      return applyCounter(args);
+    },
     from(table: string) {
       const builder = db.from(table);
       let operation: Operation = 'read';
@@ -150,16 +176,16 @@ describe('signed Resend suppression and durable receipt execution', () => {
 
   it.each(['email.bounced', 'email.opened'])('accepts the documented Resend tag record for %s and attributes the campaign', async (type) => {
     const f = fixture();
-    f.db.seed('marketing_email_campaigns', [{ id: 'campaign-fixture', bounces: 0, opens: 0 }]);
+    f.db.seed('marketing_email_campaigns', [{ id: '00000000-0000-4000-8000-0000000c0001', bounces: 0, opens: 0 }]);
     const event = {
-      type, data: { to: ['fixture@example.test'], tags: { campaign: 'campaign-fixture', category: 'fixture' } },
+      type, data: { to: ['fixture@example.test'], tags: { campaign: '00000000-0000-4000-8000-0000000c0001', category: 'fixture' } },
     };
     expect((await POST(signedRequest(type, { payload: event }))).status).toBe(200);
     expect(f.event().status).toBe('processed');
     expect(f.db.table('marketing_email_campaigns')[0][type === 'email.bounced' ? 'bounces' : 'opens']).toBe(1);
-    if (type === 'email.bounced') expect(f.suppressions()[0].campaign_id).toBe('campaign-fixture');
+    if (type === 'email.bounced') expect(f.suppressions()[0].campaign_id).toBe('00000000-0000-4000-8000-0000000c0001');
     else expect(mocks.fireAutomationEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      trigger: 'email_opened', context: { campaignId: 'campaign-fixture' },
+      trigger: 'email_opened', context: { campaignId: '00000000-0000-4000-8000-0000000c0001' },
     }));
   });
 
@@ -247,18 +273,18 @@ describe('signed Resend suppression and durable receipt execution', () => {
     expect(f.event().status).toBe('processed');
   });
 
-  it.each(['read', 'update'] as const)('persists suppression before a campaign %s failure and retries the receipt', async (operation) => {
+  it('persists suppression before a campaign counter failure and retries the receipt', async () => {
     const f = fixture();
-    f.db.seed('marketing_email_campaigns', [{ id: 'campaign-fixture', bounces: 0 }]);
+    f.db.seed('marketing_email_campaigns', [{ id: '00000000-0000-4000-8000-0000000c0001', bounces: 0 }]);
     let failOnce = true;
     f.intercept((a) => {
-      if (a.table === 'marketing_email_campaigns' && a.operation === operation && failOnce) { failOnce = false; return failure; }
+      if (a.operation === 'rpc' && failOnce) { failOnce = false; return failure; }
       return null;
     });
-    expect((await POST(signedRequest('email.bounced', { campaign: 'campaign-fixture' }))).status).toBe(503);
+    expect((await POST(signedRequest('email.bounced', { campaign: '00000000-0000-4000-8000-0000000c0001' }))).status).toBe(503);
     expect(f.suppressions()).toHaveLength(1);
     expect(f.event().status).toBe('error');
-    expect((await POST(signedRequest('email.bounced', { campaign: 'campaign-fixture' }))).status).toBe(200);
+    expect((await POST(signedRequest('email.bounced', { campaign: '00000000-0000-4000-8000-0000000c0001' }))).status).toBe(200);
     expect(f.suppressions()).toHaveLength(1);
     expect(f.db.table('marketing_email_campaigns')[0].bounces).toBe(1);
   });
@@ -353,12 +379,16 @@ describe('signed Resend suppression and durable receipt execution', () => {
   });
 });
 
-// EMAIL-002. The claim above serialises by svix_id — one EVENT — so two
-// deliveries for the SAME campaign run concurrently by design. Read-modify-write
-// then loses one: both read 5, both write 6, and an open or a click simply never
-// happened as far as the campaign's numbers are concerned.
-describe('campaign counters survive concurrent events', () => {
-  const campaign = 'campaign-under-contention';
+// EMAIL-002. Two counter defects, closed together by 0340's
+// resend_apply_campaign_counter, which marks the event's counter applied and
+// increments the campaign in one transaction.
+//   * Lost update: the claim serialises by svix_id — one EVENT — so two events
+//     for the same campaign run concurrently by design, and read-then-write kept
+//     only one of them. The increment is now atomic in SQL.
+//   * Double count: the counter moved before the receipt was finalised, so a
+//     failed finalisation, retried by the provider, counted one open twice.
+describe('campaign counters: every event counted, each exactly once', () => {
+  const campaign = '00000000-0000-4000-8000-0000000c0002';
 
   function withCampaign(counters: Row) {
     const f = fixture();
@@ -366,35 +396,44 @@ describe('campaign counters survive concurrent events', () => {
     return f;
   }
 
+  it('counts a retried event once when its finalisation failed the first time', async () => {
+    const f = withCampaign({ opens: 5 });
+    let failOnce = true;
+    f.intercept((a) => {
+      if (a.table === 'resend_webhook_events' && a.payload?.status === 'processed' && failOnce) { failOnce = false; return failure; }
+      return null;
+    });
+    expect((await POST(signedRequest('email.opened', { id: 'msg_retry', campaign }))).status, 'finalisation failed').toBe(503);
+    expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(6);
+    expect((await POST(signedRequest('email.opened', { id: 'msg_retry', campaign }))).status, 'provider retry').toBe(200);
+    expect(f.db.table('marketing_email_campaigns')[0].opens, 'one open, counted once; 7 is the double count').toBe(6);
+    expect(f.event().status).toBe('processed');
+  });
+
   it('counts both of two events that interleave on the same campaign', async () => {
     const f = withCampaign({ opens: 5 });
-    // The interleaving has to be exact. Worker A must be held AFTER it has read 5
-    // and BEFORE it writes; holding it any earlier just makes it re-read whatever
-    // B left and the lost update never happens. Only A's first write is held, so
-    // its guarded retry can proceed.
-    const reachedWrite = deferred();
+    // Hold A's counter application while B completes. With read-then-write in the
+    // route this lost one of the two; the increment now happens in one SQL
+    // statement, so A applies against whatever B left behind.
+    const reached = deferred();
     const release = deferred();
-    let firstUpdate = true;
+    let first = true;
     f.intercept(async (attempt) => {
-      if (attempt.table === 'marketing_email_campaigns' && attempt.operation === 'update' && firstUpdate) {
-        firstUpdate = false;
-        reachedWrite.resolve();
+      if (attempt.operation === 'rpc' && first) {
+        first = false;
+        reached.resolve();
         await release.promise;
       }
       return null;
     });
 
     const slow = POST(signedRequest('email.opened', { id: 'msg_a', campaign }));
-    await reachedWrite.promise;                 // A has read 5 and is about to write.
-    const quick = await POST(signedRequest('email.opened', { id: 'msg_b', campaign }));
-    expect(quick.status).toBe(200);
+    await reached.promise;
+    expect((await POST(signedRequest('email.opened', { id: 'msg_b', campaign }))).status).toBe(200);
     expect(f.db.table('marketing_email_campaigns')[0].opens, 'B counted').toBe(6);
-
-    release.resolve();                          // A writes against a row that moved.
+    release.resolve();
     expect((await slow).status).toBe(200);
-
-    const row = f.db.table('marketing_email_campaigns')[0];
-    expect(row.opens, 'two opens must count as two; 6 here means one was lost').toBe(7);
+    expect(f.db.table('marketing_email_campaigns')[0].opens, 'two opens must count as two').toBe(7);
   });
 
   it('counts an event against a column that has never been counted', async () => {
@@ -403,14 +442,25 @@ describe('campaign counters survive concurrent events', () => {
     expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(1);
   });
 
-  it('fails the event back to the provider rather than dropping an uncountable one', async () => {
+  it('fails the event back to the provider when the counter cannot be applied, and counts it once on retry', async () => {
     const f = withCampaign({ opens: 5 });
-    // Every guarded write misses, as it would under unbounded contention.
-    f.intercept((attempt) => (attempt.table === 'marketing_email_campaigns' && attempt.operation === 'update'
-      ? { data: null, error: null } as never : null));
+    let failOnce = true;
+    f.intercept((attempt) => (attempt.operation === 'rpc' && failOnce ? (failOnce = false, failure) : null));
     const response = await POST(signedRequest('email.opened', { id: 'msg_lost', campaign }));
     expect(response.status, 'a 200 here would tell the provider to stop retrying').toBe(503);
     expect(f.event().status).toBe('error');
+    expect((await POST(signedRequest('email.opened', { id: 'msg_lost', campaign }))).status).toBe(200);
+    expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(6);
+  });
+
+  it('passes the event, the campaign and the counter to the database, and nothing else', async () => {
+    const f = withCampaign({ opens: 0 });
+    await POST(signedRequest('email.opened', { id: 'msg_args', campaign }));
+    expect(f.attempts.filter((a) => a.operation === 'rpc').map((a) => a.payload)).toEqual([
+      { p_svix_id: 'msg_args', p_campaign_id: campaign, p_field: 'opens' },
+    ]);
+    // No read-modify-write of the campaign from the route any more.
+    expect(f.attempts.some((a) => a.table === 'marketing_email_campaigns')).toBe(false);
   });
 
   it('leaves an unknown campaign alone without failing the event', async () => {

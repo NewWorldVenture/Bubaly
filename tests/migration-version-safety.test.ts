@@ -40,7 +40,8 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0339 adds per-recipient push
+    // Bumped whenever a migration lands — 0340 applies a campaign counter once
+    // per webhook event (EMAIL-002); 0339 adds per-recipient push
     // delivery receipts (PUSH-003); 0338 makes family media private
     // (SEC-001, deploy-coupled); 0337 lets only a parent make,
     // change or remove a parent; 0336 ends a removed member's
@@ -60,7 +61,7 @@ describe('Supabase migration filename safety', () => {
     // it rather than deriving it is the point: the number is how a new
     // migration announces itself, so a file that quietly reuses one, or a
     // rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0340');
+    expect(audit.nextVersion).toBe('0341');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

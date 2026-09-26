@@ -2698,3 +2698,33 @@ a member can neither read, write nor delete receipts, one delivery keys once,
 and receipts cascade with their notification; it goes red on a grant plus a
 permissive policy. 61/61 probes on the local stack and on a fresh replay on the
 exact CI image, and the migration re-applies onto an existing schema.
+
+## 0340 — a campaign counter moves once per webhook event (EMAIL-002)
+
+`supabase/migrations/0340_resend_counter_applied_once.sql`
+
+**Severity: high (marketing metrics). DEPLOY-COUPLED — apply BEFORE (or with)
+the deploy.** The new Resend webhook route calls
+`resend_apply_campaign_counter`. Deployed without this function, every event
+that carries a campaign counter fails back to the provider (503) until the
+migration is applied. The provider retries, so nothing is lost inside its
+retry window, but nothing is counted either. The old route touches neither the
+function nor the new column, so applying it first is safe.
+
+The route claimed an event, moved the campaign counter, then finalised the
+receipt. When finalisation failed, the claim was released to `error`, the
+provider retried, and the counter moved a second time for one open or click.
+0340 adds `resend_webhook_events.counter_applied_at` and a service-only
+SECURITY INVOKER function. In one transaction it sets the marker (only if
+unset) and increments the campaign with `coalesce(x, 0) + 1` under the row
+lock. A retried event answers `already_applied` and changes nothing.
+Concurrent events for one campaign cannot lose an update either, which retires
+the route's read-then-compare-and-set loop. A malformed campaign tag answers
+`no_campaign` instead of failing the event for ever.
+
+Verified locally. `docs/audit/resend-counter-applied-once-check.sql` shows
+the same event applied twice counts once, two events count twice, a malformed
+tag answers `no_campaign`, an unknown counter or an unclaimed event is refused,
+and a signed-in member cannot call it. It turns red on a function without the
+marker. 62/62 probes on the local stack and on a fresh replay on the exact CI
+image, and the migration re-applies onto an existing schema.

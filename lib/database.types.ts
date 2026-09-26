@@ -1786,9 +1786,9 @@ export interface Database {
         Partial<{ reason: string; campaign_id: string | null }>
       >;
       resend_webhook_events: T<
-        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
-        { svix_id: string; event_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null },
-        Partial<{ event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null }>
+        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null; counter_applied_at: string | null },
+        { svix_id: string; event_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null; counter_applied_at?: string | null },
+        Partial<{ event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null; counter_applied_at: string | null }>
       >;
       guardian_callback_events: T<
         { event_id: string; callback_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
@@ -2745,6 +2745,8 @@ export interface Database {
       marketplace_place_bid: { Args: { p_listing_id: string; p_bidder_member_id: string; p_bidder_family_id: string; p_max_cents: number }; Returns: Json };
       marketplace_buy_now: { Args: { p_listing_id: string; p_buyer_member_id: string; p_buyer_family_id: string }; Returns: Json };
       marketplace_close_auction: { Args: { p_listing_id: string; p_now?: string }; Returns: Json };
+      // EMAIL-002 (0340): marks a webhook event's counter applied and increments the campaign, once.
+      resend_apply_campaign_counter: { Args: { p_svix_id: string; p_campaign_id: string; p_field: string }; Returns: string };
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };

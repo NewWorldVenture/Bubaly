@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T15:05:00.000Z
+- Last Updated: 2026-09-26T15:50:00.000Z
 - Total Audit Items: 14105
 - Not Started: 13842
-- In Progress: 192
+- In Progress: 191
 - Passed: 12
-- Fixed + Passed: 57
+- Fixed + Passed: 58
 - Blocked: 2
 - Failed: 0
 - Overall Completion: 0.04%
@@ -90,12 +90,12 @@ PRODUCTION READY: NO
 - SEC-025 (HIGH until 0335 is applied): any signed-in account can write another user's id onto a member row in its own family and then read that user's email, full name, date of birth and phone; the ids are visible on the feedback board. Reproduced locally; fixed in migration 0335 (pending production).
 - TEST-012: the CI database gate was red on this branch (0326 could not replay; 13/57 probes failed on the CI image) and could not see function-grant traps. The harness is repaired and 57/57 on the exact CI image, but CI itself has never run on this branch: no PR exists.
 - SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
-- DEPLOY-002: Migrations 0318–0339 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once. 0335 (SEC-025) stops a client linking a login to a member row; safe in either order. 0336 (PRIV-002) ends a removed member's profile visibility; safe in either order. 0337 (SEC-026) lets only a parent make, change or remove a parent; safe in either order. 0338 (SEC-001) makes family media private and is DEPLOY-COUPLED the other way from 0328: apply it only after the deploy carrying the signed-URL readers, or every photo goes blank. 0339 (PUSH-003) is coupled the other way: apply it BEFORE the deploy, because the new dispatcher refuses to send without its receipts table.
+- DEPLOY-002: Migrations 0318–0340 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once. 0335 (SEC-025) stops a client linking a login to a member row; safe in either order. 0336 (PRIV-002) ends a removed member's profile visibility; safe in either order. 0337 (SEC-026) lets only a parent make, change or remove a parent; safe in either order. 0338 (SEC-001) makes family media private and is DEPLOY-COUPLED the other way from 0328: apply it only after the deploy carrying the signed-URL readers, or every photo goes blank. 0339 (PUSH-003) is coupled the other way: apply it BEFORE the deploy, because the new dispatcher refuses to send without its receipts table. 0340 (EMAIL-002) likewise goes BEFORE the deploy: the new webhook route calls its function.
 - SEC-001 (CRITICAL until deployed and 0338 applied): family media is readable by anyone holding a URL in production. Fixed on this branch: every reader signs, the service worker no longer retains private images, and 0338 makes the bucket private. DEPLOY-COUPLED: ship the code first, then apply 0338.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003 (fixed on this branch; 0339 must be applied BEFORE the deploy or push stops): overlapping runs are serialised by the cursor compare-and-set, and a partly failed fan-out now retries only the recipients it has not reached (per-recipient receipts).
-- EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
+- EMAIL-002 (fixed on this branch; 0340 must be applied BEFORE the deploy): each webhook event now moves its campaign counter exactly once, in one transaction with an idempotency marker, so neither concurrent events nor a retried finalisation miscounts.
 - INT-002: Urgent receipt/notification/claim/drain repairs pass locally. Live provider/scheduler deployment, unknown-attempt reconciliation and ordinary automatic-reply replay durability remain open.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
@@ -13399,7 +13399,7 @@ PRODUCTION READY: NO
 | MOBILE-002 | MOBILE | Native bootstrap listener lifecycle | 🔄 IN PROGRESS | Medium | docs/final-audit/native-cycle.md | Dispose checks after asynchronous boundaries, late handle removal, partial setup cleanup and inactive callbacks after teardown. | Native/PWA combined31 Chromium cases PASS; 28 redirect/PWA regressions PASS. Physical shell remains unverified. | No physical native device or provider workflow pass claimed. |
 | JOB-001 | JOB | Cron dispatcher missing-configuration failure visibility | 🔄 IN PROGRESS | High | docs/final-audit/cron-dispatch-cycle.md | Missing/blank dispatch secret fails; dry-run remains read-only; validate registered route and HTTPS/HTTP-loopback base origin, reject redirects/failures, bound responses/deadlines and redact secret diagnostics. Schedule and lookback unchanged. | 4 suites /44 tests PASS; strict types, scoped lint, syntax and YAML parse PASS. Production configuration/real execution and durable catch-up remain unverified. |  |
 | PUSH-003 | PUSH | Distributed push delivery receipts and concurrent worker claims | 🛠 FIXED + PASS (0339 pending production, apply BEFORE deploy) | High | tests/push-delivery-receipts.test.ts (4) RED on the old dispatcher (parent re-sent every retry) and GREEN on the new one; all 19 dispatcher-touching test files (238) pass; new probe push-receipts-are-service-only-check.sql, 61/61 on both databases | 0339 adds service-only notification_push_receipts (notification_id, user_id). The dispatcher skips receipted recipients, writes a receipt after each successful delivery, and stamps pushed_at only when every permitted recipient is receipted; a failed receipt read sends nothing and moves no cursor | Partial fan-out failure then retry reaches only the recipient who failed; all-succeed stamps at once; unrecorded delivery repeats only that one delivery | Concurrent-worker half fixed earlier (cursor compare-and-set). The residual is a crash between send and receipt write, repeating one delivery: at-least-once, chosen over losing it. DEPLOY-COUPLED: 0339 first, then the code. |
-| EMAIL-002 | EMAIL | Transactional campaign webhook metrics | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. | Pending | Pending |  |
+| EMAIL-002 | EMAIL | Transactional campaign webhook metrics | 🛠 FIXED + PASS (0340 pending production, apply BEFORE deploy) | High | tests/resend-webhook-execution.test.ts 38 pass; five counter cases RED on the old route, including a retried event whose finalisation failed (counted twice, 7 instead of 6). New probe resend-counter-applied-once-check.sql, 62/62 on both databases, red on a marker-less function | 0340: counter_applied_at marker plus service-only resend_apply_campaign_counter, which sets the marker and increments the campaign in one transaction; the route's read-then-CAS loop is replaced by one RPC | Retry after failed finalisation counts once; two interleaved events count twice; a counter failure fails the event back (503) and the retry counts it once; the route no longer reads or writes the campaign row itself | Closes the double count the previous cycle left open (it needed SQL). A malformed campaign tag is now an unknown campaign instead of a retry-for-ever failure. DEPLOY-COUPLED: 0340 first, then the code. |
 | INT-002 | INT | Durable Contact Center outbound escalation and replies | 🔄 IN PROGRESS | High | Source/reproduction evidence in discovery findings; execution verification pending. Next-cycle actual middleware/SMS/voicemail/capture/planner/Twilio fixture reproduces lost urgent dispatch after429 and committed-inbox interruption, silently failed notification writes and missing acceptance-unknown receipts (8 characterization cases; no fix claimed). Evidence tests/contact-center-urgent-durability-repro.test.ts, uncommitted after checkpoint6094eb04. | Replaced with checked plain insert and exact family/channel/provider/direction duplicate verification on23505; no SQL changes. Durable system receipt before inbox capture, separate deterministic notification repair, revision-claimed one-shot provider attempt, bounded429-only retry, held ambiguous results and fair scheduled drain; intake ACK makes no delivery claim. | 11focused files/187tests pass; independent security review, installed-SDK query contract, handlers and cron execution included; scoped lint pass. Combined fourth-cycle gates pending. See docs/final-audit/contact-center-urgent-cycle.md and contact-center-urgent-security-review.md. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. |  |
 | SEC-003 | SEC | Native deep-link internal navigation boundary | 🔄 IN PROGRESS | High | docs/final-audit/native-cycle.md | Validate parsed pathname through existing safeInternalRedirect; preserve accepted OAuth query/hash unchanged. | Four adversarial paths failed before and pass after fix; ordinary and encoded OAuth returns remain accepted in actual-component Chromium tests. | Origin allowlist policy is separate; preserve supported same-origin navigation and OAuth query/hash. |
 | UI-002 | UI | Public feature-link browser navigation | 🔄 IN PROGRESS | High | docs/final-audit/public-navigation-cycle.md; tests/marketing-public-read-budget.test.ts; private production Chromium feature-link and mobile-menu navigation timing; selected 104-test public browser run | Public SEO/AEO sequential fallback reads share a 1.5-second abort budget; abandoned requests cannot start fallback work. Successful configuration and authoritative empty values remain intact, and failed reads remain uncached. The optional cached social-profile read now has the same 1.5-second SDK abort deadline, preserving throw-inside/catch-outside cache semantics. | Installed-SDK read deadline and failure/recovery checks pass. After both editorial and social-read repairs, integrated production fresh-home load was 2120ms and feature navigation 1657ms with no page errors under a controlled database outage. 104 selected production Chromium checks PASS in 1.8 minutes. Final b4d4ad78 changes private display only. Live configured content and cache invalidation remain open. | Missing service key also caused pricing error-boundary fixture failures; no pricing source defect inferred. |
@@ -15598,7 +15598,7 @@ control passes on both.
 
 ### EMAIL-002 — Transactional campaign webhook metrics
 
-Status: 🔄 IN PROGRESS
+Status: 🛠 FIXED + PASS (0340 pending production, apply BEFORE deploy)
 Severity: High
 Route(s), components, actions, tables and providers: app/api/webhooks/resend/route.ts
 
@@ -15663,8 +15663,30 @@ tests/resend-webhook-execution.test.ts — concurrent interleaving, NULL column,
 exhausted contention, unknown campaign. app/api/webhooks/resend/route.ts.
 
 #### Final Status
-🔄 IN PROGRESS — lost update fixed and pinned; the per-event idempotency needed
-to close the double count requires a schema change and stays open.
+🛠 FIXED + PASS (0340 pending production, apply BEFORE deploy).
+
+**The double count, closed (2026-09-26).** The fix this record named, an
+idempotency marker set in the same transaction as the counter, was authored
+as 0340. `resend_apply_campaign_counter` sets
+`resend_webhook_events.counter_applied_at` only if it is unset, and increments
+the campaign in the same transaction; a retried event answers
+`already_applied`. The same function retires the lost-update loop: the
+increment is `coalesce(x, 0) + 1` under the row lock, so the route makes one
+RPC call instead of reading and compare-and-setting the campaign row.
+
+Measured with the test fake (which emulates the function's semantics exactly)
+and on the real function:
+- **Route level.** A finalisation that fails once, then the provider's retry:
+  opens stays at 6 rather than reaching 7. Two interleaved events count as two.
+  A counter failure returns 503 and its retry counts once. The route never
+  touches the campaign row. On the old route five of these cases fail,
+  including the double count.
+- **SQL level.** `docs/audit/resend-counter-applied-once-check.sql`: one event
+  applied twice counts once, two events count twice, a malformed tag answers
+  `no_campaign`, an unknown counter or an unclaimed event is refused, and a
+  signed-in member is refused. It turns red on a function without the marker.
+  62/62 probes on the local stack and a fresh CI-image replay.
+
 
 ### INT-002 — Durable Contact Center outbound escalation and replies
 
@@ -23265,7 +23287,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003 (fixed on this branch; 0339 must be applied BEFORE the deploy or push stops): overlapping runs are serialised by the cursor compare-and-set, and a partly failed fan-out now retries only the recipients it has not reached (per-recipient receipts).
-- EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
+- EMAIL-002 (fixed on this branch; 0340 must be applied BEFORE the deploy): each webhook event now moves its campaign counter exactly once, in one transaction with an idempotency marker, so neither concurrent events nor a retried finalisation miscounts.
 - INT-002: Urgent receipt/notification/claim/drain repairs pass locally. Live provider/scheduler deployment, unknown-attempt reconciliation and ordinary automatic-reply replay durability remain open.
 - SEC-003: External destination reinterpretation blocked and browser-tested; full native deep-link/provider-return workflow remains unverified.
 - UI-002: Public SEO/AEO and social-profile timeout defects repaired in source and SDK execution tests; SEO/AEO also verified in production browser. Combined production verification for the added social-profile deadline and configured cache/admin invalidation remain pending.
@@ -30051,6 +30073,25 @@ does.
 - `docs/audit/push-receipts-are-service-only-check.sql`: 61/61 probes on the
   local stack and a fresh replay of the exact CI image (352/352 migrations);
   it turns red on a grant plus a permissive policy.
+
+# Pass AN — one email open counted twice (EMAIL-002)
+
+The previous cycle fixed the lost update with a compare-and-set, and left the
+double count open because it "needed SQL". It did: the counter moved before
+the receipt was finalised, so a failed finalisation, retried by the provider,
+counted one open twice. 0340 puts an idempotency marker and the increment in
+one transaction, `resend_apply_campaign_counter`. A retried event changes
+nothing, and the atomic `+1` retires the route's compare-and-set loop. The
+route makes one RPC call.
+
+Verification:
+- Five route-level cases fail on the old route and pass on the new one.
+- A SQL probe proves the real function once-per-event, turns red on a
+  marker-less version, and refuses a signed-in member.
+- 62/62 probes on the local stack and a fresh CI-image replay (353/353
+  migrations).
+
+Deploy order: 0340 goes before the code, as with 0339.
 
 # Final Regression
 
