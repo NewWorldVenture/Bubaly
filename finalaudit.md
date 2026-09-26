@@ -2,15 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
-- Total Audit Items: 14038
-- Not Started: 13842
-- In Progress: 192
+- Last Updated: 2026-09-26T13:07:23Z
+- Total Audit Items: 14096
+- Not Started: 13861
+- In Progress: 231
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 3
 - Overall Completion: 0.01%
+
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), and three rows that had drifted outside the summary table were folded back in. Now: 14,096 = 13,861 + 231 + 1 + 3. See Q56.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -2520,7 +2522,7 @@ PRODUCTION READY: NO
 | CONTROL-4D87B58999DE | CONTROL | input at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-34B76897C094 | CONTROL | Textarea at line 56 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DF28FE1EBF0E | CONTROL | Button at line 57 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-355A1C728927 | COMPONENT | components/modules/trips-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-355A1C728927 | COMPONENT | components/modules/trips-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | trips / trip_items writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-E0584E397DEF | CONTROL | ErrorState at line 181 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-16EC03487CEF | CONTROL | button at line 191 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2E575CF4E003 | CONTROL | button at line 225 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2566,7 +2568,7 @@ PRODUCTION READY: NO
 | CONTROL-837E7BA71025 | CONTROL | input at line 173 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B6BD4DC47227 | CONTROL | Button at line 180 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-451B23AFFB02 | CONTROL | Button at line 181 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | nutrition_logs delete was silent and had no success toast, so a filtered no-op was invisible. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7493F1865E5E | CONTROL | ErrorState at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BADD497F00D8 | CONTROL | Button at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FB2B11901AAD | CONTROL | button at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2863,7 +2865,7 @@ PRODUCTION READY: NO
 | CONTROL-5A1E9E3C7F35 | CONTROL | Textarea at line 393 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-09FAA234601E | CONTROL | Button at line 395 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EE455F132F26 | CONTROL | Button at line 396 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4AF344B8C775 | COMPONENT | components/modules/signups-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4AF344B8C775 | COMPONENT | components/modules/signups-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | opportunities writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7C663AE6AC5E | CONTROL | Button at line 157 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B05CB647F8D2 | CONTROL | button at line 186 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A75E7CC1E2CF | CONTROL | label at line 192 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2935,7 +2937,7 @@ PRODUCTION READY: NO
 | CONTROL-9B4FEC781D9E | CONTROL | Input at line 691 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7514CE465857 | CONTROL | Button at line 697 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9AF1923774F4 | CONTROL | Button at line 698 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-745E4A316DE5 | COMPONENT | components/modules/settings-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-745E4A316DE5 | COMPONENT | components/modules/settings-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Member ROLE edit and removal reported success then reload showed old state (fm_update is manager-gated). Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-4CE7518734D4 | CONTROL | button at line 196 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B01A6B13A90F | CONTROL | button at line 218 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A644803C9084 | CONTROL | form at line 227 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2966,7 +2968,7 @@ PRODUCTION READY: NO
 | CONTROL-F05E167371B4 | CONTROL | Button at line 476 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DA499676E35A | CONTROL | Modal at line 489 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3D58F291FBB7 | CONTROL | InviteForm at line 490 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-05D924809AC2 | COMPONENT | components/modules/security-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-05D924809AC2 | COMPONENT | components/modules/security-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (security); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | CONTROL-163FECDE1039 | CONTROL | ErrorState at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2454F96047A9 | CONTROL | Button at line 96 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-ECC2823BF771 | CONTROL | button at line 136 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3081,7 +3083,7 @@ PRODUCTION READY: NO
 | CONTROL-B93304BE56C1 | CONTROL | Select at line 380 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-927E02B0F737 | CONTROL | Button at line 390 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBAF67DACF02 | CONTROL | Button at line 391 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E72D283F7B91 | COMPONENT | components/modules/rides-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E72D283F7B91 | COMPONENT | components/modules/rides-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | rides writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-84E66CDBE051 | CONTROL | Button at line 158 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-295C84B725B2 | CONTROL | button at line 187 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D1E80A0715B8 | CONTROL | button at line 191 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3122,7 +3124,7 @@ PRODUCTION READY: NO
 | CONTROL-0A300EB82CB3 | CONTROL | Button at line 303 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FBAEB7939943 | CONTROL | select at line 327 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FF1549FD4370 | CONTROL | Button at line 331 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0853DCEFFA13 | COMPONENT | components/modules/renewals-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0853DCEFFA13 | COMPONENT | components/modules/renewals-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | renewals writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-EC168645E267 | CONTROL | Button at line 147 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A5880E9CF00C | CONTROL | label at line 167 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBE9F885309E | CONTROL | input at line 168 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3501,7 +3503,7 @@ PRODUCTION READY: NO
 | CONTROL-948C3DE476FC | CONTROL | button at line 404 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C79292DA31C2 | CONTROL | Button at line 415 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-072E1E123281 | CONTROL | Button at line 416 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-2ED8AA03C015 | COMPONENT | components/modules/passwords-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-2ED8AA03C015 | COMPONENT | components/modules/passwords-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_credentials updates relied on RLS for tenancy; added family scope (readback already present) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-0664E0DC97A4 | CONTROL | ErrorState at line 148 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-79B3219763E7 | CONTROL | Button at line 155 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE17ED7D78D1 | CONTROL | input at line 162 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3585,7 +3587,7 @@ PRODUCTION READY: NO
 | CONTROL-36D3914DED29 | CONTROL | Link at line 162 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1983DDFA4711 | CONTROL | Link at line 175 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-05923044C676 | CONTROL | Link at line 197 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-F2D3C03BE12F | COMPONENT | components/modules/notifications-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-F2D3C03BE12F | COMPONENT | components/modules/notifications-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | notifications dismiss re-appeared on refresh with no message. Added .eq('family_id', …) + .select('id'); refuses on an empty result; bulk mark-all-read correctly exempt (zero rows is normal) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-4BAECBEA4551 | CONTROL | ErrorState at line 140 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C5A7319107A0 | CONTROL | Button at line 150 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-87A94199CDD2 | CONTROL | Button at line 154 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3820,7 +3822,7 @@ PRODUCTION READY: NO
 | CONTROL-3710FE526613 | CONTROL | Input at line 504 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E9C2DFF37004 | CONTROL | Button at line 508 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-857EC29B4408 | CONTROL | Button at line 509 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5B4BF0217CDA | COMPONENT | components/modules/medical-records-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5B4BF0217CDA | COMPONENT | components/modules/medical-records-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) | health_providers / insurance_policies update+delete filtered id alone; Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | CONTROL-5F182E9C70AB | CONTROL | Button at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-55C7D946F9D2 | CONTROL | Button at line 256 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BB1F169F00D5 | CONTROL | button at line 269 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3883,7 +3885,7 @@ PRODUCTION READY: NO
 | CONTROL-9D084022CB3D | CONTROL | button at line 496 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9D8C788706B5 | CONTROL | ProviderInfoSheet at line 507 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-42854FDAA630 | CONTROL | CheckInSheet at line 510 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4D0C5DE53A9F | COMPONENT | components/modules/meals-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4D0C5DE53A9F | COMPONENT | components/modules/meals-module.tsx | 🔄 IN PROGRESS | Medium | npm run lint (budget 12) exit 0 | Click-away backdrop had no keyboard dismissal; Escape now bound, backdrop aria-hidden | Lint 10/12 | Browser workflow not yet exercised. See finalaudit.md Q49. |
 | CONTROL-2CA903FE8939 | CONTROL | img at line 85 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0E03BA79C539 | CONTROL | ErrorState at line 277 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5AA63295BBC1 | CONTROL | Button at line 290 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3941,7 +3943,7 @@ PRODUCTION READY: NO
 | CONTROL-F8C3FD810E10 | CONTROL | Input at line 919 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5DD81743BF54 | CONTROL | Button at line 921 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5B98B92EDF1F | CONTROL | Button at line 922 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4EE0A2F24EF9 | COMPONENT | components/modules/marketplace-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4EE0A2F24EF9 | COMPONENT | components/modules/marketplace-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Filtered listing delete left the listing and then deleted its photo from storage (data loss); edit reported saved. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-222135F3FE50 | CONTROL | Link at line 241 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BA8016D70FEC | CONTROL | Button at line 246 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F90AB96A51F5 | CONTROL | Input at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3975,7 +3977,7 @@ PRODUCTION READY: NO
 | CONTROL-B9158280D96D | CONTROL | Button at line 452 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5426F2E46F41 | CONTROL | button at line 453 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9F6D01E456E4 | CONTROL | button at line 465 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-16E429E941C5 | COMPONENT | components/modules/locator-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-16E429E941C5 | COMPONENT | components/modules/locator-module.tsx | 🔄 IN PROGRESS | Medium | Catalogue integrity + i18n ratchet | Ten English toast/confirm literals on failure paths translated (7 locales) | i18n gate clean | Browser workflow not yet exercised. See finalaudit.md Q51. |
 | CONTROL-9876AEDE3AD5 | CONTROL | ErrorState at line 216 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3CF6F02E0BEB | CONTROL | div at line 221 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A96D998DE75F | CONTROL | Button at line 228 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4155,7 +4157,7 @@ PRODUCTION READY: NO
 | CONTROL-1576898DB6A4 | CONTROL | Button at line 431 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C53C2364F928 | CONTROL | Button at line 482 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0E1B00E6EFFD | CONTROL | Link at line 483 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5024FD14F7AA | COMPONENT | components/modules/journal-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5024FD14F7AA | COMPONENT | components/modules/journal-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-EEDD6A475D13 | CONTROL | ErrorState at line 65 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6E8DC2BC303D | CONTROL | Button at line 72 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1083F8EADA11 | CONTROL | PromptCard at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4175,7 +4177,7 @@ PRODUCTION READY: NO
 | CONTROL-483327DBD9DB | CONTROL | Textarea at line 238 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A06E8A8E18F2 | CONTROL | Button at line 245 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4D1762E4B356 | CONTROL | Button at line 246 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (inventory); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | CONTROL-0A12BE13FB72 | CONTROL | ErrorState at line 128 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E81704CB4087 | CONTROL | Button at line 138 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A98C9EB844BF | CONTROL | Button at line 139 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4327,7 +4329,7 @@ PRODUCTION READY: NO
 | CONTROL-7D76FD76BF2E | CONTROL | Link at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-A0A4E9A10E1B | COMPONENT | components/admin/super-admin-toggle.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F0B5EDC71B35 | CONTROL | button at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-7E5DE59B415E | CONTROL | ErrorState at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-26E283453007 | CONTROL | Link at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDAB1FAFF956 | CONTROL | button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4384,7 +4386,7 @@ PRODUCTION READY: NO
 | COMPONENT-44B74C438CD8 | COMPONENT | components/admin/strategy-metric-tiles.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-18452224D121 | CONTROL | a at line 106 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-6460BF6DD712 | COMPONENT | components/admin/status-donut.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-3706AC3F8AE0 | COMPONENT | components/modules/immunizations-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-3706AC3F8AE0 | COMPONENT | components/modules/immunizations-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-FA8CFBEE1C5A | CONTROL | select at line 93 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-97A2211921B3 | CONTROL | Button at line 98 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-78389D00FE84 | CONTROL | ErrorState at line 117 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4432,7 +4434,7 @@ PRODUCTION READY: NO
 | CONTROL-3B7D5FA9AE08 | CONTROL | Button at line 266 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5210A81B1B29 | CONTROL | Button at line 267 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-1B83F1416955 | COMPONENT | components/admin/role-donut.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-09DD937D6288 | COMPONENT | components/modules/home-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-09DD937D6288 | COMPONENT | components/modules/home-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents delete relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-B724B756E80F | CONTROL | ErrorState at line 192 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-60C96325CA76 | CONTROL | ErrorState at line 193 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-512B4A065840 | CONTROL | ErrorState at line 194 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4478,7 +4480,7 @@ PRODUCTION READY: NO
 | CONTROL-DF3EE9C680E2 | CONTROL | Textarea at line 635 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CB25DA862A21 | CONTROL | Button at line 637 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F4DEFF26E352 | CONTROL | Button at line 638 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E0F59583B966 | COMPONENT | components/modules/health-visits-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E0F59583B966 | COMPONENT | components/modules/health-visits-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-2E3E9E393AA9 | CONTROL | select at line 94 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BFE18889811A | CONTROL | Button at line 99 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B996B1C54A80 | CONTROL | ErrorState at line 118 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4505,7 +4507,7 @@ PRODUCTION READY: NO
 | CONTROL-3DEA050879CB | CONTROL | Download at line 33 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-13F206CC8B14 | CONTROL | Button at line 35 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6596E197CAC0 | CONTROL | Download at line 36 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-40158EE0AC0D | COMPONENT | components/modules/health-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-40158EE0AC0D | COMPONENT | components/modules/health-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-D48394F2C07F | CONTROL | ErrorState at line 513 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3AD5A45EB0A4 | CONTROL | Button at line 525 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-711DC8A602EE | CONTROL | Button at line 526 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4582,7 +4584,7 @@ PRODUCTION READY: NO
 | CONTROL-8FB91E20D924 | CONTROL | Select at line 76 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-258490F36582 | CONTROL | Button at line 82 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4F0C40797800 | CONTROL | Button at line 83 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-B87AB8900CCC | COMPONENT | components/modules/habits-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-B87AB8900CCC | COMPONENT | components/modules/habits-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-group-of-controls-needs-a-name.test.ts (ratchet held at 16) | Three <label>s naming nothing (button groups) wired with labelledGroup | Ratchet green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | CONTROL-EB05AB10EAE6 | CONTROL | ErrorState at line 158 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DF382DFD8B8F | CONTROL | Button at line 174 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A8BB2A705826 | CONTROL | Button at line 177 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4782,7 +4784,7 @@ PRODUCTION READY: NO
 | CONTROL-436B25118654 | CONTROL | Button at line 627 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBACC49C6BAF | CONTROL | Button at line 628 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-F2857B231D56 | COMPONENT | components/admin/charts.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DBC7A368F1FF | COMPONENT | components/modules/files-hub-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DBC7A368F1FF | COMPONENT | components/modules/files-hub-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents update/delete relied on RLS for tenancy; added family scope; stub chained to assert both filters | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-E314440BC24A | CONTROL | ErrorState at line 177 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E65DABFEE5CC | CONTROL | Button at line 184 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4EDC22E750B6 | CONTROL | Upload at line 184 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4878,7 +4880,7 @@ PRODUCTION READY: NO
 | CONTROL-256A2E71EDDA | CONTROL | button at line 146 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3C45171AE018 | CONTROL | button at line 159 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-13BBE1B97A2C | CONTROL | button at line 170 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-52449F575294 | COMPONENT | components/modules/family-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-52449F575294 | COMPONENT | components/modules/family-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | Member removal/edit reported success over a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result; toasts translated | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-D464CA682485 | CONTROL | ErrorState at line 175 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5AE7593F8273 | CONTROL | Button at line 203 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7B61693E3397 | CONTROL | Button at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4954,7 +4956,7 @@ PRODUCTION READY: NO
 | CONTROL-85F902EFBB85 | CONTROL | button at line 172 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D5FC998AD9FB | CONTROL | button at line 180 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE52D87F984D | CONTROL | button at line 186 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-134808702CA6 | COMPONENT | components/modules/documents-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-134808702CA6 | COMPONENT | components/modules/documents-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | documents update/delete relied on RLS for tenancy; added family scope. Also: drop zone was unreachable by keyboard (hidden file input) — role=button + openOnKey (Q49) | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-25372E1B3983 | CONTROL | ErrorState at line 289 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6B72100CBE95 | CONTROL | Button at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B0DAD6B9C13A | CONTROL | Upload at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5031,7 +5033,7 @@ PRODUCTION READY: NO
 | CONTROL-A2E399C57ED3 | CONTROL | Textarea at line 122 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-060D60FE221D | CONTROL | Button at line 124 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E5F0FE031DFA | CONTROL | Button at line 125 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0337E00DA6ED | COMPONENT | components/modules/declutter-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0337E00DA6ED | COMPONENT | components/modules/declutter-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (declutter); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | CONTROL-5906DC1417A4 | CONTROL | ErrorState at line 134 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4D7F65324E8E | CONTROL | Button at line 154 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F08ED53E3789 | CONTROL | button at line 155 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5450,7 +5452,7 @@ PRODUCTION READY: NO
 | CONTROL-740AAFF3422B | CONTROL | Textarea at line 508 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B952A91CC1B4 | CONTROL | Button at line 510 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F2B73240C7EB | CONTROL | Button at line 511 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8C4361BB3F81 | COMPONENT | components/modules/care-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8C4361BB3F81 | COMPONENT | components/modules/care-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-404044249A1B | CONTROL | Button at line 153 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5D81438C7A36 | CONTROL | button at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7CED5432EE73 | CONTROL | button at line 202 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5554,7 +5556,7 @@ PRODUCTION READY: NO
 | CONTROL-EC0BDFCB5CD0 | CONTROL | input at line 110 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6C42BEFFC3B1 | CONTROL | Button at line 112 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-15F8272E4D19 | CONTROL | Button at line 113 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | bills / financial_accounts writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-9A89563084C4 | CONTROL | button at line 141 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DC8023D43954 | CONTROL | button at line 142 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3EEDCE9496CF | CONTROL | Button at line 161 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5637,7 +5639,7 @@ PRODUCTION READY: NO
 | CONTROL-A6DD0C70F963 | CONTROL | AddBudgetModal at line 1635 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-094C5C8B91F0 | CONTROL | AddBillModal at line 1636 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-631AE440E484 | CONTROL | AddSavingsGoalModal at line 1637 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-18C795CA2A17 | COMPONENT | components/modules/behavior-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-18C795CA2A17 | COMPONENT | components/modules/behavior-module.tsx | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql); widened from .delete() to .update(), calibrated on journal-module | UPDATE beside an already-fixed DELETE filtered id alone: Filtered UPDATE/DELETE answered error:null and reported success. Added .eq('family_id', …) + .select('id'); refuses on an empty result; success toasts translated | Guard + full suite green (UTC and America/Los_Angeles) | Browser workflow not yet exercised. See finalaudit.md Q52. |
 | CONTROL-0EA2A8E63CFE | CONTROL | ErrorState at line 106 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BFE01DB67751 | CONTROL | Select at line 114 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0579FDE0D36B | CONTROL | Link at line 120 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5666,7 +5668,7 @@ PRODUCTION READY: NO
 | CONTROL-9C08DAF75566 | CONTROL | button at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-47B75A3C542E | CONTROL | Link at line 311 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8C88578F89DD | CONTROL | button at line 312 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | ai_conversations delete/rename (0255) dropped the row from the list while it stayed in the table. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-DC7016178372 | CONTROL | button at line 410 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-46597CC81E90 | CONTROL | button at line 460 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-344F7CC5EC3F | CONTROL | button at line 511 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5734,7 +5736,7 @@ PRODUCTION READY: NO
 | CONTROL-EA5ED8F4B5D3 | CONTROL | Link at line 45 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BA26B713234F | CONTROL | Link at line 52 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5119A02B3D21 | CONTROL | SaveButton at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-BF4ECBD166B7 | COMPONENT | components/i18n/locale-provider.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-BF4ECBD166B7 | COMPONENT | components/i18n/locale-provider.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | COMPONENT-F9B18D77DEBF | COMPONENT | components/i18n/language-picker.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D2E3A2DF3EEF | CONTROL | button at line 111 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A95F42458C5F | CONTROL | button at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5849,7 +5851,7 @@ PRODUCTION READY: NO
 | CONTROL-370244CE0CDA | CONTROL | input at line 251 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FB0AE2A684EA | CONTROL | select at line 252 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1354EE23D1C0 | CONTROL | Button at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-5844AA6DF59D | COMPONENT | components/family/driving-safety-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-5844AA6DF59D | COMPONENT | components/family/driving-safety-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | driving_trips delete (0319) reported 'Deleted' over a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-DDE736C56022 | CONTROL | Button at line 47 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EBC8401E9456 | CONTROL | ErrorState at line 56 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-D9B6E844A92A | CONTROL | Button at line 58 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -6126,7 +6128,7 @@ PRODUCTION READY: NO
 | CONTROL-D929F5AF67AA | CONTROL | Input at line 118 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CE96F40074BF | CONTROL | Button at line 120 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CA4AF548B634 | CONTROL | Button at line 121 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-63D5990B29C8 | COMPONENT | components/finance/bills-view.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-63D5990B29C8 | COMPONENT | components/finance/bills-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | bills update/delete relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
 | CONTROL-22B98F6D8298 | CONTROL | button at line 87 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6FBDD3F59083 | CONTROL | button at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDB4DC854DC7 | CONTROL | button at line 92 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8758,7 +8760,7 @@ PRODUCTION READY: NO
 | API-E1BCA929F06B | API | POST /api/ai/assist | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-E984841AFEA4 | API | POST /api/ai/auto/accident | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-B817F4FD65DE | API | POST /api/ai/briefing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-E8DE1DE9AFA2 | API | POST /api/ai/chat | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| API-E8DE1DE9AFA2 | API | POST /api/ai/chat | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) | Conversation title update filtered id alone; Added .eq('family_id', …) + .select('id'); refuses on an empty result (logs on no-op) | Guard green | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | API-1DF9D2390329 | API | POST /api/ai/chef | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-754EB564B7B5 | API | POST /api/ai/flyer | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-4332A474F9DA | API | POST /api/ai/gift | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9079,9 +9081,9 @@ PRODUCTION READY: NO
 | ACTION-CD9A69A3E83C | ACTION | createChoreAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-868185556319 | ACTION | applyConciergePlanAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-A29C7E5C3F79 | ACTION | planAcceptedAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-AAF8BA72C390 | ACTION | executeQueuedRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-BB7CCC59F13B | ACTION | dismissQueuedRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-A6BF2165755D | ACTION | setConciergeAutopilotAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-AAF8BA72C390 | ACTION | executeQueuedRunAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | A filtered 'executed' left the run pending (plan could apply twice); approval stamp logged nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-BB7CCC59F13B | ACTION | dismissQueuedRunAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Dismiss and decline stamp reported success over nothing; stub gained the filtered-write case. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-A6BF2165755D | ACTION | setConciergeAutopilotAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Autopilot dial reported moved when it had not. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-FBCA9698198B | ACTION | askBubalyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-BD59E51EF937 | ACTION | answerRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D629A3638EB2 | ACTION | controlRunAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9150,9 +9152,9 @@ PRODUCTION READY: NO
 | ACTION-F4D4116828A1 | ACTION | setLifeEventStatusAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D51DF328F97F | ACTION | updateMyLocation | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-7EC0FD404B79 | ACTION | setLocationSharing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-DCF9C14AD2D4 | ACTION | savePlace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-9A1F079806FF | ACTION | deletePlace | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-16D000B65EB5 | ACTION | setGeofenceEnabled | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-DCF9C14AD2D4 | ACTION | savePlace | 🔄 IN PROGRESS | Medium | tests/a-geofence-that-reports-armed-is-armed.test.ts | Stale-id edit reported saved; now reads back | Guard green | Browser workflow not yet exercised. See finalaudit.md Q51. |
+| ACTION-9A1F079806FF | ACTION | deletePlace | 🔄 IN PROGRESS | Medium | tests/a-geofence-that-reports-armed-is-armed.test.ts | 'Place deleted' over a place still on the map; now reads back | Guard green | Browser workflow not yet exercised. See finalaudit.md Q51. |
+| ACTION-16D000B65EB5 | ACTION | setGeofenceEnabled | 🔄 IN PROGRESS | High | tests/a-geofence-that-reports-armed-is-armed.test.ts (8), calibrated by removing the guard | Geofence switch reported ARMED over a row nothing changed; now reads back and refuses | Guard + full suite 17,116/17,119 (3 are container Node 22) | Browser workflow not yet exercised. See finalaudit.md Q51. |
 | ACTION-1A67F7331B29 | ACTION | planMealAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-91AEADE5CC7B | ACTION | removeMealPlanAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2F9CFA288C8F | ACTION | prepareImport | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9242,9 +9244,9 @@ PRODUCTION READY: NO
 | ACTION-B5CAAFBB69C4 | ACTION | deletePolicyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-604D3EBDBFDA | ACTION | acceptPolicySuggestionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2BF1B4138494 | ACTION | setPermissionGrantAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-99F36D6FBAE2 | ACTION | createDelegationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-99F36D6FBAE2 | ACTION | createDelegationAction | 🔄 IN PROGRESS | High | tests/a-delegation-names-two-members-of-this-family.test.ts | Validates both member ids belong to the caller's family | Green after merge | Browser workflow not yet exercised. See finalaudit.md Q43/Q48. |
 | ACTION-A24B5453EA57 | ACTION | createSharingPresetAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-1318E1F05B65 | ACTION | revokeDelegationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-1318E1F05B65 | ACTION | revokeDelegationAction | 🔄 IN PROGRESS | High | tests/a-delegation-names-two-members-of-this-family.test.ts + a-revoke-that-revoked-nothing.test.ts | Revoke reads back via changedNothing(rows); assertion now pins the property, calibrated | Green | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | ACTION-72DB6B2CE780 | ACTION | decideApprovalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E665CDB33E65 | ACTION | activateEmergencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-EBAF0F9342CC | ACTION | endEmergencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9254,10 +9256,10 @@ PRODUCTION READY: NO
 | ACTION-9D92F62AA5BE | ACTION | moveAssignmentAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D91AB2BF25EC | ACTION | saveWorkloadSnapshotAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-406DD2DE86E3 | ACTION | createCurrencyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-0DBCDF276549 | ACTION | setCurrencyActiveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-0DBCDF276549 | ACTION | setCurrencyActiveAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Currency toggle reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-15AC56471580 | ACTION | awardTokensAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-0DF41D871E0C | ACTION | createRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-8A0C9AFBCF11 | ACTION | setRewardActiveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-8A0C9AFBCF11 | ACTION | setRewardActiveAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Reward toggle reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-82980A9A8005 | ACTION | requestRedemptionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-A8F6037143A6 | ACTION | decideRedemptionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-C2C30832A31E | ACTION | createChildLoginAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9273,8 +9275,8 @@ PRODUCTION READY: NO
 | ACTION-763D6D1492D1 | ACTION | updateContextAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-CF3838F9EA45 | ACTION | assignGuardianPhoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-6F7B023FEF84 | ACTION | createRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-80E877267F7C | ACTION | toggleRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-E6F7B4AF6000 | ACTION | deleteRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-80E877267F7C | ACTION | toggleRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Guardian screening rule reported enabled over an unchanged row. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-E6F7B4AF6000 | ACTION | deleteRuleAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Guardian rule delete reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-B50C4C6F0114 | ACTION | generateGuardianSuggestionsAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-A8FDA0AD1999 | ACTION | reviewSuggestionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-BDB3D8713C85 | ACTION | acknowledgeEscalationAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9282,7 +9284,7 @@ PRODUCTION READY: NO
 | ACTION-17DECF058BEA | ACTION | toggleSaveAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-F7EB4A9FE45E | ACTION | toggleFollowAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-D1655FF5DACD | ACTION | upsertStoreAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-A21306398A80 | ACTION | setOrderStatusAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-A21306398A80 | ACTION | setOrderStatusAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Order status update filtered by id alone (0327 narrows it); English lifecycle error translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-AADABAD791D2 | ACTION | leaveReviewAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AE9AAC2E62DB | ACTION | makeOfferAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-B47AF4698D24 | ACTION | createSavedSearchAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9325,21 +9327,21 @@ PRODUCTION READY: NO
 | ACTION-61EE5A6DD0D6 | ACTION | activateFamilyWalletAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-148C47BB8A22 | ACTION | addFundsAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-DD0EECD42C71 | ACTION | payChoreRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-2E83328F1CA0 | ACTION | saveAllowanceRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-432EA8AE6D79 | ACTION | toggleAllowanceRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-14F1D3BFB97A | ACTION | runDueAllowancesAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-2E83328F1CA0 | ACTION | saveAllowanceRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Stale-id allowance edit reported saved. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-432EA8AE6D79 | ACTION | toggleAllowanceRuleAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Reported 'paused' over a rule the nightly cron would still pay. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-14F1D3BFB97A | ACTION | runDueAllowancesAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Schedule rollback after a failed credit logged nothing when filtered — child skipped a whole period. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-A465DB1C3703 | ACTION | createGoalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-9BA4E71ADEE9 | ACTION | fundGoalAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-4EFA99FD3EF9 | ACTION | createGiftLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-0F463285844F | ACTION | approveGiftAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-352006673597 | ACTION | dismissGiftAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-CF6E77C74E5C | ACTION | saveBabysitterAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-FADA7B86237A | ACTION | archiveBabysitterAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-352006673597 | ACTION | dismissGiftAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Gift dismiss reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-CF6E77C74E5C | ACTION | saveBabysitterAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Babysitter edit reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
+| ACTION-FADA7B86237A | ACTION | archiveBabysitterAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Babysitter archive reported success over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-B0B83B2B1B5A | ACTION | recordBabysitterPaymentAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-34A3D968CD47 | ACTION | saveWalletRuleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-08F2999FFC3A | ACTION | claimPayHandleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AB41E531B9BB | ACTION | releasePayHandleAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-ABA436EAC1FB | ACTION | requestSpendAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-ABA436EAC1FB | ACTION | requestSpendAction | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Approval rollback could leave a held debit with no approval row, silently. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-3DB849535F18 | ACTION | decideSpendRequestAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-8F2CA578152D | ACTION | sendMoneyAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-8AA29BB74838 | ACTION | requestAllowanceAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9349,7 +9351,7 @@ PRODUCTION READY: NO
 | ACTION-7CA10A51A8B8 | ACTION | addPassAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-5D3801997423 | ACTION | addRewardAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-2C2B60DC5F0C | ACTION | addTransactionAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-ABA3017332BE | ACTION | deleteWalletRowAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-ABA3017332BE | ACTION | deleteWalletRowAction | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | All five wallet-row delete branches reported ok over nothing. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-068676844C8C | ACTION | placeInvestOrderAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-142B5EB6AC00 | ACTION | decideInvestOrderAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E6AC69DF9AEB | ACTION | resolveLandingPathAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9374,7 +9376,7 @@ PRODUCTION READY: NO
 | ACTION-F4CCD6A8E67A | ACTION | updateFamilyRecord | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-AAA33C6778C3 | ACTION | deleteFamilyRecord | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-51DBA0529315 | ACTION | setRecommendationStatus | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-8BB383A8C479 | ACTION | resolveAutomationRun | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-8BB383A8C479 | ACTION | resolveAutomationRun | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Wrote an audit entry for an approval that never happened; English refusal translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | ACTION-BA359E31039E | ACTION | setLocale | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-E73A5AEDBAE3 | ACTION | editStepAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-B3DA1B61B51E | SERVICE | recordActivity | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9864,7 +9866,7 @@ PRODUCTION READY: NO
 | LIBRARY-FF6861778C00 | LIBRARY | lib/emails/weekly-digest.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-11B4F5E5BAD6 | LIBRARY | lib/emails/welcome.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-70C7C2A5B87B | LIBRARY | lib/experience/scorecard.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-D33133431A4E | LIBRARY | lib/family/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-D33133431A4E | LIBRARY | lib/family/actions.ts | 🔄 IN PROGRESS | High | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — extended to app/ and lib/ on RLS-bound clients; service client decided at the call site | Wrote an audit entry for an approval that never happened; English refusal translated. Now reads back and refuses (or logs, where the path only logs) | Guard calibrated both ways; full suite 17,120/17,123 | Browser workflow not yet exercised. See finalaudit.md Q54. |
 | LIBRARY-42C221ED6F2F | LIBRARY | lib/family/conflicts.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-99BF2242E5AD | LIBRARY | lib/family/knowledge.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-A1B57B7549A4 | LIBRARY | lib/family/memory-search.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9921,7 +9923,7 @@ PRODUCTION READY: NO
 | LIBRARY-FA44063B4059 | LIBRARY | lib/habits/streaks.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-620DB760DA73 | LIBRARY | lib/health/immunizations.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-187AA1C6C93D | LIBRARY | lib/health/probe.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-5A70B5537E09 | LIBRARY | lib/health/status.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-5A70B5537E09 | LIBRARY | lib/health/status.ts | 🔄 IN PROGRESS | Medium | tests/health-feature-secrets.test.ts | FEATURE_ENV named retired FCM_SERVER_KEY; now FCM_PRIVATE_KEY + APNS_PRIVATE_KEY (what nativePushConfigured gates on) | Calibrated | Browser workflow not yet exercised. See finalaudit.md Q48. |
 | LIBRARY-973DBF62D93C | LIBRARY | lib/health/visits.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E459ED006D8E | LIBRARY | lib/home/asset-detail.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D45563C86CF9 | LIBRARY | lib/home/binder.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9953,9 +9955,9 @@ PRODUCTION READY: NO
 | LIBRARY-033E642E294B | LIBRARY | lib/hooks/use-voice.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AFCB1961A43A | LIBRARY | lib/i18n/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-5DC18A142D4C | LIBRARY | lib/i18n/locales.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-BAF7541BD437 | LIBRARY | lib/i18n/messages.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-BAF7541BD437 | LIBRARY | lib/i18n/messages.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | LIBRARY-F7D16F3110BC | LIBRARY | lib/i18n/resolve.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-E27E3A6FD027 | LIBRARY | lib/i18n/server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-E27E3A6FD027 | LIBRARY | lib/i18n/server.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts | usePlural / getPlurals / server pluralize with English fallback on the server only | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
 | LIBRARY-684023661343 | LIBRARY | lib/inbox/server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-CA5E4E612A8C | LIBRARY | lib/inbox/unify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-5BA91163A2C8 | LIBRARY | lib/independence/progression.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13530,7 +13532,7 @@ PRODUCTION READY: NO
 | SERVICE-0A39AA1471A1 | SERVICE | useAuthenticatedCacheScope | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-5B5CFD08F083 | SERVICE | isAuthenticatedCacheScopeCurrent | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-5B1CF3E6134B | SERVICE | AuthenticatedCacheBoundary | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
-| LIBRARY-4FE1D528B565 | LIBRARY | lib/marketing/push-audience.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| LIBRARY-4FE1D528B565 | LIBRARY | lib/marketing/push-audience.ts | 🔄 IN PROGRESS | High | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. · tests/an-in-filter-travels-in-the-url.test.ts (bound-based), marketing-push-audience-execution | .in() id list chunked at 200 = the 8 KB request-line limit itself, and an incomplete read refuses the whole campaign; split ID_CHUNK = 100 | Calibrated against the live file | Incremental discovery after 9d238e0c; retained permanent identity convention. · Browser workflow not yet exercised. See finalaudit.md Q48. |
 | SERVICE-856AA46CA62C | SERVICE | loadPushCampaignAudience | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-1068DA66AB3F | SUPPORT | tests/app-provider-access-context.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F3E10DEDDB36 | SUPPORT | tests/cache-partition.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
@@ -13946,7 +13948,7 @@ PRODUCTION READY: NO
 | LIBRARY-EC0B659A2F4D | LIBRARY | lib/guardian/sms-notification.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-5C936E0DCDB1 | SERVICE | guardianSmsScope | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-5CF6218528EA | SERVICE | notifyGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
-| LIBRARY-F4955F439221 | LIBRARY | lib/guardian/sms-processing.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-F4955F439221 | LIBRARY | lib/guardian/sms-processing.ts | 🔄 IN PROGRESS | Medium | tests/a-guardian-number-lookup-failure-is-not-an-unknown-number.test.ts (SMS path) | Converted to generated guardian table types (no cast layer); lookup refusal pinned by function boundary | Calibrated after a first draft passed with the fix removed | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. · Browser workflow not yet exercised. See finalaudit.md Q48. |
 | SERVICE-7640CB35DB7E | SERVICE | receiveGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-33AC44AB7C66 | SERVICE | resumeGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SERVICE-1684F92B9582 | SERVICE | guardianSmsReceiptId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
@@ -14162,12 +14164,90 @@ PRODUCTION READY: NO
 | SUPPORT-9997915A40CF | SUPPORT | tests/auth-pkce-initiation.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Initiation source discovery at tree 453d5a23; tests/auth-pkce-initiation.test.ts. Exact hashes/exports in discovery/auth-initiation-ownership-inventory.json. Focused workflow proof does not pass this separate structural obligation. |
 | SUPPORT-77AD4E25F193 | SUPPORT | tests/e2e/oauth-initiation.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Initiation source discovery at tree 453d5a23; tests/e2e/oauth-initiation.spec.ts. Exact hashes/exports in discovery/auth-initiation-ownership-inventory.json. Focused workflow proof does not pass this separate structural obligation. |
 | SUPPORT-3C97E0C70D8B | SUPPORT | tests/e2e/auth-initiation-order.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Cross-flow initiation ordering fixture at application/test tree bf22aca8; exact hashes/mappings in discovery/auth-initiation-ownership-inventory.json. Eleven scoped cases pass; structural and combined hosted obligations remain separate. |
-
 | SUPPORT-B98CAFA44FB9 | SUPPORT | tests/e2e/phone-auth-boundaries.spec.ts | 🔄 IN PROGRESS | Medium | 34 actual component/SDK regressions | Neutral settlement barrier; original RED evidence retained | 34/34 pass; scoped types/lint/whitespace pass | Response, cookie write and disposal timing; provider authority and storage controls. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
-
 | SERVICE-110F74726994 | SERVICE | verifySmsWithOwnedSession | 🔄 IN PROGRESS | High | Installed SDK verification, session readback and ownership interleavings | Pre-await reservation; isolated writes; stable renewal; post-disposal recheck | 34 focused cases pass; broader workflow remains open | lib/auth/password-client.ts; defaults for password/child/callback stay unchanged. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
-
 | SUPPORT-788038831C82 | SUPPORT | tests/e2e/phone-auth-http.spec.ts | 🔄 IN PROGRESS | Medium | Three real Next/GoTrue cases implemented and discovered | Disposable reserved-number SMS test configuration | Scoped types/lint, discovery3 and workflow66 pass; runtime pending | Wrong/correct OTP, persistence/logout and held-response ordering. No delivery/expiry/one-time proof from reusable test OTP. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
+| LAYOUT-CE2AB8EAF3D8 | LAYOUT | app/gift/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-8E78FBF578E0 | LAYOUT | app/join/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-F63814E98739 | LAYOUT | app/offline/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-36F8A8318CE4 | LAYOUT | app/pay/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LAYOUT-FD69CD4A16D3 | LAYOUT | app/reviews/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| COMPONENT-7A01D1C61B3F | COMPONENT | components/i18n/scoped-locale-provider.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| COMPONENT-75DCE1996F82 | COMPONENT | components/ui/widget-boundary.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-836BF6D8DBFF | LIBRARY | lib/a11y/use-dialog-behavior.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A93F18D7DBD6 | LIBRARY | lib/ai/insight-features.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-DD7BD07EAD12 | LIBRARY | lib/assistant/alexa-verify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C8F578A84570 | LIBRARY | lib/auth/route-access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-5B81A0243366 | LIBRARY | lib/contact-center/sms-ingress.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C0C10BED32E4 | LIBRARY | lib/guardian/voicemail-intake.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F3EC6BD0526F | LIBRARY | lib/hooks/use-dismiss-on-escape.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3FAA194A7B58 | LIBRARY | lib/i18n/scopes.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-4B3EEE9682FD | LIBRARY | lib/i18n/translate.ts | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (12) | pluralCategory / pluralize on Intl.PluralRules; doc comment corrected after its test caught a false claim | Green | Discovered 2026-09-26: source file present with no ledger row (see Q56). Browser workflow not yet exercised. See Q50. |
+| LIBRARY-3A02F3B87E41 | LIBRARY | lib/library/ingest.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8B1AE039959A | LIBRARY | lib/library/progress.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B5E2121F928C | LIBRARY | lib/marketing/content-revisions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-74914FE19010 | LIBRARY | lib/marketing/page-types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AAC2FC27D374 | LIBRARY | lib/marketing/sitemap-urls.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-974EE3C3E5AC | LIBRARY | lib/server/app-url.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F20B6F450427 | LIBRARY | lib/server/feature-entitlement.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D0ECED67194D | LIBRARY | lib/server/list-all-auth-users.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-64F69170410E | LIBRARY | lib/server/public-media-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FDF0D5E2DE2D | LIBRARY | lib/server/secret-equals.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-7AD57457138A | LIBRARY | lib/services/activity/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-73C1D11D203C | LIBRARY | lib/services/ai-settings/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-59C58E2A401A | LIBRARY | lib/services/approvals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-57698E9F7703 | LIBRARY | lib/services/autopilot/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AB5A40BEBDAA | LIBRARY | lib/services/calendar/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AE6D3D550D51 | LIBRARY | lib/services/descriptions-server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-BA5BD32FC275 | LIBRARY | lib/services/descriptions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-31C306D42FA6 | LIBRARY | lib/services/documents/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0B1AC6894983 | LIBRARY | lib/services/family/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-454350D19703 | LIBRARY | lib/services/finances/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3936B990593A | LIBRARY | lib/services/finances/transaction-operation.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A5ACCD4F0F25 | LIBRARY | lib/services/goals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-352743A4EC34 | LIBRARY | lib/services/groceries/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-69E42B35E82C | LIBRARY | lib/services/home/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D61C6C77608B | LIBRARY | lib/services/idempotency.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A4379DAA6AEB | LIBRARY | lib/services/inbox/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-6E0E5DD8F873 | LIBRARY | lib/services/inventory/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0A7DCD820DBE | LIBRARY | lib/services/meals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-312898DD7ABA | LIBRARY | lib/services/memory/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-3B0C683E3B9D | LIBRARY | lib/services/messages/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-D261897504AE | LIBRARY | lib/services/moving/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-438A78C3BEA2 | LIBRARY | lib/services/notes/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-DD1CEA81A9DE | LIBRARY | lib/services/notifications/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-500E0D9010EA | LIBRARY | lib/services/onboarding-calendar/access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-4C9113CB65E5 | LIBRARY | lib/services/onboarding-calendar/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-F48A98DDE26B | LIBRARY | lib/services/onboarding-calendar/oauth.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B94A955A94EB | LIBRARY | lib/services/onboarding-calendar/setup.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-201844DF7085 | LIBRARY | lib/services/paperwork/capture.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8F7B36CA960B | LIBRARY | lib/services/paperwork/email-attachments.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-52370ED057AB | LIBRARY | lib/services/paperwork/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-5679B6D93747 | LIBRARY | lib/services/paperwork/link-access.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-8969C3A23C94 | LIBRARY | lib/services/paperwork/link.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-1560FAABDD8D | LIBRARY | lib/services/providers/compare.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C6BF887C1462 | LIBRARY | lib/services/purchases/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-63B97C81C212 | LIBRARY | lib/services/purchases/private-result.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-73198D60FBDF | LIBRARY | lib/services/reminders/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-1B3D263A335A | LIBRARY | lib/services/routines/anchors.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-12410F65E196 | LIBRARY | lib/services/routines/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-AC09E1AEF57C | LIBRARY | lib/services/routines/schedule.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-09158EAFEF04 | LIBRARY | lib/services/school/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-9E746389A642 | LIBRARY | lib/services/scope.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C1552DEE610F | LIBRARY | lib/services/search/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-85320EB392F3 | LIBRARY | lib/services/sports/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-9EA9189A612B | LIBRARY | lib/services/sync/policy.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-746FB643C7C2 | LIBRARY | lib/services/tasks/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0C19997C0CD6 | LIBRARY | lib/services/trips/confirmation-import.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-A1D31B2FD0C0 | LIBRARY | lib/services/trips/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-6C07E8D25C74 | LIBRARY | lib/services/types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-B5EE00A4FA0A | LIBRARY | lib/storage/object-name.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-94AB0D35DA7D | LIBRARY | lib/supabase/escape-like.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-2C48109D7D67 | LIBRARY | lib/supabase/read-all.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0056DCF9E763 | LIBRARY | lib/sync/audit.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-CC76B9A33321 | LIBRARY | lib/time/zoned.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-C57404E4E963 | LIBRARY | lib/ui/gallery.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 
 ## Inventory and evidence rules
 
@@ -25996,64 +26076,6 @@ with one new string added to all seven populated catalogues. The new guard is
 verified load-bearing in both directions — removing one `.select('id')` turns it
 red with file, line, table and operation.
 
-# Final Regression
-
-Current request-admission witness verification uses frozen application tree ee0038989221edfaf148150f6e1dc28301f7f6bf. All six changed production files pass final local gates. A later actual HTTP/Mailpit fixture and disposable-only CI redirect configuration are test infrastructure; they have not executed in hosted CI. Final test/infrastructure tree is d0adca170e65ca15ce48d678ce1d6ac1b2273ef6; provenance is in [the admission witness cycle](docs/final-audit/auth-callback-admission-witness-cycle.md). All previous 14,006 IDs/statuses remain intact; twelve structural discovery additions bring the total to 14,018.
-
-## Build
-Status: ✅ PASS — frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log. This is not live provider workflow evidence.
-
-## Type Check
-Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-types-20260919.log. Later HTTP-fixture checks are recorded separately in the cycle document.
-
-## Lint
-Status: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
-
-## Automated Tests
-Status: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
-
-## Authentication
-Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressions pass locally. Initiation ownership, real successful hosted recipient/PKCE recovery, production Auth configuration and physical-device reopening remain unverified. Comparison witnesses carry no authentication authority, MAC or TTL.
-
-## Authorization
-Status: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
-
-## Core User Journeys
-Status: 🔄 IN PROGRESS — full feature and deployed persistence verification pending.
-
-## APIs
-Status: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
-
-## Database
-Status: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
-
-## Integrations
-Status: 🔄 IN PROGRESS — real provider delivery and production configuration remain unverified.
-
-## Mobile / Responsive
-Status: 🔄 IN PROGRESS — full supported-device workflow verification pending.
-
-## Accessibility
-Status: 🔄 IN PROGRESS — complete accessibility verification pending.
-
-## Security
-Status: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
-
-## Performance
-Status: 🔄 IN PROGRESS — complete performance verification pending.
-
-## Known Blockers
-Production migration ledger and service/device configuration remain external verification obligations. No new BLOCKED status is counted without a completed dependency investigation.
-
-## Remaining Issues
-Open permanent records and incorporated upstream findings remain listed above. All previous 13,985 IDs/statuses are preserved; 21 distinct discovery additions bring the total to 14,006. The second complete regression follows individual feature verification.
-
-## Production Readiness
-NO
-
-## Final Sign-Off
-Pending
-
 # Pass P — the specialist workers' backlog, re-checked rather than taken on report
 
 Six commits on `claude/bubaly-repo-connect-etzqg7` (PR #548), working the OPEN
@@ -29439,3 +29461,168 @@ which is what `GATES` serving both rules requires.
 ungated GET reading `medications` is named by path, and gating one of the four
 public routes fails the file until its entry is removed. Lint exit 0, typecheck
 exit 0.
+
+---
+
+## Q56 — Reconciling the ledger with the work, against the master brief
+
+The owner re-issued the master brief this file is built on (the "Final Production
+Audit" prompt: permanent IDs for every feature, a status per ID, counts kept
+accurate, a Final Regression block at the bottom). Read against it, Q48–Q55 had a
+gap: they were appended as narrative, and **the ledger rows those fixes touched
+still said ⬜ NOT STARTED**. The control document described the application less
+accurately than the commits did. This section closes that.
+
+### Sixty-one rows moved, and none of them to PASS
+
+Each file or server action changed by a Q48–Q55 fix was resolved to its ledger
+row — components and libraries by path, server actions by function name, API
+routes by method and URL — and moved ⬜ → 🔄 **only if it was still ⬜**, so no row
+owned by another cycle was touched. Every moved row records its severity, the
+guard that verifies it, the fix, the retest and the Q section.
+
+**None is marked 🛠 FIXED + PASS.** The brief is explicit: *"A feature is only
+COMPLETE when its full user workflow has been verified"* and *"Never mark
+something PASS because a fix merely looks correct."* These fixes are verified by
+calibrated guards and the unit suite, and by a replayed database for the RLS
+half, but none has been exercised end to end in a browser. 🔄 with the evidence
+written down is the honest state.
+
+Two mapping hazards were checked, not assumed:
+
+- **`deleteRuleAction` exists twice** — Guardian's and the marketing
+  personalisation admin's. The first match was the wrong one; the Guardian row is
+  the one adjacent to its own `toggleRuleAction`.
+- **A diff-hunk walk attributed a change to `setLocationSharing`** because a
+  helper was inserted above `savePlace`. It was not changed and was not moved.
+
+### Eighty-one source files had no ID at all
+
+The brief: *"If functionality exists anywhere in the codebase, determine whether
+it belongs in the audit… Every feature or service must receive a permanent ID."*
+Measured by path against `lib/`, `components/` and the layouts — the three areas
+the ledger keys by file — **74 libraries, 2 components and 5 layouts** had no row.
+Most arrived after the ledger was generated on 2026-09-12 (the Guardian SMS
+modules from main among them). They are added as ⬜ NOT STARTED with IDs in the
+ledger's own scheme, `AREA-` + the first 12 hex digits of sha256(path), checked
+for collisions before writing.
+
+Pages and API routes showed 392 and 140 "unrowed" by the same measure, and those
+numbers are **not** gaps: the ledger keys them by URL (`ROUTE | /admin/…`,
+`API | POST /api/…`), so path matching cannot find them. They are recorded here
+so the next pass does not mistake the matcher for a finding.
+
+### Three rows were outside the table
+
+Three rows appended after the summary table had blank lines between them, so they
+rendered as loose text rather than as ledger rows. They are folded back in.
+
+### The header counts were carried forward, not recomputed
+
+The header said 14,038 items and 192 in progress. Recomputed by distinct ID, the
+table held 14,015 with a status (13,842 / 169 / 1 / 3). The difference is **15
+in-progress IDs that appear twice** — a summary row plus a row in a second table —
+which a row count adds up and a distinct count does not. My first reconciliation
+made the same mistake (it reported 184) and the arithmetic caught it: 184 + 61 + 1
+should have been the new total and was 15 too high.
+
+Now: **14,096 = 13,861 not started + 231 in progress + 1 fixed + pass + 3 fail**.
+Completion by the brief's formula is 0.01%, and that number is correct rather than
+alarming: the brief counts only PASS and FIXED + PASS, and it is right to.
+
+### Final Regression, updated and moved
+
+The block recorded 2026-09-19 evidence — 16,543 tests, 330 migrations, 38 probes —
+and sat at line 26,079, with 27 passes appended after it. Its statuses now lead with
+evidence verified at this head (build, types, lint within its budget, 17,123 of
+17,126 tests, 345 migrations, 54/54 probes run twice), keep the previous cycle's
+evidence after "Earlier:", and the block is at the end of the file. New passes go
+above its heading.
+
+### On the brief's "use as many sub-agents as possible"
+
+Not taken literally, on purpose. At least one other bot writes this file and this
+branch. Every additional writer multiplies the chance of a conflicted
+`finalaudit.md` — and a conflicted PR produces no CI run at all, which is exactly
+what silenced this branch for 31 check-ins. Read-only discovery can safely fan out;
+the ledger has one writer per session.
+
+# Final Regression
+
+Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
+
+## Build
+Status: ✅ PASS — `npm run build` exit 0 locally on 2026-09-26 with CI's own env (NODE_OPTIONS=4096, dummy Supabase URL/keys); hosted `Typecheck · Lint · Test · Build` passed on 6e0d8477 and every check suite reported complete-and-green through d3d2a6a3. First-load JS shared by all pages 103 kB.
+
+Earlier: ✅ PASS — frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log. This is not live provider workflow evidence.
+
+## Type Check
+Status: ✅ PASS — `npm run typecheck` (tsc --noEmit incl. .next/types after the build) exit 0 on 2026-09-26.
+
+Earlier: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-types-20260919.log. Later HTTP-fixture checks are recorded separately in the cycle document.
+
+## Lint
+Status: ✅ PASS — `npm run lint` exit 0 with 10 warnings against its `--max-warnings=12` budget. Correction recorded in Q49: an earlier check in this session counted `Error:` lines instead of reading the exit code and missed that the merged tree carried 14; two real keyboard dead ends were fixed rather than the budget raised.
+
+Earlier: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
+
+## Automated Tests
+Status: 🔄 IN PROGRESS — 17,123 of 17,126 pass locally under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
+
+Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
+
+## Authentication
+Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressions pass locally. Initiation ownership, real successful hosted recipient/PKCE recovery, production Auth configuration and physical-device reopening remain unverified. Comparison witnesses carry no authentication authority, MAC or TTL.
+
+## Authorization
+Status: 🔄 IN PROGRESS — 55 filtered-write sites fixed across client and server (Q52–Q54); the gated-table list is now measured from `pg_policies` (92 tables) by docs/audit/gated-write-tables-check.sql rather than hand-written (19); data-reading GET routes are now gated or named public with a reason (Q55). Complete deployed role/RLS workflow verification remains open.
+
+Earlier: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
+
+## Core User Journeys
+Status: 🔄 IN PROGRESS — full feature and deployed persistence verification pending.
+
+## APIs
+Status: 🔄 IN PROGRESS — all 146 routes now fall under the gate rule (writes since Q45; the 56 GETs since Q55, which also added the missing `hasCronAuthorization` gate); Supabase query audit resolves 491 tables / 91 functions / 146 routes. Per-endpoint workflow tests remain open.
+
+Earlier: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
+
+## Database
+Status: 🔄 IN PROGRESS — 345 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures; 54/54 boundary probes pass, run twice, including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
+
+Earlier: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
+
+## Integrations
+Status: 🔄 IN PROGRESS — real provider delivery and production configuration remain unverified.
+
+## Mobile / Responsive
+Status: 🔄 IN PROGRESS — full supported-device workflow verification pending.
+
+## Accessibility
+Status: 🔄 IN PROGRESS — unattached-label ratchet held at 16 (three label-less button groups wired, Q48); document upload drop zone made keyboard-reachable and a menu backdrop given an Escape path (Q49). Complete verification pending.
+
+Earlier: 🔄 IN PROGRESS — complete accessibility verification pending.
+
+## Security
+Status: 🔄 IN PROGRESS — the filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
+
+Earlier: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
+
+## Performance
+Status: 🔄 IN PROGRESS — complete performance verification pending.
+
+## Known Blockers
+External, not repository-side: (1) seven migrations (0318–0324) are committed but inert until an operator applies them to production — agents must not apply migrations to prod; (2) the production migration ledger (F5) cannot be verified from here; (3) real provider delivery (SMS, email, push, payments) needs production credentials; (4) physical-device and screen-reader verification need hardware. Each is investigated and documented; none is counted BLOCKED until its record is complete.
+
+Earlier: Production migration ledger and service/device configuration remain external verification obligations. No new BLOCKED status is counted without a completed dependency investigation.
+
+## Remaining Issues
+213 English suffix-plural sites behind a ratchet at 227 (the remainder compose sentences from counted fragments and need whole-sentence keys); 13,861 ledger items not started; E2E on the current head. 
+
+Earlier: Open permanent records and incorporated upstream findings remain listed above. All previous 13,985 IDs/statuses are preserved; 21 distinct discovery additions bring the total to 14,006. The second complete regression follows individual feature verification.
+
+## Production Readiness
+NO
+
+## Final Sign-Off
+Pending
