@@ -35434,6 +35434,12 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Seventeenth run, on `572a8bf1` (run 36255594733): 1,293 passed, 3 failed, 0 flaky
+in 8.0m**, covering `C1-S9-73`: the `/missions` review card, the new create
+form wrapper, and the money-timeline revert. Typecheck/Lint/Test/Build,
+Database and Mobile are green. Only the known `phone-auth-http` cases.
+`C1-S9-74` was held until it reported.
+
 **Sixteenth run, on `b7c4c2f9` (run 36254178211): 1,293 passed, 3 failed, 0 flaky
 in 9.1m**, covering `C1-S9-72`, with Typecheck/Lint/Test/Build, Database and
 Mobile green. Only the known `phone-auth-http` cases. `C1-S9-73` was held until
