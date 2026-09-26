@@ -14062,7 +14062,7 @@ PRODUCTION READY: NO
 | MAIN-F-C06 | UPSTREAM | F-C06: A CSS margin lived in the message catalogue (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3109). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | ✅ CLOSED (Pass C1-K) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | ✅ MITIGATED (boot guard 1fa0ac5b; see finding) | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | ◐ MOSTLY MITIGATED (16 root tests; `expo-router` advisory needs a device build) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D02 | UPSTREAM | F-D02: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D03 | UPSTREAM | F-D03: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D10 | UPSTREAM | F-D10: The lint config enables none of the rules that would have caught them (Medium — and the root cause) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3305). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -24432,7 +24432,7 @@ So the diagnosis gap this finding describes is closed; whether a misconfigured
 deploy should instead refuse to serve anything is a product decision, and it
 has already been made the other way on purpose.
 
-## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
+## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, mostly mitigated — see status)*
 
 `mobile/` is a real Expo app of 42 TypeScript files with **zero** test files.
 Its CI job has three steps: install, `npm run typecheck`, and
@@ -24442,6 +24442,34 @@ The web app is gated on 13,500 tests and a mobile device matrix; the mobile app
 is gated on "it compiles and its config parses". Separately, nothing audits the
 mobile dependency tree — `npm audit --package-lock-only` there reports 14
 moderate advisories, while the root tree reports zero of any severity.
+
+**Status (Pass C1-K): mostly mitigated; one part re-scoped, one part needs a
+build this sandbox cannot do.** Re-measured, and the headline was wrong:
+
+- *"Zero test files"* counted inside `mobile/` only. **Sixteen root test files**
+  exercise the mobile app and run in the root Vitest job CI already gates on:
+  every `*-core` module (`auth`, `chores`, `voice`, `assistant`, `theme`), plus
+  `format`, `chunked-storage`, `config`, `api`, auth session, family session,
+  sign-out, i18n, the owner render, and `mobile-imports-stay-bundleable`, which
+  keeps those imports Metro-resolvable. The core modules say so in their own
+  headers (*"Pure — unit-tested from the repo root"*). The mobile CI job also
+  runs `scripts/auth-storage-errors.test.mjs` via `pretypecheck`.
+- *No lint, no native build* — still true.
+- *14 moderate advisories* — confirmed, and there are exactly **two** root causes:
+  - `uuid <11.1.1`, via `xcode` → `@expo/config-plugins` / `@expo/cli`. This is
+    **build-time tooling** for native project generation; it does not ship to
+    a device.
+  - `decode-uri-component <=0.4.2`, via `query-string` → `expo-router`. This one
+    **is** runtime: a malformed percent-encoded deep link can drive exponential
+    decoding (GHSA-vcc3-ghjq-m6fr).
+
+  `npm audit` offers only `--force`, i.e. breaking major upgrades of Expo
+  tooling and the router. Section A of this document records that the mobile
+  app has never been *run*, only read — so a forced upgrade made here could be
+  typechecked but not built or launched, and a router upgrade that breaks
+  navigation would pass every check this sandbox can run. Left for someone who
+  can do an `expo prebuild` and a device run; `expo-router` is the one to
+  prioritise, since it is the only runtime path.
 
 ## Verified clean in Pass C
 
