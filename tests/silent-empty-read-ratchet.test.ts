@@ -47,7 +47,6 @@ const BASELINE = new Set<string>([
   'app/(app)/dashboard/billing/page.tsx',
   // concierge-calls page fixed under M26 honesty (wave 3b) — a failed read now
   // renders a retryable ErrorState instead of an empty queue; removed.
-  'app/(app)/dashboard/independence/page.tsx',
   // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
   // and render MiniError instead of a false-empty; removed from baseline.
   'app/(app)/dashboard/money-timeline/page.tsx',
@@ -59,7 +58,6 @@ const BASELINE = new Set<string>([
   // now throw on a real read error (retryable 5xx) instead of 404-ing a live page;
   // notFound() reserved for a genuinely missing row. Removed from baseline.
   'components/app/app-context.tsx',
-  'components/concierge/plan-write-backs.tsx',
   // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message
   // reads keep prior state on error instead of false-emptying; removed.
   // concierge-calls-module fixed under M26 honesty (wave 3b) — the realtime

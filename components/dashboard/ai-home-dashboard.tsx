@@ -415,10 +415,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     if (candidates.length > 0) {
       const today = todayStart.toISOString().slice(0, 10);
       // Which kinds has the family already dismissed today? Never re-surface those.
-      const { data: existingIns } = await supabase.from('daily_insights')
+      //
+      // If that read fails, nothing may be written: an empty `blocked` set would
+      // send every candidate to the upsert below, and its `status: 'active'`
+      // would overwrite the rows the family dismissed — bringing back, on a bad
+      // read, exactly what they asked not to see again today.
+      const { data: existingIns, error: existingError } = await supabase.from('daily_insights')
         .select('kind, status').eq('family_id', familyId).eq('as_of_date', today);
       const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
-      const toUpsert = candidates.filter((c) => !blocked.has(c.kind));
+      const toUpsert = existingError ? [] : candidates.filter((c) => !blocked.has(c.kind));
       if (toUpsert.length > 0) {
         const { error: insightError } = await settle(supabase.from('daily_insights').upsert(
           toUpsert.map((c) => ({

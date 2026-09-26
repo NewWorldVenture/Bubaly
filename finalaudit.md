@@ -4,15 +4,15 @@
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-26T16:55:00Z
 - Total Audit Items: 14173
-- Not Started: 13896
-- In Progress: 275
+- Not Started: 13888
+- In Progress: 283
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. See Q56–Q61.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. See Q56–Q62.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -305,7 +305,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0174 | UI | /dashboard/home/warranties | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0175 | UI | /dashboard/homework | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0176 | UI | /dashboard/inbox | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0177 | UI | /dashboard/independence | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0177 | UI | /dashboard/independence | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed milestones read renders ErrorState; only a missing table degrades to empty (the old try/catch could never fire) | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0178 | UI | /dashboard/insurance | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0179 | UI | /dashboard/intelligence | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0180 | UI | /dashboard/inventory | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -409,7 +409,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0278 | UI | /dashboard/vacations/[id]/lodging | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0279 | UI | /dashboard/vacations/[id]/overview | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0280 | UI | /dashboard/vacations/[id]/packing | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0281 | UI | /dashboard/vacations/[id] | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0281 | UI | /dashboard/vacations/[id] | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed trip read throws to the error boundary instead of answering 404 | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0282 | UI | /dashboard/vacations/[id]/travel | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0283 | UI | /dashboard/vacations/[id]/weather | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0284 | UI | /dashboard/vacations/calendar | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -437,7 +437,7 @@ PRODUCTION READY: NO
 | UI-ROUTE-0306 | UI | /guardian/contacts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0307 | UI | /guardian/history | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0308 | UI | /guardian | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0309 | UI | /guardian/rules | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0309 | UI | /guardian/rules | 🔄 IN PROGRESS | High | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed routing-rules read renders ErrorState instead of an empty rules editor that told a parent no screening rules existed | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | UI-ROUTE-0310 | UI | /guardian/settings | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0311 | UI | /home | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0312 | UI | /kids | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -535,7 +535,7 @@ PRODUCTION READY: NO
 | LAYOUT-FE5B3632A041 | LAYOUT | app/(app)/dashboard/home/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-71922492AE14 | LAYOUT | app/(app)/dashboard/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-A54EBC17D0B8 | LAYOUT | app/(app)/dashboard/social/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LAYOUT-2CD878730A6E | LAYOUT | app/(app)/dashboard/vacations/[id]/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LAYOUT-2CD878730A6E | LAYOUT | app/(app)/dashboard/vacations/[id]/layout.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed trip read throws to the error boundary instead of answering 404 | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | LAYOUT-08FAB6DF8C1C | LAYOUT | app/(app)/economy/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-D79E22FFD32D | LAYOUT | app/(app)/family/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LAYOUT-B1C20F0E7596 | LAYOUT | app/(app)/feedback/layout.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1212,7 +1212,7 @@ PRODUCTION READY: NO
 | CONTROL-487BF51E4F91 | CONTROL | input at line 296 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A4B0C60AC072 | CONTROL | Button at line 298 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E09FBF52DA1F | CONTROL | Button at line 299 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-9A7A795F78C3 | COMPONENT | components/vacations/trip-concierge.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-9A7A795F78C3 | COMPONENT | components/vacations/trip-concierge.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed history read no longer looks like "no conversation": sending is held and an alert shown, so a second conversation is not started beside the one that failed to load | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-A6673EB56BDB | CONTROL | Button at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F38E3FA2CD01 | CONTROL | button at line 86 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-544A09EB5DEF | CONTROL | form at line 102 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1785,7 +1785,7 @@ PRODUCTION READY: NO
 | CONTROL-3D25416C3068 | CONTROL | Input at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-688A91282E2B | CONTROL | Button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0FCD6D015B9D | CONTROL | Button at line 170 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-0DD4698F12E8 | COMPONENT | components/dashboard/ai-home-dashboard.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-0DD4698F12E8 | COMPONENT | components/dashboard/ai-home-dashboard.tsx | 🔄 IN PROGRESS | High | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed read of today's dismissed insights now writes nothing — before, the empty block list sent every candidate to an upsert that set dismissed insights back to active | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-2C356F2B2F90 | CONTROL | Link at line 88 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CCDE57DEA7F0 | CONTROL | Link at line 448 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C38AEA8AC9F1 | CONTROL | Link at line 461 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -1871,7 +1871,7 @@ PRODUCTION READY: NO
 | CONTROL-AADFE7449658 | CONTROL | Input at line 230 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5DC5E195C849 | CONTROL | Button at line 244 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CA7E52C8A713 | CONTROL | Button at line 245 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCB59C13F483 | COMPONENT | components/concierge/plan-write-backs.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DCB59C13F483 | COMPONENT | components/concierge/plan-write-backs.tsx | 🔄 IN PROGRESS | Medium | tests/a-read-that-drops-its-error-is-named.test.ts (every error-dropping read named with its harmless default, or failing; the six fixes pinned) | 2026-09-26 (Q62): a failed read of applied write-backs disables the buttons and says so, instead of offering to add the same event, reminder or task again | 2026-09-26 (Q62): guard passes; calibrated — undoing the insight fix fails it. tsc clean | DATA-002 read-failure class. See Q62. |
 | CONTROL-F2405784000F | CONTROL | button at line 67 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-1FF32555441D | COMPONENT | components/concierge/needs-you-actions.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-11241C3F90B8 | CONTROL | button at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12501,7 +12501,7 @@ PRODUCTION READY: NO
 | SUPPORT-424409F60A53 | SUPPORT | tests/concierge-digest.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-693E9182015C | SUPPORT | tests/concierge-front-desk-intent.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-D2329F4BB039 | SUPPORT | tests/concierge-read-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-9F77CF84C734 | SUPPORT | tests/concierge-run-write-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-9F77CF84C734 | SUPPORT | tests/concierge-run-write-boundary.test.ts | 🔄 IN PROGRESS | Low | Ran in a batch at baseline: the first case timed out at 5 s on a cold import, with and without Q62's changes | 2026-09-26 (Q62): the actions module is imported once in beforeAll (60 s budget); no assertion changed | 801/801 in the batch that failed before | Flake made robust, not skipped. See Q62. |
 | SUPPORT-784DC33EBD14 | SUPPORT | tests/connections-providers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-D409053801CF | SUPPORT | tests/connections-ui-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-8E0BDD12EDE2 | SUPPORT | tests/consent-ui.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13465,7 +13465,7 @@ PRODUCTION READY: NO
 | SERVICE-FF9C62744FCD | SERVICE | nativePushConfigured | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-D6F2AF0CEBFB | SERVICE | sendNativePush | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-003 | UI | Family display calendar and availability correctness | 🔄 IN PROGRESS | High | docs/final-audit/kitchen-calendar-cycle.md; docs/final-audit/display-state-cycle.md; docs/final-audit/display-clock-cycle.md | Family-zone civil-day/calendar overlap and canonical reminders carry independent read status. Family/user-owned display state adopts idle refreshed settings while preserving edit drafts and local save baselines. A synchronous owner-scoped lock serializes saves/dismissals and blocks false cancellation of in-flight writes. Header,photo frame,event labels and ambienttime use family zone; unavailable data suppresses false availability claims. Eight new UI strings provided in all7base locales. | 10 server/helper/display/reminder suites with 164 tests PASS; 25 display ownership and six clock/photo actual React/Chromium checks PASS, included in the final 108-check component gate. Strict tsc identified an actual Locale object/string mismatch, fixed using .code; corrected fixtures use real locale objects and exercise French dates. Final application source b4d4ad782884066ffebb398ed87425e4f54855b8: production build, strict TypeScript, full 1,136-file / 12,715-test Vitest suite and 108 actual React/Chromium component checks PASS. Generated route types match the strict-check input byte for byte. Full-project lint passes with four unchanged baseline warnings; final changed display files pass scoped lint. See docs/final-audit/verification-checkpoint.md for source/log provenance and limitations. | Hook ownership repaired under DATA-002 first; display/shell and canonical-reminder source follow separately. |
-| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation. | 68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | Next cycle active: durable v2 user/session/family/access partition, exact envelope/query identity, and descendant retirement after observed account/access change. Source evidence and scope in auth-cache-partition-proposal.md; master remains IN PROGRESS before implementation. |
+| DATA-002 | DATA | Realtime query ownership, request ordering and failure completion | 🔄 IN PROGRESS | High | docs/final-audit/realtime-query-cycle.md; tests/e2e/realtime-query.spec.ts | Query state is tied to table/family/serialized dependencies and mount lifetime. Stale-owner rows are masked during render; request generation fences data/error/loading/cache commits. Captured fetcher and key stay paired; thrown/failed/missing-table reads expose errors. Exact-key caches include valid empty results and expose stale/saved-time state. Central cache-generation invalidation additionally fences pending responses and retained callbacks/setters on auth purge, including failed physical storage deletion. Cache hydration now requires an exact v2 user/session/family/server-access/query identity. All three AppProvider sites use required membership reads, not the optional roster. Legacy/unowned cache is never hydrated by the production hook; callers outside the provider are network-only. Stable semantic dependencies preserve query state through normal token rotation. | 68 actual auth/cache Chromium checks pass, including 32 shared query cases and 22 partition cases. Failed physical deletion, process restart, stale bootstrap, six access dimensions and copied descendant state are exercised with actual SDK/React. Root server identity/degradation gate: 22 tests pass.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | Next cycle active: durable v2 user/session/family/access partition, exact envelope/query identity, and descendant retirement after observed account/access change. Source evidence and scope in auth-cache-partition-proposal.md; master remains IN PROGRESS before implementation. · 2026-09-26 (Q62): the "direct query consumers omit read errors" class re-measured — six consequential reads fixed (trip 404, trip concierge fork, independence milestones, concierge write-backs, Guardian rules, dismissed-insight resurrection) and the remaining nine named with their harmless default in tests/a-read-that-drops-its-error-is-named.test.ts. |
 | PUSH-004 | PUSH | User and parental consent on every public push sender | 🔄 IN PROGRESS | High | docs/final-audit/push-consent-cycle.md; actual marketing action, own-user test endpoint and public sender execution; stateful policy/failure/recovery fixtures | Every public sender resolves user and parental consent before accessing devices. Policy reads are chunked at200 distinctusers and allchunks resolve before any delivery. Private transport is only invoked with permitted recipients; dispatcher reuses its batch decision. Explicit withheld counts resolve deliberate optouts without treating them as unconfigured retry failures. Marketing persists withheld in existing skipped total and retains separate audit counts. | 13 related suites / 144 tests PASS; final two cron suites / 27 tests PASS; strict types, production build and full 12,715-test suite PASS. Denied user/parental policy sends nothing, policy-read failure marks campaign failed, and recovery/adult/zero-audience cases pass. Provider/device workflow and remaining campaign failure/recovery obligations stay open. | No schema changes or live provider sends. |
 | API-9173F41D99C0 | API | GET /api/sync/[provider]/status | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-2F04FE3C0839 | SUPPORT | docs/runbooks/google-oauth-production.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
@@ -29949,6 +29949,50 @@ accepted; a tracker, another bucket, a non-uuid folder, a traversal and `javascr
 refused; the render re-check pinned. Calibrated: disabling the submit check fails it.
 Status 🔄 — no browser run.
 
+## Q62 — DATA-002: a read that drops its error, and the six that mattered
+
+DATA-002's blocker line says "seventeen remaining direct query consumers omit read
+errors". The list behind that number is not in the ledger, so the class was measured
+again rather than taken on trust: every `const { data } = await ….from('t').select(…)`
+in `app/` and `components/` — a read that keeps its data and discards its error.
+
+Sixteen sites. Nine fall back to something harmless — a display name, a default
+headline, a missing score badge, an absent insight card — and are now named in
+`tests/a-read-that-drops-its-error-is-named.test.ts` with that default. The other
+seven, in six places, turned "I could not look" into a false statement, and are fixed:
+
+| Where | What a failed read did | Now |
+|---|---|---|
+| `dashboard/vacations/[id]/layout` | answered **404** — "your trip is gone" | throws to the error boundary, which offers a retry |
+| `components/vacations/trip-concierge` | looked like no conversation, so the next message started a **second** one beside it | alert shown, sending held until the history is known |
+| `dashboard/independence` | its `try/catch` could never fire (PostgREST resolves, it does not throw), so milestones rendered **empty** | `ErrorState`; only a missing table (`isMissingRelationError`) still degrades to empty, as its comment intended |
+| `components/concierge/plan-write-backs` | offered to add **again** the event, reminder and task the plan had already added | buttons disabled, alert shown |
+| `guardian/rules` | showed a parent **no call-screening rules**, inviting them to rebuild ones that exist | `ErrorState` |
+| `components/dashboard/ai-home-dashboard` | emptied today's dismissal list, and the upsert then set every **dismissed insight back to active** | a failed read writes nothing |
+
+The last one is the sharpest: it is not a display lie but a write — the family
+dismissed an insight, and a bad read quietly undid it.
+
+Three new messages (`tripConcierge.couldNotLoadConversation`,
+`planWriteBacks.couldNotLoadApplied`, `guardianRules.couldNotLoadRules`) are
+translated into all six base catalogues; the regional overlays inherit, as their
+README specifies.
+
+**A flake, made robust.** `tests/concierge-run-write-boundary.test.ts` timed out at
+5 s whenever it ran in a batch — with and without these changes — because its first
+case paid for a cold `import()` of the whole actions module. The import now happens
+once in `beforeAll` with its own budget; no assertion changed. The batch that failed
+now passes 801/801.
+
+Two existing guards moved with the fixes, both tighter rather than looser: the
+silent-empty-read ratchet (PLA-0624/0625) drops `independence/page.tsx` and
+`plan-write-backs.tsx` from its baseline, and `server-page-read-boundary` now pins the
+missing-table degrade by its new spelling and asserts the never-firing try/catch is gone.
+
+Guard calibrated: undoing the insight fix fails it. Full suite 17,156 / 17,159 after
+these two updates, the 3 being the container's Node 22. Status 🔄 — none of the six has
+been driven through a failing read in a browser.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -29969,7 +30013,7 @@ Status: ✅ PASS — `npm run lint` exit 0 with 10 warnings against its `--max-w
 Earlier: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
+Status: 🔄 IN PROGRESS — the `concierge-run-write-boundary` batch timeout made robust (Q62); 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
 
 Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 

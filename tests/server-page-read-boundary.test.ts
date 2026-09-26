@@ -68,9 +68,13 @@ describe('the independence ladder does not report a family with no children', ()
   });
 
   it('keeps the milestone read degrading on its own terms', () => {
-    // That one is wrapped in try/catch on purpose: the table may not exist yet
-    // on an environment where migration 0175 has not been applied, and an
-    // unapplied table is not a read failure to report at a parent.
-    expect(independence).toContain('/* table not applied yet */');
+    // The table may not exist yet on an environment where migration 0175 has not
+    // been applied, and an unapplied table is not a read failure to report at a
+    // parent. That used to be a try/catch — which could never fire, because
+    // PostgREST resolves with { error } rather than throwing, so EVERY failed
+    // read rendered as no milestones (Q62). The degrade is now keyed on the one
+    // error that means "not applied", and anything else is reported.
+    expect(independence).toMatch(/if \(error && !isMissingRelationError\(error\)\)/);
+    expect(independence).not.toContain('/* table not applied yet */');
   });
 });

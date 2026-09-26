@@ -15,7 +15,10 @@ export default async function TripLayout({
   const { id } = await params;
   await requireFeature('/dashboard/vacations');
   const supabase = await createServer();
-  const { data: trip } = await supabase.from('vacations').select('*').eq('id', id).maybeSingle();
+  const { data: trip, error } = await supabase.from('vacations').select('*').eq('id', id).maybeSingle();
+  // A failed read is not a missing trip: answering 404 told the family their
+  // trip was gone. Throwing reaches the error boundary, which offers a retry.
+  if (error) throw new Error('Could not load this trip.');
   if (!trip) notFound();
 
   const kind = lookup(VACATION_KINDS, trip.kind);

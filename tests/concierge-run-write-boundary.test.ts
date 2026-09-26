@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // dismissQueuedRunAction (a manager action) previously discarded the status-update
 // result and returned { ok: true } even when the write failed — so the run stayed
@@ -34,6 +34,15 @@ function client(runData: unknown, updateError: unknown, updateRows: unknown[] | 
 }
 
 describe('dismissQueuedRunAction write boundary', () => {
+  // The actions module has a large import graph. Loaded inside the first case it
+  // spent that case's 5-second budget on a cold import whenever the machine was
+  // busy, and failed as a timeout rather than on anything it asserts. Loading it
+  // once here, with its own budget, leaves each case timing only the action.
+  let dismissQueuedRunAction: typeof import('@/app/(app)/dashboard/concierge/actions').dismissQueuedRunAction;
+  beforeAll(async () => {
+    ({ dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions'));
+  }, 60_000);
+
   beforeEach(() => {
     requireUserContext.mockResolvedValue({ active: { familyId: 'fam-1', role: 'parent' }, user: { id: 'user-1' } });
   });
@@ -42,7 +51,6 @@ describe('dismissQueuedRunAction write boundary', () => {
   it('returns ok:false when the dismiss status update fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, { message: 'update failed' }));
-    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(false);
   });
@@ -53,14 +61,12 @@ describe('dismissQueuedRunAction write boundary', () => {
     // defect the header describes, one layer down from the one it fixed.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null, []));
-    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(false);
   });
 
   it('returns ok:true when the dismiss succeeds', async () => {
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null));
-    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(true);
   });

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { IndependenceModule } from '@/components/modules/independence-module';
@@ -34,13 +35,22 @@ export default async function IndependencePage() {
     );
   }
 
-  // Degrades safely before migration 0175 is applied.
-  let rows: Tables<'independence_milestones'>[] = [];
-  try {
-    const { data } = await supabase.from('independence_milestones').select('*')
-      .eq('family_id', ctx.active.familyId).order('created_at', { ascending: false }).limit(1000);
-    rows = (data ?? []) as Tables<'independence_milestones'>[];
-  } catch { /* table not applied yet */ }
+  // Degrades safely before migration 0175 is applied — and ONLY then. The
+  // try/catch this replaced could never fire: PostgREST resolves with
+  // { data, error } rather than throwing, so every failed read (a timeout, a
+  // policy error) rendered as a family with no milestones at all. A missing
+  // table is the one error that genuinely means "nothing here yet".
+  const { data, error } = await supabase.from('independence_milestones').select('*')
+    .eq('family_id', ctx.active.familyId).order('created_at', { ascending: false }).limit(1000);
+  if (error && !isMissingRelationError(error)) {
+    return (
+      <div className="module-page">
+        <PageHeader title={t('independence.independence')} description={t('independenceModule.responsibilitiesThatGrowAsYour')} />
+        <ErrorState message={t('independence.couldNotLoadYourFamily')} />
+      </div>
+    );
+  }
+  const rows = (data ?? []) as Tables<'independence_milestones'>[];
 
   return (
     <IndependenceModule
