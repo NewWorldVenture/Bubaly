@@ -39755,8 +39755,8 @@ main's three new restrictive-guard tables (`concierge_calls`,
 **OPEN, carried from the merge.** (1) The behaviour-log boundary: dropping
 `0329` leaves main's `0338` as the only rule, and the two disagree on whether
 the subject member may read their own log — an owner decision, MEDIUM.
-(2) Location family-consistency residual, LOW. (3) Closet wear-count lost
-update, LOW. (4) Object-first delete residual, LOW. (5) Timetable copy, LOW.
+(2) Location family-consistency residual, LOW. (3) ~~Closet wear-count lost
+update~~ — FIXED by `C1-S9-90`. (4) Object-first delete residual, LOW. (5) Timetable copy, LOW.
 
 **Verification.** `npx vitest run`: 18,882 / 18,885 across 1,465 files; the
 three failures are `node-version-is-pinned` and the two
@@ -39807,6 +39807,37 @@ still cited their migrations' pre-renumber numbers and were corrected. Result:
 which need the server's socket reachable by its own user).
 
 **Status:** FIXED (merge); items (1)–(5) OPEN.
+
+---
+
+### `[CLAUDE-1][LOW][CLOSET]` C1-S9-90 — two outfits logged at once counted one wear
+
+**File/path:** `components/modules/closet-module.tsx` (`logWear`), new `lib/closet/wear.ts`.
+
+**Problem.** Each worn item's bump wrote `wear_count: cached + 1`, where
+`cached` was the count this browser had loaded. Two members logging an outfit
+that shares an item — siblings and one hoodie, or two phones on one child —
+both wrote the same number, and one wear was lost. The count feeds
+cost-per-wear and the "neglected" list, so a lost wear misprices an item and
+can nominate a worn one for decluttering. Carried as OPEN (LOW) since
+`C1-S9-81` and in `C1-S9-89`'s carry-overs as item (3).
+
+**Fix.** A compare-and-swap on the LIVE count: read it, write `+1` only
+`.eq('wear_count', expected)`, and re-read when another writer got there first
+(up to four attempts, then report). An increment RPC would be simpler and is
+the right end state, but it is a migration, and production cannot take
+migrations yet (B1), so a client change that depended on one would break
+every outfit log until then.
+
+**Evidence.** `tests/a-worn-outfit-adds-one-wear-per-item.test.ts` drives the
+helper against a store with PostgREST's zero-row semantics and a second writer
+landing between read and write: 5 → 7, where `cached + 1` gives 6. Accepting a
+zero-row write as success turns two cases red (mutation run), and restoring the
+check turns them green again. The failed-read, missing-item and never-settles
+cases are covered, and so is the uncontended path's cost of one read plus one
+write. Two exact-statement pins were re-pointed at the new write.
+
+**Status:** FIXED. `C1-S9-89` item (3) is closed.
 
 ---
 

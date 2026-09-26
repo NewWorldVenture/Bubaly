@@ -179,8 +179,12 @@ describe('a write that licenses the next one is confirmed before it (C1-S9-80)',
 describe('closet: every wear-count bump is confirmed before the outfit is called logged (C1-S9-81)', () => {
   it('each bump asks for its row, and a bump that matched nothing is reported', () => {
     const src = readFileSync('components/modules/closet-module.tsx', 'utf8');
-    expect(src).toContain(".update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id).select('id');");
-    expect(at(src, 'if (results.some((r) => wroteNoRows(r.data)))')).toBeLessThan(at(src, "success(t('closetModule.loggedTodaySOutfit'))"));
+    // Since C1-S9-90 the bump is a compare-and-swap on the live count
+    // (lib/closet/wear.ts, proved in a-worn-outfit-adds-one-wear-per-item); the
+    // confirmation is `wroteNoRows` inside it, and a bump that did not land is
+    // still reported before the outfit is called logged.
+    expect(src).toContain(".update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id')");
+    expect(at(src, 'if (results.some((r) => !r.ok))')).toBeLessThan(at(src, "success(t('closetModule.loggedTodaySOutfit'))"));
   });
 });
 

@@ -26,6 +26,7 @@ import {
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useConfirm } from '@/components/ui/confirm';
+import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -123,16 +124,20 @@ export function ClosetModule() {
       occasion, temp_c: tempC, weather: weatherLabelFromTemp(tempC), created_by: userId,
     });
     if (error) { setBusy(false); return toastError(describeDbError(error)); }
-    const results = await Promise.all(itemIds.map((id) => {
-      const current = itemById.get(id);
-      return supabase.from('wardrobe_items').update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id).select('id');
-    }));
+    // Each bump is a compare-and-swap on the LIVE count, not `cached + 1`: two
+    // members logging the same item at once each add their wear. Audit C1-S9-90.
+    const store: WearStore = {
+      readWearCount: (id) => supabase.from('wardrobe_items').select('wear_count').eq('id', id).maybeSingle(),
+      writeWearCount: (id, expected, next, wornOn) => supabase.from('wardrobe_items')
+        .update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id'),
+    };
+    const results = await Promise.all(itemIds.map((id) => bumpWearCount(store, id, todayIso())));
     setBusy(false);
-    const failed = results.find((r) => r.error);
-    if (failed?.error) return toastError(describeDbError(failed.error));
-    // A wear-count bump that matched nothing is an item the log names but
-    // whose count did not move. Audit C1-S9-81.
-    if (results.some((r) => wroteNoRows(r.data))) return toastError(t('errors.thatChangeWasNotSaved'));
+    const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');
+    if (failed) return toastError(describeDbError(failed.error));
+    // A bump that did not land is an item the log names but whose count did
+    // not move. Audit C1-S9-81.
+    if (results.some((r) => !r.ok)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.loggedTodaySOutfit'));
   }
 

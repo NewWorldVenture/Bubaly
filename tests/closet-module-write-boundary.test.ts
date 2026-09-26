@@ -27,8 +27,11 @@ describe('closet-module writes fail visibly', () => {
 
   it('logs a wear before bumping wear counts, and reports a failed bump', () => {
     const b = body('logWear');
-    expect(at(b, "from('outfit_logs').insert(")).toBeLessThan(at(b, "from('wardrobe_items').update("));
-    expect(b).toContain('const failed = results.find((r) => r.error);');
+    // The bump reads the live count first (compare-and-swap, C1-S9-90), so
+    // the ordering is pinned against the store's write, not the first chain.
+    expect(at(b, "from('outfit_logs').insert(")).toBeLessThan(at(b, ".update({ wear_count: next"));
+    expect(b).toContain("const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');");
+    expect(at(b, 'if (failed) return toastError(')).toBeLessThan(at(b, "success(t('closetModule.loggedTodaySOutfit'))"));
   });
 
   it('never fetches weather from the browser except through the CSP-allowed helper', () => {
