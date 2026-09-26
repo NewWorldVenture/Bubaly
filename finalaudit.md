@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T14:40:00Z
+- Last Updated: 2026-09-26T14:50:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26625,10 +26625,10 @@ holds, the Google route and the provider page read correctly. All 5 fail with
 the source reverted. The status-route harness now models `limit(1)`. Full
 suite: 16,919 pass; the 3 failures are the known Node-22-container-only cases.
 
-**Follow-up, not changed:** the other `sync_*` tables (calendar events,
-mappings, conflicts, jobs, reminders) still grant any member FOR ALL. They hold
-family-shared data and some may be written from member sessions, so each needs
-its own writer inventory before tightening.
+**Follow-up, since closed (C1-K-30):** the other `sync_*` tables (calendar
+events, mappings, conflicts, jobs, reminders) still granted any member FOR ALL.
+The writer inventory found only the service-role engine and the owner's own
+onboarding mappings; migration 0329 tightens all eighteen.
 
 ## C1-K-20 · HIGH · A failed read published an empty calendar to every subscriber
 
@@ -26863,6 +26863,39 @@ member's dose by design (a teen logging a sibling's dose while babysitting).
 The risk is real (a deleted "taken" row invites a second dose, and
 `logged_by` is not pinned to the caller), but narrowing it changes a product
 flow, so it is an owner decision, not a fix.
+
+## C1-K-30 · HIGH · Any member could make the sync engine delete or rewrite a parent's Google Calendar events
+
+The two-way sync engine (`lib/sync/engine/generic.ts`, `google.ts`) runs with
+the service role and acts with the connected account owner's OAuth token. It
+reads its instructions from rows: a deleted `internal` event that has a mapping
+becomes `adapter.deleteEvent(mapping.external_id)`; a changed one becomes
+`patchEvent`; an unmapped one becomes `insertEvent`; reminders the same; and any
+`sync_calendars` row with `feed_enabled` is served publicly, with no login, at
+`/api/sync/feeds/<feed_token>`.
+
+Every one of the engine's 18 tables still carried the original
+`family member access` FOR ALL policy (or member INSERT). So any family
+member, a child included, could insert a deleted internal event on a parent's
+synced calendar together with a mapping naming an event on the parent's Google
+Calendar, and the next sync deleted that event with the parent's token. The
+same approach patched a parent's event with the child's own content, or wrote
+new events into it. A member could also switch on a public feed for any family
+calendar, with a token of their choosing. No application path does that (no
+code writes `feed_enabled`). Measured on the replayed schema: 7 breaches.
+
+Writers, from the code: the engine and the sync API routes (service role) for
+all of them, plus `lib/services/onboarding-calendar`, which writes
+`sync_external_mappings` in the account owner's own session for their own
+account. `0329_the_sync_engines_tables_are_not_a_members_write.sql` makes the
+engine tables member-read-only and lets a mapping be written only for an
+account the caller owns (`sync_accounts.user_id = auth.uid()`, same family,
+never in another user's name). This closes the "other sync_* tables FOR ALL"
+follow-up recorded under C1-K-19. `docs/audit/sync-engine-write-check.sql`
+fails 7 ways before and passes after (53/53 probes), with controls that the
+child still reads the calendar and the owner still writes and updates
+mappings on their own account; onboarding-calendar, sync-policy and briefing
+suites pass (207/207).
 
 ## Swept clean · the API routes this file never named
 
