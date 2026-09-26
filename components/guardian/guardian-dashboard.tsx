@@ -77,13 +77,14 @@ const COMM_ICONS: Record<string, string> = {
   email_inbound: '📧',
 };
 
+// Labels are catalogue keys, rendered with the viewer's t() (I18N-002).
 const CONTEXT_OPTIONS = [
-  { value: 'normal', label: 'Normal', icon: '🟢' },
-  { value: 'driving', label: 'Driving', icon: '🚗' },
-  { value: 'meeting', label: 'In a Meeting', icon: '💼' },
-  { value: 'sleeping', label: 'Sleeping', icon: '😴' },
-  { value: 'vacation', label: 'Vacation', icon: '🌴' },
-  { value: 'do_not_disturb', label: 'Do Not Disturb', icon: '🔕' },
+  { value: 'normal', labelKey: 'guardianDashboard.contextNormal', icon: '🟢' },
+  { value: 'driving', labelKey: 'guardianDashboard.contextDriving', icon: '🚗' },
+  { value: 'meeting', labelKey: 'guardianDashboard.contextMeeting', icon: '💼' },
+  { value: 'sleeping', labelKey: 'guardianDashboard.contextSleeping', icon: '😴' },
+  { value: 'vacation', labelKey: 'guardianDashboard.contextVacation', icon: '🌴' },
+  { value: 'do_not_disturb', labelKey: 'guardianDashboard.contextDoNotDisturb', icon: '🔕' },
 ];
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
@@ -100,7 +101,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     setScanning(false);
     if (res.ok) {
       const n = res.data?.created ?? 0;
-      toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
+      toastSuccess(n > 1 ? t('guardianDashboard.foundNewSuggestionsMany', { count: n }) : n === 1 ? t('guardianDashboard.foundNewSuggestionOne', { count: n }) : t('guardianDashboard.allCaughtUpNoSuggestions'));
       if (n > 0) router.refresh();
     } else {
       toastError(res.error);
@@ -111,7 +112,11 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     setContextLoading(memberId);
     const res = await updateContextAction(memberId, context);
     setContextLoading(null);
-    if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
+    if (res.ok) {
+      const option = CONTEXT_OPTIONS.find(c => c.value === context);
+      toastSuccess(t('guardianDashboard.statusUpdatedTo', { status: option ? t(option.labelKey) : context }));
+      router.refresh();
+    }
     else toastError(res.error);
   }
 
@@ -176,10 +181,10 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Calls Today', value: stats.totalCalls, icon: Phone, color: 'text-blue-400' },
-          { label: 'Blocked', value: stats.blockedToday, icon: Shield, color: 'text-red-400' },
-          { label: 'Scams Stopped', value: stats.scamsBlocked, icon: AlertTriangle, color: 'text-orange-400' },
-          { label: 'AI Screened', value: stats.screened, icon: Zap, color: 'text-purple-400' },
+          { label: t('guardianDashboard.statCallsToday'), value: stats.totalCalls, icon: Phone, color: 'text-blue-400' },
+          { label: t('guardianDashboard.statBlocked'), value: stats.blockedToday, icon: Shield, color: 'text-red-400' },
+          { label: t('guardianDashboard.statScamsStopped'), value: stats.scamsBlocked, icon: AlertTriangle, color: 'text-orange-400' },
+          { label: t('guardianDashboard.statAiScreened'), value: stats.screened, icon: Zap, color: 'text-purple-400' },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <s.icon className={cn('mb-2 h-5 w-5', s.color)} />
@@ -195,7 +200,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
           <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">{t('guardianDashboard.yourStatus')}</h3>
           {memberProfiles.map((profile) => (
             <div key={profile.id} className="space-y-2">
-              <p className="text-sm font-medium">{profile.ai_persona_name}&apos;s Status</p>
+              <p className="text-sm font-medium">{t('guardianDashboard.personaStatus', { name: profile.ai_persona_name })}</p>
               <div className="flex flex-wrap gap-2">
                 {CONTEXT_OPTIONS.map((opt) => (
                   <button
@@ -210,7 +215,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                     )}
                   >
                     <span>{opt.icon}</span>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 ))}
               </div>
@@ -332,13 +337,14 @@ function CommRow({ comm }: { comm: Communication }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const t = useTranslations();
   const config: Record<string, { label: string; cls: string }> = {
-    received: { label: 'Received', cls: 'text-muted' },
-    screening: { label: 'Screening', cls: 'text-purple-400' },
-    handled: { label: 'Handled', cls: 'text-emerald-400' },
-    escalated: { label: 'Escalated', cls: 'text-red-400' },
-    blocked: { label: 'Blocked', cls: 'text-red-400' },
-    missed: { label: 'Missed', cls: 'text-amber-400' },
+    received: { label: t('guardianDashboard.callStatusReceived'), cls: 'text-muted' },
+    screening: { label: t('guardianDashboard.callStatusScreening'), cls: 'text-purple-400' },
+    handled: { label: t('guardianDashboard.callStatusHandled'), cls: 'text-emerald-400' },
+    escalated: { label: t('guardianDashboard.callStatusEscalated'), cls: 'text-red-400' },
+    blocked: { label: t('guardianDashboard.callStatusBlocked'), cls: 'text-red-400' },
+    missed: { label: t('guardianDashboard.callStatusMissed'), cls: 'text-amber-400' },
   };
   const c = config[status] ?? { label: status, cls: 'text-muted' };
   return <span className={cn('text-[10px] font-semibold', c.cls)}>{c.label}</span>;

@@ -62,7 +62,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // Then to 2,819 with the calendar-sync count and the admin campaign-send and
 // lead-score recompute toasts.
-const CEILING = 2819;
+//
+// Then to 2,802 as the Guardian dashboard was localized as a whole: its
+// status contexts, call statuses, stat tiles, heading and both toasts.
+const CEILING = 2802;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
