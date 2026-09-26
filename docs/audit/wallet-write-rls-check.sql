@@ -239,14 +239,26 @@ end $$;
 -- what closes that: anon holds no INSERT privilege, so the question never
 -- reaches RLS. Asserted rather than assumed, because it is the one path the
 -- restrictive guards do not cover.
+--
+-- It checked one verb on one table. 0290 revokes four verbs on five tables
+-- (MAIN-F-003: anon held INSERT/UPDATE/DELETE on every money table), so a
+-- regrant of, say, UPDATE on child_wallets passed here. All twenty now.
 do $$
-declare has_priv boolean;
+declare
+  t text; v text; held text[] := '{}';
 begin
-  select has_table_privilege('anon','public.wallet_transactions','INSERT') into has_priv;
-  if has_priv then
-    raise exception 'A-08 FAIL: anon holds INSERT on wallet_transactions — the restrictive guards are `to authenticated` and would not apply';
+  foreach t in array array['wallet_transactions','child_wallets','family_wallets','wallet_buckets','wallet_rules'] loop
+    if to_regclass('public.' || t) is null then
+      raise exception 'A-08 FAIL: public.% does not exist, so the anon-grant check proves nothing about it', t;
+    end if;
+    foreach v in array array['INSERT','UPDATE','DELETE','TRUNCATE'] loop
+      if has_table_privilege('anon', 'public.' || t, v) then held := held || (v || ' on ' || t); end if;
+    end loop;
+  end loop;
+  if cardinality(held) > 0 then
+    raise exception 'A-08 FAIL: anon holds % — the restrictive guards are `to authenticated` and would not apply', array_to_string(held, ', ');
   end if;
-  raise notice 'A-08 OK: anon holds no INSERT privilege on wallet_transactions';
+  raise notice 'A-08 OK: anon holds no INSERT, UPDATE, DELETE or TRUNCATE on any of the five money tables';
 end $$;
 
 -- ── Invariant 7: no stray permissive WRITE policy is left to report ─────────

@@ -191,3 +191,50 @@ describe('a wallet balance is summed over the whole ledger', () => {
     expect(sum(data ?? [])).toBe(50_000);
   });
 });
+
+describe('the pages themselves still page (MAIN-F-J05, J06, J07)', () => {
+  // The cases above prove the helper against a capped fake. They never read the
+  // pages, so putting a page back on a bare select passed them. Each chain below
+  // feeds a total someone reads as the truth: an admin tile, the MRR, a child's
+  // Invest balance.
+  const SITES: { file: string; table: string }[] = [
+    { file: 'app/(app)/admin/reports/page.tsx', table: 'families' },
+    { file: 'app/(app)/admin/reports/page.tsx', table: 'profiles' },
+    { file: 'app/(app)/admin/reports/page.tsx', table: 'subscriptions' },
+    { file: 'app/(app)/admin/reports/page.tsx', table: 'documents' },
+    { file: 'app/(app)/admin/reports/page.tsx', table: 'audit_logs' },
+    { file: 'app/(app)/admin/backup/page.tsx', table: 'documents' },
+    { file: 'app/(app)/admin/billing/page.tsx', table: 'subscriptions' },
+    { file: 'app/(app)/wallet/invest/actions.ts', table: 'wallet_transactions' },
+  ];
+
+  it.each(SITES)('$file reads $table in pages or as a count', async ({ file, table }) => {
+    const { readFile } = await import('node:fs/promises');
+    const source = (await readFile(file, 'utf8')).split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+    const marker = `from('${table}')`;
+    const chains: string[] = [];
+    for (let at = source.indexOf(marker); at !== -1; at = source.indexOf(marker, at + 1)) {
+      // A chain ends at the `,` or `;` that closes its statement; a readAllAsQuery
+      // callback closes with `.range(from, to)`.
+      const rest = source.slice(at);
+      const end = rest.search(/\)\s*(,|;)\s*\n/);
+      chains.push(rest.slice(0, end === -1 ? rest.length : end + 1));
+    }
+    expect(chains.length).toBeGreaterThan(0);
+    for (const chain of chains) {
+      const flat = chain.replace(/\s+/g, ' ');
+      const isWrite = /\.(insert|update|upsert|delete)\(/.test(chain);
+      const isCount = /count: 'exact', head: true/.test(chain);
+      const pages = /\.order\('id'\)[^;]*\.range\(from, to\)/.test(flat);
+      expect(isWrite || isCount || pages, `${file}: ${flat.slice(0, 160)}`).toBe(true);
+    }
+  });
+
+  it('the Documents tile is a count, not docs.length (MAIN-F-J05)', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const source = (await readFile('app/(app)/admin/reports/page.tsx', 'utf8')).split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n');
+    expect(source).toContain("supabase.from('documents').select('id', { count: 'exact', head: true })");
+    expect(source).toMatch(/key: 'documents',[^}]*value: \(docCountResult\.count \?\? 0\)/);
+    expect(source).not.toMatch(/docs\.length/);
+  });
+});

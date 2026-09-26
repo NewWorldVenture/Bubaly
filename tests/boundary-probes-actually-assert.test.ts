@@ -50,3 +50,35 @@ describe('the boundary probes can actually fail', () => {
     expect(runner).toMatch(/no probes found[\s\S]*exit 1/);
   });
 });
+
+describe('a refusal counts only when it is the refusal being tested (MAIN-G1, MAIN-F-003)', () => {
+  // Three boundary probes once caught `when others` and called any error "the
+  // boundary held", so a renamed column (42703) or a missing table (42P01)
+  // read as a pass. The fix is in the probes; nothing stopped it coming back.
+  const code = (f: string) => body(f).split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
+
+  it.each(['document-vault-boundary-check.sql', 'money-write-boundary-check.sql'])(
+    '%s records a refusal only for insufficient_privilege',
+    (f) => {
+      const src = code(f);
+      const refusals = [...src.matchAll(/exception\s+when\s+(\w+)\s+then\s+(?:refused|blocked)\s*:=\s*true/gi)].map((m) => m[1].toLowerCase());
+      expect(refusals.length, `${f} no longer records any refusal`).toBeGreaterThan(0);
+      expect(refusals.every((w) => w === 'insufficient_privilege'), `${f}: ${refusals.join(', ')}`).toBe(true);
+    },
+  );
+
+  it('the child-mint proof in wallet-write-rls-check.sql insists the refusal was RLS (42501)', () => {
+    const src = code('wallet-write-rls-check.sql');
+    expect(src).toMatch(/if sqlst is distinct from '42501' then\s+raise exception 'A-08 FAIL/);
+  });
+
+  it('the anon-grant check covers every table and verb 0290 revokes', () => {
+    const src = code('wallet-write-rls-check.sql');
+    const migration = readFileSync('supabase/migrations/0290_money_anon_write_grants.sql', 'utf8');
+    const revoked = [...migration.matchAll(/^revoke insert, update, delete, truncate on public\.(\w+)\s+from anon;/gm)].map((m) => m[1]);
+    expect(revoked).toHaveLength(5);
+    for (const table of revoked) expect(src, table).toContain(`'${table}'`);
+    expect(src).toContain("array['INSERT','UPDATE','DELETE','TRUNCATE']");
+    expect(src).toMatch(/has_table_privilege\('anon', 'public\.' \|\| t, v\)/);
+  });
+});

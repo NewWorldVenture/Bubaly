@@ -302,6 +302,14 @@ describe('no delivery-contract read is left unbounded', () => {
     // the child's allowance is SKIPPED while the run reports itself clean.
     { file: 'app/api/cron/wallet-allowance/route.ts', table: 'subscriptions', why: 'a plan that does not come back skips a child\'s allowance' },
     { file: 'app/api/cron/chore-reminders/route.ts', table: 'families', why: 'every family with an open chore, in one request line' },
+    // The other five of F-008's six crons. Each stopped at the 1,000th row and
+    // reported a clean run; readAll fixed all six, but only chore-reminders was
+    // pinned here, so any of these could go back to a bare read unnoticed.
+    { file: 'app/api/cron/weekly-digest/route.ts', table: 'families', why: 'the family past #1,000 gets no digest (F-008)' },
+    { file: 'app/api/cron/notifications/route.ts', table: 'families', why: 'the family past #1,000 gets no notifications (F-008)' },
+    { file: 'app/api/cron/push-scan/route.ts', table: 'families', why: 'the family past #1,000 is never scanned for push (F-008)' },
+    { file: 'app/api/cron/calendar-feeds/route.ts', table: 'calendar_feeds', why: 'the feed past #1,000 never syncs (F-008)' },
+    { file: 'app/api/cron/checkout-abandoned/route.ts', table: 'checkout_sessions', why: 'the checkout past #1,000 is never followed up (F-008)' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
