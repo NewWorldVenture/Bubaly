@@ -22,10 +22,11 @@
 --
 -- ── what this probe does and does not assert ───────────────────────────────
 --
--- It does NOT assert that `family-media` should be public. It is public today,
--- the record says so, and closing it needs every consumer moved off
--- `getPublicUrl` onto signed URLs first — flipping the flag alone would blank
--- every photo, avatar, attachment and album cover in the product.
+-- It did NOT assert that `family-media` should be private while it was public:
+-- closing it needed every consumer moved off `getPublicUrl` onto signed URLs
+-- first, and flipping the flag alone would have blanked every photo,
+-- attachment and album cover in the product. That rollout is done (0338); see
+-- the declared list below.
 --
 -- What it asserts is that the set of internet-readable buckets is exactly the
 -- set somebody declared, with a reason. Two things follow. A NEW bucket created
@@ -57,7 +58,18 @@ declare
   --   unauthenticated GET, bucket public   -> HTTP 200, 67 bytes
   --   unauthenticated GET, bucket private  -> HTTP 400, "Bucket not found"
   --   unauthenticated GET of a signed URL  -> HTTP 200, 67 bytes
-  declared text[] := array['avatars', 'marketplace-photos', 'family-media'];
+  --
+  -- `family-media` followed with 0338 (SEC-001), after every reader moved to
+  -- signFamilyMediaRefs (lib/storage/family-media-ref.ts): server pages sign
+  -- with the request's session, client modules through useSignedFamilyMedia,
+  -- and stored public URLs are read as references, not rewritten. Measured on
+  -- the local stack with one object at one path:
+  --
+  --   unauthenticated GET of the stored public URL, bucket public  -> HTTP 200
+  --   unauthenticated GET of the stored public URL, bucket private -> HTTP 400
+  --   member, stored public URL through the app helper (either)    -> HTTP 200
+  --   signed-in non-member, same helper (either)                   -> null
+  declared text[] := array['avatars', 'marketplace-photos'];
   seen     int := 0;
   failures int := 0;
 begin
@@ -89,6 +101,27 @@ begin
     raise warning 'BREACH: the documents bucket has no family-scoped SELECT policy';
     failures := failures + 1;
   end if;
+
+  -- family-media is private now, so its four family-scoped policies are the
+  -- whole access model. A missing one either locks members out (read, upload)
+  -- or lets them stop cleaning up (update, delete); a widened one is SEC-001
+  -- again by another door.
+  -- `want.op`, qualified: an unqualified `cmd` inside the subquery resolves to
+  -- pg_policies.cmd, and `p.cmd = cmd` is then true for every row, so one
+  -- policy would satisfy all four. (Caught by dropping the read policy and
+  -- watching this pass.)
+  for r in
+    select want.op from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as want(op)
+     where not exists (
+       select 1 from pg_policies p
+        where p.schemaname = 'storage' and p.tablename = 'objects' and p.cmd = want.op
+          and (coalesce(p.qual, '') || coalesce(p.with_check, '')) like '%family-media%'
+          and (coalesce(p.qual, '') || coalesce(p.with_check, '')) like '%is_family_member%'
+     )
+  loop
+    raise warning 'BREACH: family-media has no family-scoped % policy', r.op;
+    failures := failures + 1;
+  end loop;
 
   if failures > 0 then
     raise exception 'bucket-visibility: % assertion(s) failed', failures;

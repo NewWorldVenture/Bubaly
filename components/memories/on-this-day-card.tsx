@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Sparkles, ChevronRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import type { Tables } from '@/lib/database.types';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -36,6 +37,8 @@ export function OnThisDayCard() {
   }, [error]);
 
   const memories = useMemo(() => pickOnThisDay(rows ?? [], new Date(), 6), [rows]);
+  // SEC-001: signed with the viewer's session; never the stored public link.
+  const media = useSignedFamilyMedia(memories.slice(0, 4).map((m) => m.thumbnail_url || m.url));
   if (memories.length === 0) return null;
 
   const lead = memories[0];
@@ -62,7 +65,7 @@ export function OnThisDayCard() {
         {memories.slice(0, 4).map((m) => (
           <span key={m.id} className="relative h-12 w-12 overflow-hidden rounded-xl border-2 border-bg bg-elevated">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={m.thumbnail_url || m.url || ''} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
+            <img src={media(m.thumbnail_url || m.url) ?? ''} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
           </span>
         ))}
       </div>

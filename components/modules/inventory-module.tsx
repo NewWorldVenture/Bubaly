@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -32,10 +33,6 @@ const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { max
 const todayIso = () => new Date().toISOString().slice(0, 10);
 function fmtDate(d: string): string {
   return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
 }
 
 export function InventoryModule() {
@@ -125,6 +122,8 @@ export function InventoryModule() {
   const loading = locations.loading || items.loading || moves.loading;
   const error = locations.error || items.error || moves.error;
   const refresh = () => { void locations.refresh(); void items.refresh(); void moves.refresh(); };
+  // SEC-001: photos are drawn from short-lived signed URLs, never public ones.
+  const media = useSignedFamilyMedia(items.data.map((i) => i.photo_path));
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={tr('inventoryModule.couldNotLoadTheHome')} onRetry={refresh} />;
 
@@ -254,7 +253,7 @@ export function InventoryModule() {
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
-                const url = photoUrl(item.photo_path);
+                const url = media(item.photo_path);
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
@@ -391,7 +390,8 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
+  const media = useSignedFamilyMedia([photoPath]);
+  const url = media(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">

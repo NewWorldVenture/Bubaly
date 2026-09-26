@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Heart, Users, Camera, Award, Megaphone, Cake } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withSignedFamilyMedia } from '@/lib/storage/family-media-ref';
 import { settleAll } from '@/lib/supabase/settle';
 import {
   buildGrandparentDigest, digestSummary, celebrationCountdown, orderHouseholds,
@@ -126,7 +127,11 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
     return <ErrorState message={t('grandparentPortal.couldNotLoadYourFamily')} />;
   }
   const members = membersRes.data;
-  const photos = photosRes.data;
+  // SEC-001: each household's photos are signed with this viewer's own
+  // session, so Storage checks their membership of THAT household — the portal
+  // spans several, and resolving against the active one alone would refuse the
+  // rest. A photo that cannot be signed is left out, not shown broken.
+  const photos = (await withSignedFamilyMedia(supabase, photosRes.data ?? [], ['url'])).filter((p) => p.url);
   const milestones = milestonesRes.data;
   const announcements = announcementsRes.data;
   const dates = datesRes.data;
@@ -150,7 +155,7 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
     members: (members ?? []).map((m) => ({
       name: m.display_name, birthday: m.birthday, color: m.color, role: m.role,
     })),
-    photos: (photos ?? []).map((p) => ({
+    photos: photos.map((p) => ({
       url: p.url ?? '', caption: p.caption, date: p.created_at,
     })),
     milestones: (milestones ?? []).map((m) => ({

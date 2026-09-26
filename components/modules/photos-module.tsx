@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -97,6 +98,9 @@ export function PhotosModule() {
     !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
+  // SEC-001: the stored url is a reference; what the page draws is a
+  // short-lived signed URL for it (null until it arrives, and if refused).
+  const media = useSignedFamilyMedia(allPhotos.map((p) => p.url));
 
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
@@ -216,7 +220,7 @@ export function PhotosModule() {
   const albumStats = albums.map((a) => ({
     ...a,
     count: allPhotos.filter((p) => p.album_id === a.id).length,
-    cover: allPhotos.find((p) => p.album_id === a.id)?.url,
+    cover: media(allPhotos.find((p) => p.album_id === a.id)?.url),
   }));
 
   if (loading) return <SkeletonList />;
@@ -359,7 +363,7 @@ export function PhotosModule() {
                     </div>
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
+                    <img src={media(photo.url) ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
                       loading="lazy" decoding="async" />
                   )}
@@ -414,7 +418,7 @@ export function PhotosModule() {
                     </div>
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
+                    <img src={media(photo.url) ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
@@ -474,7 +478,7 @@ export function PhotosModule() {
           <div onClick={(e) => e.stopPropagation()} className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
             {photos[lightboxIdx].media_type === 'video' ? (
               <video
-                src={photos[lightboxIdx].url ?? ''}
+                src={media(photos[lightboxIdx].url) ?? ''}
                 controls
                 autoPlay
                 playsInline
@@ -482,7 +486,7 @@ export function PhotosModule() {
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
+              <img src={media(photos[lightboxIdx].url) ?? ''} alt={photos[lightboxIdx].caption ?? ''}
                 className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
             )}
             {/* Controls */}
@@ -490,7 +494,7 @@ export function PhotosModule() {
               <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
               {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
               <div className="ml-auto flex gap-2">
-                <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                <a href={media(photos[lightboxIdx].url) ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
                   onClick={(e) => e.stopPropagation()}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Download className="h-4 w-4" />
@@ -535,7 +539,7 @@ export function PhotosModule() {
 
       {/* Edit caption modal */}
       {editPhoto && (
-        <EditPhotoModal photo={editPhoto}
+        <EditPhotoModal photo={editPhoto} src={media(editPhoto.url)}
           onClose={() => setEditPhoto(null)}
           onSave={(caption) => updateCaption(editPhoto, caption)} />
       )}
@@ -687,14 +691,14 @@ function UploadModal({ onClose, onUpload, progress }: {
   );
 }
 
-function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () => void; onSave: (caption: string) => void }) {
+function EditPhotoModal({ photo, src, onClose, onSave }: { photo: Photo; src: string | null; onClose: () => void; onSave: (caption: string) => void }) {
   const tr = useTranslations();
   const [caption, setCaption] = useState(photo.caption ?? '');
   return (
     <Modal open onClose={onClose} title={tr('photos.editPhoto')}>
       <div className="space-y-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
+        <img src={src ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
         <Field label={tr('photos.caption')}>
           {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={tr('photos.addACaption')} autoFocus />}
         </Field>

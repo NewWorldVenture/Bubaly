@@ -1,5 +1,6 @@
 'use client';
 
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
@@ -527,6 +528,10 @@ export function MessagesModule() {
     () => messages.filter((m) => m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
     [messages],
   );
+  // SEC-001: attachments are family-media references (or a Giphy URL, which
+  // passes through); what is drawn, played or downloaded is a short-lived
+  // signed URL minted with the viewer's session.
+  const media = useSignedFamilyMedia(messages.map((m) => m.attachment_url));
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
     const label = timeGroup(msg.created_at);
@@ -799,15 +804,15 @@ export function MessagesModule() {
                               )}>
                                 {/* Image */}
                                 {msg.kind === 'image' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer">
+                                  <a href={media(msg.attachment_url) ?? '#'} target="_blank" rel="noreferrer">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={msg.attachment_url} alt={msg.attachment_name ?? 'Photo'}
+                                    <img src={media(msg.attachment_url) ?? ''} alt={msg.attachment_name ?? 'Photo'}
                                       className="mb-2 max-h-56 rounded-xl object-cover" />
                                   </a>
                                 )}
                                 {/* File — download card */}
                                 {msg.kind === 'file' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer" download
+                                  <a href={media(msg.attachment_url) ?? '#'} target="_blank" rel="noreferrer" download
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
                                       isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
@@ -827,7 +832,7 @@ export function MessagesModule() {
                                 {/* Voice message — inline audio player ('voice' is the
                                     legacy/seed kind; 'audio' is what the recorder sends). */}
                                 {(msg.kind === 'audio' || msg.kind === 'voice') && msg.attachment_url && (
-                                  <audio controls preload="none" src={msg.attachment_url}
+                                  <audio controls preload="none" src={media(msg.attachment_url) ?? undefined}
                                     className="mb-1 h-10 w-56 max-w-full" aria-label={tr('messages.voiceMessage')} />
                                 )}
                                 {/* Text */}
@@ -1095,10 +1100,10 @@ export function MessagesModule() {
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {sharedPhotos.map((p) => (
-                  <a key={p.id} href={p.attachment_url ?? '#'} target="_blank" rel="noreferrer"
+                  <a key={p.id} href={media(p.attachment_url) ?? '#'} target="_blank" rel="noreferrer"
                     className="aspect-square overflow-hidden rounded-lg bg-elevated">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.attachment_url ?? ''} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
+                    <img src={media(p.attachment_url) ?? ''} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
                   </a>
                 ))}
               </div>

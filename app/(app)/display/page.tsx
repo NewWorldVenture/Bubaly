@@ -5,6 +5,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { runPagePath } from '@/lib/ai/chat-request';
 import { createServer } from '@/lib/supabase/server';
+import { signFamilyMediaRefs } from '@/lib/storage/family-media-ref';
 import { AutoRefresh } from '@/components/display/auto-refresh';
 // ⚠️ RSC boundary rule (this WAS the kiosk's persistent crash): display-grid.tsx
 // is a 'use client' module, so every value imported from it here — even a
@@ -182,6 +183,15 @@ async function loadDisplay(
   // flight across an array literal where a throw could orphan it (§3).
   const handled = await loadHandledToday(supabase, familyId, start, end, untitledRun);
 
+  // SEC-001: family media renders through short-lived signed URLs, never the
+  // stored public link. The kiosk re-renders every two minutes, well inside the
+  // TTL; an external recipe photo passes through unchanged.
+  const media = await signFamilyMediaRefs(supabase, [
+    ...(photoRows ?? []).map((p) => p.url),
+    ...(featuredRecipe ?? []).map((r) => r.photo_url),
+  ]);
+  const shown = (value: string | null) => (value ? media.get(value) ?? null : null);
+
   const choreTitle = new Map((choreRows ?? []).map((c) => [c.id, c.title]));
   const mealName = new Map((meals ?? []).map((m) => [m.id, m.name]));
 
@@ -221,12 +231,12 @@ async function loadDisplay(
     reminders: displayReminders,
     birthdays,
     notes: (notes ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body })),
-    featured: (featuredRecipe ?? []).map((r) => ({ name: r.name, category: r.category, imageUrl: r.photo_url })),
+    featured: (featuredRecipe ?? []).map((r) => ({ name: r.name, category: r.category, imageUrl: shown(r.photo_url) })),
     // Photo ambience: family photos first, recipe photos as a fallback so the
     // photo background/frame works even before the family uploads pictures.
     photos: [
-      ...(photoRows ?? []).map((p) => p.url).filter((u): u is string => Boolean(u)),
-      ...(featuredRecipe ?? []).map((r) => r.photo_url).filter((u): u is string => Boolean(u)),
+      ...(photoRows ?? []).map((p) => shown(p.url)).filter((u): u is string => Boolean(u)),
+      ...(featuredRecipe ?? []).map((r) => shown(r.photo_url)).filter((u): u is string => Boolean(u)),
     ].slice(0, 24),
     calendar: { year: calendar.year, month: calendar.month, today: calendar.today, eventDays },
     handled,

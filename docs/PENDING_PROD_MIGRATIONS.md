@@ -2619,3 +2619,51 @@ happened:** families whose current parents include a member invited as
 current role), and families whose creator (`families.created_by`) is no longer
 an active parent. Neither is proof on its own: a parent may have promoted
 someone legitimately.
+
+## 0338 — family media is private (SEC-001)
+
+`supabase/migrations/0338_family_media_is_private.sql`
+
+**Severity: critical. DEPLOY-COUPLED — apply AFTER the deploy that carries the
+signed-URL readers is live.** Applied first, every photo, video, message
+attachment, reminder image, closet/inventory picture and album cover in the
+product goes blank until that deploy lands, because the old code draws the
+stored public URLs directly. The reverse order is safe: the new code reads
+through signed URLs while the bucket is still public.
+
+`family-media` was created public (0216). A public bucket is served at
+`/storage/v1/object/public/family-media/<path>` to any request, and the
+storage.objects policies are never consulted, so the family-scoped SELECT
+policy was decorative. Every reader now resolves a stored value through
+`signFamilyMediaRefs` (`lib/storage/family-media-ref.ts`), which asks Storage
+for a one-hour signed URL with the viewer's own session. That request is
+authorized by the SELECT policy. Stored values are not rewritten: a stored
+public URL is read as a reference to the object it names.
+
+Measured on the local stack, one object at one path, the same stored public URL
+throughout:
+
+```
+                                         before 0338        after 0338
+unauthenticated GET of the public URL    HTTP 200, bytes    HTTP 400
+member, via signFamilyMediaRefs          HTTP 200, bytes    HTTP 200, bytes
+signed-in non-member, same helper        null               null
+```
+
+0338 checks its own work. It raises if the bucket is still public, or if any
+of the four family-scoped storage policies (read, upload, update, delete) is
+missing, because with the bucket private those policies are the whole access
+model. `docs/audit/bucket-visibility-is-declared-check.sql` now declares
+`family-media` private and asserts the same four policies. Dropping any one
+of them fails it, naming the command.
+
+The service worker change ships in the same deploy. It stops storing
+`/_next/image` responses and anything marked `private`/`no-store`, and bumps
+`bubaly-v4` → `bubaly-v5` so the activate sweep purges private images the old
+worker already retained.
+
+**After applying, consider:** URLs already shared, cached or forwarded while the
+bucket was public stop working, which is the point. Objects are named with 122
+random bits (`lib/storage/object-name.ts`), so none were enumerable. If a
+specific family reports a leaked link, the fix is to re-upload and delete the
+old object; there is no per-URL revocation for a public object.

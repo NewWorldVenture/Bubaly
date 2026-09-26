@@ -7,8 +7,15 @@
    offline to whoever next opens the app on a shared/family device — so only the
    public app shell below is ever cached for navigations; every other page is
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
-   previous worker cached, via the activate-time cleanup.) */
-const CACHE = 'bubaly-v4';
+   previous worker cached, via the activate-time cleanup.)
+
+   SEC-001: the same holds for private IMAGES. Only a response that is public
+   by its own account is stored: never the image optimizer's output
+   (/_next/image is same-origin and keyed by URL, not by session, so a family
+   photo rendered through <Image> was served offline to whoever opened the app
+   next), and never a response marked private or no-store. v4 retained such
+   images; the v4→v5 bump purges them. */
+const CACHE = 'bubaly-v5';
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown
@@ -21,6 +28,14 @@ const LIBRARY_CACHE = 'bubaly-library-v1';
 const KEEP = new Set([CACHE, LIBRARY_CACHE]);
 const APP_SHELL = ['/', '/offline'];
 const CACHEABLE_NAV = new Set(APP_SHELL);
+const CACHEABLE_DESTINATIONS = new Set(['style', 'script', 'image']);
+
+function isCacheableAsset(request, url, res) {
+  if (!res.ok || !CACHEABLE_DESTINATIONS.has(request.destination)) return false;
+  if (url.pathname.startsWith('/_next/image')) return false;
+  const cacheControl = (res.headers.get('cache-control') || '').toLowerCase();
+  return !/\b(private|no-store)\b/.test(cacheControl);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));
@@ -64,7 +79,7 @@ self.addEventListener('fetch', (event) => {
       (cached) =>
         cached ||
         fetch(request).then((res) => {
-          if (res.ok && (request.destination === 'style' || request.destination === 'script' || request.destination === 'image')) {
+          if (isCacheableAsset(request, url, res)) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(request, copy));
           }

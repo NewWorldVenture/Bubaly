@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { withSignedFamilyMedia } from '@/lib/storage/family-media-ref';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
@@ -91,7 +92,7 @@ export default async function PlanningPage() {
     { data: docs, count: docCount },
     { data: contacts, count: contactCount },
     { data: milestones, count: milestoneCount },
-    { data: photos, count: photoCount },
+    { data: photoRows, count: photoCount },
   ] = await Promise.all([
     safe(supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
       .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4)),
@@ -110,6 +111,8 @@ export default async function PlanningPage() {
     safe(supabase.from('family_photos').select('id, url, thumbnail_url', { count: 'exact' })
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4)),
   ]);
+  // SEC-001: signed, short-lived, and kept out of the image optimizer's cache.
+  const photos = await withSignedFamilyMedia(supabase, (photoRows ?? []) as { id: string; url: string | null; thumbnail_url: string | null }[], ['url', 'thumbnail_url']);
 
   type Ev = { id: string; title: string; starts_at: string; all_day: boolean };
   type Td = { id: string; title: string; due_date: string | null };
@@ -198,7 +201,7 @@ export default async function PlanningPage() {
                   const src = p.thumbnail_url || p.url;
                   return (
                     <span key={p.id} className="relative aspect-square overflow-hidden rounded-lg bg-elevated">
-                      {src ? <Image src={src} alt={tr('planning.familyMoment')} fill sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
+                      {src ? <Image src={src} alt={tr('planning.familyMoment')} fill unoptimized sizes="96px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-4 w-4" /></span>}
                     </span>
                   );
                 })}

@@ -7,6 +7,7 @@ import {
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { signFamilyMediaRefs } from '@/lib/storage/family-media-ref';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { ErrorState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
@@ -97,8 +98,19 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     return <ErrorState message={tr('memories.couldNotLoadYourMemories')} />;
   }
 
-  const albums = (albumsRes.data ?? []) as AlbumRow[];
-  const photos = (photosRes.data ?? []) as PhotoRow[];
+  // SEC-001: every album cover and photo renders through a short-lived signed
+  // URL, never the stored public link — one Storage round trip for the page.
+  // A cover pasted from the web passes through; one of ours that cannot be
+  // signed becomes null and takes the no-cover branch below.
+  const albumRows = (albumsRes.data ?? []) as AlbumRow[];
+  const photoRows = (photosRes.data ?? []) as PhotoRow[];
+  const media = await signFamilyMediaRefs(supabase, [
+    ...albumRows.map((a) => a.cover_url),
+    ...photoRows.flatMap((p) => [p.url, p.thumbnail_url]),
+  ]);
+  const shown = (value: string | null) => (value ? media.get(value) ?? null : null);
+  const albums: AlbumRow[] = albumRows.map((a) => ({ ...a, cover_url: shown(a.cover_url) }));
+  const photos: PhotoRow[] = photoRows.map((p) => ({ ...p, url: shown(p.url), thumbnail_url: shown(p.thumbnail_url) }));
   const memberList = (members ?? []) as MemberLite[];
 
   const matchesQ = (name: string) => !q || name.toLowerCase().includes(q.toLowerCase());

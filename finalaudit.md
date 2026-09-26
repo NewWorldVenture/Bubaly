@@ -2,14 +2,14 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T03:20:00.000Z
+- Last Updated: 2026-09-26T14:10:00.000Z
 - Total Audit Items: 14105
 - Not Started: 13842
-- In Progress: 194
+- In Progress: 193
 - Passed: 12
-- Fixed + Passed: 54
+- Fixed + Passed: 56
 - Blocked: 2
-- Failed: 1
+- Failed: 0
 - Overall Completion: 0.04%
 
 Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Three further integrity gaps followed from the same question — what does the table enforce, as opposed to what does the code promise: DATA-008, a single-choice poll took every choice (one member cast 3 votes across 3 options) because the single/multi rule lived only in the browser and spans two tables, so it needed a trigger rather than an index; DATA-009, `families.timezone` had no constraint at all, so a typo saved silently and put the family on Greenwich time. Fixed in 0318-0323 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. TEST-007 is the one that explains the rest: DB-FN-001 had a probe watching it the whole time — `circle-join-code-check.sql` calls the dead function and asserts it works, ran on every pull request, and passed on every pull request. CI's bootstrap installed pgcrypto into `public` while a real Supabase project puts it in `extensions`, so the broken pin resolved there and nowhere else. Restoring the pre-0318 definition on a CI-shaped database: probe exit 0. After the bootstrap was made faithful to production: probe exit 3, `function gen_random_bytes(integer) does not exist`. The runner also reported a SKIP as a PASS, which had hidden that the wallet overspend race ran nowhere; skips are now counted separately and `PROBES_REQUIRE_ALL=1` makes them fatal in CI. `docs/audit/run-probes.sh` passes 45/45 with 0 skipped, on both a fresh container replicating the CI job and the local Supabase stack. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records five member-data tables left deliberately unchanged as an owner decision, with the reasoning and a recommended shape written down for whoever decides. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0323 are PENDING PRODUCTION MIGRATIONS that a human must apply.
@@ -90,8 +90,8 @@ PRODUCTION READY: NO
 - SEC-025 (HIGH until 0335 is applied): any signed-in account can write another user's id onto a member row in its own family and then read that user's email, full name, date of birth and phone; the ids are visible on the feedback board. Reproduced locally; fixed in migration 0335 (pending production).
 - TEST-012: the CI database gate was red on this branch (0326 could not replay; 13/57 probes failed on the CI image) and could not see function-grant traps. The harness is repaired and 57/57 on the exact CI image, but CI itself has never run on this branch: no PR exists.
 - SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
-- DEPLOY-002: Migrations 0318–0337 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once. 0335 (SEC-025) stops a client linking a login to a member row; safe in either order. 0336 (PRIV-002) ends a removed member's profile visibility; safe in either order. 0337 (SEC-026) lets only a parent make, change or remove a parent; safe in either order.
-- SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
+- DEPLOY-002: Migrations 0318–0338 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once. 0335 (SEC-025) stops a client linking a login to a member row; safe in either order. 0336 (PRIV-002) ends a removed member's profile visibility; safe in either order. 0337 (SEC-026) lets only a parent make, change or remove a parent; safe in either order. 0338 (SEC-001) makes family media private and is DEPLOY-COUPLED the other way from 0328: apply it only after the deploy carrying the signed-URL readers, or every photo goes blank.
+- SEC-001 (CRITICAL until deployed and 0338 applied): family media is readable by anyone holding a URL in production. Fixed on this branch: every reader signs, the service worker no longer retains private images, and 0338 makes the bucket private. DEPLOY-COUPLED: ship the code first, then apply 0338.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
@@ -12165,7 +12165,7 @@ PRODUCTION READY: NO
 | SUPPORT-D59FA133542C | SUPPORT | public/launch/launch-1320x2868.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4C8E9A36E1EE | SUPPORT | public/launch/launch-750x1334.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-292C0CE6AF4C | SUPPORT | public/launch/launch-828x1792.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout | None | Desired private-image isolation regression RED | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
+| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🛠 FIXED + PASS (ships with the deploy) | Critical | Native: real Chromium registration and CacheStorage against a local server, old worker vs new. Executed: the real handlers in a VM (tests/sw-private-image-cache.test.ts, 5) | Stores an asset only when the response is public by its own account: never /_next/image, never Cache-Control private/no-store; bubaly-v4 → v5 purges what the old worker retained; library downloads cache kept | Old worker in Chromium: optimizer response cached, private/no-store cached, v4 survived (the record's RED). New worker: none of the three; the public icon still cached (control). All 39 SW tests pass | Logout no longer has private images to purge, because none are stored. Family media also stopped passing through the optimizer (rendered unoptimized; SEC-001). See SEC-001. |
 | SUPPORT-E3637D40E182 | SUPPORT | route-inventory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-52B4E3C1B5F2 | SUPPORT | scripts/backfill-marketing-asset-provenance.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-010123692F7B | SUPPORT | scripts/backfill-marketing-coverage.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13386,7 +13386,7 @@ PRODUCTION READY: NO
 | PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
-| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Proven by execution: an unauthenticated GET of a family-media object returns HTTP 200 and its bytes; the same request against the private documents bucket returns 400. The RLS policy on storage.objects is correct and the public URL never consults it. | None to the bucket flag — closing it needs every consumer moved off getPublicUrl first, and flipping it alone would blank every photo and avatar in the product. New probe bucket-visibility-is-declared-check.sql holds the declared set in both directions. | Probe mutation-tested: a fifth public bucket fails it, and flipping family-media to private fails it with a message naming the rollout. Suite 47/47. | Objects are NOT enumerable — 122 bits from crypto.randomUUID, verified across every upload path. The residual is that a leaked URL is permanent and unrevocable. |
+| SEC-001 | SEC | Private family media storage and URL access | 🛠 FIXED + PASS (0338 pending production, deploy-coupled) | Critical | Live on the local stack, the same stored public URL: unauthenticated GET 200 → **400** after 0338; member via the app helper 200 → 200; signed-in non-member null → null. Executed service-worker harness RED → GREEN. 60/60 probes on both databases | Every reader signs through `signFamilyMediaRefs`/`useSignedFamilyMedia` (never falling back to the public URL); the SW stops storing `/_next/image` and private/no-store responses (v4→v5 purge); 0338 makes the bucket private and asserts its four family-scoped policies | Parser/signer 8 tests; SW harness 5; bucket probe mutation-tested per policy and for re-publication | Stored values are not rewritten (no data migration). DEPLOY-COUPLED: apply 0338 after the deploy. Objects were never enumerable (122-bit names); the residual — a leaked public URL being permanent — ends when 0338 is applied. |
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -14695,7 +14695,7 @@ docs/final-audit/pwa-cycle.md
 
 ### SEC-001 — Private family media storage and URL access
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS (0338 pending production, deploy-coupled)
 Severity: Critical
 Route(s), components, actions, tables and providers: supabase/migrations/0216_family_media_bucket.sql; lib/storage/family-media.ts; six uploaders and downstream consumers enumerated below; public/sw.js; realtime/offline cache
 
@@ -14754,16 +14754,34 @@ A new probe, `docs/audit/bucket-visibility-is-declared-check.sql`, now holds the
 Required rollout order: define strict configured-project/bucket/family reference parsing and the desired revocation/cache contract; prove authorized/cross-family, stale-owner, expiry/idle and range/download behavior on disposable data; deploy every legacy/new-reference consumer before changing bucket access; then verify a reviewed private-bucket change, denial of old public reads, permitted member reads, old-client behavior and cache handling. A signed bearer URL grants access until its expiry and alone cannot promise per-request membership or immediate logout revocation. Current provider configuration, old public cache exposure and production schema prerequisites need independent verification before such a rollout.
 
 #### Fixes Applied
-None
+Closed on this branch (2026-09-26), in the rollout order this record prescribed:
+
+1. **Reference parsing and signing** — `lib/storage/family-media-ref.ts`. `parseFamilyMediaRef` reads a stored value as an object in this bucket (a bare path, or a public/signed/authenticated Storage URL on the configured project), as external media (any other http(s) URL, including this project's other public buckets), or as nothing (empty, malformed, `javascript:`/`data:`, a path that escapes its folder). With no configured origin, a family-media URL on any host is still treated as ours, so a missing env var fails closed. `signFamilyMediaRefs` signs every distinct object in one `createSignedUrls` round trip with the caller's own client, which the storage.objects SELECT policy (`is_family_member` of the first path segment) authorizes. An object that cannot be signed — refused, failed call, thrown call — resolves to **null, never the stored public URL**. Signed URLs last an hour and are never persisted.
+2. **Every reader moved.** Server pages sign with the request's session: Display (kiosk), Home, Planning, Grandparent portal (per household, so each is checked against that household's membership), and Memories (up to 400 photos plus album covers in one round trip). Home and Planning render these `unoptimized`, so private bytes no longer pass through `/_next/image`. Client modules sign through the new `useSignedFamilyMedia` hook, which signs with the viewer's session, resolves external media synchronously and re-signs before expiry: Photos (grid, list, album covers, lightbox, video, download, edit preview), On-This-Day, Messages (image, file download, audio/voice, shared-photo rail; Giphy passes through), Reminders (card and editor), Closet and Inventory (the synchronous `getPublicUrl` helpers are gone), and the Family screen's covers. Stored values are not rewritten, so there is no data migration.
+3. **Service worker** — `public/sw.js` stores an asset only when the response is public by its own account: never `/_next/image`, never `Cache-Control: private` or `no-store`. `bubaly-v4` → `bubaly-v5` purges what the old worker retained; the family's library downloads cache is kept.
+4. **The bucket** — migration **0338** sets `family-media` private and raises if it is still public or if any of the four family-scoped storage policies is missing. It is **deploy-coupled**: apply it after the deploy carrying (1)–(3), because the old code draws the stored public URLs directly. The reverse order is safe.
+
+The probe and the migration self-check both first shipped with a bug: an unqualified `cmd` in a subquery over `pg_policies` resolved to `pg_policies.cmd`, so one policy satisfied all four. Mutation testing (dropping the read policy and watching the probe pass) caught it; both now use a qualified alias, and dropping each of the four policies now fails the probe, naming the command.
 
 #### Retest Results
-Read-only source/caller map complete. Controlled private-image cache isolation regression fails as described above; provider access and native worker/optimizer acceptance are unexecuted. No privacy fix has been applied; SEC-001 stays FAIL.
+- **Live, against the local Supabase stack** (real Storage through Kong, real GoTrue sessions, the app's own `signFamilyMediaRefs`), the same stored public URL throughout:
+
+  | | before 0338 | after 0338 |
+  |---|---|---|
+  | unauthenticated GET of the stored public URL | HTTP 200, 25 bytes | **HTTP 400** |
+  | member, stored public URL via the app helper | HTTP 200, 25 bytes | **HTTP 200, 25 bytes** |
+  | signed-in non-member, same helper | null | **null** |
+
+- **Service worker, executed** — `tests/sw-private-image-cache.test.ts` runs the real `public/sw.js` handlers in a VM against an in-memory CacheStorage. It was RED on the old worker, failing exactly as this record described: the optimizer response was stored, a `private`/`no-store` response was stored, and `bubaly-v4` survived activation. It is GREEN on the new one, and its controls pass: public static assets are still cached, a signed Storage URL is cross-origin and not intercepted, and the library cache survives.
+- `tests/family-media-ref.test.ts` (8): the parser against hostile inputs, one signing round trip, and all three never-fall-back cases.
+- Probes: **60/60 on the local stack and on a fresh replay on the exact CI image** (351/351 migrations, `plpgsql_check` installed, 0 skipped); the ledger rehearsal re-applies 0338 cleanly. `bucket-visibility-is-declared-check.sql` fails if the bucket is made public again, and if any of the four policies is dropped.
+- Two existing tests were updated for the new shape, not weakened. `memories-read-boundary` pins the renamed `albumRows`/`photoRows` reads behind the same fail-closed guard. `reminder-provenance-ui` mocks the signing hook alongside the realtime hook it already mocks, because its hand-built `react` mock indexes state slots.
 
 #### Evidence
-Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
+Local stack execution recorded above (object created, read, and removed within the run; test users and family deleted afterwards). No production object, credential or configuration was touched. Production remains exposed until the deploy lands and 0338 is applied — see DEPLOY-002 and docs/PENDING_PROD_MIGRATIONS.md.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS (0338 pending production, deploy-coupled)
 
 ### SOCIAL-001 — Live social publishing connectors
 
@@ -22500,7 +22518,7 @@ All eight assertions above, executed in one pass. Every fixture was removed afte
 Executed against the running local Supabase stack over HTTP, with tokens obtained by real password sign-in rather than minted or stubbed. This complements rather than replaces the SQL probes: they run in CI against a bare Postgres, where no Storage service exists, and this reaches the parts they cannot.
 
 #### Final Status
-✅ PASS — for the private buckets. The public `family-media` bucket is a separate and unresolved matter; see SEC-001, where the same HTTP method showed an unauthenticated read returning 200 and the bytes.
+✅ PASS — for the private buckets. `family-media` joins them with 0338 (SEC-001, fixed on this branch, deploy-coupled): the same HTTP method that returned 200 and the bytes returns 400 once it is applied, while members still read through signed URLs.
 
 ### AI-002 — The AI surface outside the context slices
 
@@ -23158,7 +23176,7 @@ Status: 🔄 IN PROGRESS — migration integrity verified in CI; live policy beh
 
 The Database job (migration replay and RLS boundary probes) passes on head 92340315. This branch authors no SQL and changes no migration — `git diff origin/main...HEAD -- supabase/migrations/` is empty.
 
-NOT verified here: the applied production catalog, which no static evidence establishes. The three release failures (SEC-001 public family-media bucket, AUTHZ-003 social-member DELETE, AUTHZ-005 Guardian contact/profile writes) are all policy state on main, not regressions from this branch, and all need SQL applied by a human.
+NOT verified here: the applied production catalog, which no static evidence establishes. The three release failures recorded here (SEC-001 public family-media bucket, AUTHZ-003 social-member DELETE, AUTHZ-005 Guardian contact/profile writes) were all policy state on main, not regressions from this branch; each is now fixed on this branch and needs its SQL applied by a human (SEC-001's 0338 only after the deploy that carries its signed-URL readers).
 
 ## Integrations
 Status: 🔄 IN PROGRESS — no live provider exchange was performed in this pass.
@@ -23193,7 +23211,7 @@ Production response headers on / (2026-09-13, build f9c4d7a1):
 
 Observation, not a defect of this pass: `script-src` carries 'unsafe-inline', which is the usual Next App Router trade-off and materially weakens CSP as an XSS control. Moving to a nonce or hash strategy is worth a separate record; it is not claimed as verified either way here.
 
-The unauthenticated route sweep under APIs found no data exposure. SEC-001 remains a release failure and is live on main, independent of this branch.
+The unauthenticated route sweep under APIs found no data exposure. SEC-001 is fixed on this branch (0338, deploy-coupled) and remains live in production until that ships.
 
 ## Performance
 Status: ✅ PASS for public delivery; deployed runtime inspection remains separate.
@@ -23225,7 +23243,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
+- SEC-001 (CRITICAL until deployed and 0338 applied): family media is readable by anyone holding a URL in production. Fixed on this branch: every reader signs, the service worker no longer retains private images, and 0338 makes the bucket private. DEPLOY-COUPLED: ship the code first, then apply 0338.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
@@ -29912,6 +29930,80 @@ too.
 - `tests/parent-role-is-the-parents.test.ts` pins the trigger (invoker, three
   refusals, the no-parent exception) and the UI gating. The last-manager test
   now pins the helper that carries its check.
+
+# Pass AL — family media made private (SEC-001, the one ❌ FAIL)
+
+SEC-001 stayed at ❌ FAIL all cycle. The one-line fix, `public = false`, blanks
+every photo in the product, because every reader drew the stored
+`getPublicUrl` link directly. The record prescribed the order. Define strict
+reference parsing and a revocation/cache contract. Move every consumer. Fix
+the service worker. Only then change the bucket, and ship the bucket change
+after the code. This pass followed it.
+
+**The contract.** A stored value is a *reference*, never something to draw.
+`parseFamilyMediaRef` reads a bare path, or a public/signed/authenticated
+Storage URL on the configured project, as an object in `family-media`. Any
+other http(s) URL (a Giphy GIF in Messages, a pasted cover, this project's
+public avatars or marketplace buckets) is external media, and anything else is
+nothing. `signFamilyMediaRefs` signs every distinct object in one round trip
+with the caller's own session, and Storage authorizes that with the existing
+`is_family_member` SELECT policy. An object that cannot be signed resolves to
+**null**, never to the stored public URL. That fallback is the tempting
+shortcut: it would keep the bytes public exactly as long as the bucket stayed
+public, and blank the image the day it did not, so the failure would be
+invisible until then. Signed URLs last an hour, are re-minted on the client
+before they expire, and are never written back.
+
+**The readers.** Five server pages sign with the request's session: Display,
+Home, Planning, the Grandparent portal (per household, so a grandparent's
+several families each check their own membership) and Memories (up to 400
+photos and every album cover in one round trip). Home and Planning render them
+`unoptimized`, so private bytes stop passing through `/_next/image`. Client
+modules sign through `useSignedFamilyMedia`: Photos (grid, list, album covers,
+lightbox, video, download, edit preview), On-This-Day, Messages (image, file,
+audio/voice, the shared-photo rail), Reminders, Closet, Inventory and the
+Family screen's covers. The six uploaders the record listed are exactly the six
+that write to the bucket, confirmed by search, and they keep writing the same
+reference, so there is no data migration.
+
+**The worker.** Run in a VM with its real handlers, the old `public/sw.js` did
+what the record's RED regression said. It stored an optimizer response, stored
+a `private`/`no-store` response, and kept `bubaly-v4` through activation. The
+new worker stores only what is public by its own account, and `bubaly-v5`
+purges the old cache. The same harness is green, and its controls still pass.
+
+**The bucket.** 0338 sets `family-media` private and checks its own work. On
+the local stack, the same stored public URL:
+
+| | before 0338 | after 0338 |
+|---|---|---|
+| unauthenticated GET | HTTP 200, 25 bytes | **HTTP 400** |
+| member, via the app helper | HTTP 200, 25 bytes | **HTTP 200, 25 bytes** |
+| signed-in non-member, same helper | null | **null** |
+
+The member row is the one that makes the rollout safe: the new read path
+already works while the bucket is public. So the deploy goes first, then 0338,
+the reverse of 0328's coupling. That order is recorded in DEPLOY-002 and at
+the top of 0338's entry in docs/PENDING_PROD_MIGRATIONS.md.
+
+**A bug in my own guard, caught by mutation.** The probe and 0338's self-check
+both assert that the four family-scoped storage policies exist, and both first
+compared `p.cmd = cmd` in a subquery over `pg_policies`. The unqualified `cmd`
+resolved to `pg_policies.cmd`, so any single policy satisfied all four.
+Dropping the read policy and watching the probe pass is what showed it. Both
+now use a qualified `want.op`. Dropping each of the four policies fails the
+probe and names the command, and dropping one fails 0338's own check.
+
+- 60/60 probes on the local stack and on a fresh replay of the exact CI image
+  (351/351 migrations, 0 skipped). The ledger rehearsal re-applies 0338.
+- New tests: `tests/family-media-ref.test.ts` (8) and
+  `tests/sw-private-image-cache.test.ts` (5, executed).
+- **Native, in real Chromium** (registration, activation and CacheStorage,
+  images loaded through real `<img>` elements from a local server). The old
+  worker cached the optimizer response and the `private, no-store` response,
+  and kept `bubaly-v4`, which is the record's RED reproduced in a browser. The
+  new worker cached neither, purged `bubaly-v4`, and still cached the public
+  icon. SUPPORT-98FD1D4C44AD closes with this.
 
 # Final Regression
 

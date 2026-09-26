@@ -25,8 +25,10 @@ describe('memories page read boundary', () => {
 
   it('derives albums/photos only after the fail-closed guard', () => {
     const guardIdx = page.indexOf('if (contentError) {');
-    const albumsIdx = page.indexOf('const albums = (albumsRes.data ?? [])');
-    const photosIdx = page.indexOf('const photos = (photosRes.data ?? [])');
+    // The rows are read into albumRows/photoRows and then signed (SEC-001);
+    // both reads must still sit behind the guard.
+    const albumsIdx = page.indexOf('const albumRows = (albumsRes.data ?? [])');
+    const photosIdx = page.indexOf('const photoRows = (photosRes.data ?? [])');
     expect(guardIdx).toBeGreaterThan(-1);
     expect(albumsIdx).toBeGreaterThan(guardIdx);
     expect(photosIdx).toBeGreaterThan(guardIdx);

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -39,10 +40,6 @@ function fmtDate(d: string): string {
   return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
-}
 
 export function ClosetModule() {
   const t = useTranslations();
@@ -171,6 +168,8 @@ export function ClosetModule() {
   const error = items.error || outfits.error || logs.error || locations.error;
   const refresh = () => { void items.refresh(); void outfits.refresh(); void logs.refresh(); void locations.refresh(); };
 
+  // SEC-001: photos are drawn from short-lived signed URLs, never public ones.
+  const media = useSignedFamilyMedia(items.data.map((i) => i.photo_path));
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={t('closetModule.couldNotLoadTheCloset')} onRetry={refresh} />;
 
@@ -231,7 +230,7 @@ export function ClosetModule() {
             <>
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                 {suggestion.picks.map((p) => {
-                  const url = photoUrl(p.item.photo_path);
+                  const url = media(p.item.photo_path);
                   return (
                     <li key={p.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
                       {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
@@ -297,7 +296,7 @@ export function ClosetModule() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
-            const url = photoUrl(item.photo_path);
+            const url = media(item.photo_path);
             const cpw = costPerWear(item);
             return (
               <div key={item.id} className="group rounded-2xl border border-border bg-surface/40 p-3">
@@ -451,7 +450,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
+  const media = useSignedFamilyMedia([photoPath]);
+  const url = media(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">

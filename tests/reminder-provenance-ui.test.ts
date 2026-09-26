@@ -17,6 +17,9 @@ vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: ({ table }:
   loading: false, error: null, refresh: vi.fn(),
 }) }));
 vi.mock('@/lib/hooks/use-action', () => ({ useAction: () => ({ run: vi.fn(), isPending: () => false }) }));
+// Media signing (SEC-001) is an external dependency here, like the realtime
+// query above; its own tests live in tests/family-media-ref.test.ts.
+vi.mock('@/lib/hooks/use-signed-family-media', () => ({ useSignedFamilyMedia: () => (value: string | null | undefined) => value ?? null }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: state.db }));
 vi.mock('@/app/(app)/dashboard/reminders/actions', () => ({ createReminderAction: vi.fn(), deleteReminderAction: vi.fn(), snoozeReminderAction: vi.fn() }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));

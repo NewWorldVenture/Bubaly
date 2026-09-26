@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useSignedFamilyMedia } from '@/lib/hooks/use-signed-family-media';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
@@ -252,6 +253,8 @@ export function RemindersModule() {
     });
   }
 
+  // SEC-001: reminder images are drawn from short-lived signed URLs.
+  const media = useSignedFamilyMedia(reminders.map((r) => r.image_url));
   if (combinedLoading) return <SkeletonList />;
   if (combinedError) return <ErrorState message={tr('remindersModule.couldNotLoadRemindersRefresh')} onRetry={retry} />;
 
@@ -541,7 +544,7 @@ export function RemindersModule() {
 
                   {reminder.image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={reminder.image_url} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
+                    <img src={media(reminder.image_url) ?? ''} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
                   )}
                 </div>
 
@@ -615,6 +618,8 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   const [subtasks, setSubtasks] = useState<Subtask[]>(normalizeSubtasks(reminder?.subtasks));
   const [subtaskInput, setSubtaskInput] = useState('');
   const [imageUrl, setImageUrl] = useState(reminder?.image_url ?? '');
+  // The stored value (or a fresh upload's reference) is signed for display only.
+  const media = useSignedFamilyMedia([imageUrl]);
   const [uploading, setUploading] = useState(false);
 
   function commitTags() {
@@ -882,7 +887,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               {imageUrl
                 ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <div className="relative"><img src={imageUrl} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
+                  <div className="relative"><img src={media(imageUrl) ?? ''} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
                     <button type="button" onClick={() => setImageUrl('')} aria-label={tr('reminders.removeImage')} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
                   </div>
                 )

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { withSignedFamilyMedia } from '@/lib/storage/family-media-ref';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
@@ -173,7 +174,7 @@ export default async function HomePage() {
     { data: choreRows },
     { data: dinnerPlans },
     { data: txns },
-    { data: photos },
+    { data: photoRows },
     { data: messages },
     { count: choresToday },
     { count: choresDone },
@@ -213,6 +214,10 @@ export default async function HomePage() {
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
   ]);
+  // SEC-001: photos render through short-lived signed URLs, never the stored
+  // public link, and bypass the image optimizer so private bytes do not land in
+  // its shared cache (or the service worker's).
+  const photos = await withSignedFamilyMedia(supabase, photoRows ?? [], ['url', 'thumbnail_url']);
 
   const memberList = (members ?? []) as Member[];
   const memberById = new Map(memberList.map((m) => [m.id, m]));
@@ -752,7 +757,7 @@ export default async function HomePage() {
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
                     {src
-                      ? <Image src={src} alt={p.caption ?? 'Family memory'} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover transition group-hover:scale-105" />
+                      ? <Image src={src} alt={p.caption ?? 'Family memory'} fill unoptimized sizes="(max-width: 640px) 50vw, 25vw" className="object-cover transition group-hover:scale-105" />
                       : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-6 w-6" /></span>}
                     <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white">{when}</span>
                   </Link>
