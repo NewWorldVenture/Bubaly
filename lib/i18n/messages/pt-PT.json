@@ -2112,6 +2112,7 @@
   "assistantModule.deleteThisConversation": "Eliminar esta conversa?",
   "assistantModule.renameConversation": "Mudar o nome da conversa",
   "assistantModule.sorryIHadTroubleWith": "Desculpe, tive dificuldade com isso.",
+  "assistants.keyNotFoundNothingRevoked": "Essa chave não foi encontrada nesta família, por isso nada foi revogado.",
   "auction.auction": "Leilão",
   "auction.bidHistory": "Histórico de licitações",
   "auction.buyItNowFor": "Compre já por",

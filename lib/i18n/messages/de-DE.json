@@ -2112,6 +2112,7 @@
   "assistantModule.deleteThisConversation": "Diese Unterhaltung löschen?",
   "assistantModule.renameConversation": "Unterhaltung umbenennen",
   "assistantModule.sorryIHadTroubleWith": "Entschuldigung, damit hatte ich Schwierigkeiten.",
+  "assistants.keyNotFoundNothingRevoked": "Dieser Schlüssel wurde in dieser Familie nicht gefunden, daher wurde nichts widerrufen.",
   "auction.auction": "Auktion",
   "auction.bidHistory": "Gebotsverlauf",
   "auction.buyItNowFor": "Jetzt kaufen für",

@@ -26047,6 +26047,38 @@ update), and still goes red if the store swallows a write failure.
 branch's: a `pg_isready`-vs-`POSTGRES_DB` readiness race in the workflow, which
 `main` had already fixed and the merge carried in verbatim.
 
+## C1-K-10 · HIGH · "Assistant key revoked" when nothing was revoked
+
+The server-side mirror of C1-K-01. `revokeAssistantLinkAction` writes through
+the service client, scoped by id **and** family so an id from elsewhere cannot
+revoke another household's key — correct. But an id that matches nothing
+(another family's, or one deleted in another tab) raises no error; it updates
+zero rows. The action checked only `error`, then replied
+
+> Assistant key revoked. It stops working immediately.
+
+Of every false "done" this audit has found, this is the one where the lie is a
+**security claim**: a parent told a leaked key is dead stops worrying about it.
+
+It now asks for the row back and refuses on zero rows, with the message in all
+seven locales; nothing is written to the audit log for a revocation that did
+not happen. Calibrated: dropping the row check fails exactly the zero-row case,
+while the manager pre-check and the real-error path hold in both directions.
+
+A sweep of every other credential-shaped write (`sync_accounts`,
+`sync_tokens`, `child_logins`, `social_account_tokens`, `push_devices`,
+`permission_grants`, `trust_delegations`) found no second instance:
+`account-tokens.ts` names its results `claimed` / `consumed` / `retired` and
+checks each, and the two disconnect routes delete an `account.id` they have
+just read under the family scope, where zero rows means "already gone" — which
+is true.
+
+**Process note.** The first version of this fix re-serialised all seven locale
+files with sorted keys (a ~7,100-line diff), because `main` no longer keeps
+them sorted. It was reverted before commit and the key inserted as one line per
+file. With other sessions editing the same catalogues, a re-sort is a
+guaranteed merge conflict for all of them.
+
 ## Converged with another session on C1-K-01/03
 
 While this pass was running, another session found the **same class

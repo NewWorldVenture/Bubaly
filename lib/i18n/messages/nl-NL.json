@@ -2112,6 +2112,7 @@
   "assistantModule.deleteThisConversation": "Dit gesprek verwijderen?",
   "assistantModule.renameConversation": "Gesprek hernoemen",
   "assistantModule.sorryIHadTroubleWith": "Sorry, daar had ik moeite mee.",
+  "assistants.keyNotFoundNothingRevoked": "Die sleutel is niet gevonden in dit gezin, dus er is niets ingetrokken.",
   "auction.auction": "Veiling",
   "auction.bidHistory": "Biedgeschiedenis",
   "auction.buyItNowFor": "Koop het nu voor",
