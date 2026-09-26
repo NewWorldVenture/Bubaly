@@ -159,15 +159,23 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
   // never depend on policy drift to avoid cross-family targeting.
+  // Every branch reads the row back. The comment above already explains why the
+  // family predicate is on all five ("a delete action should never depend on
+  // policy drift"), and this is the other half of the same thought: 0218/0220
+  // narrow writes on `transactions` and `financial_accounts`, and RLS FILTERS a
+  // delete rather than refusing it — so a removal the policy blocked answered
+  // `error: null` and this action reported `{ ok: true }` over a row still there.
   const result = input.table === 'wallet_cards'
-    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+    ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
     : input.table === 'wallet_passes'
-      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+      ? await supabase.from('wallet_passes').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
       : input.table === 'wallet_rewards'
-        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
+        ? await supabase.from('wallet_rewards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
         : input.table === 'financial_accounts'
-          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId)
-          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  const { error } = result;
-  return error ? actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error) : { ok: true };
+          ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
+          : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
+  const { data: rows, error } = result;
+  if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
+  return { ok: true };
 }

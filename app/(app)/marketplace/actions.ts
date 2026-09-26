@@ -141,11 +141,20 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
-    return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
+    // Was an English template literal on the one path a person actually hits when
+    // they mis-click a lifecycle button.
+    return { ok: false, error: t('marketplace.cannotGoFromStatusToStatus', { from: order.status, to: status }) };
   }
 
-  const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);
+  // The read above establishes the order is this family's, but the write did not
+  // repeat it — and 0327 ("the terms of a deal are fixed when it is struck")
+  // narrows `marketplace_orders_update`, so a write the policy filters answers
+  // `error: null` and the order stays in its old status while the buyer is told it
+  // moved. The scope also closes the window between the read and the write.
+  const { data: rows, error } = await supabase.from('marketplace_orders')
+    .update({ status }).eq('id', orderId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('marketplace.couldNotUpdateTheOrder') };
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }

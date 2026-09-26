@@ -29277,3 +29277,119 @@ the new probe calibrated in all three policy shapes and in both drift directions
 container's Node 22 against the declared 24.21.0). Lint exit 0 at 10 of 12
 warnings, typecheck exit 0, i18n gate clean across eight surfaces, Supabase query
 audit 491 tables / 91 functions / 146 routes, migration ledger 345 files.
+
+---
+
+## Q54 — The guard only looked in `components/`. The same policies filter the server.
+
+Q53 measured which tables' RLS can filter a member's write, and applied the rule
+to `components/`. That was the wrong boundary: a **server action or route handler
+on the RLS-bound client** (`createServer()`) is filtered by exactly the same
+policies. Only the SERVICE client is exempt, because it bypasses RLS entirely — a
+write through it is never filtered, so the rule has nothing to say about it.
+
+Extending the scan to `app/` and `lib/` found **22 more sites**, all fixed.
+
+### Three matcher defects found by running it
+
+Each was found by reading what the scan reported, not by the scan passing.
+
+**A 320-character window cut multi-line chains short.** Six writes that already
+carry `.eq('family_id', …)` on a continuation line were reported as leaving
+tenancy to RLS. The window is bounded by the **statement** now (a PostgREST chain
+ends at its `;`), because a guard that names innocent call sites is how exemptions
+get bolted on until it means nothing.
+
+**A file-level client check is too coarse.** `app/(app)/dashboard/assistants/actions.ts`
+writes through `admin = createServiceClient()` beside RLS-bound reads, so the file
+matched and the write did not belong to the rule at all. The client is decided at
+the **call site** now, by collecting which local names hold a service client. The
+calibration for it is the one that matters: swapping that file's
+`createServiceClient()` for `createServer()` makes the site appear, so the
+exemption is keyed to the client rather than being a blanket pass.
+
+**`family_id` is not the only ownership predicate.** `push_devices` is one row per
+physical device and its policy (0035) is device-owner-scoped, so `.eq('user_id',
+user.id)` is the RIGHT predicate there and `family_id` would be the wrong one, not
+a stricter one. The same is true of `library_progress`, `user_preferences`,
+`blog_post_saves` and `feedback_votes`. The scope rule accepts either now.
+
+### The money paths, where a silent no-op is not cosmetic
+
+Two of these are **rollbacks whose only trace is a `console.error`** — and an RLS
+filter raises no error, so the one case worth logging never logged:
+
+- **`runDueAllowancesAction`'s schedule rollback.** If the wallet credit fails, the
+  rule's `next_run_on` must go back. A filtered rollback leaves the rule advanced
+  with the credit never made, so the child is **skipped for a whole period** and
+  nothing in the product says so.
+- **`requestSpendAction`'s approval rollback.** Its own comment says why: *"A held
+  debit without its approval row can never be resolved."* A filtered cancel leaves
+  exactly that in the ledger — `requires_parent_approval` with no approval row
+  that could ever resolve it.
+
+And `toggleAllowanceRuleAction` reported "paused" over a rule the nightly cron
+would still pay — the same table as CRITICAL 2, one layer up from the policy that
+fixed it.
+
+`hub-actions.ts`'s delete already had the family predicate on all five branches
+with a comment explaining why ("a delete action should never depend on policy
+drift"); this is the other half of that same thought, and all five branches read
+back now.
+
+### The approval stamps, where a comment already made the argument
+
+`concierge/actions.ts` stamps `approval_requests` after executing or dismissing a
+plan, and logs on failure. The decline stamp carries this comment:
+
+> 0093's CHECK allows pending|approved|rejected|… and decided_by references
+> family_members(id), not auth.users — the previous 'declined' + user id never
+> satisfied either, so this stamp **had always failed and only logged**.
+
+That is the argument for the readback, made about a different mechanism. A CHECK
+violation *raises*, which is eventually how someone noticed. An RLS filter raises
+nothing at all, so the same stamp silently not landing would not even reach that
+log. Both stamps read back now, as do both `family_automation_runs` status writes
+— a filtered "executed" leaves the run `pending`, and the plan can be applied
+twice.
+
+`lib/family/actions.ts`'s `resolveAutomationRun` is the sharpest of that group:
+`logAudit` runs unconditionally afterwards, so a filtered write **wrote an audit
+entry for an approval that never happened**. The log and the table disagreeing is
+worse than either being wrong alone.
+
+### Three more English strings on refusal paths
+
+`lib/family/actions.ts`'s manager refusal (`'Only parents and adults can approve
+automations.'`), `marketplace/actions.ts`'s lifecycle error (`` `Can't go from
+${order.status} to ${status}` ``) and the ai-chat title path. The pattern now holds
+across **nine** modules and two server-action files, which is enough to state it
+plainly: *the path a file was written for is translated, and the path it falls back
+to is not.*
+
+### Two more stubs narrower than the builder they stand in for
+
+`tests/concierge-run-write-boundary.test.ts` offered no `.select()` and returned
+`data: null` for every update, so it could express only two outcomes. The action
+now has three — error, zero rows, changed — and the stub takes `updateRows`, with a
+**new case for the filtered write**: zero rows and `error: null`, which is the
+defect the file's own header describes, one layer down from the one it fixed.
+
+Two assertions in the wallet tests pinned spellings rather than properties, and
+both were repointed rather than retargeted:
+
+- `wallet-money-action-boundaries` pinned `.eq('status',
+  'requires_parent_approval');` **with the semicolon**, so adding `.select('id')`
+  after it failed a test about rolling back for a reason that had nothing to do
+  with rolling back.
+- `wallet-allowance-persistence` pinned the rollback's exact declaration line.
+
+Both now assert the rollback's property AND the readback, so they are stronger than
+before rather than merely passing.
+
+**Verified:** 17,120 of 17,123 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`; 54/54 boundary probes; `npm run build` exit 0; typecheck
+exit 0; lint exit 0 at 10 of 12 warnings; i18n gate clean across eight surfaces;
+Supabase query audit clean. The three remaining failures are this container's Node
+22.22.2 against the declared 24.21.0 — CI resolves Node from `.nvmrc` and the same
+suite passed there.

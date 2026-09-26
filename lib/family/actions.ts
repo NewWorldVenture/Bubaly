@@ -9,6 +9,7 @@
 //   4. records an audit log entry.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -218,12 +219,20 @@ export async function resolveAutomationRun(
   id: string,
   decision: 'approved' | 'skipped',
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) {
-    return { ok: false, error: 'Only parents and adults can approve automations.' };
+    // Was an English literal, on the refusal path of a manager-gated action —
+    // the same half-translated shape found across eight modules: the path the
+    // code was written for is translated and the path it falls back to is not.
+    return { ok: false, error: t('actions.onlyParentsAndAdultsCanApprove') };
   }
   const supabase = await createServer();
-  const { error } = await supabase
+  // RLS FILTERS this update rather than refusing it. `logAudit` below records the
+  // decision unconditionally, so a filtered write wrote an audit entry for an
+  // approval that never happened — the log and the table disagreeing is worse
+  // than either being wrong alone.
+  const { data: rows, error } = await supabase
     .from('family_automation_runs')
     .update({
       status: decision === 'approved' ? 'approved' : 'skipped',
@@ -231,8 +240,10 @@ export async function resolveAutomationRun(
       approved_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('resolve that automation', error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('actions.couldNotResolveThatAutomation') };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id,
     action: decision === 'approved' ? 'approve' : 'skip',

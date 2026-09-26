@@ -386,11 +386,17 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const { error } = await supabase.from('guardian_routing_rules')
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  // Here it decides whether a screening rule is armed, so "enabled" over a rule
+  // that never changed is a safety claim the product cannot keep.
+  const { data: rows, error } = await supabase.from('guardian_routing_rules')
     .update({ is_active: isActive })
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the Guardian routing rule', t('guardian.couldNotUpdateTheGuardianRouting'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -400,11 +406,15 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const { error } = await supabase.from('guardian_routing_rules')
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  const { data: rows, error } = await supabase.from('guardian_routing_rules')
     .delete()
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian routing rule', t('guardian.couldNotDeleteTheGuardianRouting'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }

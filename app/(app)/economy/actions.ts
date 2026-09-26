@@ -61,9 +61,12 @@ export async function setCurrencyActiveAction(input: { currencyId: string; isAct
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan2') };
   const supabase = await createServer();
-  const { error } = await supabase.from('family_currencies')
-    .update({ is_active: input.isActive }).eq('id', input.currencyId).eq('family_id', ctx.active.familyId);
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  const { data: rows, error } = await supabase.from('family_currencies')
+    .update({ is_active: input.isActive }).eq('id', input.currencyId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('update the currency', t('economy.couldNotUpdateTheCurrency'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('economy.couldNotUpdateTheCurrency') };
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -125,9 +128,12 @@ export async function setRewardActiveAction(input: { rewardId: string; isActive:
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan2') };
   const supabase = await createServer();
-  const { error } = await supabase.from('economy_rewards')
-    .update({ is_active: input.isActive }).eq('id', input.rewardId).eq('family_id', ctx.active.familyId);
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  const { data: rows, error } = await supabase.from('economy_rewards')
+    .update({ is_active: input.isActive }).eq('id', input.rewardId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('update the reward', t('economy.couldNotUpdateTheReward'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('economy.couldNotUpdateTheReward') };
   revalidatePath('/economy');
   return { ok: true };
 }

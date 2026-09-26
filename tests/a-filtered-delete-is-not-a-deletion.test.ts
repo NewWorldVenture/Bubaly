@@ -104,16 +104,47 @@ function tsxFiles(dir: string): string[] {
  */
 function gatedWrites(): { file: string; table: string; verb: string; window: string }[] {
   const hits: { file: string; table: string; verb: string; window: string }[] = [];
-  for (const file of tsxFiles(join(ROOT, 'components'))) {
+  // `components/` was the original scope, and it was too narrow: a server action
+  // or route handler on the RLS-BOUND client (`createServer()`) is filtered by
+  // exactly the same policies. Only the SERVICE client is exempt, because it
+  // bypasses RLS entirely — a write through it is never filtered, so the rule has
+  // nothing to say about it.
+  const files = [
+    ...tsxFiles(join(ROOT, 'components')),
+    ...tsxFiles(join(ROOT, 'app')),
+    ...tsxFiles(join(ROOT, 'lib')),
+  ];
+  for (const file of files) {
     const src = readFileSync(file, 'utf8');
+    if (!/createServer\(|from '@\/lib\/supabase\/client'/.test(src)) continue;
+    // Which local names hold a SERVICE client. A file can hold both —
+    // app/(app)/dashboard/assistants/actions.ts writes through `admin =
+    // createServiceClient()` beside RLS-bound reads — so the client has to be
+    // decided at the CALL SITE. A service-client write is never filtered, because
+    // it bypasses RLS entirely, and flagging one asks for a readback that proves
+    // nothing about a policy that was never consulted.
+    const serviceNames = new Set(
+      [...src.matchAll(/(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?createServiceClient\(/g)].map((m) => m[1]),
+    );
     for (const table of GATED) {
       for (const verb of ['delete\\(\\)', 'update\\(']) {
-        const re = new RegExp(`from\\('${table}'\\)[\\s\\S]{0,40}?\\.${verb}`, 'g');
+        const re = new RegExp(`(\\w+)?\\s*\\.?\\s*from\\('${table}'\\)[\\s\\S]{0,40}?\\.${verb}`, 'g');
         for (const m of src.matchAll(re)) {
+          if (m[1] && serviceNames.has(m[1])) continue;
+          // `await admin\n  .from('x')` puts the receiver on the previous line, so
+          // the capture above is empty; look back over whitespace and one dot.
+          const lead = src.slice(Math.max(0, m.index - 60), m.index);
+          const owner = /(\w+)\s*\.?\s*$/.exec(lead)?.[1];
+          if (owner && serviceNames.has(owner)) continue;
+          // Bounded by the STATEMENT, not by a fixed character count. A 320-char
+          // window cut multi-line chains short and reported six already-scoped
+          // writes as unscoped — a guard that names innocent call sites is how
+          // exemptions get bolted on until it means nothing.
+          const semi = src.indexOf(';', m.index);
           hits.push({
             file: file.slice(ROOT.length + 1), table,
             verb: verb.startsWith('delete') ? 'delete' : 'update',
-            window: src.slice(m.index, m.index + 320),
+            window: src.slice(m.index, semi < 0 ? src.length : semi + 1),
           });
         }
       }
@@ -121,6 +152,18 @@ function gatedWrites(): { file: string; table: string; verb: string; window: str
   }
   return hits;
 }
+
+/**
+ * Ownership established IN CODE rather than left to RLS.
+ *
+ * `family_id` is the usual answer, and `user_id` is the right one for a table
+ * whose owner is a PERSON rather than a household: `push_devices` is one row per
+ * physical device and its policy (0035) is device-owner-scoped, so filtering by
+ * `family_id` there would be the wrong predicate, not a stricter one. The same is
+ * true of `library_progress`, `user_preferences`, `blog_post_saves` and
+ * `feedback_votes`.
+ */
+const ownershipFiltered = (window: string) => /\.eq\('(family_id|user_id)'/.test(window);
 
 /**
  * The offenders the measured list just revealed, and the ONLY ones tolerated.
@@ -182,7 +225,7 @@ describe('a filtered delete is not a deletion', () => {
 
   it('every write on a gated table is family-scoped, not left to RLS alone', () => {
     const unscoped = deletes
-      .filter((d) => !/\.eq\('family_id'/.test(d.window))
+      .filter((d) => !ownershipFiltered(d.window))
       .filter((d) => !KNOWN_UNFIXED.includes(siteKey(d)))
       .map((d) => `${d.file} — ${d.verb} on ${d.table} filters id alone and leaves tenancy to RLS`);
     expect(unscoped, unscoped.join('\n')).toEqual([]);
@@ -194,7 +237,7 @@ describe('a filtered delete is not a deletion', () => {
     // table. The entry must still name a write that is silent OR unscoped.
     const offending = new Set(
       deletes.filter((d) => (!/\.select\(/.test(d.window) && /\.eq\('id'/.test(d.window))
-                         || !/\.eq\('family_id'/.test(d.window)).map(siteKey),
+                         || !ownershipFiltered(d.window)).map(siteKey),
     );
     const stale = KNOWN_UNFIXED.filter((k) => !offending.has(k));
     expect(
@@ -213,6 +256,15 @@ describe('a filtered delete is not a deletion', () => {
     expect(named("from('notifications').update({ is_read: true }).eq('family_id', f).eq('is_read', false)")).toBe(false);
     // And a single-row write that DOES read back is not an offender either.
     expect(named("from('notifications').delete().eq('id', id).select('id')")).toBe(false);
+  });
+
+  it('a user-owned table is scoped by its owner, not by a household', () => {
+    // Calibration for `ownershipFiltered`. `family_id` is not a stricter
+    // predicate on `push_devices`, it is the WRONG one — a device belongs to a
+    // person, and the policy says so.
+    expect(ownershipFiltered("from('push_devices').delete().eq('user_id', user.id).eq('device_key', k)")).toBe(true);
+    expect(ownershipFiltered("from('medications').delete().eq('id', id).eq('family_id', f)")).toBe(true);
+    expect(ownershipFiltered("from('medications').delete().eq('id', id)")).toBe(false);
   });
 
   it('the refusal string exists in every catalogue that carries keys', () => {

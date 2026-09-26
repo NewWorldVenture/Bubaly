@@ -224,8 +224,17 @@ export async function POST(req: NextRequest) {
           } else {
             const patch: Database['public']['Tables']['ai_conversations']['Update'] = { model: provider.model };
             if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
-            const { error: titleUpdateError } = await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
+            // Ownership was proved above (`.eq('family_id', familyId).eq('user_id',
+            // ctx.user.id)` on the read), but the write did not repeat it, and
+            // 0255 narrows ai_conversations writes — so a filtered update raised
+            // no error and the log below never fired. Scoped and read back: the
+            // conversation keeps the title "New conversation" forever otherwise,
+            // which is the visible half of a write nothing reported.
+            const { data: titleRows, error: titleUpdateError } = await supabase
+              .from('ai_conversations').update(patch)
+              .eq('id', conversationId).eq('family_id', familyId).select('id');
             if (titleUpdateError) console.error('[ai-chat] conversation metadata update failed', titleUpdateError);
+            else if (!titleRows || titleRows.length === 0) console.error('[ai-chat] conversation metadata update changed no row', { conversationId });
           }
         }
         if (persistenceError) {

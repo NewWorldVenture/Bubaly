@@ -20,7 +20,14 @@ describe('wallet allowance persistence boundaries', () => {
     expect(source).toContain(".update({ next_run_on: next, last_run_on: today })");
     expect(source).toContain(".lte('next_run_on', today)");
     expect(source).toContain(".select('id').maybeSingle()");
-    expect(source).toContain("const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    // The rollback's PROPERTY, not one spelling of its declaration. It restores
+    // both dates, and it now reads the row back — RLS filters an UPDATE rather
+    // than refusing it, so the `console.error` that was this rollback's only
+    // trace never fired for the case where nothing changed, leaving the rule
+    // advanced while the credit had failed and the child skipped for a period.
+    expect(source).toContain(".update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    expect(source).toMatch(/const \{ data: rolledBack, error: rollbackError \}/);
+    expect(source).toContain("console.error('[wallet allowances] schedule rollback changed no row'");
     expect(source).toContain("return { ok: false, error: res.error, ranCount, paidCents };");
   });
 
