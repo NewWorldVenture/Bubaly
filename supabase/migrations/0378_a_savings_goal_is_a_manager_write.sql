@@ -1,4 +1,4 @@
--- Bubaly :: 0349 - a savings goal is written by the family's managers
+-- Bubaly :: 0378 - a savings goal is written by the family's managers
 --
 -- Every other wallet table is manager-write: child_wallets, wallet_buckets and
 -- wallet_transactions carry can_manage_family policies (and restrictive

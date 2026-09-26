@@ -1,4 +1,4 @@
--- Bubaly :: 0360 - a member's audit entry is written as themselves
+-- Bubaly :: 0380 - a member's audit entry is written as themselves
 --
 -- audit_logs and wallet_audit_logs are append-only for members (0347), but the
 -- INSERT policies checked only family membership, so a member could append an

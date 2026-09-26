@@ -119,13 +119,20 @@ export async function postConsent(
  * Fire a single first-party page-view touch per tab session — but ONLY when the
  * resolved state permits analytics (the server double-checks and no-ops
  * otherwise). Passes the GPC flag so the server honors it too.
+ *
+ * Like postConsent, no id is sent: the touch is recorded against the visitor
+ * this browser IS when it fires — the `bubaly_vid` cookie the same-origin fetch
+ * carries — so it is gated on the same consent ledger the banner just wrote to,
+ * not on an id a page captured at mount and may have outlived (SEC-007).
  */
-export async function trackTouchOnce(anonymousId: string, state: ConsentState, gpc: boolean): Promise<void> {
+export async function trackTouchOnce(state: ConsentState, gpc: boolean): Promise<void> {
   if (typeof window === 'undefined' || !state.analytics) return;
   if (touchInFlight) return;
   try {
     if (sessionStorage.getItem(TRACKED_KEY)) return;
   } catch { /* if sessionStorage is blocked, still fire once */ }
+  // Make sure the cookie exists so the request below carries an identity.
+  if (!getAnonymousId()) return;
 
   touchInFlight = true;
   const { source, medium, campaign } = parseUtmParams(location.search);
@@ -135,7 +142,7 @@ export async function trackTouchOnce(anonymousId: string, state: ConsentState, g
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        anonymousId, kind: 'touch', gpc,
+        kind: 'touch', gpc,
         source, medium, campaign,
         landingPath: location.pathname.slice(0, 200),
         deviceType,
@@ -156,6 +163,9 @@ export async function trackConversion(): Promise<void> {
   const state = readLocalConsent()?.state ?? initialConsent(gpc);
   if (!state.analytics) return;
 
+  // The cookie is the identity (see trackTouchOnce); make sure it exists.
+  if (!getAnonymousId()) return;
+
   conversionInFlight = true;
   const { source, medium, campaign } = parseUtmParams(location.search);
   try {
@@ -163,7 +173,7 @@ export async function trackConversion(): Promise<void> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        anonymousId: getAnonymousId(), kind: 'conversion', gpc,
+        kind: 'conversion', gpc,
         source, medium, campaign,
         landingPath: location.pathname.slice(0, 200),
         deviceType: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop',

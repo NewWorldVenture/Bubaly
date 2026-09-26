@@ -1,7 +1,7 @@
 -- Can one member report another member's location or safety?
 --
 -- member_locations, location_events and safety_check_ins let any member write
--- any member's rows. 0352 scopes writes to "your own member row, or a manager";
+-- any member's rows. 0379 scopes writes to "your own member row, or a manager";
 -- reads are unchanged (family members).
 --
 -- As TEEN A against CHILD B: moving B, switching B's sharing off, writing B's
@@ -77,7 +77,7 @@ begin
   perform set_config('request.jwt.claim.sub', uPar::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', uPar, 'role', 'authenticated')::text, true);
   set local role authenticated;
-  -- 0335 (main) goes further than 0352 for member_locations: a position is
+  -- 0335 (main) goes further than 0379 for member_locations: a position is
   -- only ever its own member's to write, a manager's included ("identity, not
   -- role"). So the parent reads B's row but cannot rewrite it.
   select count(*) into n from public.member_locations where member_id = mB;

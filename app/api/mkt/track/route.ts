@@ -3,18 +3,34 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
+import { carriedVisitorId, namesAnotherVisitor } from '@/lib/marketing/visitor-cookie';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
-// Public visitor-intelligence ingest. The site/app calls this with an
-// anonymous_id (cookie/device id) plus acquisition params to record a session
-// and a touchpoint, upserting the visitor (CDP profile spine). Service-role —
-// no auth, but it only ever writes intelligence rows keyed by anonymous_id.
+// Public visitor-intelligence ingest. The site calls this with acquisition
+// params to record a session and a touchpoint, upserting the visitor (CDP
+// profile spine). Service-role — no auth, and mkt_visitors / mkt_sessions /
+// mkt_touchpoints have RLS on with no policies, so this route is the boundary.
+//
+// WHICH visitor is recorded comes from the `bubaly_vid` cookie the request
+// already carries, never from the body (SEC-007). It used to take `anonymousId`
+// from the body, so a caller could name any visitor: for one who had turned
+// analytics off the answer `{recorded:false, reason:'analytics_consent_absent'}`
+// told the caller so — a one-bit read of their consent — and for one who had not,
+// it bumped their session count, overwrote their device and country, and wrote
+// sessions and touchpoints into their profile from a request they never made.
+//
+// Same binding and the same stated limit as /api/mkt/consent (SEC-006), through
+// the same helpers in lib/marketing/visitor-cookie.ts: the cookie is the same
+// bearer bytes, so this closes a caller CHOOSING someone else's record, not a
+// holder of the id presenting it. A body that still names an id (a cached older
+// client) is accepted only when it IS the cookie; any other is refused, 403,
+// before consent is read, so the refusal carries no bit about that visitor.
 type TrackBody = {
-  anonymousId?: string;
+  anonymousId?: unknown;
   source?: string | null;
   medium?: string | null;
   campaign?: string | null;
@@ -54,8 +70,11 @@ export async function POST(req: NextRequest) {
   }
   const body = (parsedBody.value && typeof parsedBody.value === 'object' ? parsedBody.value : {}) as TrackBody;
 
-  const anonymousId = clean(body.anonymousId);
-  if (!anonymousId) return NextResponse.json({ error: t('track.anonymousidRequired') }, { status: 400 });
+  const anonymousId = carriedVisitorId(req);
+  if (!anonymousId) return NextResponse.json({ error: t('track.visitorCookieRequired') }, { status: 400 });
+  if (namesAnotherVisitor(body.anonymousId, anonymousId)) {
+    return NextResponse.json({ error: t('track.notThisVisitor') }, { status: 403 });
+  }
 
   const source = clean(body.source);
   const medium = clean(body.medium);

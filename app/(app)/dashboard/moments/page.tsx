@@ -8,7 +8,8 @@ import { activeMoments, type MomentSignals } from '@/lib/moments/organizer';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
-import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -26,9 +27,20 @@ export default async function Page() {
   // real ones are handed down; a buffer leave-by is what the card computes
   // itself. The loader is fail-closed: a failed read is logged there and the
   // view shows a retryable note rather than pretending nothing was saved.
-  const schedule = await loadScheduleIntelligence(supabase, {
-    familyId, tz: ctx.active.family.timezone || 'UTC', now: new Date(), fromMs: Date.now(), horizonDays: 30, eventLimit: 24,
-  });
+  // The member's saved prep ticks are read HERE, next to the departure plans, and
+  // for the same reason: loadMomentPrep reports a refused read instead of
+  // answering "nothing is ticked", and only a server read can hand the first
+  // paint the real answer. A failure passes down as `prepFailed`, so the card
+  // says so rather than printing "0/5", and saves no tick until a read works.
+  // This answer can be older than the database (a back/forward navigation
+  // replays it from Next's router cache), which is why a tap saves one named
+  // step rather than this list (setMomentPrepDoneAction).
+  const [schedule, prep] = await Promise.all([
+    loadScheduleIntelligence(supabase, {
+      familyId, tz: ctx.active.family.timezone || 'UTC', now: new Date(), fromMs: Date.now(), horizonDays: 30, eventLimit: 24,
+    }),
+    loadMomentPrep(),
+  ]);
   const departures: Record<string, MomentDeparture> = {};
   if (schedule.ok) {
     for (const [eventId, d] of Object.entries(schedule.data.departures)) {
@@ -93,7 +105,12 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       {organizerMoments.length > 0 && <MomentOrganizer moments={organizerMoments} />}
-      <MomentsView departures={departures} departuresFailed={!schedule.ok} />
+      <MomentsView
+        departures={departures}
+        departuresFailed={!schedule.ok}
+        savedTicks={prep.ok ? prep.done : null}
+        prepFailed={!prep.ok}
+      />
     </div>
   );
 }

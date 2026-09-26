@@ -1,4 +1,4 @@
--- A member's audit entry names the member (0360).
+-- A member's audit entry names the member (0380).
 --
 -- As the CHILD: appending an audit_logs or wallet_audit_logs entry that names
 -- the parent (or no one) as the actor must be refused. Control: the child's

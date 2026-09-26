@@ -6,6 +6,7 @@ import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
 import { insightDedupeKey, type CashflowTimeline } from '@/lib/finance/timeline';
 import { MoneyTimelineModule } from '@/components/modules/money-timeline-module';
 import { ErrorState } from '@/components/ui/states';
+import { isManager } from '@/lib/constants/roles';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Financial Copilot' };
@@ -55,11 +56,16 @@ export default async function MoneyTimelinePage() {
   // re-deriving it (keeps the key logic in one place).
   const insights = timeline.insights.map((i) => ({ ...i, key: insightDedupeKey(i) }));
 
+  // The forecast is every member's to READ (0267's documented decision, kept by
+  // 0352). Clearing an advisory is not: one row serves the whole family, so a
+  // dismissal speaks for the parents too. RLS is the boundary; this only decides
+  // whether a reader is shown a button that would be refused.
   return (
     <MoneyTimelineModule
       timeline={timeline}
       insights={insights}
       statusByKey={statusByKey}
+      canManage={isManager(ctx.active.role)}
     />
   );
 }

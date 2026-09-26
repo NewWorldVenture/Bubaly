@@ -222,9 +222,35 @@ describe('Supabase migration filename safety', () => {
     // replays every policy and grant on the table and evaluates each request
     // the way Postgres does; it goes red with the migration absent.
     //
-    // 0344–0377 are the C1-K pass from claude/youthful-turing-ppwrkl, numbered
-    // 0318–0351 on that branch and renumbered after main's 0318–0343 on merge.
-    expect(audit.nextVersion).toBe('0378');
+    // 0349_one_saved_copy_of_a_provider_recipe_per_family.sql makes the
+    // (family_id, source_provider, source_recipe_id) triple unique for provider
+    // recipes, partial so the AI variants that share a source stay writable:
+    // two Saves in the same second both probed an empty vault and both landed.
+    // Held by docs/audit/a-family-vault-holds-one-saved-copy-of-a-provider-
+    // recipe-check.sql, red on the race without it.
+    //
+    // 0352_a_child_cannot_clear_the_households_money_warnings.sql moves the
+    // writes on money_timeline_insights from is_family_member to
+    // can_manage_family, with 0275's RESTRICTIVE guards: the row is one per
+    // family per advisory, so a child's Dismiss cleared the parents' warning
+    // too. SELECT stays on membership (0267's decision). Held by two probes,
+    // docs/audit/a-child-cannot-clear-the-households-money-warnings-check.sql
+    // and docs/audit/only-a-parent-or-an-adult-clears-the-households-money-
+    // warnings-check.sql, each red without it.
+    //
+    // 0360_a_head_out_reminder_goes_with_its_departure_plan.sql adds an AFTER
+    // DELETE trigger on departure_plans that deletes the plan's head-out
+    // reminder, SECURITY INVOKER and fenced to the plan's family: 00981's
+    // event_id cascade took the plan with its event and stranded the reminder
+    // on every member's calendar. Held by
+    // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
+    //
+    // 0344–0377 and 0378–0380 are the C1-K pass from
+    // claude/youthful-turing-ppwrkl, numbered 0318–0351 on that branch. They
+    // were renumbered after main's 0318–0343 on the first merge, and the three
+    // that then collided with main's 0349, 0352 and 0360 moved to 0378
+    // (savings goals), 0379 (member locations) and 0380 (audit actor).
+    expect(audit.nextVersion).toBe('0381');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

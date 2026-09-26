@@ -4,7 +4,7 @@
 // copilot insights (acknowledge / dismiss, persisted) and the forward, week-
 // bucketed cash-flow view with a running projected balance. Pure presentation
 // over the CashflowTimeline the server built; writes go through server actions.
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, TrendingDown, CalendarClock, Target, RefreshCw,
@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type KeyedInsight = TimelineInsight & { key: string };
+/** dedupe key -> 'active' | 'acknowledged' | 'dismissed'. */
+type StatusMap = Record<string, string>;
 
 const SEV: Record<InsightSeverity, { ring: string; chip: string; icon: string; label: string }> = {
   urgent: { ring: 'border-rose-400/40 bg-rose-500/[0.07]', chip: 'bg-rose-500/15 text-rose-300', icon: 'text-rose-400', label: 'Urgent' },
@@ -50,33 +52,110 @@ const KIND_ICON: Record<string, typeof Sparkles> = {
   all_clear: Sparkles,
 };
 
+/**
+ * The cards a reader actually sees, from the family's persisted statuses plus
+ * any optimistic override this session has applied. Exported because it is the
+ * thing the family notices, so a test can assert on it directly rather than on
+ * the state that feeds it.
+ */
+export function visibleInsights<T extends { key: string }>(
+  insights: T[],
+  statusByKey: StatusMap,
+  overrides: StatusMap,
+): T[] {
+  return insights.filter((i) => (overrides[i.key] ?? statusByKey[i.key] ?? 'active') !== 'dismissed');
+}
+
+/**
+ * What to show once the server has answered. An optimistic override is a
+ * PROMISE that the write landed; when the action says it did not, the promise
+ * has to be taken back — otherwise the card stays gone for the rest of the page
+ * session and reappears on the next load with nothing to explain it, which is
+ * exactly the "a copilot that keeps re-raising an alert we cleared" complaint.
+ *
+ * It returns an UPDATER, not a finished map. React applies it to whatever the
+ * overrides are when it runs, so settling one card touches that card's key and
+ * nothing else — it can never write back a snapshot taken before another card's
+ * override was set.
+ */
+export function settleWrite(
+  key: string,
+  previous: string,
+  result: { ok: boolean; error?: string } | undefined | null,
+  fallbackMessage: string,
+): { apply: (overrides: StatusMap) => StatusMap; error: string | null } {
+  if (result?.ok) return { apply: (overrides) => overrides, error: null };
+  return {
+    apply: (overrides) => ({ ...overrides, [key]: previous }),
+    error: result?.error || fallbackMessage,
+  };
+}
+
 export function MoneyTimelineModule({
   timeline,
   insights,
   statusByKey,
+  canManage,
 }: {
   timeline: CashflowTimeline;
   insights: KeyedInsight[];
   statusByKey: Record<string, string>;
+  /** Whether this reader may clear the household's advisories. Mirrors 0352. */
+  canManage: boolean;
 }) {
   const t = useTranslations();
   // Amounts and week labels follow the reader; the currency stays the money's own.
   const locale = useLocale();
   const money = (n: number) => moneyIn(n, locale.code);
   const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const [pending, startTransition] = useTransition();
+  const [overrides, setOverrides] = useState<StatusMap>({});
+  // A plain flag, not useTransition: the work below has to be AWAITED so a
+  // refusal can roll the card back, and React 18's startTransition does not
+  // await an async callback — its pending flag would clear before the server
+  // answered, which is how the spinner used to say "saved" either way.
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const statusOf = (key: string) => overrides[key] ?? statusByKey[key] ?? 'active';
 
-  const visible = insights.filter((i) => statusOf(i.key) !== 'dismissed');
+  const visible = visibleInsights(insights, statusByKey, overrides);
 
-  const act = (insight: KeyedInsight, status: 'acknowledged' | 'dismissed' | 'active') => {
+  const act = async (insight: KeyedInsight, status: 'acknowledged' | 'dismissed' | 'active') => {
+    const previous = statusOf(insight.key);
+    setActionError(null);
     setOverrides((o) => ({ ...o, [insight.key]: status }));
-    startTransition(() => { void setMoneyInsightStatusAction({ insight, status }); });
+    setBusy(true);
+    // Functional, so it composes with whatever else is in the map by then.
+    const settle = (result: { ok: boolean; error?: string } | null) => {
+      const settled = settleWrite(insight.key, previous, result, t('moneyTimeline.weCouldNotSaveThatChoice'));
+      setOverrides(settled.apply);
+      setActionError(settled.error);
+    };
+    try {
+      settle(await setMoneyInsightStatusAction({ insight, status }));
+    } catch (err) {
+      // A transport failure is not a saved choice either. Put the card back and
+      // say so rather than leaving the reader with a silent success.
+      console.error('[money-timeline] insight status write failed', err);
+      settle(null);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const refresh = () => startTransition(() => { void syncMoneyInsightsAction(); });
+  const refresh = async () => {
+    setActionError(null);
+    setBusy(true);
+    try {
+      const result = await syncMoneyInsightsAction();
+      if (!result?.ok) setActionError(result?.error || t('moneyTimeline.weCouldNotRefreshTheseInsights'));
+    } catch (err) {
+      console.error('[money-timeline] insight refresh failed', err);
+      setActionError(t('moneyTimeline.weCouldNotRefreshTheseInsights'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
@@ -90,13 +169,15 @@ export function MoneyTimelineModule({
             {t('moneyTimeline.yourMoneyAndYourCalendarOn')}
           </p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={pending}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold transition hover:bg-elevated disabled:opacity-60"
-        >
-          <RefreshCw className={cn('h-4 w-4', pending && 'animate-spin')} /> {t('moneyTimeline.refresh')}
-        </button>
+        {canManage && (
+          <button
+            onClick={refresh}
+            disabled={busy}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold transition hover:bg-elevated disabled:opacity-60"
+          >
+            <RefreshCw className={cn('h-4 w-4', busy && 'animate-spin')} /> {t('moneyTimeline.refresh')}
+          </button>
+        )}
       </header>
 
       {/* Stat row */}
@@ -133,10 +214,19 @@ export function MoneyTimelineModule({
       {/* Insights */}
       <section className="mt-7">
         <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{t('moneyTimeline.copilotInsights')}</h2>
+        {actionError && (
+          <p role="alert" className="mt-3 rounded-xl border border-rose-400/40 bg-rose-500/[0.07] p-3 text-sm text-rose-300">
+            {actionError}
+          </p>
+        )}
         <div className="mt-3 space-y-3">
           {visible.length === 0 && (
             <p className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
-              {t('moneyTimeline.allCaughtUpYouveClearedEvery')}
+              {/* The manager's line says "you've cleared" and "Tap Refresh";
+                  a child or guest did neither and has no Refresh button. */}
+              {canManage
+                ? t('moneyTimeline.allCaughtUpYouveClearedEvery')
+                : t('moneyTimeline.allCaughtUpNothingNeedsAttention')}
             </p>
           )}
           {visible.map((i) => {
@@ -158,25 +248,33 @@ export function MoneyTimelineModule({
                       {acknowledged && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400"><Check className="h-3 w-3" /> {t('moneyTimeline.noted')}</span>}
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-muted">{i.detail}</p>
-                    {i.kind !== 'all_clear' && (
+                    {i.kind !== 'all_clear' && canManage && (
                       <div className="mt-3 flex items-center gap-2">
                         {!acknowledged && (
                           <button
-                            onClick={() => act(i, 'acknowledged')}
-                            disabled={pending}
+                            onClick={() => { void act(i, 'acknowledged'); }}
+                            disabled={busy}
                             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand/15 px-3 text-xs font-bold text-brand-text transition hover:bg-brand/25 disabled:opacity-60"
                           >
                             <Check className="h-3.5 w-3.5" /> {t('moneyTimeline.gotIt')}
                           </button>
                         )}
                         <button
-                          onClick={() => act(i, 'dismissed')}
-                          disabled={pending}
+                          onClick={() => { void act(i, 'dismissed'); }}
+                          disabled={busy}
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition hover:bg-elevated disabled:opacity-60"
                         >
                           <X className="h-3.5 w-3.5" /> {t('moneyTimeline.dismiss')}
                         </button>
                       </div>
+                    )}
+                    {/* Not a dead-end button for a child or a guest: the
+                        forecast is theirs to read, the household's triage
+                        state is not theirs to change (0352). */}
+                    {i.kind !== 'all_clear' && !canManage && (
+                      <p className="mt-3 text-[11px] text-muted">
+                        {t('moneyTimeline.aParentOrAnotherAdultClearsThese')}
+                      </p>
                     )}
                   </div>
                 </div>

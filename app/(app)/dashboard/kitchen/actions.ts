@@ -8,6 +8,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
+import { todayInZone } from '@/lib/schedule/zoned';
 import type { SubScore } from '@/lib/food/score';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -86,7 +87,20 @@ export async function snapshotFoodScoreAction(input: {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The day on the family's kitchen wall, not Greenwich's. This read
+  // `new Date().toISOString().slice(0, 10)`, which answers the UTC day, so from
+  // 17:00 local in Los Angeles (and before 10:00 in Sydney, with the sign
+  // reversed) the snapshot landed on a NEIGHBOURING day's key. Because the write
+  // below is an upsert on UNIQUE (family_id, snapshot_date)
+  // (0102_food_os.sql:57), that misdated row occupied the neighbour's slot and
+  // the next save on that day silently overwrote it: two calendar days of a
+  // once-a-day history collapsed into one row, and the UI reported both saves as
+  // saved. The page that COMPUTES this score resolves the same zone with the same
+  // `|| 'UTC'` (kitchen/page.tsx:30-31), through `dayKeyInTz` rather than
+  // `todayInZone`; both are the same en-CA Intl day with the same UTC-slice
+  // fallback (scope.ts dayKeyInTz, zoned.ts dayKeyInZone), so the day the score
+  // was computed for and the day it is filed on compare equal.
+  const today = todayInZone(ctx.active.family.timezone || 'UTC');
   const { error } = await supabase
     .from('family_food_scores')
     .upsert(

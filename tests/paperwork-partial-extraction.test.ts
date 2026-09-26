@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import { draftPaperworkReplyAction, materializePaperworkActionAction, setPaperworkStatusAction } from '@/app/(app)/dashboard/paperwork/actions';
 import { getMessages } from '@/lib/i18n/messages';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { localeOrDefault, type LocaleCode } from '@/lib/i18n/locales';
 import type { Tables } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
@@ -14,7 +14,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'parent-1' }, active: { familyId: 'family-1', member: { id: 'member-1' }, family: { timezone: 'UTC' }, role: 'parent' } }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key, useLocale: () => localeOrDefault(state.locale) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => getMessages(state.locale)[key] ?? key }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({ ...await importOriginal<typeof import('@/lib/ai/provider')>(), isAIConfigured: vi.fn(async () => false) }));
 

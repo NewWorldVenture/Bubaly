@@ -1,7 +1,7 @@
 -- Can a child mark their own savings goal reached, or erase a funded one?
 --
 -- wallet_goals was "Members manage wallet_goals" FOR ALL while every other
--- wallet table is manager-write. 0349 aligns it: members read, managers write.
+-- wallet table is manager-write. 0378 aligns it: members read, managers write.
 -- As the CHILD: UPDATE and DELETE match zero rows (a refused write raises
 -- nothing); INSERT is refused. The child can still read the goal (control). As
 -- the PARENT: update and delete succeed (control).

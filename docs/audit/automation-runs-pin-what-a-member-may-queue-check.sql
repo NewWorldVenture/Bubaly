@@ -23,9 +23,10 @@
 --      `r.summary` as the line beside the "Do it" button;
 --   3. the parent taps it. `executeQueuedRunAction`
 --      (app/(app)/dashboard/concierge/actions.ts ~L185) reads `meta.plan_id`
---      and `meta.approval_id` FROM THAT ROW'S OWN METADATA and stamps the named
+--      and `meta.approval_id` FROM THAT ROW'S OWN METADATA and decides the named
 --      `approval_requests` row `status='approved'`, `decided_by = <the parent's
---      member id>`, `decided_at`, `executed_at`. That write is manager-only
+--      member id>`, `decided_at`, `executed_at` (since 0344 through `decide()`,
+--      which also appends the parent's own vote). That write is manager-only
 --      (`approval_requests_decide`, 0251 ~L128) and succeeds only because it is
 --      running in the parent's session. `dismissQueuedRunAction` (~L238) is the
 --      mirror and stamps 'rejected'.
@@ -277,8 +278,12 @@ begin
   if n = 0 then
     failures := array_append(failures, 'a MANAGER could not mark a queued run executed — executeQueuedRunAction is broken');
   end if;
+  -- Since 0344 a decision carries the decider's own vote in the same UPDATE,
+  -- which is what `decide()` writes and what executeQueuedRunAction now routes
+  -- through; a bare status flip is refused by approval_requests_decision_is_earned.
   update public.approval_requests
-     set status = 'approved', decided_by = parent_m, decided_at = now(), executed_at = now()
+     set status = 'approved', decided_by = parent_m, decided_at = now(), executed_at = now(),
+         approvals = approvals || jsonb_build_array(jsonb_build_object('member_id', parent_m, 'decision', 'approved'))
    where id = approval and family_id = fam;
   get diagnostics n = row_count;
   if n <> 1 then
@@ -287,7 +292,7 @@ begin
   -- Put the sibling's request back so the negative control starts undecided.
   perform set_config('role','postgres', true);
   update public.approval_requests
-     set status = 'pending', decided_by = null, decided_at = null, executed_at = null
+     set status = 'pending', decided_by = null, decided_at = null, executed_at = null, approvals = '[]'::jsonb
    where id = approval;
 
   -- ── As the server: the client planAcceptedAction actually holds ─────────
@@ -334,13 +339,15 @@ begin
       'with 0255''s policy alone the child STILL could not file the forged run — this probe is decoration, not a boundary');
   end if;
 
-  -- The parent's own click, exactly as executeQueuedRunAction writes it: the
+  -- The parent's own click, exactly as executeQueuedRunAction writes it (via
+  -- `decide()`, which records the parent's own vote with the flip): the
   -- plan id and the approval id come from the row the CHILD wrote.
   if planted is not null then
     perform set_config('request.jwt.claim.sub', parent_u::text, true);
     update public.approval_requests
        set status = 'approved', decided_by = parent_m, decided_at = now(),
-           executed_at = now(), execution_result = 'Booked the school trip'
+           executed_at = now(), execution_result = 'Booked the school trip',
+           approvals = approvals || jsonb_build_array(jsonb_build_object('member_id', parent_m, 'decision', 'approved'))
      where id = ((select metadata ->> 'approval_id' from public.family_automation_runs where id = planted))::uuid
        and family_id = fam;
     get diagnostics n = row_count;

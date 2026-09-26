@@ -51,8 +51,13 @@ function createVault() {
       expect(table).toBe('family_recipes');
       return {
         select() {
+          // `limit` is here because the real dedupe probe chains it — see
+          // tests/a-failed-vault-probe-does-not-save-a-second-copy.test.ts for
+          // why. A fake that omits a link in the builder chain makes the action
+          // throw for a reason the real database never would.
           const q = {
             eq: () => q,
+            limit: () => q,
             maybeSingle: async () => ({ data: null, error: null }),
           };
           return q;
@@ -164,7 +169,7 @@ describe('saving a discovered recipe into the vault', () => {
     serveMeal(meal('52772', 'Teriyaki Chicken', 'Chicken'));
     mocks.createServer.mockResolvedValue({
       from: () => ({
-        select: () => { const q = { eq: () => q, maybeSingle: async () => ({ data: null, error: null }) }; return q; },
+        select: () => { const q = { eq: () => q, limit: () => q, maybeSingle: async () => ({ data: null, error: null }) }; return q; },
         insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { code: '42501', message: 'permission denied', details: null, hint: null } }) }) }),
       }),
     });
