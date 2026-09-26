@@ -5,7 +5,7 @@ import { MapPin, Plus, Search, Star, Trash2, LocateFixed, Wind, Droplets, X } fr
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -182,20 +182,30 @@ export function WeatherModule() {
     // succeeded while the set failed they ended up with none. Same shape as the
     // meal-vote ballot: an invariant a comment states and only an unchecked
     // write keeps.
-    const { error: clearErr } = await settle(
-      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId));
-    if (clearErr) return toastError(describeDbError(clearErr));
+    //
+    // Order (Audit C1-S9-83, the career primary's fix in C1-S9-80): it cleared
+    // EVERY city first, so a set that then matched nothing (the city deleted a
+    // moment ago by someone else) left the family with no default at all. The
+    // set goes first and is confirmed; only then are the OTHERS cleared. A
+    // failed clear leaves two defaults, which is visible and fixable; the old
+    // order lost the family's choice. The clear is left unconfirmed on purpose:
+    // with one city there are no others, and zero rows is the ordinary answer.
     const { data: rows, error: err } = await supabase.from('weather_locations')
       .update({ is_default: true }).eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
     if (!rows?.length) return toastError(t('errors.thatChangeWasNotSaved'));
+    const { error: clearErr } = await settle(
+      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId).neq('id', id));
+    if (clearErr) { toastError(describeDbError(clearErr)); await loadSaved(); return; }
     success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 
   async function removeCity(id: string) {
-    const { error: err } = await supabase.from('weather_locations').delete().eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: removed, error: err } = await supabase.from('weather_locations').delete().eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     if (activeKey === `db:${id}`) setActiveKey(geo ? 'geo' : null);
     await loadSaved();
   }

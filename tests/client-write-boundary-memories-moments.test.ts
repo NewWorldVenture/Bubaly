@@ -19,7 +19,10 @@ describe('memories create-memory undo surfaces a failed delete', () => {
   it('checks the family_photos delete error inside undo()', () => {
     const undo = src.slice(src.indexOf('async function undo('));
     // The delete must capture and branch on its error, not fire-and-forget.
-    expect(/const \{ error: delErr \} = await supabase\.from\('family_photos'\)\.delete\(\)/.test(undo)).toBe(true);
+    // Re-pointed (Audit C1-S9-83): the delete now also reads back which rows it
+    // removed (`const { data: deleted, error: delErr } =`); the error is still
+    // bound and branched on, which is what this holds.
+    expect(/const \{ (?:data(?:: \w+)?, )?error: delErr \} = await supabase\.from\('family_photos'\)\.delete\(\)/.test(undo)).toBe(true);
     expect(/if \(delErr\)/.test(undo)).toBe(true);
   });
 

@@ -50,7 +50,8 @@ describe('family media persistence boundaries', () => {
   it('surfaces a failed Favorites update after a memory is saved', () => {
     const source = read('components/memories/create-memory.tsx');
 
-    expect(source).toContain('const { error: favoriteError }');
+    // Re-pointed (Audit C1-S9-83): the favorite now also reads back its row.
+    expect(source).toMatch(/const \{ (?:data(?:: \w+)?, )?error: favoriteError \}/);
     expect(source).toContain('createMemory.theMemoryWasSavedBut');
   });
 });

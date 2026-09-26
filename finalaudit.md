@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-223 finding IDs from four workers and two parallel sessions; none of it was
+224 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 233 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 234 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35917,6 +35917,112 @@ files.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-83 — an undo that deleted files whose rows survived, a default city that could vanish, and a role change nobody made
+
+**Settings, weather, decisions, shopping, connections, create-memory, chores and
+meals: 12 writes converted, 2 left deliberate.** This batch was chosen for
+consequence, not size: the sites where a false "done" misleads about access,
+money or data loss.
+
+**Two different answers:**
+- **Create Memory, undo.** It deletes the new photo rows `.in('id', ids)` and
+  then removes their files. Its comment says an RLS failure must not be
+  claimed as undone. But a refused row is not an error: it is simply absent
+  from the rows deleted. So "no error" was read as "every row is gone", every
+  file was removed, and it said "Memory undone".
+  - Any row that survived was left pointing at a deleted image, which is the
+    orphan the photos module's comment says must never happen (`C1-S9-82`
+    fixed the single-photo version).
+  - **Fix:** only the files whose rows are **confirmed** deleted are removed.
+    If any row survives, those files stay, the survivors stay on the "Created"
+    screen to retry, and the user sees `errors.thatChangeWasNotSaved`.
+- **Weather, choosing a default city.** It cleared **every** city's default,
+  then set the new one. The set was confirmed, but if it matched nothing (the
+  city deleted a moment ago by another member), the family had already lost
+  its default.
+  - **Fix:** the career primary's fix from `C1-S9-80`. Set first, confirmed;
+    then clear only the others (`.neq('id', id)`). A failed clear leaves two
+    defaults, which is visible and fixable.
+  - The clear is **left unconfirmed on purpose**: with one city there are no
+    others. The weather module's own comment says no unique index backs "one
+    default", which is why the order matters.
+
+**Consequential base-class sites:**
+- **Settings: removing a member, and editing one.** Both updates are
+  `can_manage_family` under RLS (0211). The UI shows both only to an admin,
+  so a refusal needs a stale role (demoted mid-session) or a policy that
+  drifts from the screen. When it happened:
+  - a refused deactivation said **"Member removed"** while the member kept
+    their access;
+  - a refused role change said "Member updated".
+
+  Both then reloaded the page onto the unchanged state, which is where the
+  user found out, if at all. The transformer converted the removal; the edit
+  was done by hand.
+- **Connections: disconnect.** It is keyed by family and provider, which the
+  transformer refuses. But the button renders only for a connected provider,
+  so zero rows is never ordinary. It was converted by hand. The table holds
+  display metadata, not credentials (0128), so this was a false label, not a
+  live grant.
+- **Chores: approve.** A non-manager's approval is refused **with** an error
+  by the 0223 trigger (`chore-manager-only-writes` records this), so this is
+  not a self-approval path. A row RLS cannot see was refused with none, and
+  the app said "Approved! +N pts" about points nobody was given.
+- **Decisions: saving scores.** A `Promise.all` over the options, confirmed
+  per row like closet's bumps.
+- **Shopping, meals and create-memory's favorite** are ordinary conversions.
+  Shopping's archive runs inside `run()`, so it toasts and returns rather
+  than throwing a message through `describeDbError`.
+
+**The meal ballot clear is left unconfirmed on purpose.** Its error was
+already checked (its own long comment explains the double-vote it
+prevents). Its row count is not: a member's first vote has no prior ballot.
+
+**Pins and one fragile slice (the thirty-eighth to fortieth):**
+- **`client-write-boundary-memories-moments`:** the undo's
+  `const { error: delErr }` regex now admits `data: …,`.
+- **`family-media-persistence`:** `const { error: favoriteError }`, the same.
+- **`meals-module-read-boundary`:** it sliced `castVote` as a fixed
+  **1,400-character window**. My four-line comment pushed the insert check
+  out of it. A window that ends early also makes the test's `not.toMatch`
+  vacuous, so the slice now ends at the function's own closing brace
+  (`bodyOf`), not a character count.
+
+The corrected pre-check from `C1-S9-82` (any test that imports the component
+AND mocks `@/lib/supabase/client`) found no render mocks for these eight
+files.
+
+**Guard.** `a-client-write-reads-what-it-changed` covers the eight files and
+admits two more genuine read forms: `if (!rows?.length)` (weather's
+pre-existing check) and `(deleted ?? []).map(` (the undo's row-by-row read).
+New cases:
+- weather: the order, the `.neq`, and the clear left unconfirmed;
+- undo: files come from confirmed rows only, and a survivor stops the flow
+  before "undone";
+- settings, connections, chores and decisions: the check precedes the claim;
+- the ballot clear stays deliberate.
+
+**12 mutations, all red:**
+- weather back in the old order;
+- weather clearing every city, including the new default;
+- weather's clear confirmed (over-tightening);
+- undo removing every file again;
+- undo ignoring survivors;
+- the favorite unread;
+- disconnect unread;
+- approval unread;
+- scores unread;
+- the role edit unread;
+- the ballot clear confirmed (over-tightening);
+- the shopping archive unread.
+
+Components ratchet: **71/46 → 59/40.**
+
+**Status:** FIXED (12 writes; 2 deliberate). **OPEN (ratchet):** 59 across 40
+files.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -35986,8 +36092,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,471 passing / 17,474 across 1,370
-files.** (Re-run after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,483 passing / 17,486 across 1,370
+files.** (After `C1-S9-83`, green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

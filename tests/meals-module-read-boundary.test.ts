@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bodyOf } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 
 // A-10 — the Meals module's secondary/enhancement client reads (the "add from
@@ -40,7 +41,10 @@ describe('meals-module secondary reads log on failure', () => {
 // so the doubled member adds one to each of two meals AND two to the
 // denominator: one person deciding a family's dinner twice, for two dinners.
 describe('castVote does not leave a member holding two ballots', () => {
-  const castVote = src.slice(src.indexOf('async function castVote'), src.indexOf('async function castVote') + 1400);
+  // The whole function, not a fixed 1,400-character window: a longer comment
+  // (Audit C1-S9-83) pushed the insert check out of the old window, and a
+  // window that ends early also makes every `not.toMatch` below vacuous.
+  const castVote = bodyOf(src, 'async function castVote', '\n  }\n');
 
   it('checks the error from the clear before inserting the new ballot', () => {
     expect(castVote).toMatch(/const\s*\{\s*error:\s*clearError\s*\}\s*=\s*await[\s\S]*?\.delete\(\)/);

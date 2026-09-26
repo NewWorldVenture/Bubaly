@@ -44,6 +44,14 @@ const FIXED = [
   'components/modules/home-module.tsx',
   'components/modules/expenses-module.tsx',
   'components/modules/routines-panel.tsx',
+  'components/modules/settings-module.tsx',
+  'components/modules/weather-module.tsx',
+  'components/modules/decisions-module.tsx',
+  'components/modules/shopping-module.tsx',
+  'components/modules/connections-module.tsx',
+  'components/memories/create-memory.tsx',
+  'components/modules/chores-module.tsx',
+  'components/modules/meals-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -53,8 +61,9 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
       // Read as "none", against an exact expected count, or — for a
-      // `.single()` result — as absence (`|| !created`).
-      const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `|| !${b})`, `if (!${b})`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
+      // `.single()` result — as absence (`|| !created`); or, for a batch,
+      // row by row (`(deleted ?? []).map`, C1-S9-83).
+      const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `|| !${b})`, `if (!${b})`, `if (!${b}?.length)`, `(${b} ?? []).map(`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
       expect(src, `${b} is requested but never read`).toContain(read);
       // …and read AFTER it is bound, not in some earlier function.
       expect(at(src, `data: ${b}, error`)).toBeLessThan(at(src, read));
@@ -169,6 +178,47 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     expect(clearLine).not.toContain('.select(');
     const lead = routines.slice(0, clear).split('\n').slice(-12).join('\n');
     expect(lead).toContain('Audit C1-S9-82');
+  });
+});
+
+describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
+  it('weather: the new default is set and confirmed before the OTHER cities are cleared', () => {
+    const src = readFileSync('components/modules/weather-module.tsx', 'utf8');
+    const fn = bodyOf(src, 'async function makeDefault(', '\n  }\n');
+    expect(at(fn, 'if (!rows?.length)')).toBeLessThan(at(fn, 'update({ is_default: false })'));
+    // Only the others, and unconfirmed on purpose: with one city there are none.
+    expect(fn).toContain(".update({ is_default: false }).eq('family_id', familyId).neq('id', id))");
+    expect(fn).not.toMatch(/is_default: false \}\)[^;]*\.select\(/);
+    expect(fn).toContain('Audit C1-S9-83');
+  });
+
+  it('create-memory: undo removes only the files whose rows are confirmed gone', () => {
+    const src = readFileSync('components/memories/create-memory.tsx', 'utf8');
+    const fn = bodyOf(src, 'async function undo(', '\n  }\n');
+    expect(fn).toContain(".from('family_photos').delete().in('id', ids).select('id')");
+    expect(at(fn, 'const paths = created.filter((c) => gone.has(c.id))')).toBeLessThan(at(fn, ".storage.from('family-media').remove(paths)"));
+    // A survivor stops the flow before "undone" is said.
+    expect(at(fn, 'if (survivors.length)')).toBeLessThan(at(fn, "success(t('createMemory.memoryUndoneNothingWasSaved'))"));
+    expect(fn).not.toContain('const paths = created.map(');
+  });
+
+  it('settings, connections, chores, decisions: the zero-row check precedes the claim', () => {
+    const settings = readFileSync('components/modules/settings-module.tsx', 'utf8');
+    expect(at(settings, 'if (wroteNoRows(edited))')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
+    const connections = readFileSync('components/modules/connections-module.tsx', 'utf8');
+    expect(connections).toContain(".delete().eq('family_id', familyId).eq('provider', p.id).select('id')");
+    expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, 'success(`${p.name} disconnected`)'));
+    const chores = readFileSync('components/modules/chores-module.tsx', 'utf8');
+    expect(at(chores, 'if (wroteNoRows(approved))')).toBeLessThan(at(chores, 'success(`Approved! +${a.chore?.points ?? 0} pts`)'));
+    const decisions = readFileSync('components/modules/decisions-module.tsx', 'utf8');
+    expect(at(decisions, 'if (results.some((x) => wroteNoRows(x.data)))')).toBeLessThan(at(decisions, "success(t('decisionsModule.scoresSavedToTheDecision'))"));
+  });
+
+  it("meals: the prior-ballot clear stays unconfirmed on purpose — a first vote has none", () => {
+    const src = readFileSync('components/modules/meals-module.tsx', 'utf8');
+    const fn = bodyOf(src, 'async function castVote(', '\n  }\n');
+    expect(fn).toContain(".delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);");
+    expect(fn).toContain('Audit C1-S9-83');
   });
 });
 

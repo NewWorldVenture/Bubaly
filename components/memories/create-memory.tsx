@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { partitionBySize, oversizeMessage, familyMediaPath } from '@/lib/storage/family-media';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -115,8 +115,10 @@ export function CreateMemory() {
           if (cleanupError) toastError(t('createMemory.theUploadedPhotoCouldNot'));
         } else {
           // Mark it a favorite so it also shows in the Photos "Favorites" tab.
-          const { error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id);
-          if (favoriteError) toastError(t('createMemory.theMemoryWasSavedBut'));
+          // A refused update is no error and zero rows, the same outcome as a
+          // failed one, and it said nothing. Audit C1-S9-83.
+          const { data: favorited, error: favoriteError } = await supabase.from('family_photos').update({ is_favorite: true }).eq('id', row.id).select('id');
+          if (favoriteError || wroteNoRows(favorited)) toastError(t('createMemory.theMemoryWasSavedBut'));
           createdRows.push({ id: row.id, path: stored.path });
           saved++;
         }
@@ -139,18 +141,40 @@ export function CreateMemory() {
     setUndoing(true);
     const supabase = createClient();
     const ids = created.map((c) => c.id);
-    const paths = created.map((c) => c.path);
     // Delete the DB rows first — they're the source of truth for what shows on the
     // Memories/Photos timeline. If this fails (RLS/network), the memory is still
     // live, so DON'T claim it was undone; surface the error and keep the "Created"
     // screen so the user can retry (created state is preserved).
+    //
+    // Under RLS a refused row is not an error: it is simply not among the rows
+    // deleted. This used to treat "no error" as "every row is gone", then remove
+    // EVERY file, orphaning the rows that survived (a timeline entry pointing at
+    // a deleted image) and saying "undone". Only the files whose rows are
+    // confirmed gone are removed now; any survivors stay on this screen to retry.
+    // Audit C1-S9-83.
+    let gone = new Set<string>();
     if (ids.length) {
-      const { error: delErr } = await supabase.from('family_photos').delete().in('id', ids);
+      const { data: deleted, error: delErr } = await supabase.from('family_photos').delete().in('id', ids).select('id');
       if (delErr) {
         toastError(describeDbError(delErr));
         setUndoing(false);
         return;
       }
+      gone = new Set((deleted ?? []).map((r) => r.id));
+    }
+    const paths = created.filter((c) => gone.has(c.id)).map((c) => c.path);
+    const survivors = created.filter((c) => !gone.has(c.id));
+    if (survivors.length) {
+      // Best-effort removal of the files that ARE orphaned, then stop: part of
+      // the memory is still live, so it is not "undone".
+      if (paths.length) {
+        const { error: rmErr } = await supabase.storage.from('family-media').remove(paths);
+        if (rmErr) console.error('[memories] undo left files behind', { count: paths.length, error: rmErr });
+      }
+      setCreated(survivors);
+      toastError(t('errors.thatChangeWasNotSaved'));
+      setUndoing(false);
+      return;
     }
     // Rows are gone; best-effort remove the now-orphaned storage objects.
     if (paths.length) {
