@@ -38,9 +38,11 @@ export async function scheduleGraphAutoRefresh(supabase: DB, familyId: string): 
         const svc = createServiceClient();
         const res = await runTwinProjection(svc, familyId, null);
         if (res.ok) {
-          await svc
+          // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+          const { error: familyModelDirtyWriteError } = await svc
             .from('family_model_dirty')
             .upsert({ family_id: familyId, dirty: false, refreshed_at: new Date().toISOString() }, { onConflict: 'family_id' });
+          if (familyModelDirtyWriteError) console.error('[auto-refresh] family_model_dirty upsert failed', familyModelDirtyWriteError);
         }
       } catch {
         /* best-effort; the model-refresh cron is the backstop */

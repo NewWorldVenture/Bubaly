@@ -157,7 +157,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: weekendSearchesWriteError } = await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  if (weekendSearchesWriteError) console.error('[weekend-discover] weekend_searches insert failed', weekendSearchesWriteError);
 
   return NextResponse.json({ count: merged.length, zip: zip.trim(), radius: radiusMiles, days: windowDays, sources: sourcesUsed, errors: sourceErrors });
 }

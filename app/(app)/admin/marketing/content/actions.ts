@@ -129,13 +129,17 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
     const { error: clearError } = await supabase.from('marketing_aeo_questions')
       .delete().eq('source_path', `/blog/${payload.slug}`).eq('metadata->>seed', 'blog_aeo_v1');
     if (clearError) throw clearError;
-    await supabase.from('marketing_aeo_questions').insert(
+    // Its result used to be discarded. The old set is already deleted by here,
+    // so a refused insert leaves this post with NO answers until the next
+    // publish; the catch below logs it instead of the silence. Audit C1-S9-76.
+    const { error: aeoInsertError } = await supabase.from('marketing_aeo_questions').insert(
       aeo.map((q) => ({
         question: q.question, answer: q.answer, entity: q.entity, source_path: q.source_path,
         pattern: q.pattern, status: q.status, clarity_score: q.clarity_score,
         last_reviewed: new Date().toISOString(), metadata: q.metadata as unknown as Json,
       })),
     );
+    if (aeoInsertError) throw aeoInsertError;
   } catch (aeoError) {
     /* AEO generation is best-effort — never block a publish on it */
     console.error('[marketing-content] AEO regeneration skipped', {

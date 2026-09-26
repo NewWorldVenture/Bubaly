@@ -28,7 +28,9 @@ async function userTier(supabase: Awaited<ReturnType<typeof createServer>>, fami
 }
 
 async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, userId: string, action: string, featureKey?: string | null, metadata: Record<string, unknown> = {}) {
-  await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: dashboardLayoutEventsWriteError } = await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  if (dashboardLayoutEventsWriteError) console.error('[dashboard] dashboard_layout_events insert failed', dashboardLayoutEventsWriteError);
 }
 
 /**

@@ -114,13 +114,15 @@ export async function POST() {
     }
   }
 
-  await supabase.from('home_ai_logs').insert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: homeAiLogsWriteError } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'utility_savings',
     input: { bills: bills.length, monthly_cents: summary.monthlyTotalCents },
     output: { findings: findings.length, aiUsed },
     status: aiUsed ? 'succeeded' : 'fallback',
     created_by: ctx.user.id,
   });
+  if (homeAiLogsWriteError) console.error('[home-utility-savings] home_ai_logs insert failed', homeAiLogsWriteError);
 
   return NextResponse.json({
     findings,

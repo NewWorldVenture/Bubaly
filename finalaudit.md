@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-216 finding IDs from four workers and two parallel sessions; none of it was
+217 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 226 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 227 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35429,6 +35429,67 @@ creating a list). The meta-guard fix is proved by two more.
 onboarding check can still insert a duplicate row, which was the behaviour
 before this entry.
 
+### `[CLAUDE-1][HIGH][WRITES]` C1-S9-76 — writes whose result was discarded outright, and the AI key a model change could wipe
+
+**The class below the write ratchets.** `C1-S9-50` and `-61` count updates and
+deletes that bind `error` but never ask for rows. Below that sits a write that
+binds **nothing**: `await db.from(t).insert(…);`, where even the error is
+dropped. `C1-S9-73` met two of these in money-timeline. A census found 23 more
+across `app/`, `lib/` and `components/`.
+
+**HIGH: the platform AI config (`lib/ai/settings.ts`, `setAIConfig`).**
+- **A model change could wipe the stored AI key.** The read of the stored
+  config dropped its error, so a refused read left `stored` empty. The
+  function's own docstring promises that "keys are only overwritten when a
+  non-empty value is given". But a save that left the key field blank wrote
+  `openaiKey: stored.openaiKey ?? null`, which is `null`. So an admin changing
+  only the **model**, on a read that failed, wiped the platform's stored
+  OpenAI key. Every AI feature that depends on it would then fail, unless an
+  environment key backs it.
+- **A failed save was reported as saved.** The upsert's result was discarded
+  too. The admin action wraps the call in a `try/catch` that exists to report
+  failure, but a resolved PostgREST error never reaches it.
+
+Both now throw, and the admin action already turns a throw into a message.
+Proved behaviourally: a refused read throws before any write, a refused write
+throws, and a blank key keeps the stored one (the ordinary save still works).
+
+**The rest: 18 sites, bound and logged.** These are telemetry, AI
+history/logs, usage events, status stamps, self-correcting caches, and the
+child sign-in throttle reset:
+- `dashboard_layout_events`, `crm_contact_profile` ×2, `child_login_throttle`
+- `auto_ai_logs`, `home_ai_logs` ×4, `social_ai_generations` ×2,
+  `social_usage_events` (read nowhere, so pure telemetry)
+- `weekend_searches`, `activation_events`, `marketing_provider_syncs`
+- `marketplace_matches`, `family_operating_index`, `family_model_dirty`
+
+Each is best-effort by design, so each is logged rather than raised. **One
+more site is not merely telemetry:** the AEO insert after the Knowledge Centre
+clear.
+The old set is already deleted by then, so a refused insert leaves the post
+with *no* answers until its next publish. It now throws into the existing
+catch, which names it.
+
+**Three accepted, with reasons in the guard:**
+- `sms-ingress`, an insert raced by design, where only the readback on the
+  next line grants emission;
+- `guardian/callbacks.ts` ×2, **locked** by the parallel session.
+
+**Guard: `a-write-result-is-never-discarded`.** A census of every bare
+awaited write in `app/`, `lib/` and `components/`, with exact per-file counts
+for the three accepted sites. A new site fails until its result is bound. Seven
+scanner fixtures cover a bound write, a returned write, a write assigned
+across a line break, a read, and a write passed as a callback (the false
+positive the first census reported for `medications-module`). The fixtures run
+through the *same* function as the census; my first draft re-implemented it
+inline, where a mutation to the real scanner would have gone unseen. Behavioural
+cases cover `setAIConfig`, and a source case covers the AEO insert.
+
+**7 mutations, all red.** They include the blank-key wipe and the scanner
+counting a bound write.
+
+**Status:** FIXED.
+
 ---
 
 ## What this pass did NOT establish
@@ -35500,8 +35561,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,407 passing / 17,410 across 1,367
-files.** (Re-run after `C1-S9-75`; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,413 passing / 17,416 across 1,368
+files.** (Re-run after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

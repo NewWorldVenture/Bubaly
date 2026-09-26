@@ -42,7 +42,8 @@ function tokenForGoogle(): string | null {
 }
 
 async function writeSyncState(db: Db, provider: Provider, state: { status: string; error?: string | null; rows?: number; started?: string; completed?: string }) {
-  await db.from('marketing_provider_syncs').upsert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: marketingProviderSyncsWriteError } = await db.from('marketing_provider_syncs').upsert({
     provider,
     status: state.status,
     last_started_at: state.started ?? null,
@@ -51,6 +52,7 @@ async function writeSyncState(db: Db, provider: Provider, state: { status: strin
     rows_imported: state.rows ?? 0,
     metadata: { source: 'marketing-provider-sync' },
   });
+  if (marketingProviderSyncsWriteError) console.error('[provider-sync] marketing_provider_syncs upsert failed', marketingProviderSyncsWriteError);
 }
 
 async function writeObservations(db: Db, rows: Observation[]): Promise<number> {

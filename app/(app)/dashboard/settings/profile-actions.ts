@@ -80,10 +80,12 @@ export async function saveProfileAnswerAction(field: string, rawValue: unknown):
   const contactId = await resolveContactId(admin, ctx.user.id, ctx.user.email);
   if (!contactId) return { known: {}, skipped: [] };
 
-  await admin.from('crm_contact_profile').upsert(
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: crmContactProfileWriteError } = await admin.from('crm_contact_profile').upsert(
     { contact_id: contactId, [field]: value } as never,
     { onConflict: 'contact_id' },
   );
+  if (crmContactProfileWriteError) console.error('[profile] crm_contact_profile upsert failed', crmContactProfileWriteError);
   return loadState(admin, contactId);
 }
 
@@ -98,9 +100,10 @@ export async function skipProfileFieldAction(field: string): Promise<ProfileStat
 
   const state = await loadState(admin, contactId);
   const skipped = [...new Set([...state.skipped, field])];
-  await admin.from('crm_contact_profile').upsert(
+  const { error: crmContactProfileWriteError } = await admin.from('crm_contact_profile').upsert(
     { contact_id: contactId, extra: { skipped } } as never,
     { onConflict: 'contact_id' },
   );
+  if (crmContactProfileWriteError) console.error('[profile] crm_contact_profile upsert failed', crmContactProfileWriteError);
   return { ...state, skipped };
 }

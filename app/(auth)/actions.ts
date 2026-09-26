@@ -169,8 +169,10 @@ export async function childSignInAction(input: { username: string; pin: string }
     }
 
     // Success: wipe the throttle so a genuine kid never carries a stale lock.
-    await admin.from('child_login_throttle').upsert(
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: childLoginThrottleWriteError } = await admin.from('child_login_throttle').upsert(
       { username, ...clearedState(now) }, { onConflict: 'username' });
+    if (childLoginThrottleWriteError) console.error('[child-sign-in] child_login_throttle upsert failed', childLoginThrottleWriteError);
     return { ok: true, tokens: { access_token: session.access_token, refresh_token: session.refresh_token } };
   } catch {
     // Provider/configuration failures never expose the derived password or any

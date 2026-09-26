@@ -79,10 +79,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
-  await supabase.from('auto_ai_logs').insert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: autoAiLogsWriteError } = await supabase.from('auto_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, vehicle_id: vehicleId, kind: 'accident',
     input: { situation, injuries, hasInsurance }, output: { text }, created_by: ctx.user.id,
   });
+  if (autoAiLogsWriteError) console.error('[auto-accident] auto_ai_logs insert failed', autoAiLogsWriteError);
 
   return NextResponse.json({ text });
 }
