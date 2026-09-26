@@ -7,12 +7,12 @@
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 2
+- Fixed + Passed: 3
 - Blocked: 0
-- Failed: 2
+- Failed: 1
 - Overall Completion: 0.01%
 
-2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 moves ❌ FAIL → 🛠 FIXED + PASS in the repository (migration 0318 + docs/audit/social-restriction-delete-check.sql; production needs the F-001 ledger repair). The remaining FAIL items are SEC-001 and AUTHZ-005. Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well.
+2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001. Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -114,7 +114,7 @@ PRODUCTION READY: NO
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Current isolated action receipt and browser adoption/grant checks pass focused local execution; initiation-before-completion ownership and new-source hosted acceptance remain open. Local grant ownership is not distributed exactly-once mutation control, and a failed post-exchange check cannot undo provider code consumption.
 - SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- AUTHZ-005: Repaired in the repository 2026-09-26 — migration 0319 makes Guardian contact, member-profile and suggestion writes manager-only and drops the member INSERT on guardian_communications; docs/audit/guardian-manager-write-check.sql fails 8 ways before and passes after. Child contact deletion (and so its cascade into routing rules) is closed with it. Remaining: apply to production after the F-001 ledger repair and verify there; member_id columns still reference family_members without a same-family constraint.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
@@ -13805,7 +13805,7 @@ PRODUCTION READY: NO
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
-| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
+| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | 🛠 FIXED + PASS | High | Reproduced against the replayed schema (docs/audit/guardian-manager-write-check.sql): a teen raised a caller's trust, created a trusted contact, deleted a contact, rewrote a routing profile and a suggestion, and forged call history. | Migration 0319: guardian_contacts, guardian_member_profiles and guardian_suggestions writes need can_manage_family (0215's pattern); the member INSERT on guardian_communications is dropped (every real insert is service-role). | Probe fails 8 ways before 0319 and passes after (parent controls pass, members still read); 0319 re-applies idempotently; 43/43 probes; 26 Guardian test files (636 tests) and the full unit suite pass. | Repository-verified 2026-09-26 (Pass C1-K, C1-K-17). Production carries it only after the F-001 ledger repair. Cross-family member_id references remain a separate integrity item. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
 | SERVICE-274EDFA6815C | SERVICE | createAssistantLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -16447,35 +16447,41 @@ Two assistant redirects and five Contact Center neighbor failures reproduced; ac
 
 ### AUTHZ-005 — Guardian contact trust and member profiles require database manager write authority
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: High
-Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; app/(app)/guardian/actions.ts
+Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; supabase/migrations/0319_guardian_trust_and_routing_are_manager_writes.sql; app/(app)/guardian/actions.ts
 
 #### Expected Behavior
 Only family managers may change contact trust, member routing profiles, context or phone assignments, including through direct database requests.
 
 #### Test Cases
-- [ ] Happy path through every required layer and persisted readback
-- [ ] Missing, invalid, unauthorized and cross-tenant inputs
-- [ ] Empty, loading, provider failure and retry states
-- [ ] Duplicate submissions and concurrent execution where applicable
-- [ ] Refresh, restart, keyboard and mobile behavior where applicable
-- [ ] Console and network inspection; related regression
+- [x] A teen cannot raise a caller's trust level (UPDATE matches zero rows)
+- [x] A teen cannot create a trusted contact (INSERT refused)
+- [x] A teen cannot delete a contact, and so cannot cascade-delete manager-created routing rules through `condition_contact_id … ON DELETE CASCADE`
+- [x] A teen cannot rewrite a member routing profile (modes, Guardian phone)
+- [x] A teen cannot rewrite the learning queue (guardian_suggestions)
+- [x] A teen cannot forge Guardian call/message history (guardian_communications INSERT refused)
+- [x] A teen can still read all four tables (control)
+- [x] A parent can set trust, update a profile, add a suggestion and delete a contact (controls)
+- [x] Every app write path keeps working: all go through isManager-gated actions, and isManager (parent/adult) is exactly can_manage_family
+- [ ] Deployed production policy (blocked: migrations from 0296 on are not applied in production — F-001)
 
 #### Issues Found
 The existing contacts and profiles authenticated FOR ALL policies use active family membership without a role check. Server actions require managers, but direct member REST writes bypass those action gates. The later0215 migration hardens routing rules only; contacts and profiles retain the earlier policy.
 
+2026-09-26: the same held for guardian_suggestions (FOR ALL, any member), and "Service can insert guardian_communications" granted INSERT to any family member although every legitimate insert runs as the service role — which let a child forge the history the learning loop reads when it proposes that a caller be trusted.
+
 #### Fixes Applied
-Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force.
+`0319_guardian_trust_and_routing_are_manager_writes.sql`: INSERT/UPDATE/DELETE on guardian_contacts, guardian_member_profiles and guardian_suggestions require `can_manage_family(family_id)`, following 0215; SELECT stays open to members; the member INSERT policy on guardian_communications is dropped. Service-role writers are unaffected. The action file's header, which described the server actions as the only boundary, now says the database enforces it too.
 
 #### Retest Results
-Pending disposable role-boundary reproduction and authorized schema repair.
+`docs/audit/guardian-manager-write-check.sql` fails 8 ways before 0319 (six breaches, plus two parent controls finding the teen had already deleted the contact) and passes after. 0319 applied twice without error. Probes 43/43. `scripts/audit-migration-versions.mjs` passes (next free version 0320). 26 Guardian test files / 636 tests and the full unit suite pass (the three failures are the known Node-22-container-only cases).
 
 #### Evidence
-Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed.
+docs/audit/guardian-manager-write-check.sql; Pass C1-K (C1-K-17) in this file.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS in the repository. Production needs the F-001 migration-ledger repair. Still open and separate: `member_id` columns reference family_members without a same-family constraint.
 
 ### SMS-002 — Guardian SMS recovery after provider retries stop
 
@@ -20911,7 +20917,7 @@ Status: 🔄 IN PROGRESS — the outer boundary is verified from outside; databa
 
 The middleware boundary was probed exhaustively (see APIs below): no route exposed family data to an unauthenticated caller. The assistant exemption was confirmed exact — POST /api/assistant answers 401 and POST /api/assistant/alexa answers 403 from their own handlers, GET on both answers 307, and /api/assistant/link and /api/assistant/other answer 307 on both verbs, so the namespace was not opened.
 
-NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 through AUTHZ-005 remain open, and AUTHZ-005 remains a release failure requiring SQL. (AUTHZ-003 was repaired in the repository on 2026-09-26 by migration 0318; production needs the F-001 ledger repair.)
+NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 and AUTHZ-004 remain open. AUTHZ-003 and AUTHZ-005 were repaired in the repository on 2026-09-26 by migrations 0318 and 0319; production needs the F-001 ledger repair for both.
 
 ## Core User Journeys
 Status: 🔄 IN PROGRESS — public journeys verified; authenticated journeys not exercised in this pass.
@@ -20944,7 +20950,7 @@ Status: 🔄 IN PROGRESS — migration integrity verified in CI; live policy beh
 
 The Database job (migration replay and RLS boundary probes) passes on head 92340315. This branch authors no SQL and changes no migration — `git diff origin/main...HEAD -- supabase/migrations/` is empty.
 
-NOT verified here: the applied production catalog, which no static evidence establishes. The release failures (SEC-001 public family-media bucket, AUTHZ-005 Guardian contact/profile writes) are policy state on main, not regressions from this branch, and need SQL applied by a human. AUTHZ-003 (social-member DELETE) was repaired in the repository on 2026-09-26 by migration 0318 and also needs applying to production.
+NOT verified here: the applied production catalog, which no static evidence establishes. The remaining release failure (SEC-001 public family-media bucket) is policy state on main, not a regression from this branch. AUTHZ-003 (social-member DELETE) and AUTHZ-005 (Guardian contact/profile writes) were repaired in the repository on 2026-09-26 by migrations 0318 and 0319 and also need applying to production.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — no live provider exchange was performed in this pass.
@@ -21040,7 +21046,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
 - SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- AUTHZ-005: Repaired in the repository 2026-09-26 — migration 0319 makes Guardian contact, member-profile and suggestion writes manager-only and drops the member INSERT on guardian_communications; docs/audit/guardian-manager-write-check.sql fails 8 ways before and passes after. Child contact deletion (and so its cascade into routing rules) is closed with it. Remaining: apply to production after the F-001 ledger repair and verify there; member_id columns still reference family_members without a same-family constraint.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
@@ -26488,6 +26494,50 @@ the UPDATE predicate. `docs/audit/social-restriction-delete-check.sql` fails 3
 ways before it and passes after; a parent can still lift the restriction.
 The ledger row and detailed record are updated to 🛠 FIXED + PASS in the
 repository; production carries it only after the F-001 ledger repair.
+
+## C1-K-17 · HIGH · Guardian: an emergency alert that could not be dismissed, and AUTHZ-005 closed
+
+Working AUTHZ-005 (Critical-path FAIL) turned up three defects beside it.
+
+1. **The Emergency Alert banner could never be acknowledged.**
+   `acknowledgeEscalationAction` updated `guardian_escalations` through the
+   parent's own session. That table is SELECT-only for members (the webhook
+   writes it), so RLS filtered the update to zero rows without an error.
+   Measured on the replayed schema: the parent sees the escalation (1 row) and
+   the update touches 0. The action answered "Escalation acknowledged", the
+   dashboard refreshed, and the red banner came straight back — every time,
+   for every family. **Fix:** after its manager check, the action writes
+   through the service role, scoped to id and family and to unacknowledged
+   rows, and requires a row back; zero rows is success only if the escalation
+   is already acknowledged (the first acknowledgement is kept), and each real
+   acknowledgement is audited.
+2. **A parent-run learning scan was never audited, and ran on from failed
+   reads.** `runLearningForFamily` wrote its audit row through the caller's
+   client — refused by RLS in a parent's session — and discarded the result
+   with `.then(() => {}, () => {})`. Its three reads dropped their errors; a
+   failed read of the pending queue meant de-duplication found nothing and the
+   run re-filed every open suggestion. **Fix:** the action passes a service
+   client for the audit write and failures are logged; a failed read stops the
+   run (the cron already isolates per-family failures, the action now reports
+   it).
+3. **Every Guardian dashboard control could spin forever.** Scan, context
+   change, suggestion review and acknowledge awaited their server actions with
+   no rejection path, so a dropped connection or a server throw skipped the
+   reset below the await. All four now catch, say so, and release in a
+   `finally`.
+
+**AUTHZ-005** itself (manager-only writes for contacts, member profiles and
+suggestions; no member INSERT on communications) is migration 0319 — see its
+ledger record.
+
+**Test.** `a-guardian-escalation-is-actually-acknowledged` (10): acknowledge
+scoped to the family and audited; refused when nothing was acknowledged;
+already-acknowledged is done without overwriting; non-managers still refused;
+the learning run stops on a failed pending read and writes nothing; the action
+passes an audit client; all four dashboard handlers have a rejection path.
+Reverting the three source files fails 9 of 10 (the non-manager control holds
+both ways). Full unit suite: 16,908 pass; the 3 failures are the known
+Node-22-container-only cases.
 
 ## The master ledger's open list, worked to the end
 

@@ -13,11 +13,12 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
-// Guardian settings govern a child's call/message SAFETY screening. RLS on the
-// guardian tables is family-scoped (any member), and children have real logins,
-// so these server actions are the authorization boundary: only a family manager
-// (parent/adult) may change safety config. The failure-only shape is assignable
-// to every ActionResult<T>.
+// Guardian settings govern a child's call/message SAFETY screening, and children
+// have real logins. Only a family manager (parent/adult) may change safety
+// config. These actions check that first; the database checks it too since 0215
+// (routing rules) and 0319 (contacts, member profiles, suggestions), where
+// can_manage_family is the same parent/adult test as isManager. The
+// failure-only shape is assignable to every ActionResult<T>.
 async function guardianForbidden(): Promise<{ ok: false; error: string }> {
   const t = await getTranslations();
   return { ok: false, error: t('actions.onlyAParentOrGuardian') };
@@ -417,10 +418,15 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
 export async function generateGuardianSuggestionsAction(): Promise<ActionResult<{ created: number }>> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
+  const t = await getTranslations();
   const supabase = await createServer();
-  const result = await runLearningForFamily(supabase, ctx.active.familyId);
-  revalidatePath('/guardian');
-  return { ok: true, data: { created: result.created } };
+  try {
+    const result = await runLearningForFamily(supabase, ctx.active.familyId, { auditClient: createServiceClient() });
+    revalidatePath('/guardian');
+    return { ok: true, data: { created: result.created } };
+  } catch (err) {
+    return actionFailure('run Guardian learning', t('globalError.somethingWentWrong'), err);
+  }
 }
 
 export async function reviewSuggestionAction(
@@ -449,13 +455,37 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
-  const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_escalations') as ReturnType<typeof supabase.from>)
+  // guardian_escalations is SELECT-only for family members: escalations are
+  // written by the webhook, and nothing a member's session sends may change
+  // one. This used to update through the parent's own session, which RLS
+  // filtered to zero rows without an error — so it answered "Escalation
+  // acknowledged", the page refreshed, and the red Emergency Alert came back,
+  // every time. The manager check above is the authority; the write itself goes
+  // through the service role, scoped to this family, and must touch the row.
+  const failed = () => actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), new Error('No escalation acknowledged'));
+  const svc = withGuardianTables(createServiceClient());
+  const { data: rows, error } = await svc.from('guardian_escalations')
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .is('acknowledged_at', null)
+    .select('id');
   if (error) return actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), error);
+  if (!rows?.length) {
+    // Zero rows is success only if someone already acknowledged it; the first
+    // acknowledgement is kept rather than overwritten.
+    const { data: existing, error: readError } = await svc.from('guardian_escalations')
+      .select('acknowledged_at')
+      .eq('id', escalationId)
+      .eq('family_id', ctx.active.familyId)
+      .maybeSingle();
+    if (readError || !(existing as { acknowledged_at?: string | null } | null)?.acknowledged_at) return failed();
+  } else {
+    await logGuardianAudit({
+      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, actor: 'parent',
+      action: 'escalation.acknowledged', entity_type: 'guardian_escalations', entity_id: escalationId,
+    });
+  }
   revalidatePath('/guardian');
   return { ok: true };
 }
