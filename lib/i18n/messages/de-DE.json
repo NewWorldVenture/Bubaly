@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "Dieser Benutzer konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateTheChore": "Die Einreichung der Aufgabe konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateTheConcierge": "Die Concierge-Einstellungen konnten nicht aktualisiert werden.",
+  "actions.forwardingNumberNotCallable": "Diese Ausweichnummer ist keine Telefonnummer, die wir anrufen können. Gib die vollständige Nummer mit Ländervorwahl ein, z. B. +49 30 1234567.",
   "actions.couldNotUpdateTheFamily": "Die Family Wallet konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateTheMessage": "Die Nachricht konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateYourCalendar": "Ihr Kalender konnte nicht aktualisiert werden.",

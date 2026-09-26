@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "Kan die gebruiker niet bijwerken.",
   "actions.couldNotUpdateTheChore": "Kan de inzending van het klusje niet bijwerken.",
   "actions.couldNotUpdateTheConcierge": "Kan de conciërge-instellingen niet bijwerken.",
+  "actions.forwardingNumberNotCallable": "Dat terugvalnummer is geen telefoonnummer dat we kunnen bellen. Gebruik het volledige nummer met landcode, bijvoorbeeld +31 6 12345678.",
   "actions.couldNotUpdateTheFamily": "Kan de gezinsportemonnee niet bijwerken.",
   "actions.couldNotUpdateTheMessage": "Kan het bericht niet bijwerken.",
   "actions.couldNotUpdateYourCalendar": "Kan je agenda niet bijwerken.",

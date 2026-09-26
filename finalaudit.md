@@ -26322,6 +26322,54 @@ production (F-001). A half-fix here would read as closed and not be.
    code allowlist and `super_admins`, so the role cannot follow an address to a
    different account.
 
+## C1-K-14 · HIGH · TwiML was built without escaping — a broken screening call, and a fallback number that could add verbs
+
+Every TwiML builder in `lib/guardian/twilio.ts` interpolated its values into
+XML, and only spoken text was escaped (`& < >`, not quotes). Three defects came
+out of that one shape.
+
+1. **AI screening could not be heard.** `app/api/guardian/screen/route.ts` and
+   `inbound/voice` put `…/screen?sessionId=${id}&turn=${n}` into a `<Gather
+   action="…">`. A bare `&` is not well-formed XML (`&turn` reads as an
+   unterminated entity), and Twilio parses TwiML strictly, so a call routed to
+   screening got a document parse failure (Twilio 12100) instead of the
+   question. Confirmed with a strict XML parser on the exact string.
+2. **The Contact Center fallback number reached the TwiML as typed.**
+   `updateConciergeAction` stored `input.forwardTo` with no validation;
+   `contact-center/voice` dialled it as `<Dial>${number}</Dial>`. Any parent on
+   a Family+ plan could save `+1555…</Dial><Redirect>https://…</Redirect><Dial>`
+   and have their family line hand live calls, on Bubaly's Twilio account, to a
+   TwiML document anywhere. `guardian/screen` also dialled a member's phone as
+   raw `<Dial>${memberPhone}</Dial>`, outside the builder.
+3. **Urgent SMS forwarding never sent for the format the form suggests.** The
+   field's placeholder is `+1 555 123 4567`. Stored verbatim, it failed
+   `sendSmsWithReceipt`'s E.164 check on every urgent message, which the
+   receipt records as *rejected* — the parent set up a fallback that could not
+   fire.
+
+**Fix.** One `xml()` escape (`& < > " '`) for every text and attribute value in
+the builders; `guardian/screen` now dials through `twimlDial`.
+`toCallableE164` (`lib/contact-center/phone.ts`) accepts only phone punctuation
+before normalizing — `toE164` alone keeps the digits of whatever it is given and
+would make a number out of a URL. The action stores E.164 or refuses with a
+translated message (`actions.forwardingNumberNotCallable`, 7 locales); empty
+clears. Numbers saved in the old format are normalized where they are used:
+the voice route dials one that reads as a number and otherwise takes a message;
+urgent delivery sends to the normalized number and still lets anything else be
+rejected visibly rather than treating it as "no number".
+
+**Test.** `a-forwarding-number-is-a-number` (8): a strict well-formedness check
+over Gather/Record/Say/Dial output with `&`, quotes and closing tags; an
+injected number yields only `Response` and `Dial` elements; normalization of the
+placeholder formats; refusal of text; the action writes E.164, clears on empty,
+and writes nothing for an injection. Reverting the fix fails 6 of 8.
+
+**Owner item (not code).** Forwarding to a number the customer chooses is the
+feature, so premium-rate and international destinations are a Twilio account
+setting, not something this code can decide: confirm **Voice Geographic
+Permissions** and **SMS Geo Permissions** in the Twilio console allow only the
+countries Bubaly serves.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as

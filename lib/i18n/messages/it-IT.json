@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "Impossibile aggiornare quell’utente.",
   "actions.couldNotUpdateTheChore": "Impossibile aggiornare l’invio della faccenda.",
   "actions.couldNotUpdateTheConcierge": "Impossibile aggiornare le impostazioni del concierge.",
+  "actions.forwardingNumberNotCallable": "Questo numero di riserva non è un numero che possiamo chiamare. Inserisci il numero completo con il prefisso internazionale, ad esempio +39 312 345 6789.",
   "actions.couldNotUpdateTheFamily": "Impossibile aggiornare il portafoglio di famiglia.",
   "actions.couldNotUpdateTheMessage": "Impossibile aggiornare il messaggio.",
   "actions.couldNotUpdateYourCalendar": "Impossibile aggiornare il tuo calendario.",

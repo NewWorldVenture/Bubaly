@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "Não foi possível atualizar esse utilizador.",
   "actions.couldNotUpdateTheChore": "Não foi possível atualizar a submissão da tarefa.",
   "actions.couldNotUpdateTheConcierge": "Não foi possível atualizar as definições do concierge.",
+  "actions.forwardingNumberNotCallable": "Esse número alternativo não é um telefone para o qual possamos ligar. Usa o número completo com o indicativo do país, por exemplo +351 912 345 678.",
   "actions.couldNotUpdateTheFamily": "Não foi possível atualizar a carteira familiar.",
   "actions.couldNotUpdateTheMessage": "Não foi possível atualizar a mensagem.",
   "actions.couldNotUpdateYourCalendar": "Não foi possível atualizar o seu calendário.",

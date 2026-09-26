@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "Impossible de mettre à jour cet utilisateur.",
   "actions.couldNotUpdateTheChore": "Impossible de mettre à jour la soumission de la corvée.",
   "actions.couldNotUpdateTheConcierge": "Impossible de mettre à jour les paramètres du concierge.",
+  "actions.forwardingNumberNotCallable": "Ce numéro de secours n'est pas un numéro que nous pouvons appeler. Saisissez le numéro complet avec l'indicatif du pays, par exemple +33 6 12 34 56 78.",
   "actions.couldNotUpdateTheFamily": "Impossible de mettre à jour le portefeuille familial.",
   "actions.couldNotUpdateTheMessage": "Impossible de mettre à jour le message.",
   "actions.couldNotUpdateYourCalendar": "Impossible de mettre à jour votre agenda.",

@@ -266,6 +266,7 @@
   "actions.couldNotUpdateThatUser": "No se ha podido actualizar a ese usuario.",
   "actions.couldNotUpdateTheChore": "No se ha podido actualizar el envío de la tarea.",
   "actions.couldNotUpdateTheConcierge": "No se han podido actualizar los ajustes del conserje.",
+  "actions.forwardingNumberNotCallable": "Ese número de respaldo no es un teléfono al que podamos llamar. Usa el número completo con el prefijo del país, como +34 612 345 678.",
   "actions.couldNotUpdateTheFamily": "No se ha podido actualizar la cartera familiar.",
   "actions.couldNotUpdateTheMessage": "No se ha podido actualizar el mensaje.",
   "actions.couldNotUpdateYourCalendar": "No se ha podido actualizar tu calendario.",
