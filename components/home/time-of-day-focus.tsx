@@ -12,6 +12,7 @@ import { dayPhase, phaseBlurb, focusForPhase, type DayPhase } from '@/lib/home/t
 import { roleSurface, focusHeadline, focusChipClasses } from '@/lib/ui/role-surface';
 import type { MemberRole } from '@/lib/constants/roles';
 import { cn } from '@/lib/utils/cn';
+import { getTranslations } from '@/lib/i18n/server';
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   CalendarClock, CalendarDays, CloudSun, GraduationCap, ListChecks, MessageCircle,
@@ -22,8 +23,9 @@ const PHASE_ICON: Record<DayPhase, React.ComponentType<{ className?: string }>> 
   morning: Sunrise, midday: Sun, evening: Sunset, night: Moon,
 };
 
-export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; role?: MemberRole | null }) {
-  const phase = dayPhase(now);
+export async function TimeOfDayFocus({ now = new Date(), role = null, timezone }: { now?: Date; role?: MemberRole | null; timezone: string }) {
+  const t = await getTranslations();
+  const phase = dayPhase(now, timezone);
   // Role-tailored (Friction #8): kids/guests get a shorter, simpler focus set,
   // the heading language matches who's reading, and the chips scale to the
   // reader's density (bigger, more tappable for kids).
@@ -37,7 +39,7 @@ export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; 
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <PhaseIcon className="h-4 w-4" />
         </span>
-        <p className="text-sm font-semibold">{focusHeadline(role)} <span className="font-normal text-muted">· {phaseBlurb(phase)}</span></p>
+        <p className="text-sm font-semibold">{focusHeadline(role, t)} <span className="font-normal text-muted">· {phaseBlurb(phase, t)}</span></p>
       </div>
       <div className="flex flex-wrap gap-2">
         {items.map((it) => {
@@ -51,7 +53,7 @@ export function TimeOfDayFocus({ now = new Date(), role = null }: { now?: Date; 
                 sizing.chip,
               )}
             >
-              <Icon className={cn('text-brand-text', sizing.icon)} /> {it.label}
+              <Icon className={cn('text-brand-text', sizing.icon)} /> {t(it.labelKey)}
             </Link>
           );
         })}

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { dayPhase, phaseGreeting, phaseBlurb, focusForPhase } from '@/lib/home/time-of-day';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
+const de = (key: string, params?: Record<string, string | number>) => translate(getMessages('de-DE'), key, params);
 
 function at(hour: number): Date {
   const d = new Date('2026-07-04T00:00:00');
@@ -23,16 +27,16 @@ describe('dayPhase', () => {
 
 describe('phaseGreeting', () => {
   it('greets per phase; night reads as evening', () => {
-    expect(phaseGreeting('morning')).toBe('Good morning');
-    expect(phaseGreeting('midday')).toBe('Good afternoon');
-    expect(phaseGreeting('evening')).toBe('Good evening');
-    expect(phaseGreeting('night')).toBe('Good evening');
+    expect(phaseGreeting('morning', en)).toBe('Good morning');
+    expect(phaseGreeting('midday', en)).toBe('Good afternoon');
+    expect(phaseGreeting('evening', en)).toBe('Good evening');
+    expect(phaseGreeting('night', en)).toBe('Good evening');
   });
 });
 
 describe('phaseBlurb', () => {
   it('has a distinct blurb for every phase', () => {
-    const blurbs = (['morning', 'midday', 'evening', 'night'] as const).map(phaseBlurb);
+    const blurbs = (['morning', 'midday', 'evening', 'night'] as const).map((p) => phaseBlurb(p, en));
     expect(new Set(blurbs).size).toBe(4);
     blurbs.forEach((b) => expect(b.length).toBeGreaterThan(0));
   });
@@ -53,5 +57,25 @@ describe('focusForPhase', () => {
   });
   it('never returns more items than a phase defines', () => {
     expect(focusForPhase('night', 10).length).toBe(3); // night defines 3
+  });
+});
+
+describe('the phase is the family\'s, not the server\'s (DATA-022)', () => {
+  // The home page and the dashboards render on the server, in UTC. At 8 pm in
+  // Los Angeles (03:00 UTC) the old code said "Good morning" and offered the
+  // morning shortcuts; at 8 am there (15:00 UTC) it said "Good afternoon".
+  const evening = new Date('2026-07-04T03:00:00Z');   // 20:00 in Los Angeles
+  const morning = new Date('2026-07-04T15:00:00Z');   // 08:00 in Los Angeles
+
+  it('reads the hour in the family timezone', () => {
+    expect(dayPhase(evening, 'America/Los_Angeles')).toBe('evening');
+    expect(dayPhase(morning, 'America/Los_Angeles')).toBe('morning');
+    expect(dayPhase(evening, 'Europe/Berlin')).toBe('morning');   // the same instant is 05:00 in Berlin
+    expect(dayPhase(evening, 'UTC')).toBe('night');
+  });
+
+  it('and the words are the family\'s language', () => {
+    expect(phaseGreeting('morning', de)).toBe('Guten Morgen');
+    expect(focusForPhase('morning').map((i) => de(i.labelKey))).toContain('Wetter');
   });
 });

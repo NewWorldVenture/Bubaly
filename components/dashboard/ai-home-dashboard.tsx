@@ -45,13 +45,7 @@ import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSou
 import { InsightHero } from '@/components/dashboard/insight-hero';
 import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 
 function todayLabel(locale: string) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -444,7 +438,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted">{todayLabel(locale.code)}</p>
-          <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{greeting()}, {name.split(' ')[0]}.</h1>
+          <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{phaseGreeting(dayPhase(new Date(), tz), t)}, {name.split(' ')[0]}.</h1>
         </div>
         <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
           <Sparkles className="h-3.5 w-3.5" /> {t('aiHomeDashboard.askAi')}

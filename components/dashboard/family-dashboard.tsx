@@ -13,6 +13,7 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
+import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { localPartsAt, startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -147,7 +148,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const r = 40; const circ = 2 * Math.PI * r;
 
-  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting = phaseGreeting(dayPhase(new Date(), ctx.active.family.timezone || 'UTC'), tr);
 
   // Suggestions derived from real family data — never fabricated.
   const suggestions: { icon: typeof Calendar; text: string; cta: string }[] = [];

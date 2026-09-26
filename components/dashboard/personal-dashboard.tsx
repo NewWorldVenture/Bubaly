@@ -134,7 +134,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   // casual one, kids a warm emoji greeting — same treatment as Home, now on the
   // personal dashboard too.
   const firstName = (me.display_name || 'there').split(' ')[0];
-  const greeting = roleGreeting(role, firstName, dayPhase(new Date()));
+  const greeting = roleGreeting(role, firstName, dayPhase(new Date(), ctx.active.family.timezone || 'UTC'), tr);
   const showWave = roleSurface(role).tone !== 'kid'; // kid greetings already carry an emoji
 
   const statusTone: Record<string, string> = {

@@ -5,7 +5,7 @@
 // components consume this to adapt copy/limits per role. Fully unit-testable.
 
 import type { MemberRole } from '@/lib/constants/roles';
-import type { DayPhase } from '@/lib/home/time-of-day';
+import type { DayPhase, Translate } from '@/lib/home/time-of-day';
 
 export type Density = 'comfortable' | 'cozy' | 'playful';
 export type Tone = 'formal' | 'casual' | 'kid';
@@ -34,32 +34,26 @@ export function roleSurface(role: MemberRole | null | undefined): RoleSurface {
 }
 
 /** Personalized greeting line, tone-matched to the reader's role + time of day. */
-export function roleGreeting(role: MemberRole | null | undefined, firstName: string, phase: DayPhase): string {
-  const name = firstName.trim() || 'there';
+export function roleGreeting(role: MemberRole | null | undefined, firstName: string, phase: DayPhase, t: Translate): string {
+  const name = firstName.trim() || t('roleGreeting.there');
   const tone = roleSurface(role).tone;
-  if (tone === 'kid') {
-    switch (phase) {
-      case 'morning': return `Good morning, ${name}! ☀️`;
-      case 'midday':  return `Hi ${name}! 👋`;
-      case 'evening': return `Hey ${name}! 🌙`;
-      default:        return `Night night soon, ${name} 🌟`;
-    }
-  }
-  const hi = tone === 'formal' ? 'Good' : 'Hey';
-  switch (phase) {
-    case 'morning': return `${tone === 'formal' ? 'Good morning' : 'Morning'}, ${name}`;
-    case 'midday':  return `${hi} ${tone === 'formal' ? 'afternoon' : 'there'}, ${name}`;
-    case 'evening': return `${tone === 'formal' ? 'Good evening' : 'Evening'}, ${name}`;
-    default:        return `${tone === 'formal' ? 'Good night' : 'Night'}, ${name}`;
-  }
+  const TONE = tone === 'kid' ? 'kid' : tone === 'formal' ? 'formal' : 'casual';
+  // Twelve whole phrases rather than a greeting word plus a name: the order,
+  // the comma and the emoji all belong to the language.
+  const KEYS = {
+    kid: { morning: 'roleGreeting.kidMorning', midday: 'roleGreeting.kidMidday', evening: 'roleGreeting.kidEvening', night: 'roleGreeting.kidNight' },
+    formal: { morning: 'roleGreeting.formalMorning', midday: 'roleGreeting.formalMidday', evening: 'roleGreeting.formalEvening', night: 'roleGreeting.formalNight' },
+    casual: { morning: 'roleGreeting.casualMorning', midday: 'roleGreeting.casualMidday', evening: 'roleGreeting.casualEvening', night: 'roleGreeting.casualNight' },
+  } as const;
+  return t(KEYS[TONE][phase], { name });
 }
 
 /** Heading for the Home "Focus now" strip, tailored to the reader. */
-export function focusHeadline(role: MemberRole | null | undefined): string {
+export function focusHeadline(role: MemberRole | null | undefined, t: Translate): string {
   switch (roleSurface(role).tone) {
-    case 'kid':    return "Let's go";
-    case 'formal': return 'Focus now';
-    default:       return 'Your focus';
+    case 'kid':    return t('focusHeadline.kid');
+    case 'formal': return t('focusHeadline.formal');
+    default:       return t('focusHeadline.casual');
   }
 }
 
