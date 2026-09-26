@@ -65,33 +65,43 @@ export async function addMomentGroceryAction(input: {
     .map((s) => (typeof s === 'string' ? s.trim() : ''))
     .filter(Boolean))).slice(0, 20);
   if (names.length === 0) return { ok: false, error: t('momentActions.nothingToAdd') };
+  // The family is the session's, not the caller's. RLS would still refuse a
+  // family the member is not in, but a member of two households could otherwise
+  // drop a moment's shopping into the one they are not looking at.
+  const familyId = ctx.active.familyId;
+  if (input.familyId && input.familyId !== familyId) return { ok: false, error: t('momentActions.couldNotAddToGroceries') };
   const supabase = await createServer();
 
   // Resolve the active (non-archived) list, or create "Groceries" — same rule the
   // Grocery module uses, so the moment's items land exactly where the family shops.
   // Both archive columns: only `archived_at` is ever written (the shopping
   // module stamps it), so `is_archived` alone calls an archived list active.
-  const { data: lists } = await supabase.from('grocery_lists')
-    .select('id').eq('family_id', input.familyId).eq('is_archived', false).is('archived_at', null)
+  // A failed read is not "no list": creating one here would give the family a
+  // second "Groceries" list beside the one that failed to load.
+  const { data: lists, error: listsError } = await supabase.from('grocery_lists')
+    .select('id').eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
     .order('created_at').limit(1);
+  if (listsError) return { ok: false, error: describeActionError(listsError, t('momentActions.couldNotAddToGroceries')) };
   let listId = lists?.[0]?.id;
   if (!listId) {
     const { data: created, error: listErr } = await supabase.from('grocery_lists')
-      .insert({ family_id: input.familyId, name: 'Groceries', created_by: ctx.user.id })
+      .insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id })
       .select('id').single();
     if (listErr || !created) return { ok: false, error: describeActionError(listErr, 'Could not create a list') };
     listId = created.id;
   }
 
   // Skip items already present (unchecked) so re-tapping is idempotent.
-  const { data: existing } = await supabase.from('grocery_items')
+  // Likewise: a failed read of what is already on the list would re-add all of it.
+  const { data: existing, error: existingError } = await supabase.from('grocery_items')
     .select('name').eq('list_id', listId).eq('is_checked', false);
+  if (existingError) return { ok: false, error: describeActionError(existingError, t('momentActions.couldNotAddToGroceries')) };
   const have = new Set((existing ?? []).map((r) => r.name.trim().toLowerCase()));
   const toAdd = names.filter((n) => !have.has(n.toLowerCase()));
   if (toAdd.length === 0) return { ok: true, added: 0, ids: [] };
 
   const { data: inserted, error } = await supabase.from('grocery_items').insert(
-    toAdd.map((name) => ({ family_id: input.familyId, list_id: listId as string, name, created_by: ctx.user.id })),
+    toAdd.map((name) => ({ family_id: familyId, list_id: listId as string, name, created_by: ctx.user.id })),
   ).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true, added: toAdd.length, ids: (inserted ?? []).map((r) => r.id) };

@@ -7682,6 +7682,7 @@
   "momentActions.missingEvent": "Evento mancante",
   "momentActions.missingTitle": "Titolo mancante",
   "momentActions.nothingToAdd": "Niente da aggiungere",
+  "momentActions.couldNotAddToGroceries": "Impossibile aggiungerli alla lista della spesa. Riprova.",
   "momentOrganizer.rightNow": "In questo momento",
   "moments.addedToGroceryList": "Aggiunti {count} alla tua lista della spesa",
   "moments.moments": "Momenti",

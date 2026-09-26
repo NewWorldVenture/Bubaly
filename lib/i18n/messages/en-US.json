@@ -7669,6 +7669,7 @@
   "momentActions.missingEvent": "Missing event",
   "momentActions.missingTitle": "Missing title",
   "momentActions.nothingToAdd": "Nothing to add",
+  "momentActions.couldNotAddToGroceries": "Couldn't add these to the grocery list. Try again.",
   "momentOrganizer.rightNow": "Right now",
   "moments.moments": "Moments",
   "moments.needPrep": "need prep",

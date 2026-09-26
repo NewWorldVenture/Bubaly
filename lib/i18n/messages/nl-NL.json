@@ -7682,6 +7682,7 @@
   "momentActions.missingEvent": "Gebeurtenis ontbreekt",
   "momentActions.missingTitle": "Titel ontbreekt",
   "momentActions.nothingToAdd": "Niets toe te voegen",
+  "momentActions.couldNotAddToGroceries": "Dit kon niet aan de boodschappenlijst worden toegevoegd. Probeer het opnieuw.",
   "momentOrganizer.rightNow": "Op dit moment",
   "moments.addedToGroceryList": "{count} toegevoegd aan je boodschappenlijst",
   "moments.moments": "Momenten",

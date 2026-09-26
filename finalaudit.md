@@ -4,15 +4,15 @@
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-26T18:30:00Z
 - Total Audit Items: 14180
-- Not Started: 13881
-- In Progress: 297
+- Not Started: 13880
+- In Progress: 298
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. Q64 added two new IDs (migration 0335 and its probe) and moved two more ⬜ → 🔄: 14,175 = 13,886 + 287 + 1 + 1. Q65 added migration 0336 and moved lib/server/push.ts ⬜ → 🔄: 14,176 = 13,885 + 289 + 1 + 1. Q66 added migration 0337 and its probe and moved the Resend webhook route ⬜ → 🔄: 14,178 = 13,884 + 292 + 1 + 1. Q67 added migration 0338 and its probe and moved three actions ⬜ → 🔄: 14,180 = 13,881 + 297 + 1 + 1. See Q56–Q67.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. Q64 added two new IDs (migration 0335 and its probe) and moved two more ⬜ → 🔄: 14,175 = 13,886 + 287 + 1 + 1. Q65 added migration 0336 and moved lib/server/push.ts ⬜ → 🔄: 14,176 = 13,885 + 289 + 1 + 1. Q66 added migration 0337 and its probe and moved the Resend webhook route ⬜ → 🔄: 14,178 = 13,884 + 292 + 1 + 1. Q67 added migration 0338 and its probe and moved four actions ⬜ → 🔄: 14,180 = 13,880 + 298 + 1 + 1. See Q56–Q67.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -9161,7 +9161,7 @@ PRODUCTION READY: NO
 | ACTION-06C82E2828E8 | ACTION | commitImport | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-1A3AD1A02F9E | ACTION | loadMomentPrep | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-1AEED72D9878 | ACTION | setMomentPrepDoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-9FAA2BF77E5F | ACTION | addMomentGroceryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-9FAA2BF77E5F | ACTION | addMomentGroceryAction | 🔄 IN PROGRESS | Medium | tests/moment-grocery-does-not-duplicate-on-a-failed-read.test.ts (failed list read, failed item read, foreign family, happy path) | 2026-09-26 (Q67): family taken from the session; both read errors refuse instead of creating a second "Groceries" list or re-adding every item | 4/4; disabling the list-read check fails it | See Q67. |
 | ACTION-59FEC0DE848A | ACTION | removeMomentGroceryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-ED73CED91B24 | ACTION | createMomentReminderAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-94972CCF8DD8 | ACTION | dismissMomentAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -30183,6 +30183,16 @@ first so a child gets a sentence ("Only a parent or guardian can move a child's
 independence ladder.", six base catalogues), and the two updates now read their row
 back, because a filtered update answers `error: null`. The measured gated-write probe
 now lists 95 tables and agrees exactly.
+
+**Actions that take a family id.** The same sweep for `input.familyId`: super-admin
+actions and internal helpers aside, `paperworkInsertRow` only builds a row (no write),
+and `addMomentGroceryAction` took the family from the caller — RLS still required
+membership, but a member of two households could drop an event's shopping into the one
+they were not looking at — and dropped both read errors: a failed read of the lists
+created a **second "Groceries"**, and a failed read of the items re-added all of them.
+It now takes the family from the session and refuses on either failure;
+`tests/moment-grocery-does-not-duplicate-on-a-failed-read.test.ts` (4) fails with the
+list check disabled.
 
 **Retest:** `docs/audit/independence-ladder-write-boundary-check.sql` fails on a
 database without 0338 (*"a child marked their own milestone achieved"*) and passes
