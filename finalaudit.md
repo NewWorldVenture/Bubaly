@@ -2,13 +2,14 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T19:07:27.000Z
+- Last Updated: 2026-09-26T19:14:54.000Z
+- Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**.
 - Total Audit Items: 14075 — **+4 in Pass BU**: SEC-007 (raised by the review of the SEC-006 fix) and SEC-008 (raised by the SEC-007 fix), each re-read against its routes before being recorded; SEC-009 (an opt-out a family set comes back on whenever the settings read fails — found by the `m35` fixer, re-read at every call site); and I18N-010 (a `t()` key no catalogue carries — found by three separate reviewers, measured tree-wide, fixed with a guard). **+33 the pass before**: SEC-006, TIME-010, SRV-001, TIME-009, CONC-001, DOC-002, AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005, METRIC-001, SPEC-001, SPEC-002, IMPORT-001, AUTH-004, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-009, AUDIT-010, TIME-001, TIME-002, TIME-003, TIME-004, TIME-005, TIME-006, TIME-007, TIME-008, AUDIT-011
-- Not Started: 13842
+- Not Started: 13838
 - In Progress: 196
 - Passed: 0
 - Fixed + Passed: 1
-- Blocked: 0
+- Blocked: 4
 - Failed: 3 — **all three now have repairs in the tree; see the merge note below**
 - Overall Completion: 0.01%
 
@@ -450,6 +451,7 @@ head 92340315):
 PRODUCTION READY: NO
 
 ## Critical Blockers
+- PROD-ENV (owner, measured 2026-09-26 19:13Z): production's `/api/health` reports `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET` and `GUARDIAN_INTERNAL_SECRET` unset. Per `lib/health/status.ts`, `hasCronAuthorization` is fail-closed, so without `CRON_SECRET` every one of the 24 scheduled jobs in `vercel.json` answers 401 (nightly notifications, wallet allowance, chore reminders, the weekly digest, …); without `CHILD_LOGIN_SECRET` no child in any family can sign in; the other two gate provider ingress and signed links and fail closed. Setting them in the Vercel production environment is the owner's action; the four `ENV-*` rows are BLOCKED on it. Also unset, per the same check: `RESEND_API_KEY`, `INTERNAL_SECRET`, `CONTACT_CENTER_INBOUND_SECRET` were NOT in the missing list, so those are set.
 - API-387E2B30BCD7: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - LIBRARY-10D7AA8F3175: The current helper distinguishes claimed, settled and unavailable. Signed voicemail consumer failure/notification/finalization repairs pass focused local checks and published 4ccc hosted gates. Remaining non-SMS callback consumer read/write-error handling and real provider recovery remain unverified; preserve the detailed record and guardian-voicemail-intake-cycle.md.
@@ -11776,14 +11778,14 @@ PRODUCTION READY: NO
 | ENV-3BC7A5CB55B3 | ENV | BUBALY_BUILD_REVISION | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-896701464B3D | ENV | BUBALY_HOME_BROWSER_DIR | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-97AD703AC3D7 | ENV | CAP_SERVER_URL | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ENV-FCB95D3AD8BB | ENV | CHILD_LOGIN_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ENV-FCB95D3AD8BB | ENV | CHILD_LOGIN_SECRET | ⚠️ BLOCKED | High | /api/health on production, 2026-09-26 | Owner: set in the Vercel production environment | Pending | Unset in the production runtime (health reports it missing); the code fails closed without it. See Critical Blockers PROD-ENV |
 | ENV-3635BCB720EC | ENV | CHROMIUM_PATH | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-FE8EE15BB86D | ENV | CI | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-A49A9E69A43C | ENV | CONTACT_CENTER_INBOUND_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-573874C01EA5 | ENV | CONTACT_INBOX | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-232DCE54F400 | ENV | COOKIE_FILE | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-686DFA651BFF | ENV | CRON_BASE_URL | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ENV-A40897767E88 | ENV | CRON_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ENV-A40897767E88 | ENV | CRON_SECRET | ⚠️ BLOCKED | High | /api/health on production, 2026-09-26 | Owner: set in the Vercel production environment | Pending | Unset in the production runtime (health reports it missing); the code fails closed without it. See Critical Blockers PROD-ENV |
 | ENV-369E166B7851 | ENV | E2E_ALLOW_REMOTE_SUPABASE | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-9294021D6EDD | ENV | E2E_AUTH_EMAIL | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-E2460059C298 | ENV | E2E_AUTH_PASSWORD | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11817,11 +11819,11 @@ PRODUCTION READY: NO
 | ENV-0D97C0B921E2 | ENV | GOOGLE_SYNC_CLIENT_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-F2DC3F4C4C2D | ENV | GOOGLE_SYNC_REDIRECT_URI | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-7F0B72380C0C | ENV | GOOGLE_SYNC_TASKS_SCOPES | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ENV-57E10566D252 | ENV | GUARDIAN_INTERNAL_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ENV-57E10566D252 | ENV | GUARDIAN_INTERNAL_SECRET | ⚠️ BLOCKED | High | /api/health on production, 2026-09-26 | Owner: set in the Vercel production environment | Pending | Unset in the production runtime (health reports it missing); the code fails closed without it. See Critical Blockers PROD-ENV |
 | ENV-DEA079A7E70C | ENV | INTERNAL_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-EE7848BAFA89 | ENV | LINKEDIN_CLIENT_ID | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-474468701BD0 | ENV | LINKEDIN_CLIENT_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ENV-F3AB1A14762D | ENV | MARKETING_UNSUB_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ENV-F3AB1A14762D | ENV | MARKETING_UNSUB_SECRET | ⚠️ BLOCKED | High | /api/health on production, 2026-09-26 | Owner: set in the Vercel production environment | Pending | Unset in the production runtime (health reports it missing); the code fails closed without it. See Critical Blockers PROD-ENV |
 | ENV-831C8EA3FD29 | ENV | MICROSOFT_SYNC_CLIENT_ID | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-ECB1FCDA9528 | ENV | MICROSOFT_SYNC_CLIENT_SECRET | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ENV-D3AD64DB85CB | ENV | MICROSOFT_SYNC_REDIRECT_URI | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
