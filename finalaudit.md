@@ -26232,6 +26232,49 @@ happens to contain the word. The finding only became precise once the test
 asked *where the browser goes* — `new URL(out, page).origin` — instead of *what
 the string contains*.
 
+## C1-K-12 · MEDIUM · The SSRF guard did not unwrap NAT64
+
+The same *validate one form, use another* shape as C1-K-11, found by fuzzing
+the address classifier through its injectable lookup rather than by reading it.
+
+`lib/server/public-calendar-fetch.ts` guards every family-supplied URL (calendar
+feeds, RSS). It is strong: it resolves **all** of a hostname's addresses, refuses
+private, loopback, link-local, CGNAT, multicast and documentation ranges,
+follows redirects manually and re-validates each hop, and unwraps IPv4-mapped
+(`::ffff:`) and IPv4-compatible (`::`) IPv6. Every literal encoding tried —
+decimal `2130706433`, hex `0x7f000001`, octal `0177.0.0.1`, short `127.1`,
+bracketed `[::ffff:127.0.0.1]` — was refused.
+
+It did not unwrap **NAT64**. `64:ff9b::/96` (RFC 6052) carries an IPv4 address in
+its low 32 bits and, on a NAT64 network, routes to it: `64:ff9b::7f00:1` is
+`127.0.0.1` and `64:ff9b::a9fe:a9fe` is the cloud metadata endpoint. A hostname
+resolving to either passed the guard.
+
+Fixed by unwrapping the well-known prefix exactly like the `::ffff:` form — so
+NAT64 to a *public* host still works — and refusing the local-use range
+(`64:ff9b:1::/48`, RFC 8215) outright. `tests/a-user-url-cannot-reach-an-internal-address.test.ts`
+covers 19 resolved addresses, 8 URL literals and 2 public controls. Calibrated
+by removing the two lines: exactly the four NAT64 cases fail; the other 25 hold
+both ways.
+
+Practical reach on the current host is low — serverless functions rarely sit on
+a NAT64 network — but the guard's job is to hold wherever it runs, and its
+`::ffff:` handling shows the embedding class was meant to be covered.
+
+### Recorded, not fixed: DNS rebinding
+
+`fetchPublicText` validates a hostname by resolving it, then calls `fetch()`
+with the **hostname** URL, which resolves it again. An attacker's DNS server can
+answer the first lookup with a public address and the second, with a zero TTL,
+with an internal one. Every redirect hop has the same gap.
+
+The robust fix is to pin the connection to the address that was validated — an
+`undici` `Agent` whose `connect.lookup` returns the pre-checked address, passed
+as the fetch `dispatcher`. That is a transport change on a security-critical
+path, and it needs real DNS to verify, which this sandbox cannot exercise;
+practical reach from a serverless function is also low. So it is written down
+with the fix named rather than changed blind.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
