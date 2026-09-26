@@ -62,7 +62,7 @@ const MANAGER_ONLY_WRITES = [
   'front_desk_settings', 'guardian_routing_rules', 'health_providers',
   'health_visits', 'home_assets', 'household_info', 'immunizations', 'insurance_policies',
   'invest_holdings', 'invites', 'medical_profiles', 'medication_schedules',
-  'medications', 'opportunities', 'renewals', 'rewards', 'rides',
+  'medications', 'money_timeline_insights', 'opportunities', 'renewals', 'rewards', 'rides',
   'savings_goals', 'transactions', 'trip_items', 'trips', 'wallet_buckets',
   'wallet_rules', 'wallet_transactions',
 ] as const;

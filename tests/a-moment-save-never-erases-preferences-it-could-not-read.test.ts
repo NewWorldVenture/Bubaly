@@ -65,7 +65,7 @@ describe('saving a moment step onto a preferences read that failed', () => {
   it('writes NOTHING when the preferences read is refused', async () => {
     read = { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
 
-    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', doneIds: ['leave-by'] });
+    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'leave-by', done: true });
 
     // The whole point: no upsert at all. An upsert built on a read that did not
     // happen replaces the column with just the moment key.
@@ -75,21 +75,25 @@ describe('saving a moment step onto a preferences read that failed', () => {
 
   it('reports the failure to the caller instead of a silent ok', async () => {
     read = { data: null, error: { code: 'PGRST301', message: 'JWT expired' } };
-    await expect(setMomentPrepDoneAction({ eventId: 'evt-1', doneIds: ['leave-by'] }))
+    await expect(setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'leave-by', done: true }))
       .resolves.toMatchObject({ ok: false, error: 'JWT expired' });
   });
 
   it('does not erase the blob when the refused read is an UNcheck either', async () => {
     read = { data: null, error: { code: '08006', message: 'connection failure' } };
 
-    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', doneIds: [] });
+    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'leave-by', done: false });
 
     expect(upserts).toEqual([]);
     expect(result.ok).toBe(false);
   });
 
   it('still merges — and preserves every other key — when the read succeeds', async () => {
-    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', doneIds: ['leave-by', 'pack-bag'] });
+    // The action saves one named step into what is already saved for the event
+    // (it no longer takes the client's whole list), so seed the first tick.
+    read = { data: { notification_prefs: { ...OTHER_PREFS, momentPrep: { 'evt-1': ['leave-by'] } } }, error: null };
+
+    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'pack-bag', done: true });
 
     expect(result).toEqual({ ok: true });
     expect(upserts).toHaveLength(1);
@@ -102,7 +106,7 @@ describe('saving a moment step onto a preferences read that failed', () => {
   it('treats a member with no preferences row as empty, not as a failure', async () => {
     read = { data: null, error: null };
 
-    const result = await setMomentPrepDoneAction({ eventId: 'evt-2', doneIds: ['leave-by'] });
+    const result = await setMomentPrepDoneAction({ eventId: 'evt-2', stepId: 'leave-by', done: true });
 
     expect(result).toEqual({ ok: true });
     expect(upserts).toHaveLength(1);

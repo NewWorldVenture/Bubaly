@@ -10,8 +10,8 @@ import {
   AlertTriangle, Clock, Loader2, X, Sparkles, Copy,
 } from 'lucide-react';
 import type { Tables, Json } from '@/lib/database.types';
-import type { PaperworkAction, PaperworkKind } from '@/lib/paperwork/triage';
-import { kindLabel } from '@/lib/paperwork/triage';
+import type { PaperworkAction, PaperworkKind, PaperworkReader } from '@/lib/paperwork/triage';
+import { paperworkActionLine, paperworkKindLabel, paperworkSummary, paperworkSummaryFacts } from '@/lib/paperwork/triage';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import {
   addPaperworkAction, materializePaperworkActionAction, setPaperworkStatusAction,
@@ -19,7 +19,7 @@ import {
 } from '@/app/(app)/dashboard/paperwork/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { DocumentCapture } from '@/components/capture/document-capture';
 import { useRouter } from 'next/navigation';
 
@@ -63,6 +63,9 @@ function parseActions(j: Json): StoredAction[] {
 
 export function PaperworkModule({ items }: { items: Item[] }) {
   const t = useTranslations();
+  // The row's stored `summary` is an en-US record; the card re-renders it, and
+  // each action's amount, for the member looking at it (I18N-003).
+  const reader: PaperworkReader = { locale: useLocale().code, t };
   const router = useRouter();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('needs_action');
   const [composerOpen, setComposerOpen] = useState(false);
@@ -194,7 +197,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-bold">{it.title}</h3>
                     <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                      {kindLabel(it.kind as PaperworkKind)}
+                      {paperworkKindLabel(it.kind, reader)}
                     </span>
                     {it.urgency === 'urgent' && it.status === 'needs_action' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
@@ -203,11 +206,16 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                     )}
                     {!partial && it.due_on && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        <Clock className="h-2.5 w-2.5" /> due {it.due_on}
+                        <Clock className="h-2.5 w-2.5" /> {t('paperworkTriage.due', { date: it.due_on })}
                       </span>
                     )}
                   </div>
-                  {!partial && it.summary && <p className="mt-1 text-xs text-muted">{it.summary}{it.sender ? ` · from ${it.sender}` : ''}</p>}
+                  {!partial && it.summary && (
+                    <p className="mt-1 text-xs text-muted">
+                      {paperworkSummary(paperworkSummaryFacts(it), reader)}
+                      {it.sender ? ` · ${t('paperworkTriage.from', { sender: it.sender })}` : ''}
+                    </p>
+                  )}
                   {partial && (
                     <div className="mt-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-300">
                       <p role="note">{t('paperwork.partialExtractionWarning')}</p>
@@ -230,7 +238,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                         return (
                           <div key={i} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-bg/40 px-3 py-2">
                             <span className={cn('min-w-0 flex-1 truncate text-xs', done ? 'text-muted line-through' : 'text-fg')}>
-                              {a.label}{a.amount != null ? ` · $${a.amount}` : ''}{a.due_on ? ` · by ${a.due_on}` : ''}
+                              {paperworkActionLine(a, reader)}
                             </span>
                             {done ? (
                               <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-400">

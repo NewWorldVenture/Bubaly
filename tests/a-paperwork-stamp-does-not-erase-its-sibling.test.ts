@@ -44,7 +44,12 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  // main's materializer (merged in Audit C1-S9-89) also reads the locale, to
+  // write the reminder's money in the reader's format.
+  return {
+    getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key),
+    getLocaleContext: async () => ({ locale: { code: 'en-US' }, messages: SOURCE_MESSAGES }),
+  };
 });
 // The reminder half goes through the service; this test is about the stamp, so
 // the service is a counter that hands back a fresh id each time. A second call

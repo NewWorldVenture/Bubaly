@@ -1,4 +1,4 @@
--- Bubaly :: 0323 Deleting a review is rewriting it
+-- Bubaly :: 0366 Deleting a review is rewriting it
 -- ----------------------------------------------------------------------------
 -- 0322 stopped a member rewriting another member's review. It did not stop them
 -- deleting it, and for a one-star review about yourself those are the same act

@@ -71,7 +71,11 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: () => true }));
-vi.mock('@/lib/services/ai-settings', () => ({ getAISettings: mocks.getAISettings }));
+// main reads the settings STRICTLY (SEC-009, merged in Audit C1-S9-89).
+vi.mock('@/lib/services/ai-settings', () => ({
+  getAISettings: mocks.getAISettings,
+  loadAISettings: async (...a: unknown[]) => ({ ok: true, data: await mocks.getAISettings(...a) }),
+}));
 vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, createRun: mocks.createRun }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: mocks.kickRun }));
 vi.mock('@/lib/services/routines', async () => {

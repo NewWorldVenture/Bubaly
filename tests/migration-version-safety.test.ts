@@ -222,6 +222,33 @@ describe('Supabase migration filename safety', () => {
     // replays every policy and grant on the table and evaluates each request
     // the way Postgres does; it goes red with the migration absent.
     //
+    // 0349_one_saved_copy_of_a_provider_recipe_per_family.sql makes the
+    // (family_id, source_provider, source_recipe_id) triple unique for provider
+    // recipes, partial so the AI variants that share a source stay writable:
+    // two Saves in the same second both probed an empty vault and both landed.
+    // Held by docs/audit/a-family-vault-holds-one-saved-copy-of-a-provider-
+    // recipe-check.sql, red on the race without it.
+    //
+    // 0352_a_child_cannot_clear_the_households_money_warnings.sql moves the
+    // writes on money_timeline_insights from is_family_member to
+    // can_manage_family, with 0275's RESTRICTIVE guards: the row is one per
+    // family per advisory, so a child's Dismiss cleared the parents' warning
+    // too. SELECT stays on membership (0267's decision). Held by two probes,
+    // docs/audit/a-child-cannot-clear-the-households-money-warnings-check.sql
+    // and docs/audit/only-a-parent-or-an-adult-clears-the-households-money-
+    // warnings-check.sql, each red without it.
+    //
+    // 0360_a_head_out_reminder_goes_with_its_departure_plan.sql adds an AFTER
+    // DELETE trigger on departure_plans that deletes the plan's head-out
+    // reminder, SECURITY INVOKER and fenced to the plan's family: 00981's
+    // event_id cascade took the plan with its event and stranded the reminder
+    // on every member's calendar. Held by
+    // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
+    //
+    // The numbers between 0343 and 0360 are held by migrations still in
+    // review; each lands with its own paragraph here. A number below the one
+    // pinned is still free to land: the pin says only which number is next.
+    //
     // 0361–0370 are the audit branch's (PR #556), renumbered on the merge that
     // brought main's 0318–0343 in — the fourth time that branch's numbers have
     // moved, and the same collision this pin has surfaced each time. The order
@@ -229,8 +256,8 @@ describe('Supabase migration filename safety', () => {
     // TRUNCATE for the public roles; 0363 household secrets; 0364–0366 the
     // marketplace parties, reviews and review deletes; 0367 health records;
     // 0368 the paperwork stamp; 0369 the private journal; 0370 the public
-    // bucket's MIME allowlist. They start at 0361 because open PR #580 holds
-    // 0349, 0352 and 0360. Three of that branch's thirteen were DROPPED rather
+    // bucket's MIME allowlist. They start at 0361 because PR #580 (now on main)
+    // holds 0349, 0352 and 0360. Three of that branch's thirteen were DROPPED rather
     // than renumbered (Audit C1-S9-89): its social-restriction DELETE policy
     // duplicated 0319 here, less its `to authenticated`; its location policies
     // are superseded by 0335, and stacking them broke 0335's own negative

@@ -1,4 +1,4 @@
--- Bubaly :: 0328 - a private journal, and the insurance table that lost its twin
+-- Bubaly :: 0369 - a private journal, and the insurance table that lost its twin
 --
 -- Two tables, one shape: the intent is written down in several places and the
 -- policy does not carry any of it.

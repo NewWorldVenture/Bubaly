@@ -1,4 +1,4 @@
--- Bubaly :: 0330 - the one public bucket that accepts anything
+-- Bubaly :: 0370 - the one public bucket that accepts anything
 --
 -- This project has four PUBLIC storage buckets. Three of them pin what may be
 -- stored in them:

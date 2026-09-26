@@ -29,7 +29,13 @@ vi.mock('@/lib/trust/server', () => ({
   evaluateTrust: (...a: unknown[]) => evaluateTrust(...a),
   roleOf: () => 'parent',
 }));
-vi.mock('@/lib/services/ai-settings', () => ({ getAISettings: () => getAISettings() }));
+// main (merged in Audit C1-S9-89) reads the settings STRICTLY (SEC-009): a
+// failed read changes nothing. This suite's reads succeed, so the strict read
+// answers with the same settings the forgiving one does.
+vi.mock('@/lib/services/ai-settings', () => ({
+  getAISettings: () => getAISettings(),
+  loadAISettings: async () => ({ ok: true, data: await getAISettings() }),
+}));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
 
 // `status` is the persisted acceptance planAcceptedAction now requires (C1-S9-77).

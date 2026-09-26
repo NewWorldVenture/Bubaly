@@ -25,7 +25,6 @@ export function ConsentManager() {
   const t = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [gpc, setGpc] = useState(false);
-  const [anonId, setAnonId] = useState('');
   const [decided, setDecided] = useState(true);       // assume decided until we check (no flash)
   const [bannerOpen, setBannerOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -34,19 +33,24 @@ export function ConsentManager() {
   // Bootstrap from local cache + browser signals; fire the analytics touch.
   useEffect(() => {
     setMounted(true);
-    const id = getAnonymousId();
+    // Establish this browser's visitor cookie. It is not held in state: every
+    // request that needs the identity carries the cookie as it is WHEN it is
+    // sent, so a touch is always gated on the consent of the visitor it is
+    // recorded against — never on an id captured here and since outlived.
+    // (tests/a-visit-is-recorded-only-against-the-browser-that-sent-it.test.ts
+    // drives this component across a cookie rotation.)
+    getAnonymousId();
     const isGpc = detectGPC();
     const local = readLocalConsent();
     const effective = local?.state ?? initialConsent(isGpc);
     const hasDecided = !!local?.decided;
 
-    setAnonId(id);
     setGpc(isGpc);
     setDecided(hasDecided);
     setDraft(effective);
     setBannerOpen(shouldShowBanner({ decided: hasDecided, gpc: isGpc }));
 
-    void trackTouchOnce(id, effective, isGpc);
+    void trackTouchOnce(effective, isGpc);
   }, []);
 
   // Re-open the preference center from anywhere (footer link).
@@ -67,8 +71,8 @@ export function ConsentManager() {
     const resolved = (await postConsent(state, gpc, source)) ?? state;
     writeLocalConsent(resolved, true);
     setDraft(resolved);
-    void trackTouchOnce(anonId, resolved, gpc);
-  }, [anonId, gpc]);
+    void trackTouchOnce(resolved, gpc);
+  }, [gpc]);
 
   if (!mounted || !draft) return null;
 

@@ -112,6 +112,14 @@ begin
   -- `can_manage_family(family_id)` today, permissive and restrictive alike, so
   -- this is not over-tight. A deliberate future rewording is meant to fail here
   -- and be re-verified by a human rather than pattern-matched past.
+  --
+  -- Re-verified once, for 0345: its nine `<t>_step_up_{insert,update,delete}_guard`
+  -- policies on budgets, savings_goals and bills are RESTRICTIVE and spelled
+  -- exactly `session_cleared_step_up()`. A restrictive policy only ANDs with the
+  -- permissive ones, so it can refuse a write and can never re-open one — the
+  -- failure this loop exists to catch. They are admitted by exact name shape,
+  -- exact predicate and RESTRICTIVE together; a permissive policy with that
+  -- predicate, or any other spelling, still fails here.
   for r in
     select tablename, policyname, cmd, permissive,
            coalesce(qual, '(none)') as using_expr,
@@ -122,6 +130,12 @@ begin
        and cmd <> 'SELECT'
        and (coalesce(qual,       'can_manage_family(family_id)') <> 'can_manage_family(family_id)'
          or coalesce(with_check, 'can_manage_family(family_id)') <> 'can_manage_family(family_id)')
+       and not (
+             permissive = 'RESTRICTIVE'
+         and policyname = tablename || '_step_up_' || lower(cmd) || '_guard'
+         and coalesce(qual,       'session_cleared_step_up()') = 'session_cleared_step_up()'
+         and coalesce(with_check, 'session_cleared_step_up()') = 'session_cleared_step_up()'
+       )
   loop
     raise exception 'policy %.% (% %) does not gate writes on can_manage_family alone: using=%, with check=%',
       r.tablename, r.policyname, r.permissive, r.cmd, r.using_expr, r.check_expr;
