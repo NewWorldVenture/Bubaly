@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T13:40:00Z
+- Last Updated: 2026-09-26T14:20:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
-- In Progress: 192
+- In Progress: 191
 - Passed: 0
-- Fixed + Passed: 3
+- Fixed + Passed: 4
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001. Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well.
+2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001 (its cache half is fixed: SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS, verified natively; its public-bucket half is an owner decision). Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -12159,7 +12159,7 @@ PRODUCTION READY: NO
 | SUPPORT-D59FA133542C | SUPPORT | public/launch/launch-1320x2868.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4C8E9A36E1EE | SUPPORT | public/launch/launch-750x1334.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-292C0CE6AF4C | SUPPORT | public/launch/launch-828x1792.png | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🔄 IN PROGRESS | Critical | Actual worker handlers, Chromium CacheStorage and production logout | None | Desired private-image isolation regression RED | After logout/new B, cached synthetic A image is served offline; no native registration or real Next optimizer execution. See SEC-001. |
+| SUPPORT-98FD1D4C44AD | SUPPORT | public/sw.js | 🛠 FIXED + PASS | Critical | Native Chromium with the real registered worker and the real Next image optimizer against a production build: the old worker (bubaly-v4) stored the /_next/image response; the new one (bubaly-v5) stores none, and after a reload still caches 18 static assets. Sandboxed worker regression tests/a-private-image-does-not-outlive-logout.test.ts (4 of 5 fail on the old worker). | Never cache /_next/image or any private/no-store response; cache name v4→v5 purges existing entries (C1-K-18). | Native before/after and control executed 2026-09-26; sandbox 5/5; mobile-sw-auth-cache and PWA suites pass. | Closes the private-image cache half of SEC-001 only; the public family-media bucket keeps SEC-001 at FAIL. |
 | SUPPORT-E3637D40E182 | SUPPORT | route-inventory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-52B4E3C1B5F2 | SUPPORT | scripts/backfill-marketing-asset-provenance.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-010123692F7B | SUPPORT | scripts/backfill-marketing-coverage.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -14667,7 +14667,7 @@ Required rollout order: define strict configured-project/bucket/family reference
 Not fixed: the bucket itself is still `public = true`, so an object URL is still the only credential. See Retest Results for what remains and the proposed route.
 
 #### Retest Results
-Read-only source/caller map complete. Private-image cache isolation: the executed regression above was RED; the equivalent sandboxed regression is now GREEN. Remaining RED: bucket visibility (public in migration 0216 and in the replayed catalog), so SEC-001 stays FAIL.
+Read-only source/caller map complete. Private-image cache isolation: the executed regression above was RED; it is now GREEN both sandboxed and natively — real Chromium, the real registered worker and the real Next image optimizer against a production build: the old worker stored the `/_next/image` response in bubaly-v4, the new worker stores none in bubaly-v5, and after a reload still caches 18 static assets (SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS). Remaining RED: bucket visibility (public in migration 0216 and in the replayed catalog), so SEC-001 stays FAIL.
 
 The bucket half is an owner decision between two designs, and neither buys anything until the bucket is actually made private — so no half of it was shipped speculatively:
 
@@ -26565,7 +26565,13 @@ worker now never caches an optimizer response or anything marked `private` or
 moves to `bubaly-v5` so every device purges what v4 holds.
 `tests/a-private-image-does-not-outlive-logout.test.ts` runs the real worker
 file against a fake Cache Storage and network; 4 of 5 fail on the old worker,
-all pass now, and the static-asset control passes both ways.
+all pass now, and the static-asset control passes both ways. Then natively:
+real Chromium, the real registered worker and the real Next image optimizer
+against a production build. The old worker stored the `/_next/image` response
+(bubaly-v4); the new one stores none (bubaly-v5) and, after a reload, still
+caches 18 static assets. The optimizer answers `public, max-age=60`, so it is
+the explicit `/_next/image` exclusion, not the Cache-Control check, that
+catches it. SUPPORT-98FD1D4C44AD moves to 🛠 FIXED + PASS.
 
 **Still open — the bucket.** `family-media` is `public = true` (0216 and the
 replayed catalog), so an object URL is the only credential; unguessable object
