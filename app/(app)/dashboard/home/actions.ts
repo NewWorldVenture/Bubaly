@@ -140,8 +140,17 @@ export async function saveServiceRecordAction(fd: FormData) {
   // (the record itself is already saved), but log a failure so a broken update is
   // observable instead of silently drifting the forecast math.
   if (assetId && serviceDate) {
-    const { error: assetError } = await supabase.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId);
-    if (assetError) console.error('[home] home_assets last_serviced_on update failed', { familyId, assetId, error: assetError });
+    // Confirmed for the LOG, not for a bail — the same treatment as the vehicle
+    // odometer. An asset id matching no row in this family is the commonest way
+    // this quietly does nothing, and only an ERROR was reaching the log that
+    // exists to keep the forecast math from drifting unobserved. Audit C1-S9-60.
+    const { data: assetTouched, error: assetError } = await supabase.from('home_assets')
+      .update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId).select('id');
+    if (assetError || wroteNoRows(assetTouched)) {
+      console.error('[home] home_assets last_serviced_on update failed', {
+        familyId, assetId, error: assetError?.message ?? 'no rows updated',
+      });
+    }
   }
   revalidatePath('/dashboard/home/service');
   revalidatePath('/dashboard/home');

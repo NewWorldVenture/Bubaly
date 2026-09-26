@@ -386,9 +386,9 @@ describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', (
   it('the module still celebrates only on ok', () => {
     // The reason this matters: the toast is the product here. If the action
     // stops gating it, the guard above becomes decorative.
-    const module = readFileSync('components/modules/independence-module.tsx', 'utf8');
-    expect(module).toContain('achieved “');
-    expect(module).toContain('router.refresh()');
+    const moduleSource = readFileSync('components/modules/independence-module.tsx', 'utf8');
+    expect(moduleSource).toContain('achieved “');
+    expect(moduleSource).toContain('router.refresh()');
   });
 });
 
@@ -433,8 +433,12 @@ describe('the home records repeat auto\'s split, not its omission (C1-S9-47)', (
     // stops a later sweep from hardening it into a thrown error that would lose
     // a record the family successfully created.
     expect(home).toContain('last_serviced_on update failed');
-    const touch = bodyOf(home, "update({ last_serviced_on: serviceDate })", '\n  }');
-    expect(touch).not.toContain('wroteNoRows');
+    const touch = stripComments(bodyOf(home, "update({ last_serviced_on: serviceDate })", '\n  }'));
+    // Originally `not.toContain('wroteNoRows')` as well — a PROXY for "not
+    // gated", and it went red when C1-S9-60 confirmed this write for its LOG.
+    // The intent was always that nothing here leaves the action, so that is
+    // what is asserted: no return and no throw, whatever the condition says.
+    expect(touch).not.toMatch(/\breturn\b/);
     expect(touch).not.toContain('throw');
   });
 });
@@ -1204,5 +1208,159 @@ describe('onboarding does not finish on a default timezone (C1-S9-59)', () => {
   it('fails through the same reporter as the error branch', () => {
     const body = onboarding.slice(at(onboarding, 'wroteNoRows(adopted)'));
     expect(body.slice(0, 300)).toContain("onboardingFailure('auto-provisioned family update'");
+  });
+});
+
+/**
+ * Audit C1-S9-60 — the last of the open write sites.
+ *
+ * Ten confirmed with a bail. Four confirmed for the LOG only, because the thing
+ * the user came for has already succeeded by the time they run (a service record
+ * saved, a draft returned, a rollback on a path already failing). One left
+ * ungated on rows because zero rows IS the requested outcome. After this pass,
+ * every write still counted by the ratchet is a member of the deliberate set.
+ */
+/** From `needle` to the brace that closes the block it opens. */
+function ifBlock(source: string, needle: string): string {
+  const open = source.indexOf('{', at(source, needle));
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) return source.slice(at(source, needle), i + 1);
+  }
+  throw new Error(`unbalanced block after ${needle}`);
+}
+
+const serviceAdmin = readFileSync('app/(app)/admin/services/actions.ts', 'utf8');
+const assistants = readFileSync('app/(app)/dashboard/assistants/actions.ts', 'utf8');
+const autoActions = readFileSync('app/(app)/dashboard/auto/actions.ts', 'utf8');
+const contactDetail = readFileSync('app/(app)/dashboard/contacts/[id]/actions.ts', 'utf8');
+const dining = readFileSync('app/(app)/dashboard/dining/actions.ts', 'utf8');
+const twin = readFileSync('app/(app)/dashboard/family-digital-twin/actions.ts', 'utf8');
+const signals = readFileSync('app/(app)/dashboard/family-signals/actions.ts', 'utf8');
+const homeActions = readFileSync('app/(app)/dashboard/home/actions.ts', 'utf8');
+const insights = readFileSync('app/(app)/dashboard/insight-actions.ts', 'utf8');
+const lifeEvents = readFileSync('app/(app)/dashboard/life-event-actions.ts', 'utf8');
+const moments = readFileSync('app/(app)/dashboard/moment-actions.ts', 'utf8');
+const paperworkActions = readFileSync('app/(app)/dashboard/paperwork/actions.ts', 'utf8');
+const playbook = readFileSync('app/(app)/dashboard/playbook/playbook-actions.ts', 'utf8');
+const missionsFile = readFileSync('app/(app)/missions/actions.ts', 'utf8');
+
+describe('a revoked assistant key really stops working (C1-S9-60)', () => {
+  it('confirms the revoke before promising it', () => {
+    const body = actionBody(assistants, 'export async function revokeAssistantLinkAction');
+    expect(body).toContain('wroteNoRows(revoked)');
+    expect(at(body, 'wroteNoRows(revoked)'))
+      .toBeLessThan(at(body, "It stops working immediately."));
+  });
+
+  it('keeps the revoke family-scoped and parent-only', () => {
+    const body = actionBody(assistants, 'export async function revokeAssistantLinkAction');
+    expect(body).toContain(".eq('family_id', ctx.active.familyId)");
+    expect(at(body, 'canManage(ctx.active.role)')).toBeLessThan(at(body, "from('assistant_links')"));
+  });
+});
+
+describe('reset-to-default stays ungated on rows (C1-S9-60)', () => {
+  it('does not fail a service nobody ever overrode', () => {
+    const body = actionBody(serviceAdmin, 'export async function saveServiceDescriptionAction');
+    const reset = body.slice(at(body, "from('service_descriptions').delete()"));
+    expect(reset.slice(0, 160)).not.toContain('.select(');
+    expect(stripComments(body)).not.toContain('wroteNoRows');
+    expect(body).toContain('that IS the outcome asked for');
+  });
+});
+
+describe('best-effort side writes are confirmed for the log, not for a bail (C1-S9-60)', () => {
+  // Four writes whose caller has already got what it came for. Each now asks
+  // what it changed, so the log that exists to make a broken update observable
+  // is reached by the commonest way it breaks — and none of them returns.
+  const cases: Array<[string, string, string, string]> = [
+    ['vehicle odometer', autoActions, 'odoUpdated', "'[auto] vehicle odometer update failed'"],
+    ['home asset last-serviced', homeActions, 'assetTouched', "'[home] home_assets last_serviced_on update failed'"],
+    ['paperwork draft persist', paperworkActions, 'persisted', "'[paperwork] draft_reply persist failed'"],
+    ['dispute rollback', missionsFile, 'cleaned', "'[chore state] dispute cleanup failed — an orphan dispute may remain'"],
+    // C1-S9-48 made these two logged-not-raised; C1-S9-60 makes the log
+    // reachable by zero rows. `ifBlock` also closes a gap in the older guard,
+    // whose slice ends at the log call's `);` and so cannot see a bail after it.
+    ['approval stamp after execution', concierge, 'approvedStamp', "'[concierge] approval stamp after execution failed'"],
+    ['approval decline stamp', concierge, 'declinedStamp', "'[concierge] approval decline stamp failed'"],
+  ];
+  for (const [name, src, binding, log] of cases) {
+    it(`${name}: asks, and logs zero rows`, () => {
+      const check = src.slice(at(src, `wroteNoRows(${binding})`));
+      expect(check.slice(0, 260), name).toContain(log);
+    });
+    it(`${name}: does not bail`, () => {
+      // The whole `if` block, found by MATCHING BRACES from the one that opens
+      // it. An earlier version ended the slice at the first `\n    }`, which is
+      // an indent guess: in the paperwork action the block sits one level
+      // shallower, so that token matched the `});` closing the log call and the
+      // slice stopped before anything a mutation could add after it. A `return`
+      // appended there survived — the only survivor in this batch.
+      const block = stripComments(ifBlock(src, `wroteNoRows(${binding})`));
+      expect(block, name).toContain(log);
+      expect(block, name).not.toMatch(/\breturn\b|\bthrow\b/);
+    });
+  }
+});
+
+describe('toggles and dismissals ask what they changed (C1-S9-60)', () => {
+  const cases: Array<[string, string, string, string]> = [
+    ['restaurant favourite', dining, 'export async function toggleFavoriteAction', 'toggled'],
+    ['simulation delete', twin, 'export async function deleteSimulationAction', 'deleted'],
+    ['signal status', signals, 'export async function setSignalStatusAction', 'set'],
+    ['insight status', insights, 'async function setInsightStatus', 'set'],
+    ['life-event plan status', lifeEvents, 'export async function setLifeEventStatusAction', 'set'],
+    ['playbook dismissal', playbook, 'export async function dismissSuggestionAction', 'dismissed'],
+    ['moment grocery undo', moments, 'export async function removeMomentGroceryAction', 'removed'],
+  ];
+  for (const [name, src, signature, binding] of cases) {
+    it(`${name}: bails on zero rows before answering ok`, () => {
+      const body = actionBody(src, signature);
+      expect(body, name).toContain(`if (wroteNoRows(${binding})) return { ok: false`);
+      // The first success return AFTER THE WRITE. Not the first in the body —
+      // several of these open with `return { ok: true }` for an empty input,
+      // which the bail cannot precede. And not the LAST either, which was the
+      // intermediate fix: an unconditional success return inserted just above
+      // the bail left it dead code while the final return still came after it,
+      // and that mutation survived. Anchored on the write's own binding.
+      // Anchored on the whole BAIL STATEMENT, not the helper's name: a
+      // condition such as `!wroteNoRows(x) || wroteNoRows(x)` mentions the
+      // helper too, and a name-only anchor found that instead of the bail.
+      const afterWrite = body.slice(at(body, `{ data: ${binding},`));
+      expect(at(afterWrite, `if (wroteNoRows(${binding})) return { ok: false`), name)
+        .toBeLessThan(at(afterWrite, 'return { ok: true'));
+    });
+  }
+
+  it('deleting a contact interaction throws on zero rows, the same way it throws on error', () => {
+    const body = actionBody(contactDetail, 'export async function deleteInteractionAction');
+    expect(body).toContain("if (wroteNoRows(deleted)) throw new Error(t('actions.couldNotDeleteThatInteraction'));");
+    expect(at(body, 'wroteNoRows(deleted)')).toBeLessThan(at(body, 'revalidatePath('));
+  });
+
+  it('the grocery undo fails only on NONE removed, never on a partial', () => {
+    // `wroteNoRows` is length-zero. A family who deleted some of the items by
+    // hand still gets their undo; an exact-count check here would refuse it.
+    // Scoped to AFTER the delete, because `ids.length === 0` legitimately
+    // appears above it as the empty-input early return. Below it, any use of
+    // `ids.length` or of `removed`'s length is a count being compared — which
+    // is the over-tightening this asserts against. (The first version matched
+    // three spellings and missed a fourth, `(removed?.length ?? 0) !== ids.length`;
+    // naming the operands rather than the operator closes that.)
+    const body = actionBody(moments, 'export async function removeMomentGroceryAction');
+    const afterDelete = stripComments(body.slice(at(body, ".delete().in('id', ids)")));
+    expect(afterDelete).not.toMatch(/\bids\.length\b/);
+    expect(afterDelete).not.toMatch(/removed\??\.length/);
+  });
+
+  it('every new message resolves in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const cat = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of ['actions.couldNotUpdateThatRestaurant', 'actions.couldNotDeleteThatSimulation', 'actions.couldNotUndoThatGroceryAdd']) {
+        expect(cat[key], `${locale} ${key}`).toBeTruthy();
+      }
+    }
   });
 });

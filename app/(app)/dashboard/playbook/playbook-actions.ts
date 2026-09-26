@@ -15,6 +15,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -178,7 +179,11 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   const id = String(input?.id || '').trim();
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
-  const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
+  // The whole point of storing the dismissal is that the suggestion is not
+  // offered again. A no-op puts it back on the next refresh. Audit C1-S9-60.
+  const { data: dismissed, error } = await sb.from('family_playbook_suggestions')
+    .update({ status: 'dismissed' }).eq('id', id).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(dismissed)) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   return { ok: true };
 }

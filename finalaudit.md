@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-200 finding IDs from four workers and two parallel sessions; none of it was
+201 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 210 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 211 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34248,6 +34248,129 @@ the register.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-60 — the write class burned down to its deliberate members, and a fifth instrument defect
+
+**The sweep's end state first, because it is the claim to check.** The
+C1-S9-50 ratchet now counts **10 unconfirmed writes across 6 files**, from 102
+when `C1-S9-46` rebuilt the scan. **Every one of the ten is deliberate**, and the
+ratchet now enforces that rather than asserting it: a new fifth case requires
+each counted write to have a comment naming its audit entry within the twelve
+lines above it. So the list can no longer grow a member that is merely
+*unfixed* — only one somebody has argued for beside the code. The ten: two
+dashboard-layout resets and one service-description reset (zero rows is the
+default already being in force); two `child_login_throttle` clears (no row until
+a first failure); two `last_error` feed annotations on a row kept on purpose;
+`markAllReadAction` (`.eq('is_read', false)` makes zero rows "already read");
+the archive-time public unpublish; and the AEO clear, whose ERROR now gates the
+insert while its zero rows stay ordinary.
+
+**Confirmed with a bail (9).**
+
+- **Revoking an assistant key.** The action promises *"It stops working
+  immediately."* A revoke matching no rows left a live key against the family's
+  data while the parent was told it was dead — and a key believed revoked is one
+  nobody goes back to check. The most security-relevant write in this batch.
+- Deleting a contact interaction (throws, as the error path does); the
+  restaurant favourite; deleting a twin simulation; a family signal's status; a
+  daily insight's dismissal (a no-op puts the **same** insight back tomorrow); a
+  life-event plan's status; a playbook suggestion's dismissal (stored precisely
+  so it is not offered again); and the grocery **undo** from a moment.
+- **The undo fails only on NONE removed, never on a partial.** A family who
+  deleted some of those items by hand still gets their undo; an exact-count check
+  would refuse it. A guard asserts the absence of any count comparison after the
+  delete — and needed a second version (below).
+
+**Confirmed for the LOG, not for a bail (6).** Four side writes whose caller
+already has what it came for — the vehicle odometer, a home asset's
+last-serviced date, a paperwork draft's persist, and a dispute rollback on a
+path already failing — plus **both concierge `approval_requests` stamps** that
+`C1-S9-48` had made logged-not-raised. In every case the log that existed "so a
+broken update is observable" was reachable only by an **error**, while the
+commonest way these do nothing is a row that does not match. The decline stamp's
+own comment is the evidence of what that costs: it *"had always failed and only
+logged"* for as long as it existed. A stamp matching no rows leaves an approval
+`pending`, and the operating index goes on counting it as waiting on a parent.
+
+**Three new messages**, inserted in place into all seven base catalogues
+(`+3` lines each, no re-serialisation): `couldNotUpdateThatRestaurant`,
+`couldNotDeleteThatSimulation`, `couldNotUndoThatGroceryAdd` — the last saying
+the items *are still on the list*, which is what zero rows removed means.
+
+**The fifth instrument defect.** `insight-actions.ts` stayed counted after its
+fix. Its write carries a trailing comment with a semicolon in it —
+`// RLS also enforces this; explicit for clarity` — and the ratchet stripped
+only whole-line comments, so the statement ended at that `;`, *before* the
+`.select('id')`. The same cut can fall before a `.eq(` instead, making a filtered
+write look unfiltered and **hiding it from the count** — the worse direction.
+Checked when the fix went in: across every `'use server'` file, the corrected
+strip changed exactly one position, the false positive. Nothing was hidden.
+That makes five: `C1-S9-37`'s API sweep, `C1-S9-44`'s blind spot, `C1-S9-46`'s
+twelve-line cap, `C1-S9-52`'s newline-eating strip, and this.
+
+**And four test-side defects, each found by a mutation surviving:**
+
+1. **An indent guess.** The "does not bail" check sliced to the first
+   `\n    }`. In the paperwork action the block sits one level shallower, so
+   that token matched the `});` closing the log call and a `return` appended
+   after it survived. Replaced with brace matching (`ifBlock`).
+2. **A `lastIndexOf` that made things worse.** Several actions open with an
+   early `return { ok: true }` for empty input, so "bail before the first
+   success return" was wrong; "before the LAST" was the first fix, and it let an
+   unconditional success return inserted *above* the bail survive. Now anchored
+   on the first success return after the write's own binding.
+3. **A name-only anchor.** A mutant condition reading
+   `!wroteNoRows(x) || wroteNoRows(x)` mentions the helper, so anchoring on
+   `wroteNoRows(x)` found the mutation instead of the bail. Now anchored on the
+   whole bail statement.
+4. **A regex that named operators instead of operands.** The partial-undo check
+   listed three spellings of a length comparison and missed a fourth. Now it
+   forbids `ids.length` and `removed.length` after the delete, whatever compares
+   them.
+
+Plus one guard of **mine** that was red on an improvement: `C1-S9-47` asserted
+`not.toContain('wroteNoRows')` for the home asset touch, as a **proxy** for "not
+gated". Re-pointed at the intent it states — no `return`, no `throw`.
+
+And the `C1-S9-48` stamp guard has the same short-slice gap as item 1: it ends
+at the log call's `);`, so a bail added after the log passes it. **Proved, not
+supposed**: both over-tightening mutants on the stamps were killed only by the
+new guard. The old one is left in place and named here rather than rewritten,
+since it still asserts something true.
+
+**And a tenth `toContain("<exact statement>")` guard red on an improvement** —
+`tests/chore-state-transition-persistence.test.ts`, upstream, and the **second
+time in the same file**: `C1-S9-55` re-pointed its chore-cleanup assertion for
+exactly this reason, and the dispute-rollback assertion beside it was left
+pinning a trailing semicolon. Confirming the second rollback moved the
+statement's end. Re-pointed at what it protects — both dispute rollbacks
+present, family-scoped and confirmed — and proved red by dropping either the
+scope or the confirmation.
+
+**A lint error that CI cannot see.** `npx eslint` over this pass's changed files
+flagged `const module = …` in the write-confirmation test
+(`@next/next/no-assign-module-variable`), from an earlier pass. CI runs
+`next lint`, which covers `app`, `components`, `lib` and friends but **not
+`tests/`**, so it has never reported it. Renamed. Worth knowing as a gap in its
+own right: the lint gate's green does not include the test suite's own source.
+
+**One self-inflicted slip, recorded because the method is the point:** a
+mutation that dropped a catalogue key was reverted with `git checkout` on
+`it-IT.json`, which also reverted this pass's three keys there. The key guard
+caught it on the next clean run. Restored in place.
+
+**Status:** FIXED. Guard: twenty-five new cases in
+`tests/a-write-the-user-is-told-about-is-confirmed.test.ts` (117 → 142) plus a
+fifth ratchet case, every one proved red by mutation — **including eight
+over-tightening mutations** (hardening the service reset, throwing from the
+odometer, returning from the asset touch, from the paperwork persist and from
+both concierge stamps, and an exact-count undo in two spellings).
+
+**Ratchet: 25 → 10 across 6 files.** The class is not closed by this — ten
+writes still cannot tell zero rows from one, by design — but it is now fully
+*accounted for*, and the test enforces the accounting.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34317,8 +34440,11 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,164 passing / 17,167 across 1,352
-files.** (Re-run after `C1-S9-59`; was 17,142 / 17,145 after `C1-S9-58`.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
+Status: ✅ PASS — `npx vitest run`: **17,190 passing / 17,193 across 1,352
+files.** (Re-run after `C1-S9-60`; was 17,164 / 17,167 after `C1-S9-59`, and
+17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
+failure — the upstream dispute-rollback guard recorded there — which was fixed
+and this count re-run rather than carried over. The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
 
@@ -34328,6 +34454,13 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Eighth re-confirmation, on `2178a69d` (run 35595435391): 1,293 passed, 3
+failed in 9.6m**, with Typecheck/Lint/Test/Build, Database and Mobile all green.
+The same three `phone-auth-http` cases and nothing else — covering `C1-S9-58`,
+the last commit before `C1-S9-59`/`-60`. Those two were deliberately **held
+locally until this run reported**, then pushed together as one, so neither
+cancelled it; the push cadence that cost four runs earlier did not recur.
 
 **Seventh re-confirmation, on `9cceaa6e` (run 35534235517): 1,293 passed, 3
 failed, 0 flaky in 10.6m** — the same three `phone-auth-http` cases, covering

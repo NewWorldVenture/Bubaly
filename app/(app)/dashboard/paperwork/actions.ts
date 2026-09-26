@@ -201,8 +201,16 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
   // Persisting the draft is best-effort — it is returned to the caller regardless —
   // but log a failure so a broken write isn't invisible.
-  const { error: metaError } = await supabase.from('paperwork_items').update({ meta: meta as never }).eq('id', item.id);
-  if (metaError) console.error('[paperwork] draft_reply persist failed', { itemId: item.id, error: metaError });
+  // Confirmed for the LOG, not for a bail: the draft is in the caller's hands
+  // either way, but a persist that matched nothing means it is gone the moment
+  // they navigate, and only an ERROR was reaching the log. Audit C1-S9-60.
+  const { data: persisted, error: metaError } = await supabase.from('paperwork_items')
+    .update({ meta: meta as never }).eq('id', item.id).select('id');
+  if (metaError || wroteNoRows(persisted)) {
+    console.error('[paperwork] draft_reply persist failed', {
+      itemId: item.id, error: metaError?.message ?? 'no rows updated',
+    });
+  }
   revalidatePath(PATH);
   return { ok: true, draft };
 }

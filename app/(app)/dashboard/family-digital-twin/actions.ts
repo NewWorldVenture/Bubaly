@@ -11,6 +11,7 @@ import {
 } from '@/lib/twin/simulate';
 import { readAll } from '@/lib/supabase/read-all';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -176,10 +177,13 @@ export async function saveSimulationAction(input: ActivityProjectionInput, resul
 
 /** Delete a saved simulation. */
 export async function deleteSimulationAction(id: string): Promise<Result> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('twin_simulations').delete().eq('id', id).eq('family_id', ctx.active.familyId);
+  const { data: deleted, error } = await supabase.from('twin_simulations')
+    .delete().eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(deleted)) return { ok: false, error: tr('actions.couldNotDeleteThatSimulation') };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }

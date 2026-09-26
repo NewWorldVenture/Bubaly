@@ -13,6 +13,7 @@ import { createServer } from '@/lib/supabase/server';
 import { launchLifeEvent, LIFE_EVENT_ROLLBACK_INCOMPLETE, type LifeEventHandoff } from '@/lib/life-events/launch';
 import { getTemplate } from '@/lib/life-events/templates';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type LaunchResult = {
   ok: boolean;
@@ -58,11 +59,16 @@ export async function setLifeEventStatusAction(planId: string, status: 'active' 
   if (!planId) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  // "Completed" and "archived" both remove the plan from the active list, so a
+  // no-op leaves it sitting there after the family said they were done with it.
+  // Audit C1-S9-60.
+  const { data: set, error } = await supabase
     .from('life_event_plans')
     .update({ status })
     .eq('id', planId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(set)) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   return { ok: true };
 }

@@ -5,7 +5,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import type { Tables } from '@/lib/database.types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -48,9 +48,12 @@ export async function deleteInteractionAction(input: { id: string; contactId: st
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('contact_interactions')
-    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // Returning without throwing is what tells the timeline the entry is gone.
+  // Audit C1-S9-60.
+  const { data: deleted, error } = await supabase.from('contact_interactions')
+    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) throw new Error(describeActionError(error, t('actions.couldNotDeleteThatInteraction')));
+  if (wroteNoRows(deleted)) throw new Error(t('actions.couldNotDeleteThatInteraction'));
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
 }
 

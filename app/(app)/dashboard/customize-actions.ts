@@ -147,7 +147,7 @@ export async function resetAllLayoutsAction(): Promise<Result> {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   // Same: resetting every member's layout in a family where nobody customised
-  // one matches nothing and has done exactly what it promised.
+  // one matches nothing and has done exactly what it promised. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
   if (error) return { ok: false, error: error.message };
   await logEvent(supabase, familyId, ctx.user.id, 'reset_all');

@@ -401,8 +401,17 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
     .eq('id', submission.assignment_id).eq('family_id', familyId).select('id').single();
   if (assignmentError || !updatedAssignment) {
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
-    const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
-    if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
+    // The same rollback as the branch above, and the same reasoning: the dispute
+    // row was inserted moments ago on this path, so zero rows deleted is a
+    // failure to remove it rather than an absence. Logged, not raised — the
+    // caller is already on its way out. Audit C1-S9-60.
+    const { data: cleaned, error: disputeCleanupError } = await supabase.from('chore_disputes')
+      .delete().eq('id', dispute.id).eq('family_id', familyId).select('id');
+    if (disputeCleanupError || wroteNoRows(cleaned)) {
+      console.error('[chore state] dispute cleanup failed — an orphan dispute may remain', {
+        disputeId: dispute.id, familyId, error: disputeCleanupError?.message ?? 'no rows deleted',
+      });
+    }
     return;
   }
   await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });

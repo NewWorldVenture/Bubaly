@@ -8,6 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const PREF_KEY = 'momentPrep';
 
@@ -98,13 +99,18 @@ export async function addMomentGroceryAction(input: {
 
 /** Undo an "add to grocery" — deletes exactly the rows the moment just inserted. */
 export async function removeMomentGroceryAction(input: { ids: string[] }): Promise<Result> {
+  const t = await getTranslations();
   await requireUserContext();
   const ids = (input.ids ?? []).filter((v) => typeof v === 'string' && v);
   if (ids.length === 0) return { ok: true };
   const supabase = await createServer();
   // RLS scopes the delete to the caller's family; ids came straight from the insert.
-  const { error } = await supabase.from('grocery_items').delete().in('id', ids);
+  // `wroteNoRows` fails only on NONE, never on a partial: a family who deleted
+  // some of the items by hand still gets their undo. Zero of them means the undo
+  // removed nothing while reporting success. Audit C1-S9-60.
+  const { data: removed, error } = await supabase.from('grocery_items').delete().in('id', ids).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotUndoThatGroceryAdd') };
   return { ok: true };
 }
 

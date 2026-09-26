@@ -192,8 +192,18 @@ export async function saveAutoServiceAction(fd: FormData) {
   // Keep the vehicle odometer fresh — best-effort (the record is already saved),
   // but log a failure so a broken update is observable, not silently ignored.
   if (vehicleId && mileage != null) {
-    const { error: odoError } = await supabase.from('vehicles').update({ mileage }).eq('id', vehicleId).eq('family_id', familyId);
-    if (odoError) console.error('[auto] vehicle odometer update failed', { familyId, vehicleId, error: odoError });
+    // The log said it was here so a broken update would be observable — but only
+    // an ERROR reached it, and the commonest way this write does nothing is a
+    // vehicle id that matches no row in this family. Confirmed for the LOG, not
+    // for a bail: the service record is already saved and the caller must not be
+    // failed for it. Audit C1-S9-60.
+    const { data: odoUpdated, error: odoError } = await supabase.from('vehicles')
+      .update({ mileage }).eq('id', vehicleId).eq('family_id', familyId).select('id');
+    if (odoError || wroteNoRows(odoUpdated)) {
+      console.error('[auto] vehicle odometer update failed', {
+        familyId, vehicleId, error: odoError?.message ?? 'no rows updated',
+      });
+    }
   }
   revalidate('/dashboard/auto', '/dashboard/auto/service');
 }

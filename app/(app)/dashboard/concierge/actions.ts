@@ -237,12 +237,22 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   }
 
   if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
+    // Best-effort, and C1-S9-48 asserts it stays that way: the plan is applied
+    // and the run recorded by here. But the log was reached only by an ERROR,
+    // and the decline stamp below is the proof of what that costs — it "had
+    // always failed and only logged" for as long as it existed. A stamp matching
+    // no rows leaves the approval `pending`, where the operating index goes on
+    // counting it as waiting on a parent. Confirmed for the LOG. Audit C1-S9-60.
+    const { data: approvedStamp, error: apprErr } = await sb.from('approval_requests').update({
       // decided_by references family_members(id) (0093), not auth.users.
       status: 'approved', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
       executed_at: new Date().toISOString(), execution_result: summary,
-    }).eq('id', meta.approval_id).eq('family_id', familyId);
-    if (apprErr) console.error('[concierge] approval stamp after execution failed', { approvalId: meta.approval_id, familyId, error: apprErr });
+    }).eq('id', meta.approval_id).eq('family_id', familyId).select('id');
+    if (apprErr || wroteNoRows(approvedStamp)) {
+      console.error('[concierge] approval stamp after execution failed', {
+        approvalId: meta.approval_id, familyId, error: apprErr?.message ?? 'no rows updated',
+      });
+    }
   }
 
   revalidatePath(PATH);
@@ -275,14 +285,19 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
   if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
+    const { data: declinedStamp, error: apprErr } = await sb.from('approval_requests').update({
       // 0093's CHECK allows pending|approved|rejected|modified|expired|cancelled
       // and decided_by references family_members(id), not auth.users — the
       // previous 'declined' + user id never satisfied either, so this stamp had
       // always failed and only logged.
       status: 'rejected', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
-    }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId);
-    if (apprErr) console.error('[concierge] approval decline stamp failed', { approvalId: meta.approval_id, familyId: ctx.active.familyId, error: apprErr });
+    }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId).select('id');
+    // Confirmed for the LOG, as above. Audit C1-S9-60.
+    if (apprErr || wroteNoRows(declinedStamp)) {
+      console.error('[concierge] approval decline stamp failed', {
+        approvalId: meta.approval_id, familyId: ctx.active.familyId, error: apprErr?.message ?? 'no rows updated',
+      });
+    }
   }
 
   revalidatePath(PATH);
