@@ -71,3 +71,19 @@ describe('a manager-gated write never claims success on a refusal', () => {
     }
   });
 });
+
+// `notifications` is gated per row, not per table: SELECT and UPDATE are
+// "own row OR family-wide", DELETE is "own row OR can_manage_family". So every
+// member is shown a bin on a family-wide notice that only a manager can empty.
+// Mark-read stays uncounted on purpose (zero rows there means nothing was
+// unread); the delete is the write that can be refused.
+describe('deleting a notification the member cannot delete', () => {
+  const source = readFileSync('components/modules/notifications-module.tsx', 'utf8');
+
+  it('asks how many rows the delete removed, and says so when none', () => {
+    const deletes = source.match(/from\('notifications'\)\.delete\(\)[^;]*;/g) ?? [];
+    expect(deletes.length, 'no notification delete found — did the module change?').toBeGreaterThan(0);
+    expect(deletes.filter((s) => !s.includes(".select('id')")), 'a delete with no row count').toEqual([]);
+    expect(source).toMatch(/if \(wroteNoRows\(rows\)\) toastError\(t\('errors\.thatChangeWasNotSaved'\)\)/);
+  });
+});

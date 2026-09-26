@@ -26370,6 +26370,72 @@ setting, not something this code can decide: confirm **Voice Geographic
 Permissions** and **SMS Geo Permissions** in the Twilio console allow only the
 countries Bubaly serves.
 
+## C1-K-15 · MEDIUM · Family-wide notifications: a bin that did nothing, and one read flag for the whole family
+
+A mechanical sweep, using the live policies from the harness: every client
+`.update()`/`.delete()` without a row count, kept only where the table's
+policy for that command is narrower than "any active member". Of 35 hits, most
+were membership written out longhand (see *Swept clean* below). Three tables
+are genuinely narrower: `ai_conversations` (own rows, and SELECT is equally
+narrow — nothing to refuse), `marketplace_listings` (own rows; the UI's
+`isOwner` and the policy's `marketplace_member_id` resolve the same member, so
+only a race reaches zero rows), and `notifications`.
+
+`notifications` is gated per row. SELECT and UPDATE are *own row OR
+family-wide* (`user_id is null`); DELETE is *own row OR can_manage_family*.
+
+1. **Fixed — the bin.** The list shows every member a delete button on every
+   row, including family-wide ones only a manager can delete. A refused
+   delete matches nothing and raises nothing; `remove()` checked only `error`,
+   so the bin silently did nothing and the row came back on refresh. It now
+   counts rows and says `errors.thatChangeWasNotSaved`. Pinned in
+   `manager-gated-writes-report-refusals` (fails without the fix).
+2. **Recorded, not fixed — one `is_read` for everyone.** Family-wide rows carry
+   a single `is_read`. Any member who opens one, or taps *Mark all read*,
+   clears it from every member's bell and list. Family-wide rows include the
+   Contact Center's urgent-message notice (`urgent-delivery.ts`), Guardian SMS
+   alerts, and medication/approval/deadline reminders when no manager is
+   resolved — so a teen tapping *Mark all read* takes the badge off the
+   parent's urgent notice. Push is unaffected (it keys on `pushed_at`), and
+   email never carries family-wide rows. Messages already solved the same
+   problem with a per-user `read_by uuid[]`.
+
+   **Why not fixed here.** Per-user read state needs a schema change the code
+   then *depends on* (the bell, the list, `listUnread`, the briefing), and
+   migrations from 0296 on are not applied in production (F-001). The
+   constraint-only migrations other sessions are landing work with or without
+   the ledger repair; this one would not. **Proposed shape:** `read_by uuid[]
+   not null default '{}'` on `notifications`; family-wide rows are unread for
+   a user when `not (read_by @> array[auth.uid()])`; mark-read appends through
+   a SECURITY DEFINER RPC that adds only the caller's id; own rows keep
+   `is_read`. Ship with the F-001 repair.
+
+## Swept clean · a removed member reaches nothing
+
+Removing a member sets `is_active = false`. Ten tables (`family_messages`,
+`family_conversations`, `family_photos`, `family_albums`, `family_contacts`,
+`family_reminders`, `family_recipes`, `family_tree_nodes`, `todo_lists`,
+`todo_items`) use a longhand policy — `family_id IN (SELECT family_id FROM
+family_members WHERE user_id = auth.uid())` — with no `is_active`. They are
+still closed to a removed member, for a reason the policy never states: the
+subquery reads `family_members` under the caller's own RLS, and `fm_select` is
+`is_family_member(family_id)`, so a removed member cannot see even their own
+row.
+
+That makes `fm_select` load-bearing for all ten. A policy as natural as *a user
+may see their own membership rows* would reopen every one of them to each
+former partner or ended caregiver who still has a session.
+`docs/audit/removed-member-access-check.sql` pins it: control (active member
+reads all ten), then deactivated (reads, updates, inserts and deletes nothing).
+Calibrated by adding exactly that own-row policy: **22 breaches**. Probes now
+**41/41**.
+
+Also swept clean for refusal-as-success, against the live policies:
+`sleep_logs`, `bedtime_routines`, `sleep_checkins` and `care_log` are
+`is_family_member` for every command, so a zero-row write can only be a race;
+`rides` is manager-gated and `rides-module` already counts rows on every
+update and delete.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
