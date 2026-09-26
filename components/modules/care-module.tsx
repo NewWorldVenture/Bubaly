@@ -9,7 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -116,11 +116,13 @@ export function CareModule() {
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('care_log').update(fields).eq('id', form.id)
-      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('care_log').update(fields).eq('id', form.id).select('id')
+      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Entry updated' : 'Care logged');
     setModalOpen(false);
   }
@@ -139,8 +141,9 @@ export function CareModule() {
   async function remove(e: CareEntry) {
     if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
+    const { data: deleted, error: err } = await sb.from('care_log').delete().eq('id', e.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(deleted)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('careModule.entryDeleted'));
   }
 

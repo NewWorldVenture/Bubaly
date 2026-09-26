@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -67,18 +67,22 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       lot_number: form.lot_number.trim() || null,
       notes: form.notes.trim() || null,
     };
-    const { error } = form.id
-      ? await supabase.from('immunizations').update(row).eq('id', form.id)
-      : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: saved, error } = form.id
+      ? await supabase.from('immunizations').update(row).eq('id', form.id).select('id')
+      : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(form.id ? 'Record updated' : 'Immunization added');
     setForm(null);
   }
 
   async function remove(id: string) {
     if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
-    const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('immunizationsModule.deleted'));
+    const { data: deleted, error } = await createClient().from('immunizations').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(deleted)) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {

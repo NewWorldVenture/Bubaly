@@ -1390,7 +1390,7 @@ describe('writes that were hidden as the first statement in a block (C1-S9-61)',
     // The old code returned `byEmail[0].id` whatever its owner. Now only an
     // unowned lead this call actually claimed, or one this user already owns.
     const body = actionBody(profileActions, 'async function resolveContactId');
-    const branch = body.slice(at(body, 'if (byEmail?.[0]?.id) {'), at(body, "from('crm_contacts').insert("));
+    const branch = between(body, 'if (byEmail?.[0]?.id) {', "from('crm_contacts').insert(");
     const returns = branch.match(/return byEmail\[0\]\.id;/g) ?? [];
     expect(returns, 'exactly the claimed path and the already-ours path').toHaveLength(2);
     expect(branch).toContain('byEmail[0].owner_id === userId');

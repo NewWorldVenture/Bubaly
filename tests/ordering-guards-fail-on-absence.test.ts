@@ -73,7 +73,10 @@ describe('ordering guards fail when the statement they name is absent', () => {
         // `.slice(at(x, a), at(x, b))` — use between() so the degenerate case
         // is a failure. An arithmetic bound (`at(x, a) - 60`) is deliberate and
         // is left alone.
-        if (/\.slice\(\s*at\([^)]*\)\s*,\s*at\(/.test(line)) offenders.push(`tests/${file}:${i + 1}`);
+        // Lazy `.*?`, not `[^)]*`: a needle with a parenthesis in it —
+        // at(src, 'function f(x) {') — ended the old match early, and a
+        // slice(at(), at()) of mine passed unseen (found under C1-S9-77).
+        if (/\.slice\(\s*at\(.*?\)\s*,\s*at\(/.test(line)) offenders.push(`tests/${file}:${i + 1}`);
       });
     }
     expect(offenders, 'use between() from tests/helpers/source-order.ts instead').toEqual([]);

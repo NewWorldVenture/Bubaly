@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-217 finding IDs from four workers and two parallel sessions; none of it was
+218 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 227 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 228 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35490,6 +35490,71 @@ counting a bound write.
 
 **Status:** FIXED.
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-77 — the write sweep's blind spot: every module in `components/`
+
+**The census.** Both write ratchets scan `app/` and `lib/`. The client modules
+under `components/` write to Supabase straight from the browser, under RLS, and
+sat outside both. The same scanner found **198 updates and deletes across 70
+files** that never ask what they changed.
+
+Under RLS this matters *more*, not less. A policy that refuses a row refuses it
+with **no error**: zero rows come back, and each module showed its success
+toast ("Member removed", "Record updated", "Deleted"). It then either
+refreshed onto the unchanged truth, or didn't refresh and left the lie on
+screen.
+
+**Frozen first.** `an-unconfirmed-write-in-components-ratchet` holds the class
+to its baseline with per-file counts: grow, shrink-without-pruning, a new file,
+or a stale entry all fail. That is the same rule `C1-S9-61` used.
+
+**Burned down where the stakes are highest (198/70 → 183/64):**
+- **Family membership** (remove, edit, add). Removing a member is a
+  manager's act; under RLS, a refusal said "Member removed".
+- **Health**: symptom resolve and delete, health visits, immunisation
+  records, and the care log.
+- **Smart devices**: save, status cycle, delete.
+- **Reminder lists** (delete).
+- **A different answer: completing a recurring reminder.** The completion
+  licenses scheduling the next occurrence. A completion that matched nothing
+  (already completed on another device, or refused) fell through and
+  scheduled a **second future reminder**. That is the same double `C1-S9-69`
+  found in the assistant's tool, now in the module itself. The fix predicates
+  on `neq('status', 'completed')`, not `eq('active')`, because a snoozed
+  reminder shows the same button; the guard asserts both directions.
+
+Each confirmed write now says *"That change wasn't saved — you may not have
+permission. Refresh and try again."* (the existing `errors.thatChangeWasNotSaved`
+key, so every locale already has it). Health keeps its own
+`failedTo…` messages.
+
+**A `.select('id')` nobody reads is the same lie with one more round trip.**
+The ratchet only proves a write *asks* for its rows.
+`a-client-write-reads-what-it-changed` proves the answer is *read*: every
+confirmed binding in the fixed files must reach `wroteNoRows(binding)` after
+it is bound.
+
+**The ordering meta-guard's second blind spot.** Its `slice(at(), at())`
+pattern used `[^)]*` for the first argument, so a needle containing a
+parenthesis (`at(src, 'function complete(reminder: Reminder) {')`) ended the
+match early. A slice of mine passed unseen, *again*; the first blind spot was
+closed under `C1-S9-75`. The pattern is now lazy (`.*?`). It immediately found
+one more existing offender, in my own `a-write-the-user-is-told-about-is-confirmed`,
+which now uses `between()`. Proved both ways: red under the new pattern, green
+under the old.
+
+**Guards:**
+- the components ratchet (5 cases);
+- `a-client-write-reads-what-it-changed` (10 cases).
+
+**7 mutations, all red**, including the snoozed-reminder over-tightening. The
+meta-guard fix is proved by two more.
+
+**Status:** FIXED for these 15 sites. **OPEN (tracked by the ratchet):** 183
+writes across 64 component files. The largest are projects (10), career (9),
+declutter (9), moving (8), inventory, language and watchlist (7 each). Most
+are low-stakes list edits, but each one says "saved" over a refusal it cannot
+see.
+
 ---
 
 ## What this pass did NOT establish
@@ -35561,8 +35626,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,413 passing / 17,416 across 1,368
-files.** (Re-run after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,428 passing / 17,431 across 1,370
+files.** (Re-run after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
