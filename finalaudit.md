@@ -35181,6 +35181,11 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Fourteenth run, on `134bce10` (run 36251631673): 1,293 passed, 3 failed, 0 flaky
+in 10.8m**, covering `C1-S9-69`, with Typecheck/Lint/Test/Build, Database and
+Mobile green. Only the known `phone-auth-http` cases. `C1-S9-70` and `-71` were
+held until it reported.
+
 **Thirteenth run, on `c5435e49` (run 36250544626): 1,293 passed, 3 failed, 0 flaky
 in 10.4m**, covering `C1-S9-67` and `-68`, with Typecheck/Lint/Test/Build,
 Database and Mobile green. Only the known `phone-auth-http` cases.
