@@ -520,6 +520,7 @@
   "actions.unknownDomain": "Unknown domain.",
   "actions.unknownEffect": "Unknown effect.",
   "actions.unknownMilestone": "Unknown milestone.",
+  "actions.onlyAParentCanMoveTheLadder": "Only a parent or guardian can move a child's independence ladder.",
   "actions.unknownPlan": "Unknown plan",
   "actions.unknownPlatform": "Unknown platform",
   "actions.unknownService": "Unknown service.",

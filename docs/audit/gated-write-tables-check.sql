@@ -66,7 +66,7 @@ declare
     'gift_payments', 'grades', 'guardian_contacts', 'guardian_member_profiles',
     'guardian_routing_rules', 'health_goals',
     'health_metrics', 'health_providers', 'health_visits', 'home_briefs',
-    'immunizations', 'insurance_policies', 'invest_holdings', 'invest_orders',
+    'immunizations', 'independence_milestones', 'insurance_policies', 'invest_holdings', 'invest_orders',
     'invites', 'journal_entries', 'library_progress', 'location_events',
     'marketplace_listing_shares', 'marketplace_listings', 'marketplace_offers',
     'marketplace_orders', 'marketplace_stores', 'medical_profiles',

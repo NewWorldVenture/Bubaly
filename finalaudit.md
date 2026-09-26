@@ -3,16 +3,16 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-26T18:30:00Z
-- Total Audit Items: 14178
-- Not Started: 13884
-- In Progress: 292
+- Total Audit Items: 14180
+- Not Started: 13881
+- In Progress: 297
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. Q64 added two new IDs (migration 0335 and its probe) and moved two more ⬜ → 🔄: 14,175 = 13,886 + 287 + 1 + 1. Q65 added migration 0336 and moved lib/server/push.ts ⬜ → 🔄: 14,176 = 13,885 + 289 + 1 + 1. Q66 added migration 0337 and its probe and moved the Resend webhook route ⬜ → 🔄: 14,178 = 13,884 + 292 + 1 + 1. See Q56–Q66.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. Q61 added SEC-007 and one new source file and moved two more ⬜ → 🔄: 14,173 = 13,896 + 275 + 1 + 1. Q62 moved eight more ⬜ → 🔄: 14,173 = 13,888 + 283 + 1 + 1. Q64 added two new IDs (migration 0335 and its probe) and moved two more ⬜ → 🔄: 14,175 = 13,886 + 287 + 1 + 1. Q65 added migration 0336 and moved lib/server/push.ts ⬜ → 🔄: 14,176 = 13,885 + 289 + 1 + 1. Q66 added migration 0337 and its probe and moved the Resend webhook route ⬜ → 🔄: 14,178 = 13,884 + 292 + 1 + 1. Q67 added migration 0338 and its probe and moved three actions ⬜ → 🔄: 14,180 = 13,881 + 297 + 1 + 1. See Q56–Q67.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -9136,9 +9136,9 @@ PRODUCTION READY: NO
 | ACTION-C8241C217F0E | ACTION | inboxRequestText | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-B979DD7EA29A | ACTION | handleInboxMessageAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-201D33862E34 | ACTION | archiveInboxMessageAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-BA6D9C001E47 | ACTION | startMilestoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-DFACF8805CFF | ACTION | achieveMilestoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| ACTION-8FA22E77AF99 | ACTION | skipMilestoneAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| ACTION-BA6D9C001E47 | ACTION | startMilestoneAction | 🔄 IN PROGRESS | Medium | docs/audit/independence-ladder-write-boundary-check.sql (child still reads; cannot achieve, skip, start on a sibling or delete; parent still marks and removes) · gated-write probe now 95 tables | 2026-09-26 (Q67): manager check before the upsert (a sentence, not a database refusal) | Probe fails without 0338 ("a child marked their own milestone achieved"), passes with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite 17,169/17,172 | See Q67. |
+| ACTION-DFACF8805CFF | ACTION | achieveMilestoneAction | 🔄 IN PROGRESS | Medium | docs/audit/independence-ladder-write-boundary-check.sql (child still reads; cannot achieve, skip, start on a sibling or delete; parent still marks and removes) · gated-write probe now 95 tables | 2026-09-26 (Q67): manager check, and the update reads its row back — a filtered write is not an achieved milestone | Probe fails without 0338 ("a child marked their own milestone achieved"), passes with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite 17,169/17,172 | See Q67. |
+| ACTION-8FA22E77AF99 | ACTION | skipMilestoneAction | 🔄 IN PROGRESS | Medium | docs/audit/independence-ladder-write-boundary-check.sql (child still reads; cannot achieve, skip, start on a sibling or delete; parent still marks and removes) · gated-write probe now 95 tables | 2026-09-26 (Q67): manager check, and the update reads its row back | Probe fails without 0338 ("a child marked their own milestone achieved"), passes with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite 17,169/17,172 | See Q67. |
 | ACTION-F86C1B82654C | ACTION | dismissInsightAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-632D1C4485C5 | ACTION | actOnInsightAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ACTION-1153C80AAF7F | ACTION | addLeftoverAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -14307,6 +14307,8 @@ PRODUCTION READY: NO
 | MIGRATION-74521116C2F2 | MIGRATION | supabase/migrations/0336_a_device_is_buzzed_once_per_notification.sql | 🔄 IN PROGRESS | High | tests/a-device-is-buzzed-once-per-notification.test.ts (retry reaches only the device that missed it; a failed receipt read sends nothing; a database without 0336 keeps delivering) · 183 push tests incl. the 180 existing | New 2026-09-26 (Q65): push_deliveries (notification_id, device_id) primary key, cascades from both sides, RLS on with no policies, DML revoked from anon/authenticated | Calibrated: removing the skip makes the phone buzz twice and the test fail. Fresh replay 349/349, probes 57/57, query audit 492 tables | Unapplied: an operator applies it. See Q65. |
 | MIGRATION-6E32CD86D2D9 | MIGRATION | supabase/migrations/0337_an_email_event_is_counted_once.sql | 🔄 IN PROGRESS | High | docs/audit/email-counter-once-check.sql (a released-and-retaken claim answers already_applied and the counter stays 1; a stale worker counts nothing; unknown campaign left alone; only counter columns; no client can execute) · tests/resend-webhook-execution.test.ts (40, 2 new) | New 2026-09-26 (Q66): resend_webhook_events.counter_applied_at and a SECURITY DEFINER apply_resend_campaign_counter(), executable by service_role only | Fresh replay 350/350, probes 58/58; route tests 40/40, including one pinning that the pre-0337 fallback still counts twice | Unapplied: an operator applies it. See Q66. |
 | SUPPORT-10B9901DEA8B | SUPPORT | docs/audit/email-counter-once-check.sql | 🔄 IN PROGRESS | High | Self-verifying probe | New 2026-09-26 (Q66) | Fresh replay 350/350, probes 58/58; route tests 40/40, including one pinning that the pre-0337 fallback still counts twice | Discovered 2026-09-26 as new source. See Q66. |
+| MIGRATION-BB54496EA8F0 | MIGRATION | supabase/migrations/0338_a_childs_milestones_are_a_parents_to_mark.sql | 🔄 IN PROGRESS | Medium | docs/audit/independence-ladder-write-boundary-check.sql (child still reads; cannot achieve, skip, start on a sibling or delete; parent still marks and removes) · gated-write probe now 95 tables | New 2026-09-26 (Q67): independence_milestones manager-written in 0333's idiom (mng_* + RESTRICTIVE guards, 0175's open policies swept by shape, asserted) | Probe fails without 0338 ("a child marked their own milestone achieved"), passes with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite 17,169/17,172 | Unapplied: an operator applies it. See Q67. |
+| SUPPORT-C504001E339D | SUPPORT | docs/audit/independence-ladder-write-boundary-check.sql | 🔄 IN PROGRESS | Medium | Self-verifying probe | New 2026-09-26 (Q67) | Probe fails without 0338 ("a child marked their own milestone achieved"), passes with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite 17,169/17,172 | Discovered 2026-09-26 as new source. See Q67. |
 
 ## Inventory and evidence rules
 
@@ -30153,6 +30155,40 @@ the whole call back) and two cases: the fixed path counts a failed-finalisation 
 **once**, and — pinned deliberately — the pre-0337 fallback on the same path still
 counts it **twice**, which is the gap an operator closes by applying 0337. 40/40.
 
+## Q67 — two classes swept, one hole: a child's milestones are a parent's to mark
+
+**Service-client writes keyed only by id.** The service role bypasses RLS, so a write
+whose id came from the caller would be a cross-family hole. Every hit across `app/`
+server actions and API routes was read: the super-admin actions are gated, the cron
+and signed-webhook routes derive their ids server-side, and the four user-facing ones
+(calendar-sync disconnect ×2, concierge call placement, feedback votes/status) select
+their rows by the caller's family and user, are cron-only, or are super-admin gated.
+**Clean** — recorded so the next sweep need not repeat it.
+
+**Actions that take a member id.** This class produced DATA-004's sibling-balance
+bugs, so every server action taking `memberId`/`childId`/`forMemberId`/… was listed
+with its checks. Four had none. `resetMemberTraitsAction` is guarded inside its
+service (`canManage`). The other three are the Independence Ladder —
+`startMilestoneAction`, `achieveMilestoneAction`, `skipMilestoneAction` — and the table
+under them was the real finding: 0175 gave `independence_milestones` plain
+family-membership policies for every command, so the child a milestone is about could
+mark it achieved, skip it, delete a sibling's, or start milestones on anyone's track.
+Every string the module shows is written from the parent's side.
+
+**Fixed** in the shape this branch used for grades (0301), chores (0303), health
+records (0307) and Guardian screening (0333): **0338** — every member still reads the
+ladder (a child seeing their own progress is the point), only a manager writes it,
+with RESTRICTIVE guards and 0175's policies swept by shape. The actions check the role
+first so a child gets a sentence ("Only a parent or guardian can move a child's
+independence ladder.", six base catalogues), and the two updates now read their row
+back, because a filtered update answers `error: null`. The measured gated-write probe
+now lists 95 tables and agrees exactly.
+
+**Retest:** `docs/audit/independence-ladder-write-boundary-check.sql` fails on a
+database without 0338 (*"a child marked their own milestone achieved"*) and passes
+with it; fresh replay 351/351, probes 59/59 on two fresh databases; full suite
+17,169/17,172. **🔄:** 0338 awaits an operator.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -30194,7 +30230,7 @@ Status: 🔄 IN PROGRESS — all 146 routes now fall under the gate rule (writes
 Earlier: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
 
 ## Database
-Status: 🔄 IN PROGRESS — 350 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333–0337 added, Q57/Q58/Q64–Q66); 58/58 boundary probes pass on fresh databases, including the new reward-balance (Q64) and email-counter (Q66) probes; earlier: 56/56 boundary probes pass, run twice, including the new Guardian screening and social-access probes and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
+Status: 🔄 IN PROGRESS — 351 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333–0338 added, Q57/Q58/Q64–Q67); 59/59 boundary probes pass on fresh databases, including the new reward-balance (Q64), email-counter (Q66) and independence-ladder (Q67) probes; earlier: 56/56 boundary probes pass, run twice, including the new Guardian screening and social-access probes and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
 
 Earlier: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
 

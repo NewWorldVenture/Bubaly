@@ -521,6 +521,7 @@
   "actions.unknownDomain": "Ambito sconosciuto.",
   "actions.unknownEffect": "Effetto sconosciuto.",
   "actions.unknownMilestone": "Traguardo sconosciuto.",
+  "actions.onlyAParentCanMoveTheLadder": "Solo un genitore o un tutore può far avanzare la scala dell'autonomia di un figlio.",
   "actions.unknownPlan": "Piano sconosciuto",
   "actions.unknownPlatform": "Piattaforma sconosciuta",
   "actions.unknownService": "Servizio sconosciuto.",

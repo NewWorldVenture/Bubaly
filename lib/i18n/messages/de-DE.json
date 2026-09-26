@@ -521,6 +521,7 @@
   "actions.unknownDomain": "Unbekannter Bereich.",
   "actions.unknownEffect": "Unbekannter Effekt.",
   "actions.unknownMilestone": "Unbekannter Meilenstein.",
+  "actions.onlyAParentCanMoveTheLadder": "Nur ein Elternteil oder eine erziehungsberechtigte Person kann die Selbstständigkeitsleiter eines Kindes ändern.",
   "actions.unknownPlan": "Unbekannter Tarif",
   "actions.unknownPlatform": "Unbekannte Plattform",
   "actions.unknownService": "Unbekannter Dienst.",

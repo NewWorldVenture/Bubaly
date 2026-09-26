@@ -521,6 +521,7 @@
   "actions.unknownDomain": "Domínio desconhecido.",
   "actions.unknownEffect": "Efeito desconhecido.",
   "actions.unknownMilestone": "Marco desconhecido.",
+  "actions.onlyAParentCanMoveTheLadder": "Só um pai, uma mãe ou um tutor pode avançar a escada de autonomia de uma criança.",
   "actions.unknownPlan": "Plano desconhecido",
   "actions.unknownPlatform": "Plataforma desconhecida",
   "actions.unknownService": "Serviço desconhecido.",

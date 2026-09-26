@@ -521,6 +521,7 @@
   "actions.unknownDomain": "Onbekend domein.",
   "actions.unknownEffect": "Onbekend effect.",
   "actions.unknownMilestone": "Onbekende mijlpaal.",
+  "actions.onlyAParentCanMoveTheLadder": "Alleen een ouder of voogd kan de zelfstandigheidsladder van een kind aanpassen.",
   "actions.unknownPlan": "Onbekend abonnement",
   "actions.unknownPlatform": "Onbekend platform",
   "actions.unknownService": "Onbekende dienst.",
