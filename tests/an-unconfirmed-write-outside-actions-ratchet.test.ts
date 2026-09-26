@@ -29,7 +29,7 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
 // the guardian screening webhook, the trip builder's rollback, and the crons;
 // the deliberate ones stay counted with their reasons) → 114/63 (C1-S9-64:
 // the Stripe mirrors, a wallet hold, a referral rollback) → 98/55 (C1-S9-65:
-// lib/services).
+// lib/services) → 89/50 (C1-S9-66: lib/ai).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
@@ -47,12 +47,7 @@ const BASELINE = new Map<string, number>([
   ['app/api/sync/google/disconnect/route.ts', 1],
   ['app/api/vacations/ai/route.ts', 1],
   ['app/api/weekend/discover/route.ts', 1],
-  ['lib/ai/assistant-engine.ts', 1],
-  ['lib/ai/context/builder.ts', 1],
-  ['lib/ai/runs/controls.ts', 1],
-  ['lib/ai/runs/store.ts', 5],
-  ['lib/ai/tools/execute.ts', 2],
-  ['lib/ai/usage.ts', 1],
+  ['lib/ai/runs/store.ts', 2],
   ['lib/assistant/service.ts', 1],
   ['lib/assistant/tools.ts', 4],
   ['lib/autopilot/policy-scan.ts', 1],
@@ -126,6 +121,6 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(98);
+    expect(total).toBe(89);
   });
 });

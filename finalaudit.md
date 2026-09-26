@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-206 finding IDs from four workers and two parallel sessions; none of it was
+207 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 216 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 217 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34733,6 +34733,65 @@ over-tightening), all killed after the S10 guard was corrected. **Ratchet:
 
 ---
 
+### `[CLAUDE-1][MEDIUM][AI]` C1-S9-66 — lib/ai: the run graph's transitions answered ok for a write that did not land, and five more fakes
+
+**Eleven writes** in `lib/ai`.
+
+**The run graph's state transitions (3, fixed).** `updateRequest`, `updateStep`
+and `updateRun` are how the executor moves a step to done or a run to
+completed. Each answered `ok(null)` for an update that matched nothing, so the
+executor went on believing a transition had landed. That is how a step runs
+twice, or a finished run shows as still working. It is the generic-helper shape
+`C1-S9-55` fixed in `lib/family/actions.ts`, fixed the same way: zero rows is
+the same, retryable failure. **None of the three had ever been exercised
+against a client**: the executor's own tests inject a fake port and never reach
+the store. A new suite, `ai-run-store-transitions-are-confirmed`, drives all
+three through an injected client in both directions (matched, zero rows, error).
+Deleting any one zero-row check turns exactly its own case red.
+
+**A lost finalize, described honestly (log).** `finalizeCall` closes a tool-call
+ledger row and "never throws: the household write already happened", which is
+right. But a *lost* finalize is worse than its old log line said. The row stays
+`reserved`; once stale, a retry with the same key takes it over and
+**re-executes a write that already landed**, a second calendar event, say. Zero
+rows is lost as surely as an error, so both now reach a log that names that
+consequence. Making finalize durable (retrying it, or reconciling stale
+reservations against the resource they point at) would close it. That is
+recorded as a follow-up, not attempted in a write sweep.
+
+**Checked, not assumed.** The rerun control bumps a failed tool call's `attempt`
+before re-queuing. If that bump were what made the rerun re-execute, a silent
+no-op would make it **replay the old outcome**, a different answer. Tracing it:
+`lib/ai/tools/execute.ts` takes over any `failed` ledger row and bumps `attempt`
+itself, so the control's bump is not load-bearing. Logged, not raised.
+
+**Confirmed for the log (5 more).** The assistant engine's conversation metadata
+(the twin of the chat route's, `C1-S9-62`), the context builder's request stats,
+the approval card's consequences (without them a parent is asked to decide with
+no statement of what the tool would do), and usage accounting.
+
+**Deliberate (2).** Superseding a prior plan (status-filtered; a finished plan
+matches nothing) and releasing a run lease (filtered on `lease_owner`; zero rows
+means it was already taken over).
+
+**Five more fakes that could not fail.** `api-ai-requests`, `api-ai-runs`,
+`run-controls`, `assistant-engine` and `assistant-stream` went red on the fix,
+**27 cases**. Three answered every update with `data: null`; two offered no
+`.select()` on an update chain at all and threw a `TypeError`. `api-ai-runs` is
+the instructive one: its compare-and-set branch for runs **already modelled the
+client honestly** (`[{id}]` matched, `[]` otherwise), and only its catch-all
+did not. The repair gives every catch-all the same honesty. A matched update
+answers with its row, which changes nothing for a caller that ignores `data` and
+is exactly what the client returns to one that asks. **That makes ten fakes in
+this sweep**, every one found the same way, and every one modelling the call
+site it was written against rather than the client.
+
+**Status:** FIXED; the finalize-durability follow-up is OPEN as a design item.
+Guard: 9 behavioural cases + 7 source cases, 11 mutations (three
+over-tightening), all killed. **Ratchet: 98 → 89 across 50 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34802,8 +34861,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,282 passing / 17,285 across 1,355
-files.** (Re-run after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,298 passing / 17,301 across 1,356
+files.** (Re-run after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

@@ -23,6 +23,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export type TokenUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
 
@@ -106,12 +107,17 @@ export async function recordModelCall(args: RecordModelCallArgs): Promise<void> 
         completion_tokens: (current.completion_tokens ?? 0) + (usage?.outputTokens ?? 0),
         latency_ms: (current.latency_ms ?? 0) + latency,
       };
-      const { error: updateError } = await db
+      // Usage accounting: logged on zero rows as on error, never raised.
+      // Audit C1-S9-66.
+      const { data: metered, error: updateError } = await db
         .from('ai_requests')
         .update(patch)
         .eq('id', requestId)
-        .eq('family_id', familyId);
-      if (updateError) console.error('[ai-usage] request usage update failed', updateError);
+        .eq('family_id', familyId)
+        .select('id');
+      if (updateError || wroteNoRows(metered)) {
+        console.error('[ai-usage] request usage update failed', updateError ?? { requestId, error: 'no rows updated' });
+      }
     }
   }
 

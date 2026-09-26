@@ -105,6 +105,9 @@ function respond(call: Call): Reply {
   }
   if (call.table === 'ai_run_events') return { data: call.kind === 'select' ? [{ id: 'ev-1', run_id: 'run-1', event_type: 'planned', message: 'Planned.', step_id: null, actor_kind: 'ai', created_at: '2026-09-01T00:00:00.000Z', payload: { prompt: 'the whole prompt' } }] : null, error: null };
   if (call.table === 'approval_requests') return { data: [], error: null };
+  // A matched update answers `.select()` with its row (C1-S9-66), as the
+  // compare-and-set branch above already models for runs.
+  if (call.kind === 'update') return { data: [{ id: 'updated' }], error: null };
   return { data: null, error: null };
 }
 

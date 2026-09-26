@@ -25,7 +25,7 @@ import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { getMembers, getPreferences } from '@/lib/services/family';
 import { dayKeyInTz, scopeNow, zonedDayBoundsMs } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { INTENT_SLICES, isSliceName, type IntentKey, type SliceName } from './intents';
 import { applySlicePolicy, viewerFor, type SliceDefinition, type SliceEnv, type SliceResult } from './policy';
 import { DEFAULT_CONTEXT_BUDGET_CHARS, renderContext, type RenderSection } from './render';
@@ -248,12 +248,17 @@ async function persistSnapshot(scope: ServiceScope, opts: BuildContextOptions, b
       .upsert({ request_id: requestId, family_id: scope.familyId, snapshot, sensitive_omitted: bundle.sensitiveOmitted }, { onConflict: 'request_id' });
     if (snapshotError) console.error('[ai-context] snapshot persistence failed', snapshotError);
 
-    const { error: statsError } = await db
+    // Logged on zero rows as well as on error; never raised — this is
+    // provenance for the request, not the request. Audit C1-S9-66.
+    const { data: statted, error: statsError } = await db
       .from('ai_requests')
       .update({ context_stats: bundle.stats as Json, interpreted_intent: opts.intent })
       .eq('id', requestId)
-      .eq('family_id', scope.familyId);
-    if (statsError) console.error('[ai-context] context_stats persistence failed', statsError);
+      .eq('family_id', scope.familyId)
+      .select('id');
+    if (statsError || wroteNoRows(statted)) {
+      console.error('[ai-context] context_stats persistence failed', statsError ?? { requestId, error: 'no rows updated' });
+    }
   } catch (error) {
     console.error('[ai-context] snapshot persistence threw', error);
   }

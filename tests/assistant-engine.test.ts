@@ -15,7 +15,13 @@ function chain(table: string) {
     select: () => c, eq: () => c, neq: () => c, in: () => c, is: () => c, not: () => c, or: () => c, ilike: () => c,
     gte: () => c, gt: () => c, lte: () => c, lt: () => c, order: () => c, limit: () => c, range: () => c,
     insert: (rows: unknown) => { inserts.push({ table, rows }); return { then: (onF: (v: { error: unknown }) => unknown) => Promise.resolve({ error: t.error ?? null }).then(onF) }; },
-    update: (patch: unknown) => { updates.push({ table, patch }); return { eq: () => Promise.resolve({ error: null }) }; },
+    // `.eq().select()` as well as a bare `.eq()`: the conversation metadata
+    // write asks for its row since C1-S9-66, and a real builder allows both.
+    update: (patch: unknown) => {
+      updates.push({ table, patch });
+      const done = { data: [{ id: 'row' }], error: null };
+      return { eq: () => ({ select: () => Promise.resolve(done), then: (onF: (v: typeof done) => unknown) => Promise.resolve(done).then(onF) }) };
+    },
     maybeSingle: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
     single: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
     then: (onF: (v: { data: Row[] | null; error: unknown }) => unknown) => Promise.resolve({ data: t.error ? null : (t.rows ?? []), error: t.error ?? null }).then(onF),

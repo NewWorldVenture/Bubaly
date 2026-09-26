@@ -18,7 +18,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { canTransitionRun, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
 import {
@@ -273,12 +273,18 @@ export async function rerunStep(
 
   const failedCall = (calls ?? []).find((c) => c.state === 'failed');
   if (failedCall) {
-    const { error: bumpError } = await db
+    // Logged, not raised: the executor's ledger takes over a `failed` row and
+    // bumps `attempt` itself (lib/ai/tools/execute.ts), so a lost bump here
+    // cannot make the rerun replay the old outcome. Audit C1-S9-66.
+    const { data: bumped, error: bumpError } = await db
       .from('ai_tool_calls')
       .update({ attempt: failedCall.attempt + 1 })
       .eq('id', failedCall.id)
-      .eq('family_id', scope.familyId);
-    if (bumpError) console.error('[ai/runs] failed to bump the tool-call attempt for a rerun', bumpError);
+      .eq('family_id', scope.familyId)
+      .select('id');
+    if (bumpError || wroteNoRows(bumped)) {
+      console.error('[ai/runs] failed to bump the tool-call attempt for a rerun', bumpError ?? { toolCallId: failedCall.id, error: 'no rows updated' });
+    }
   }
 
   // The approval is cleared with the status: a step that was cancelled because

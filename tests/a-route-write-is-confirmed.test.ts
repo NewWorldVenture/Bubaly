@@ -369,3 +369,33 @@ describe('services that stay ungated on rows say why (C1-S9-65)', () => {
     expect(w.slice(0, w.indexOf(';'))).not.toContain('.select(');
   });
 });
+
+/**
+ * Audit C1-S9-66 — lib/ai. The run-graph transitions are proved behaviourally
+ * in ai-run-store-transitions-are-confirmed; these are the best-effort writes.
+ */
+describe('lib/ai best-effort writes log a no-op and never raise (C1-S9-66)', () => {
+  const sites: Array<[string, string, string]> = [
+    ['lib/ai/assistant-engine.ts', 'if (updateError || wroteNoRows(titled)) {', 'conversation metadata update failed'],
+    ['lib/ai/context/builder.ts', 'if (statsError || wroteNoRows(statted)) {', 'context_stats persistence failed'],
+    ['lib/ai/runs/controls.ts', 'if (bumpError || wroteNoRows(bumped)) {', 'failed to bump the tool-call attempt'],
+    ['lib/ai/tools/execute.ts', 'if (error || wroteNoRows(finalized)) {', 'a stale retry may re-execute it'],
+    ['lib/ai/tools/execute.ts', 'if (error || wroteNoRows(attached)) {', 'could not attach consequences'],
+    ['lib/ai/usage.ts', 'if (updateError || wroteNoRows(metered)) {', 'request usage update failed'],
+  ];
+  for (const [file, needle, log] of sites) {
+    it(`${file}: ${log}`, () => {
+      const b = code(block(read(file), needle));
+      expect(b).toContain(log);
+      expect(b).not.toMatch(/\breturn\b|\bthrow\b/);
+    });
+  }
+
+  it('the supersede and lease release stay ungated on rows, with reasons', () => {
+    const store = read('lib/ai/runs/store.ts');
+    expect(store).toContain('a previous plan\n    // that already finished or failed matches nothing');
+    expect(store).toContain('the lease was already taken over or expired');
+    const release = block(store, 'export async function releaseRun(');
+    expect(code(release)).not.toContain('.select(');
+  });
+});

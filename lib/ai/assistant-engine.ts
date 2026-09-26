@@ -33,7 +33,7 @@ import { getTool, toolNames } from '@/lib/ai/tools/registry';
 import { toApprovalCardData, type TrustApproval } from '@/lib/approvals/card-data';
 import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { ServiceScope } from '@/lib/services/types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
@@ -400,8 +400,12 @@ export async function persistAssistantTurn(
   }
   const patch: ConversationUpdate = { model };
   if (!conv?.title || conv.title === 'New conversation') patch.title = message.slice(0, 60);
-  const { error: updateError } = await supabase.from('ai_conversations').update(patch).eq('id', conversationId);
-  if (updateError) console.error('[assistant-engine] conversation metadata update failed', updateError);
+  // Confirmed for the LOG, as the chat route's copy of this write was under
+  // C1-S9-62; the turn itself never fails for it. Audit C1-S9-66.
+  const { data: titled, error: updateError } = await supabase.from('ai_conversations').update(patch).eq('id', conversationId).select('id');
+  if (updateError || wroteNoRows(titled)) {
+    console.error('[assistant-engine] conversation metadata update failed', updateError ?? { conversationId, error: 'no rows updated' });
+  }
   return { ok: true };
 }
 
