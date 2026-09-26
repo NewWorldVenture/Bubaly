@@ -20,7 +20,7 @@ import 'server-only';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createAdmin } from '@supabase/supabase-js';
-import { durableCookieOptions, isSecureOrigin } from '../auth/session';
+import { durableCookieOptions, isSecureOrigin, preservePendingPkceVerifier } from '../auth/session';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 import type { Database } from '../database.types';
 import { SOURCE_MESSAGES, translate } from '../i18n/messages';
@@ -46,7 +46,7 @@ export async function createServer() {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet: { name: string; value: string; options: CookieOptions }[]) => {
           try {
-            toSet.forEach(({ name, value, options }) =>
+            preservePendingPkceVerifier(toSet, cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL)).forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options),
             );
           } catch {

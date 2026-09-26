@@ -68,6 +68,13 @@ export const AUTH_SCOPE = [
   'phoneAuth', 'signup', 'signupForm',
   // The phone field's own labels, reached through components/ui/phone-input.tsx.
   'phoneInput',
+  // Password recovery, sign-out and step-up reach the auth surface as client
+  // components too. Without these namespaces their strings are not shipped, and
+  // this scope's whole failure mode — per tests/i18n-client-scope.test.ts — is
+  // rendering a raw key like `authRecovery.sendLink` at the person trying to
+  // get back into their account. `actions` carries the two kid-login errors
+  // that the sign-in form surfaces from the server action.
+  'authRecovery', 'authCallback', 'signOutButton', 'stepUp', 'actions',
 ] as const;
 
 /** The public link surfaces that sit outside a route group: a gift, a review. */

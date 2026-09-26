@@ -64,7 +64,9 @@ export function ShoppingModule() {
   const { data: lists, loading: listsLoading, error: listsError, refresh: refreshLists } = useRealtimeQuery<GroceryList>({
     table: 'grocery_lists', familyId, deps: [familyId],
     fetcher: (sb) =>
-      sb.from('grocery_lists').select('*').eq('family_id', familyId).is('archived_at', null)
+      // This module is what stamps `archived_at`, but 0002's `is_archived` can
+      // still be set on a legacy row, and a list is live only if neither says otherwise.
+      sb.from('grocery_lists').select('*').eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
         .order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
   });
 

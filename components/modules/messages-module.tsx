@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -216,9 +217,10 @@ export function MessagesModule() {
       if (!rpcErr) return;
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
-        await supabase.from('family_messages')
+        const { error } = await settle(supabase.from('family_messages')
           .update({ read_by: [...(m.read_by ?? []), userId] })
-          .eq('id', m.id);
+          .eq('id', m.id));
+        if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
       }
     })();
   }, [userId]);

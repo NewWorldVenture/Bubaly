@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FEATURE_ENV, REQUIRED_ENV, checkFeatureEnv, summarizeHealth, buildHealthReport,
@@ -64,13 +65,8 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
 
   it('every listed secret is actually read by the codebase (no stale entries)', () => {
     // A name that nothing reads would make this check decorative.
-    const sources = ['app', 'lib'];
     for (const name of FEATURE_ENV) {
-      const found = sources.some((dir) => {
-        try {
-          return execSyncGrep(dir, name);
-        } catch { return false; }
-      });
+      const found = envReadLines(name).length > 0;
       expect(found, `${name} is in FEATURE_ENV but nothing reads it`).toBe(true);
     }
   });
@@ -90,12 +86,8 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
   it('every listed secret is env-only, with no stored fallback', () => {
     // The property that makes absence meaningful. If any of these gained a
     // database fallback, its absence from env would stop proving anything.
-    const { execSync } = require('node:child_process') as typeof import('node:child_process');
     for (const name of FEATURE_ENV) {
-      const hits = execSync(
-        `grep -rn "process.env.${name}" app lib --include=*.ts --include=*.tsx || true`,
-        { encoding: 'utf8' },
-      );
+      const hits = envReadLines(name).join('\n');
       expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);
       // A stored-value fallback looks like `stored.x || process.env.NAME`.
       expect(hits, `${name} has a stored fallback — absence from env no longer proves it is unconfigured`)
@@ -117,10 +109,34 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
   });
 });
 
-function execSyncGrep(dir: string, name: string): boolean {
-  const { execSync } = require('node:child_process') as typeof import('node:child_process');
-  const out = execSync(`grep -rl "process.env.${name}" ${dir} --include=*.ts --include=*.tsx || true`, { encoding: 'utf8' });
-  return out.trim().length > 0;
+function sourceText(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = join(dir, entry.name);
+    return entry.isDirectory() ? sourceText(file)
+      : /\.tsx?$/.test(entry.name) ? [readFileSync(file, 'utf8')] : [];
+  });
+}
+
+const lines = ['app', 'lib'].flatMap(sourceText).flatMap(source => source.split(/\r?\n/));
+/**
+ * Where a secret is read from the environment — in EITHER spelling.
+ *
+ * `process.env.NAME` is one. `privateKeyEnv('NAME')` in lib/server/native-push.ts
+ * is the other: it indexes `process.env` by argument so one function can undo the
+ * literal `\n` that a PEM picks up when it is pasted into a dashboard field.
+ *
+ * Matching only the dotted form reported both native signing keys as "read
+ * nowhere" — the guard failing against an empty base rather than finding a real
+ * absence, which is the exact failure mode this file exists to catch. The
+ * indirect branch is deliberately narrow: it applies only when the sources really
+ * do index `process.env` by a variable, and it still requires the name to appear
+ * as a string literal in app/ or lib/.
+ */
+function envReadLines(name: string): string[] {
+  const direct = lines.filter(line => line.includes(`process.env.${name}`));
+  if (direct.length > 0) return direct;
+  if (!lines.some(line => /process\.env\[/.test(line))) return [];
+  return lines.filter(line => line.includes(`'${name}'`) || line.includes(`"${name}"`));
 }
 
 /**
@@ -134,8 +150,11 @@ function execSyncGrep(dir: string, name: string): boolean {
  *
  * It has already cost this codebase twice. `RESEND_API_KEY` gates every outbound
  * email and was absent from this list until an audit pass put it there
- * (audit/claude-4.md raised it). `VAPID_PRIVATE_KEY` and `FCM_SERVER_KEY` gate
- * web and native push and were absent until this one.
+ * (audit/claude-4.md raised it). `VAPID_PRIVATE_KEY` and the native signing keys
+ * gate web and native push and were absent until this one. The native names then
+ * MOVED — the legacy `FCM_SERVER_KEY` endpoint was retired for FCM v1 and APNs —
+ * and a list that names a retired secret reports a subsystem as configured while
+ * its real credential is unset, which is the same failure one indirection later.
  *
  * So: a closed list of the gates, each carrying the evidence that it meets the
  * criteria in `lib/health/status.ts` — absence silently disables a whole shipped
@@ -147,7 +166,8 @@ const SUBSYSTEM_GATES: { name: string; subsystem: string; silentBecause: string 
   { name: 'RESEND_API_KEY', subsystem: 'every outbound email', silentBecause: 'lib/email.ts reports success when it is unset, so rows are marked delivered for mail never sent' },
   { name: 'CHILD_LOGIN_SECRET', subsystem: 'child sign-in', silentBecause: 'no child in any family can sign in and nothing says so' },
   { name: 'VAPID_PRIVATE_KEY', subsystem: 'web push', silentBecause: 'ensureVapid() false counts every webpush device as skipped, not failed' },
-  { name: 'FCM_SERVER_KEY', subsystem: 'native iOS/Android push', silentBecause: 'fcmConfigured() false counts every native device as skipped, not failed' },
+  { name: 'FCM_PRIVATE_KEY', subsystem: 'native Android push (FCM v1)', silentBecause: "nativePushConfigured().fcm false makes sendNativePush answer 'unconfigured', which the sender counts as skipped, not failed" },
+  { name: 'APNS_PRIVATE_KEY', subsystem: 'native iOS push (APNs)', silentBecause: "nativePushConfigured().apns false makes sendNativePush answer 'unconfigured', which the sender counts as skipped, not failed" },
 ];
 
 describe('a secret that silently kills a subsystem is on the list', () => {
@@ -177,16 +197,27 @@ describe('a secret that silently kills a subsystem is on the list', () => {
     // became `failed++` these two would stop belonging on the list.
     const push = readFileSync('lib/server/push.ts', 'utf8');
     expect(push).toMatch(/if \(!vapid \|\| [^)]*\) \{ result\.skipped\+\+; continue; \}/);
-    expect(push).toMatch(/if \(!fcmConfigured\(\) \|\| !d\.token\) \{ result\.skipped\+\+; continue; \}/);
+    // The native path moved the gate into sendNativePush, which reports the
+    // reason rather than the sender re-checking the keys. Same consequence: an
+    // unconfigured provider increments `skipped`, so the caller still sees
+    // { sent: 0, failed: 0 } and reads itself as clean.
+    expect(push).toMatch(/else if \(outcome === 'unconfigured'\) result\.skipped\+\+;/);
+    const native = readFileSync('lib/server/native-push.ts', 'utf8');
+    expect(native).toMatch(/export function nativePushConfigured\(\)/);
   });
 
   it('neither push gate has an admin-console fallback', () => {
     // The exclusion test FEATURE_ENV applies to the AI keys, applied to these:
     // a stored fallback would make absence from env stop proving anything.
     const { execSync } = require('node:child_process') as typeof import('node:child_process');
-    for (const name of ['VAPID_PRIVATE_KEY', 'FCM_SERVER_KEY']) {
+    for (const name of ['VAPID_PRIVATE_KEY', 'FCM_PRIVATE_KEY', 'APNS_PRIVATE_KEY']) {
+      // The name, not `process.env.${name}`: the two private keys are read
+      // through `privateKeyEnv(name)`, which indexes `process.env` by argument
+      // so it can undo the literal `\n` a PEM picks up in a dashboard field.
+      // Grepping the dotted spelling reported both as "read nowhere" — a guard
+      // passing on an empty base, which is the failure this file is about.
       const hits = execSync(
-        `grep -rn "process.env.${name}" app lib --include=*.ts --include=*.tsx || true`,
+        `grep -rn "${name}" app lib --include=*.ts --include=*.tsx || true`,
         { encoding: 'utf8' },
       );
       expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);

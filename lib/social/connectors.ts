@@ -15,6 +15,9 @@ import {
   isProviderConfigured, type SocialPlatform,
 } from './capabilities';
 import type { TargetStatus } from './content';
+import { publishX } from './providers/x';
+import { getTranslations } from '@/lib/i18n/server';
+import type { ScheduledClaim } from './scheduled-authority';
 
 export type ConnectorPublishInput = {
   platform: SocialPlatform;
@@ -22,6 +25,12 @@ export type ConnectorPublishInput = {
   body: string;
   link?: string | null;
   mediaUrls: string[];
+  familyId?: string;
+  accountId?: string;
+  userId?: string | null;
+  kind?: string;
+  scheduledClaim?: ScheduledClaim;
+  signal?: AbortSignal;
 };
 
 export type ConnectorPublishOutput = {
@@ -42,7 +51,7 @@ export type Connector = {
 };
 
 /**
- * Live per-platform publishers. EMPTY by default — wiring a real implementation
+ * Live per-platform publishers. Wiring a real implementation
  * here (one that performs the OAuth-authenticated API call and returns the
  * provider's post id + permalink) is the ONLY way a platform starts returning
  * confirmed 'published' results. Adding a key without a genuine API call would
@@ -50,7 +59,7 @@ export type Connector = {
  */
 type LiveImpl = (input: ConnectorPublishInput, creds: NodeJS.ProcessEnv) => Promise<ConnectorPublishOutput>;
 const LIVE_IMPLS: Partial<Record<SocialPlatform, LiveImpl>> = {
-  // e.g. reddit: async (input, env) => { ...real submit, return confirmed id... }
+  x: publishX,
 };
 
 function makeConnector(platform: SocialPlatform): Connector {
@@ -58,12 +67,13 @@ function makeConnector(platform: SocialPlatform): Connector {
     platform,
     async publish(input) {
       if (!isProviderConfigured(platform)) {
+        const t = platform === 'x' ? await getTranslations() : null;
         return {
           ok: false,
           status: 'skipped',
           errorCode: 'requires_setup',
           errorMessage:
-            `${platform} is not configured: add this platform's app credentials to the environment to enable live publishing.`,
+            t ? t('socialX.setupRequired') : `${platform} is not configured: add this platform's app credentials to the environment to enable live publishing.`,
         };
       }
       const impl = LIVE_IMPLS[platform];
@@ -78,13 +88,15 @@ function makeConnector(platform: SocialPlatform): Connector {
       }
       try {
         return await impl(input, process.env);
-      } catch (err) {
-        console.error(`[social-publish] ${platform} connector failed`, err);
+      } catch {
+        // Even an unexpected exception can follow provider acceptance. Never
+        // expose exception details (which may contain tokens) or invite a retry.
+        const t = await getTranslations();
         return {
           ok: false,
-          status: 'failed',
-          errorCode: 'provider_error',
-          errorMessage: 'The provider could not confirm this post. Review the result and try again later.',
+          status: 'publishing',
+          errorCode: 'confirmation_unknown',
+          errorMessage: t('socialX.publishUnknown'),
         };
       }
     },

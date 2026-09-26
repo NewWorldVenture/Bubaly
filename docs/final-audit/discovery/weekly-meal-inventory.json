@@ -1,0 +1,3729 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T19:12:02.601Z",
+  "baselineCommit": "644a9cbe8b5565ae22ebe6f2f5430792afb95e24",
+  "sourceCommit": "14935e3309ed3af5dac9c974037a0c932c2bf383",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 43,
+    "newFiles": 14,
+    "production": 17,
+    "tests": 16,
+    "addedExportedFunctions": 28,
+    "newPageRoutes": [
+      "/admin/marketing/social/recurring"
+    ]
+  },
+  "files": [
+    {
+      "path": "app/(app)/admin/marketing/marketing-subnav.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "bfc4fa9c4586bfadaaad062d82875ea6b00131e727cdaa339adc2ba7c1335c88",
+      "sourceSha256": "8d98c6b67179e750f8044f1d2a16978ba1d7fc9a61d3656c9db9df862bb96054",
+      "bytes": 4259,
+      "baselineExportedSymbols": [
+        {
+          "name": "MarketingSubnav",
+          "line": 93,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "MarketingSubnav",
+          "line": 94,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-64E47A5E2998",
+        "CONTROL-85E9C52919B2",
+        "NAV-64E47A5E2998"
+      ]
+    },
+    {
+      "path": "app/(app)/admin/marketing/social/recurring/actions.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "e28ba9b5c4490b6ef69cc70d0a75bf1438941b54b2b9cb45798ade0592258d17",
+      "bytes": 9888,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "ActionResult",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "createRecurringAdAction",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "setRecurringAdStatusAction",
+          "line": 121,
+          "kind": "function"
+        },
+        {
+          "name": "deleteRecurringAdAction",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "runRecurringAdNowAction",
+          "line": 178,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "createRecurringAdAction",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "setRecurringAdStatusAction",
+          "line": 121,
+          "kind": "function"
+        },
+        {
+          "name": "deleteRecurringAdAction",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "runRecurringAdNowAction",
+          "line": 178,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-10A6E498D226",
+        "SERVICE-B2F2841920BF",
+        "SERVICE-C420BD46F150",
+        "SERVICE-C10F677B0EFE",
+        "SERVICE-1BBA1A5A0567"
+      ]
+    },
+    {
+      "path": "app/(app)/admin/marketing/social/recurring/controls.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "02e5d86d52bf60d593e48a79bec397a9c1c98f1e67562978559d1ca2fb20a563",
+      "bytes": 7398,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "RecurringAdControls",
+          "line": 16,
+          "kind": "function"
+        },
+        {
+          "name": "PlatformChoice",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "NewRecurringAdForm",
+          "line": 49,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "RecurringAdControls",
+          "line": 16,
+          "kind": "function"
+        },
+        {
+          "name": "NewRecurringAdForm",
+          "line": 49,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-342D89D1E6C6",
+        "SERVICE-A8EE1EAAB2CC",
+        "SERVICE-29623616A6E1"
+      ]
+    },
+    {
+      "path": "app/(app)/admin/marketing/social/recurring/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "c3d1e45005d5a5e9dc3e39073adfbc5ca0027a13bf12644ee584884e5564c942",
+      "bytes": 8372,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 13,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "RecurringAdsPage",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "RecurringAdsPage",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": "/admin/marketing/social/recurring",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A5D17761955A",
+        "ROUTE-A5D17761955A",
+        "SERVICE-3F2D2F45866E"
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/grocery/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "c071610cf62f3ac618a7fba069dc4a4cb95542379811730b85aea1be03cd8a91",
+      "sourceSha256": "002872b36e46e4b96353c99c29f17c344c8a21f34df301a4048122a975513a45",
+      "bytes": 12919,
+      "baselineExportedSymbols": [
+        {
+          "name": "AddGroceryItemsResult",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "AddGroceryItemsInput",
+          "line": 52,
+          "kind": "type"
+        },
+        {
+          "name": "addGroceryItemsAction",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "GroceryItemActionResult",
+          "line": 84,
+          "kind": "type"
+        },
+        {
+          "name": "setGroceryItemCheckedAction",
+          "line": 96,
+          "kind": "function"
+        },
+        {
+          "name": "removeGroceryItemAction",
+          "line": 111,
+          "kind": "function"
+        },
+        {
+          "name": "ClearCheckedResult",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "clearCheckedGroceriesAction",
+          "line": 138,
+          "kind": "function"
+        },
+        {
+          "name": "MealPlanToListResult",
+          "line": 162,
+          "kind": "type"
+        },
+        {
+          "name": "addMealPlanToGroceryListAction",
+          "line": 182,
+          "kind": "function"
+        },
+        {
+          "name": "ShoppingTripActionResult",
+          "line": 211,
+          "kind": "type"
+        },
+        {
+          "name": "recordShoppingTripAction",
+          "line": 253,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "AddGroceryItemsResult",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "AddGroceryItemsInput",
+          "line": 52,
+          "kind": "type"
+        },
+        {
+          "name": "addGroceryItemsAction",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "GroceryItemActionResult",
+          "line": 84,
+          "kind": "type"
+        },
+        {
+          "name": "setGroceryItemCheckedAction",
+          "line": 96,
+          "kind": "function"
+        },
+        {
+          "name": "removeGroceryItemAction",
+          "line": 111,
+          "kind": "function"
+        },
+        {
+          "name": "ClearCheckedResult",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "clearCheckedGroceriesAction",
+          "line": 138,
+          "kind": "function"
+        },
+        {
+          "name": "MealPlanToListResult",
+          "line": 162,
+          "kind": "type"
+        },
+        {
+          "name": "addMealPlanToGroceryListAction",
+          "line": 182,
+          "kind": "function"
+        },
+        {
+          "name": "ShoppingTripActionResult",
+          "line": 212,
+          "kind": "type"
+        },
+        {
+          "name": "recordShoppingTripAction",
+          "line": 254,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ACTION-FAE89EDA6446",
+        "ACTION-4338DE1FC8D8",
+        "ACTION-8837CE631C1C",
+        "ACTION-4E887905D377",
+        "ACTION-0EE694AB25F2",
+        "ACTION-06A3F4E73165",
+        "FLOW-7AA5EB472A55"
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/meals/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b77ac488c556e3b54d287787bae9b060656ddd82e372eafa4555f246eed06ba7",
+      "sourceSha256": "30a3b0a2a60f3380c32b3ead7ede89029a275f7e6ea5091804fa1f2ed64ee2e0",
+      "bytes": 3592,
+      "baselineExportedSymbols": [
+        {
+          "name": "MealPlanActionResult",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "planMealAction",
+          "line": 41,
+          "kind": "function"
+        },
+        {
+          "name": "removeMealPlanAction",
+          "line": 62,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "MealPlanActionResult",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "planMealAction",
+          "line": 40,
+          "kind": "function"
+        },
+        {
+          "name": "createMealAction",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "removeMealPlanAction",
+          "line": 72,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "createMealAction",
+          "line": 58,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ACTION-1A67F7331B29",
+        "ACTION-91AEADE5CC7B",
+        "FLOW-F146172C0036",
+        "MEAL-001",
+        "SERVICE-73DB0E2176B9"
+      ]
+    },
+    {
+      "path": "app/api/ai/meals/plan/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e3811965b4f87d25a6863b23aeb989addf0c1e7b9b43b405c8bfb28cca9ab898",
+      "sourceSha256": "8915fbd5fcc982dff3d280d675efec7a087a47af7d55f6082cf58527397c680e",
+      "bytes": 8662,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 20,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 36,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 20,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 21,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 37,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": "/api/ai/meals/plan",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-2AD065090629",
+        "FLOW-32E83E92D45D"
+      ]
+    },
+    {
+      "path": "app/api/cron/marketing-social/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "ab1142f4838de44071cfc271ebb5c87170a3a3bc3f42f8d3a3c3e63eebb7f781",
+      "bytes": 1240,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 6,
+          "kind": "value"
+        },
+        {
+          "name": "GET",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "GET",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": "/api/cron/marketing-social",
+      "httpMethods": [
+        "GET"
+      ],
+      "existingMasterIds": [
+        "SUPPORT-3650D4324732",
+        "API-9ED269DBDB75",
+        "JOB-F5185B999046"
+      ]
+    },
+    {
+      "path": "components/modules/meals-module.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "f216ddf18da8d1a165159bdd02a0ab31398cd0d1a282e8b9f22e18d5771d033d",
+      "sourceSha256": "76e220112c102a741e353f4a88ade9386a09c3acc66684c13deaffee59caa7a5",
+      "bytes": 66446,
+      "baselineExportedSymbols": [
+        {
+          "name": "MealsModule",
+          "line": 88,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "MealsModule",
+          "line": 75,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-4D0C5DE53A9F",
+        "CONTROL-2CA903FE8939",
+        "CONTROL-0E03BA79C539",
+        "CONTROL-5AA63295BBC1",
+        "CONTROL-D916D231A931",
+        "CONTROL-77247B7954A4",
+        "CONTROL-A0EE19D10EED",
+        "CONTROL-6ABC2AD78047",
+        "CONTROL-D1DB7A8C0489",
+        "CONTROL-9B1EB3052403",
+        "CONTROL-3660A3C18BA6",
+        "CONTROL-CFBA44EB6B79",
+        "CONTROL-88F211793DD2",
+        "CONTROL-5EAC26510425",
+        "CONTROL-50AF24ED5C6A",
+        "CONTROL-73DAC3817052",
+        "CONTROL-77DC0B401EAD",
+        "CONTROL-55D39A8410D4",
+        "CONTROL-35EDBDAA0926",
+        "CONTROL-CBE6174E2327",
+        "CONTROL-89857CD42C9C",
+        "CONTROL-BADEE02A3C4C",
+        "CONTROL-165385E6AB62",
+        "CONTROL-603A80B5183E",
+        "CONTROL-A40BDD43B594",
+        "CONTROL-12CE3EB2656A",
+        "CONTROL-F6CC8087FC8B",
+        "CONTROL-5942F1D8FAD8",
+        "CONTROL-1AB3AF7D0783",
+        "CONTROL-31C3F69E74D8",
+        "CONTROL-751E14B4D0A5",
+        "CONTROL-B93534365D2E",
+        "CONTROL-CABA46042EFB",
+        "CONTROL-B7731E4986C6",
+        "CONTROL-AA3572D12580",
+        "CONTROL-22814D075756",
+        "CONTROL-C634A3F98E21",
+        "CONTROL-4A9D524844BE",
+        "CONTROL-7FEDC9F4D5FD",
+        "CONTROL-07EC2FDC4794",
+        "CONTROL-F13307B75465",
+        "CONTROL-50F4A2F3DD62",
+        "CONTROL-38D77A6B1C92",
+        "CONTROL-8F677069BF90",
+        "CONTROL-059581A8DC6A",
+        "CONTROL-92FAB6A6F409",
+        "CONTROL-5534CD000D2C",
+        "CONTROL-21811049193F",
+        "CONTROL-7D3C24AFA88E",
+        "CONTROL-AA230502887C",
+        "CONTROL-7A8D38D2432E",
+        "CONTROL-ECE021F06051",
+        "CONTROL-9BC6A521D3FB",
+        "CONTROL-FAF0E6C7E860",
+        "CONTROL-5C0C1F24A35A",
+        "CONTROL-F8C3FD810E10",
+        "CONTROL-5DD81743BF54",
+        "CONTROL-5B98B92EDF1F",
+        "INCOMPLETE-1C1CD174DEDC",
+        "INCOMPLETE-E9B80E17FC29",
+        "INCOMPLETE-1326EF59D151",
+        "INCOMPLETE-98279CD2B343",
+        "INCOMPLETE-A3BCF59363E1",
+        "INCOMPLETE-6C8788FA5806",
+        "INCOMPLETE-1BD32C269DBA",
+        "INCOMPLETE-AC07EC17D258",
+        "UI-WF-008",
+        "MEAL-001",
+        "CONTROL-E44C4826F5CE",
+        "CONTROL-A866059DF05A",
+        "CONTROL-4D14CCE7A571",
+        "CONTROL-B316FC5DE180",
+        "CONTROL-A26E7721407C",
+        "CONTROL-87108C97437D",
+        "CONTROL-EC743542B775"
+      ]
+    },
+    {
+      "path": "lib/database.types.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "4c8c8f766189d8226371228d111e877104061a663e28f8bfd546f9a73be79da7",
+      "sourceSha256": "73fa48c0b19143af58d9296e249d036f17ac7092ccfe6921dc196427a3a0c4d7",
+      "bytes": 400242,
+      "baselineExportedSymbols": [
+        {
+          "name": "Json",
+          "line": 6,
+          "kind": "type"
+        },
+        {
+          "name": "MemberRole",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "InviteStatus",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "TaskStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "Priority",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "EventCategory",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "RecurrenceFreq",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "PetSpecies",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "PetCareKind",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeCategory",
+          "line": 18,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeStatus",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "OutfitOccasion",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "WatchKind",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "WatchService",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "WatchStatus",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "WatchVote",
+          "line": 24,
+          "kind": "type"
+        },
+        {
+          "name": "HomeLocationKind",
+          "line": 25,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryCategory",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryStatus",
+          "line": 27,
+          "kind": "type"
+        },
+        {
+          "name": "SleepSource",
+          "line": 28,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterZoneKind",
+          "line": 29,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterMissionStatus",
+          "line": 30,
+          "kind": "type"
+        },
+        {
+          "name": "MoveStatus",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "MoveKind",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskCategory",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskStatus",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "MoveBoxStatus",
+          "line": 35,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectKind",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectStatus",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectPriority",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "ProjectQuoteStatus",
+          "line": 39,
+          "kind": "type"
+        },
+        {
+          "name": "CareerWorkMode",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "CareerEmploymentType",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "CareerStatus",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "JobStage",
+          "line": 43,
+          "kind": "type"
+        },
+        {
+          "name": "CefrLevel",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "LanguageSessionKind",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "InsurancePolicyType",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "PremiumFrequency",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "MealType",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "PantryLocation",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "NutritionSubject",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "NotificationType",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnType",
+          "line": 54,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnStatus",
+          "line": 57,
+          "kind": "type"
+        },
+        {
+          "name": "StripeAccountStatus",
+          "line": 59,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderSide",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderStatus",
+          "line": 61,
+          "kind": "type"
+        },
+        {
+          "name": "SocialItemKind",
+          "line": 62,
+          "kind": "type"
+        },
+        {
+          "name": "SocialCategory",
+          "line": 63,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyDirection",
+          "line": 64,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyRedemptionStatus",
+          "line": 65,
+          "kind": "type"
+        },
+        {
+          "name": "SubscriptionStatus",
+          "line": 66,
+          "kind": "type"
+        },
+        {
+          "name": "AccountType",
+          "line": 68,
+          "kind": "type"
+        },
+        {
+          "name": "TransactionType",
+          "line": 69,
+          "kind": "type"
+        },
+        {
+          "name": "BudgetPeriod",
+          "line": 70,
+          "kind": "type"
+        },
+        {
+          "name": "BillStatus",
+          "line": 71,
+          "kind": "type"
+        },
+        {
+          "name": "MetricType",
+          "line": 72,
+          "kind": "type"
+        },
+        {
+          "name": "GameResult",
+          "line": 73,
+          "kind": "type"
+        },
+        {
+          "name": "GradeType",
+          "line": 74,
+          "kind": "type"
+        },
+        {
+          "name": "ThemePref",
+          "line": 75,
+          "kind": "type"
+        },
+        {
+          "name": "DashboardView",
+          "line": 76,
+          "kind": "type"
+        },
+        {
+          "name": "AiRole",
+          "line": 77,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunState",
+          "line": 81,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunLifecycleState",
+          "line": 85,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepState",
+          "line": 86,
+          "kind": "type"
+        },
+        {
+          "name": "AiRequestKind",
+          "line": 87,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineScheduleKind",
+          "line": 89,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineRunStatus",
+          "line": 91,
+          "kind": "type"
+        },
+        {
+          "name": "HomeBriefKind",
+          "line": 93,
+          "kind": "type"
+        },
+        {
+          "name": "AutonomyBehaviorValue",
+          "line": 95,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunType",
+          "line": 96,
+          "kind": "type"
+        },
+        {
+          "name": "AiPlanStatus",
+          "line": 97,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepType",
+          "line": 99,
+          "kind": "type"
+        },
+        {
+          "name": "AiRiskLevel",
+          "line": 100,
+          "kind": "type"
+        },
+        {
+          "name": "AiActorKind",
+          "line": 101,
+          "kind": "type"
+        },
+        {
+          "name": "AiToolCallState",
+          "line": 102,
+          "kind": "type"
+        },
+        {
+          "name": "AiConversationState",
+          "line": 103,
+          "kind": "type"
+        },
+        {
+          "name": "AiApprovalPayloadKind",
+          "line": 104,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunEventType",
+          "line": 105,
+          "kind": "type"
+        },
+        {
+          "name": "RecordKind",
+          "line": 110,
+          "kind": "type"
+        },
+        {
+          "name": "RideStatus",
+          "line": 111,
+          "kind": "type"
+        },
+        {
+          "name": "HomeworkStatus",
+          "line": 112,
+          "kind": "type"
+        },
+        {
+          "name": "RenewalStatus",
+          "line": 113,
+          "kind": "type"
+        },
+        {
+          "name": "CareLogType",
+          "line": 114,
+          "kind": "type"
+        },
+        {
+          "name": "OpportunityStatus",
+          "line": 115,
+          "kind": "type"
+        },
+        {
+          "name": "LocationEventType",
+          "line": 116,
+          "kind": "type"
+        },
+        {
+          "name": "WishPriority",
+          "line": 117,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateKind",
+          "line": 118,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateStatus",
+          "line": 119,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftSource",
+          "line": 120,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftStatus",
+          "line": 121,
+          "kind": "type"
+        },
+        {
+          "name": "DoseStatus",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPattern",
+          "line": 123,
+          "kind": "type"
+        },
+        {
+          "name": "TripStatus",
+          "line": 124,
+          "kind": "type"
+        },
+        {
+          "name": "TripItemKind",
+          "line": 125,
+          "kind": "type"
+        },
+        {
+          "name": "RedemptionStatus",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "VacationStatus",
+          "line": 129,
+          "kind": "type"
+        },
+        {
+          "name": "VacationKind",
+          "line": 130,
+          "kind": "type"
+        },
+        {
+          "name": "VacItemKind",
+          "line": 131,
+          "kind": "type"
+        },
+        {
+          "name": "VacDayPart",
+          "line": 132,
+          "kind": "type"
+        },
+        {
+          "name": "VacTransportKind",
+          "line": 133,
+          "kind": "type"
+        },
+        {
+          "name": "VacLodgingKind",
+          "line": 134,
+          "kind": "type"
+        },
+        {
+          "name": "VacBudgetCategory",
+          "line": 135,
+          "kind": "type"
+        },
+        {
+          "name": "VacPackCategory",
+          "line": 136,
+          "kind": "type"
+        },
+        {
+          "name": "VacDocKind",
+          "line": 137,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoKind",
+          "line": 138,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoStatus",
+          "line": 139,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendPlanStatus",
+          "line": 142,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendFeedKind",
+          "line": 143,
+          "kind": "type"
+        },
+        {
+          "name": "SyncProviderEnum",
+          "line": 146,
+          "kind": "type"
+        },
+        {
+          "name": "SyncDirection",
+          "line": 147,
+          "kind": "type"
+        },
+        {
+          "name": "SyncStatusEnum",
+          "line": 148,
+          "kind": "type"
+        },
+        {
+          "name": "SyncItemType",
+          "line": 150,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictStatus",
+          "line": 151,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictResolutionEnum",
+          "line": 152,
+          "kind": "type"
+        },
+        {
+          "name": "SyncJobStatus",
+          "line": 154,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPlatformEnum",
+          "line": 158,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAccountStatus",
+          "line": 161,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostKind",
+          "line": 163,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostStatusEnum",
+          "line": 166,
+          "kind": "type"
+        },
+        {
+          "name": "SocialTargetStatus",
+          "line": 169,
+          "kind": "type"
+        },
+        {
+          "name": "SocialJobStatus",
+          "line": 171,
+          "kind": "type"
+        },
+        {
+          "name": "SocialApprovalStatus",
+          "line": 173,
+          "kind": "type"
+        },
+        {
+          "name": "SocialInboxStatus",
+          "line": 175,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAssetKind",
+          "line": 176,
+          "kind": "type"
+        },
+        {
+          "name": "SocialRoleEnum",
+          "line": 177,
+          "kind": "type"
+        },
+        {
+          "name": "Database",
+          "line": 188,
+          "kind": "type"
+        },
+        {
+          "name": "Tables",
+          "line": 2763,
+          "kind": "type"
+        },
+        {
+          "name": "Insertable",
+          "line": 2765,
+          "kind": "type"
+        },
+        {
+          "name": "Updatable",
+          "line": 2767,
+          "kind": "type"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "Json",
+          "line": 6,
+          "kind": "type"
+        },
+        {
+          "name": "MemberRole",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "InviteStatus",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "TaskStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "Priority",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "EventCategory",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "RecurrenceFreq",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "PetSpecies",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "PetCareKind",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeCategory",
+          "line": 18,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeStatus",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "OutfitOccasion",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "WatchKind",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "WatchService",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "WatchStatus",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "WatchVote",
+          "line": 24,
+          "kind": "type"
+        },
+        {
+          "name": "HomeLocationKind",
+          "line": 25,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryCategory",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryStatus",
+          "line": 27,
+          "kind": "type"
+        },
+        {
+          "name": "SleepSource",
+          "line": 28,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterZoneKind",
+          "line": 29,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterMissionStatus",
+          "line": 30,
+          "kind": "type"
+        },
+        {
+          "name": "MoveStatus",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "MoveKind",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskCategory",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskStatus",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "MoveBoxStatus",
+          "line": 35,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectKind",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectStatus",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectPriority",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "ProjectQuoteStatus",
+          "line": 39,
+          "kind": "type"
+        },
+        {
+          "name": "CareerWorkMode",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "CareerEmploymentType",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "CareerStatus",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "JobStage",
+          "line": 43,
+          "kind": "type"
+        },
+        {
+          "name": "CefrLevel",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "LanguageSessionKind",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "InsurancePolicyType",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "PremiumFrequency",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "MealType",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "PantryLocation",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "NutritionSubject",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "NotificationType",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnType",
+          "line": 54,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnStatus",
+          "line": 57,
+          "kind": "type"
+        },
+        {
+          "name": "StripeAccountStatus",
+          "line": 59,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderSide",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderStatus",
+          "line": 61,
+          "kind": "type"
+        },
+        {
+          "name": "SocialItemKind",
+          "line": 62,
+          "kind": "type"
+        },
+        {
+          "name": "SocialCategory",
+          "line": 63,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyDirection",
+          "line": 64,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyRedemptionStatus",
+          "line": 65,
+          "kind": "type"
+        },
+        {
+          "name": "SubscriptionStatus",
+          "line": 66,
+          "kind": "type"
+        },
+        {
+          "name": "AccountType",
+          "line": 68,
+          "kind": "type"
+        },
+        {
+          "name": "TransactionType",
+          "line": 69,
+          "kind": "type"
+        },
+        {
+          "name": "BudgetPeriod",
+          "line": 70,
+          "kind": "type"
+        },
+        {
+          "name": "BillStatus",
+          "line": 71,
+          "kind": "type"
+        },
+        {
+          "name": "MetricType",
+          "line": 72,
+          "kind": "type"
+        },
+        {
+          "name": "GameResult",
+          "line": 73,
+          "kind": "type"
+        },
+        {
+          "name": "GradeType",
+          "line": 74,
+          "kind": "type"
+        },
+        {
+          "name": "ThemePref",
+          "line": 75,
+          "kind": "type"
+        },
+        {
+          "name": "DashboardView",
+          "line": 76,
+          "kind": "type"
+        },
+        {
+          "name": "AiRole",
+          "line": 77,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunState",
+          "line": 81,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunLifecycleState",
+          "line": 85,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepState",
+          "line": 86,
+          "kind": "type"
+        },
+        {
+          "name": "AiRequestKind",
+          "line": 87,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineScheduleKind",
+          "line": 89,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineRunStatus",
+          "line": 91,
+          "kind": "type"
+        },
+        {
+          "name": "HomeBriefKind",
+          "line": 93,
+          "kind": "type"
+        },
+        {
+          "name": "AutonomyBehaviorValue",
+          "line": 95,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunType",
+          "line": 96,
+          "kind": "type"
+        },
+        {
+          "name": "AiPlanStatus",
+          "line": 97,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepType",
+          "line": 99,
+          "kind": "type"
+        },
+        {
+          "name": "AiRiskLevel",
+          "line": 100,
+          "kind": "type"
+        },
+        {
+          "name": "AiActorKind",
+          "line": 101,
+          "kind": "type"
+        },
+        {
+          "name": "AiToolCallState",
+          "line": 102,
+          "kind": "type"
+        },
+        {
+          "name": "AiConversationState",
+          "line": 103,
+          "kind": "type"
+        },
+        {
+          "name": "AiApprovalPayloadKind",
+          "line": 104,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunEventType",
+          "line": 105,
+          "kind": "type"
+        },
+        {
+          "name": "RecordKind",
+          "line": 110,
+          "kind": "type"
+        },
+        {
+          "name": "RideStatus",
+          "line": 111,
+          "kind": "type"
+        },
+        {
+          "name": "HomeworkStatus",
+          "line": 112,
+          "kind": "type"
+        },
+        {
+          "name": "RenewalStatus",
+          "line": 113,
+          "kind": "type"
+        },
+        {
+          "name": "CareLogType",
+          "line": 114,
+          "kind": "type"
+        },
+        {
+          "name": "OpportunityStatus",
+          "line": 115,
+          "kind": "type"
+        },
+        {
+          "name": "LocationEventType",
+          "line": 116,
+          "kind": "type"
+        },
+        {
+          "name": "WishPriority",
+          "line": 117,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateKind",
+          "line": 118,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateStatus",
+          "line": 119,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftSource",
+          "line": 120,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftStatus",
+          "line": 121,
+          "kind": "type"
+        },
+        {
+          "name": "DoseStatus",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPattern",
+          "line": 123,
+          "kind": "type"
+        },
+        {
+          "name": "TripStatus",
+          "line": 124,
+          "kind": "type"
+        },
+        {
+          "name": "TripItemKind",
+          "line": 125,
+          "kind": "type"
+        },
+        {
+          "name": "RedemptionStatus",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "VacationStatus",
+          "line": 129,
+          "kind": "type"
+        },
+        {
+          "name": "VacationKind",
+          "line": 130,
+          "kind": "type"
+        },
+        {
+          "name": "VacItemKind",
+          "line": 131,
+          "kind": "type"
+        },
+        {
+          "name": "VacDayPart",
+          "line": 132,
+          "kind": "type"
+        },
+        {
+          "name": "VacTransportKind",
+          "line": 133,
+          "kind": "type"
+        },
+        {
+          "name": "VacLodgingKind",
+          "line": 134,
+          "kind": "type"
+        },
+        {
+          "name": "VacBudgetCategory",
+          "line": 135,
+          "kind": "type"
+        },
+        {
+          "name": "VacPackCategory",
+          "line": 136,
+          "kind": "type"
+        },
+        {
+          "name": "VacDocKind",
+          "line": 137,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoKind",
+          "line": 138,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoStatus",
+          "line": 139,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendPlanStatus",
+          "line": 142,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendFeedKind",
+          "line": 143,
+          "kind": "type"
+        },
+        {
+          "name": "SyncProviderEnum",
+          "line": 146,
+          "kind": "type"
+        },
+        {
+          "name": "SyncDirection",
+          "line": 147,
+          "kind": "type"
+        },
+        {
+          "name": "SyncStatusEnum",
+          "line": 148,
+          "kind": "type"
+        },
+        {
+          "name": "SyncItemType",
+          "line": 150,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictStatus",
+          "line": 151,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictResolutionEnum",
+          "line": 152,
+          "kind": "type"
+        },
+        {
+          "name": "SyncJobStatus",
+          "line": 154,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPlatformEnum",
+          "line": 158,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAccountStatus",
+          "line": 161,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostKind",
+          "line": 163,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostStatusEnum",
+          "line": 166,
+          "kind": "type"
+        },
+        {
+          "name": "SocialTargetStatus",
+          "line": 169,
+          "kind": "type"
+        },
+        {
+          "name": "SocialJobStatus",
+          "line": 171,
+          "kind": "type"
+        },
+        {
+          "name": "SocialApprovalStatus",
+          "line": 173,
+          "kind": "type"
+        },
+        {
+          "name": "SocialInboxStatus",
+          "line": 175,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAssetKind",
+          "line": 176,
+          "kind": "type"
+        },
+        {
+          "name": "SocialRoleEnum",
+          "line": 177,
+          "kind": "type"
+        },
+        {
+          "name": "Database",
+          "line": 188,
+          "kind": "type"
+        },
+        {
+          "name": "Tables",
+          "line": 2773,
+          "kind": "type"
+        },
+        {
+          "name": "Insertable",
+          "line": 2775,
+          "kind": "type"
+        },
+        {
+          "name": "Updatable",
+          "line": 2777,
+          "kind": "type"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-39A229E29D4D"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "192f38de3122b6df6ee7f61dc81bc885870aff2c4132fc3ac4c51a8a8e0e496d",
+      "sourceSha256": "2ac488c063b0a4940b76f9c675d37c56659293c0e6a752a379cb1d966656fb23",
+      "bytes": 986978,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-88F1E3670486"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "291854ffd6d1001aa597df62da506f4238df757ab9ad7554812e0f11a65d59f3",
+      "sourceSha256": "09b4d0215bb94c86cfc4878a8af45a819472a2cb325b3d632a4a9cb4dadaf0cd",
+      "bytes": 881092,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C346841E8649"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "2e08de0e711d89cb71ea0d23ef8d3a9fb71dc2abc71b0425a03cb6a0b68182de",
+      "sourceSha256": "e6c03c58625f44a74ff6eecab16aa092ba116e1c534414555578487f6d583774",
+      "bytes": 970566,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-DC666FC0E80F"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "e2bc6a4662310586521c544c32875364b161dc2001a52a8bf73f4c3dffdd9b35",
+      "sourceSha256": "7164a44a4d2f73cd31e8eca85eaacd4580bcf1ca155b154459eaa4a8635488e9",
+      "bytes": 995999,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-24D39068AF0B"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "ec1d7033fa6470d3453de7800c6997cc1a48a1b20144582684131b87ae178ee0",
+      "sourceSha256": "dbd3b8e3583ebe6eb3fbe63251a1a42ca749e9905d7af53c1384744bab8f6140",
+      "bytes": 958195,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9E9B391BC4E5"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "3bab330129148c037ea9520e23975c006c694acd5611130d84d9e4f914e80b8c",
+      "sourceSha256": "344c5e14347ac5db81110838eb59ef2098d0d91730ec535498127743fae9e7c2",
+      "bytes": 942524,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-6F4C71EB2624"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "a945dea074e3bc10874337a9cccd787ac0608902ed76007822939f04e55cbedd",
+      "sourceSha256": "37af5197b481781003d2a24890ee6f85fd9cf7d4327f1c1564270b8423e33980",
+      "bytes": 972678,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-091D62717E32"
+      ]
+    },
+    {
+      "path": "lib/marketing/recurring-ads-runner.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "769516a538434b373509c3d269e746f5cdc50b9af7df87fbec0233d1a2f192b3",
+      "bytes": 10837,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "RunStatus",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "AdRow",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "RunSummary",
+          "line": 61,
+          "kind": "type"
+        },
+        {
+          "name": "validPlatforms",
+          "line": 71,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleFromRow",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "classifyOutcome",
+          "line": 87,
+          "kind": "function"
+        },
+        {
+          "name": "publishOccurrence",
+          "line": 135,
+          "kind": "function"
+        },
+        {
+          "name": "runDueRecurringAds",
+          "line": 195,
+          "kind": "function"
+        },
+        {
+          "name": "firstRunFor",
+          "line": 278,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "validPlatforms",
+          "line": 71,
+          "kind": "function"
+        },
+        {
+          "name": "scheduleFromRow",
+          "line": 76,
+          "kind": "function"
+        },
+        {
+          "name": "classifyOutcome",
+          "line": 87,
+          "kind": "function"
+        },
+        {
+          "name": "publishOccurrence",
+          "line": 135,
+          "kind": "function"
+        },
+        {
+          "name": "runDueRecurringAds",
+          "line": 195,
+          "kind": "function"
+        },
+        {
+          "name": "firstRunFor",
+          "line": 278,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-D8E1C781AB00",
+        "SERVICE-4936014BD04B",
+        "SERVICE-EF004FE9241A",
+        "SERVICE-44DF148FA73B",
+        "SERVICE-FD01DF3B35B4",
+        "SERVICE-B39F9D03F43E",
+        "SERVICE-7D0A72C7ADAE"
+      ]
+    },
+    {
+      "path": "lib/marketing/recurring-ads.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "12c767a99b8aef1d444ba241275106e90366aa19bf9a31b63e904cd43c500a1e",
+      "bytes": 14529,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "Cadence",
+          "line": 30,
+          "kind": "type"
+        },
+        {
+          "name": "CADENCES",
+          "line": 32,
+          "kind": "value"
+        },
+        {
+          "name": "RecurringAdSchedule",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "DEFAULT_SCHEDULE",
+          "line": 46,
+          "kind": "value"
+        },
+        {
+          "name": "isValidTimezone",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "localPartsAt",
+          "line": 83,
+          "kind": "function"
+        },
+        {
+          "name": "zonedLocalToInstant",
+          "line": 113,
+          "kind": "function"
+        },
+        {
+          "name": "daysInMonth",
+          "line": 146,
+          "kind": "function"
+        },
+        {
+          "name": "nextRunAt",
+          "line": 225,
+          "kind": "function"
+        },
+        {
+          "name": "RecurringAdWindow",
+          "line": 256,
+          "kind": "type"
+        },
+        {
+          "name": "RunDecision",
+          "line": 267,
+          "kind": "type"
+        },
+        {
+          "name": "decideRun",
+          "line": 279,
+          "kind": "function"
+        },
+        {
+          "name": "variantForOccurrence",
+          "line": 309,
+          "kind": "function"
+        },
+        {
+          "name": "describeSchedule",
+          "line": 323,
+          "kind": "function"
+        },
+        {
+          "name": "parseTimesOfDay",
+          "line": 348,
+          "kind": "function"
+        },
+        {
+          "name": "parseVariants",
+          "line": 361,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "isValidTimezone",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "localPartsAt",
+          "line": 83,
+          "kind": "function"
+        },
+        {
+          "name": "zonedLocalToInstant",
+          "line": 113,
+          "kind": "function"
+        },
+        {
+          "name": "daysInMonth",
+          "line": 146,
+          "kind": "function"
+        },
+        {
+          "name": "nextRunAt",
+          "line": 225,
+          "kind": "function"
+        },
+        {
+          "name": "decideRun",
+          "line": 279,
+          "kind": "function"
+        },
+        {
+          "name": "variantForOccurrence",
+          "line": 309,
+          "kind": "function"
+        },
+        {
+          "name": "describeSchedule",
+          "line": 323,
+          "kind": "function"
+        },
+        {
+          "name": "parseTimesOfDay",
+          "line": 348,
+          "kind": "function"
+        },
+        {
+          "name": "parseVariants",
+          "line": 361,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-4D80299CD0EC",
+        "SERVICE-64B60713F87D",
+        "SERVICE-1A3424F90AE3",
+        "SERVICE-986953053DB1",
+        "SERVICE-D25336ECA311",
+        "SERVICE-0A2141A9BE5C",
+        "SERVICE-BE67EEFF16E7",
+        "SERVICE-F0319A141859",
+        "SERVICE-44D9B760C61F",
+        "SERVICE-6A823A013264",
+        "SERVICE-0550051EA439"
+      ]
+    },
+    {
+      "path": "lib/meals/planner.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "fb7fac74ebfcbf97db56006b6ee2f3c22ae0999f96bbd899afa80a4916681722",
+      "sourceSha256": "8af7c2da91b3f76a47ee215097312e32959a5c31398dc748a5988151bcfb99d5",
+      "bytes": 8901,
+      "baselineExportedSymbols": [
+        {
+          "name": "PLAN_MEAL_TYPES",
+          "line": 10,
+          "kind": "value"
+        },
+        {
+          "name": "Candidate",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "MealRow",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "RecipeRow",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "buildCandidates",
+          "line": 25,
+          "kind": "function"
+        },
+        {
+          "name": "PlannerRequest",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "buildPlannerSystem",
+          "line": 59,
+          "kind": "function"
+        },
+        {
+          "name": "buildPlannerUser",
+          "line": 73,
+          "kind": "function"
+        },
+        {
+          "name": "weekDates",
+          "line": 100,
+          "kind": "function"
+        },
+        {
+          "name": "PlanAssignment",
+          "line": 109,
+          "kind": "type"
+        },
+        {
+          "name": "parsePlan",
+          "line": 122,
+          "kind": "function"
+        },
+        {
+          "name": "refParts",
+          "line": 152,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "PLAN_MEAL_TYPES",
+          "line": 11,
+          "kind": "value"
+        },
+        {
+          "name": "Candidate",
+          "line": 13,
+          "kind": "type"
+        },
+        {
+          "name": "MealRow",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "RecipeRow",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "buildCandidates",
+          "line": 26,
+          "kind": "function"
+        },
+        {
+          "name": "PlannerRequest",
+          "line": 43,
+          "kind": "type"
+        },
+        {
+          "name": "buildPlannerSystem",
+          "line": 60,
+          "kind": "function"
+        },
+        {
+          "name": "buildPlannerUser",
+          "line": 75,
+          "kind": "function"
+        },
+        {
+          "name": "weekDates",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "PlanAssignment",
+          "line": 106,
+          "kind": "type"
+        },
+        {
+          "name": "parsePlan",
+          "line": 120,
+          "kind": "function"
+        },
+        {
+          "name": "refParts",
+          "line": 169,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-D579D6B55FB7"
+      ]
+    },
+    {
+      "path": "lib/meals/substitutions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ba22ea0eb78522daa48bb592e1165e2ef1ee5a91baa0bcd8ef5eef01bfa7a514",
+      "sourceSha256": "cfedfcaba4c1328050cc841f4b5ba88a324ff5fbc81fd3f821e8c1a461bf902a",
+      "bytes": 24998,
+      "baselineExportedSymbols": [
+        {
+          "name": "SubstitutionKind",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionReasonKey",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionItem",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "Substitution",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionConstraints",
+          "line": 58,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionResult",
+          "line": 67,
+          "kind": "type"
+        },
+        {
+          "name": "normalize",
+          "line": 79,
+          "kind": "function"
+        },
+        {
+          "name": "parseConstraintText",
+          "line": 100,
+          "kind": "function"
+        },
+        {
+          "name": "applySubstitutions",
+          "line": 417,
+          "kind": "function"
+        },
+        {
+          "name": "FamilyFactRow",
+          "line": 520,
+          "kind": "type"
+        },
+        {
+          "name": "MedicalProfileRow",
+          "line": 527,
+          "kind": "type"
+        },
+        {
+          "name": "collectDietaryConstraints",
+          "line": 539,
+          "kind": "function"
+        },
+        {
+          "name": "describeSubstitutions",
+          "line": 572,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SubstitutionKind",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionReasonKey",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionItem",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "Substitution",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionConstraints",
+          "line": 58,
+          "kind": "type"
+        },
+        {
+          "name": "SubstitutionResult",
+          "line": 67,
+          "kind": "type"
+        },
+        {
+          "name": "normalize",
+          "line": 79,
+          "kind": "function"
+        },
+        {
+          "name": "parseConstraintText",
+          "line": 100,
+          "kind": "function"
+        },
+        {
+          "name": "applySubstitutions",
+          "line": 417,
+          "kind": "function"
+        },
+        {
+          "name": "FamilyFactRow",
+          "line": 521,
+          "kind": "type"
+        },
+        {
+          "name": "MedicalProfileRow",
+          "line": 528,
+          "kind": "type"
+        },
+        {
+          "name": "collectDietaryConstraints",
+          "line": 540,
+          "kind": "function"
+        },
+        {
+          "name": "describeSubstitutions",
+          "line": 573,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-447C20B90B84"
+      ]
+    },
+    {
+      "path": "lib/meals/week.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0be9a41d635d011933ee7bab4eda939ad857decf04b689419d12725a72a2addd",
+      "bytes": 2009,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "mealWeekDays",
+          "line": 10,
+          "kind": "function"
+        },
+        {
+          "name": "mealWeek",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "formatMealDay",
+          "line": 33,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "mealWeekDays",
+          "line": 10,
+          "kind": "function"
+        },
+        {
+          "name": "mealWeek",
+          "line": 17,
+          "kind": "function"
+        },
+        {
+          "name": "formatMealDay",
+          "line": 33,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-5D5611F24464",
+        "SERVICE-D7DAEBC6B079",
+        "SERVICE-DB9313004CC5",
+        "SERVICE-D8142F4F9261"
+      ]
+    },
+    {
+      "path": "lib/services/groceries/index.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "411991327669509a8874e9920274e0876b32c5f2014e16c332c8ca346009e718",
+      "sourceSha256": "ae176ec511b4b0df3c25201e3fb01d36caaae01661025132133099013f691c23",
+      "bytes": 46092,
+      "baselineExportedSymbols": [
+        {
+          "name": "GroceryList",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "GroceryItem",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "DEFAULT_GROCERY_LIST_NAME",
+          "line": 41,
+          "kind": "value"
+        },
+        {
+          "name": "categorizeGroceryItem",
+          "line": 81,
+          "kind": "function"
+        },
+        {
+          "name": "normalizeName",
+          "line": 95,
+          "kind": "function"
+        },
+        {
+          "name": "ensureDefaultList",
+          "line": 99,
+          "kind": "function"
+        },
+        {
+          "name": "GroceryItemInput",
+          "line": 128,
+          "kind": "type"
+        },
+        {
+          "name": "addItems",
+          "line": 144,
+          "kind": "function"
+        },
+        {
+          "name": "listOpen",
+          "line": 211,
+          "kind": "function"
+        },
+        {
+          "name": "checkItem",
+          "line": 252,
+          "kind": "function"
+        },
+        {
+          "name": "removeItem",
+          "line": 277,
+          "kind": "function"
+        },
+        {
+          "name": "clearChecked",
+          "line": 307,
+          "kind": "function"
+        },
+        {
+          "name": "MealPlanGroceryInput",
+          "line": 338,
+          "kind": "type"
+        },
+        {
+          "name": "MealPlanGroceryResult",
+          "line": 345,
+          "kind": "type"
+        },
+        {
+          "name": "planGroceryNeeds",
+          "line": 370,
+          "kind": "function"
+        },
+        {
+          "name": "addFromMealPlan",
+          "line": 405,
+          "kind": "function"
+        },
+        {
+          "name": "PantryItem",
+          "line": 494,
+          "kind": "type"
+        },
+        {
+          "name": "pantryList",
+          "line": 500,
+          "kind": "function"
+        },
+        {
+          "name": "PantryAdjustInput",
+          "line": 530,
+          "kind": "type"
+        },
+        {
+          "name": "pantryAdjust",
+          "line": 551,
+          "kind": "function"
+        },
+        {
+          "name": "SavePantryItemInput",
+          "line": 673,
+          "kind": "type"
+        },
+        {
+          "name": "savePantryItem",
+          "line": 685,
+          "kind": "function"
+        },
+        {
+          "name": "removePantryItem",
+          "line": 755,
+          "kind": "function"
+        },
+        {
+          "name": "parsePurchasedQuantity",
+          "line": 791,
+          "kind": "function"
+        },
+        {
+          "name": "ShoppingTripResult",
+          "line": 822,
+          "kind": "type"
+        },
+        {
+          "name": "recordShoppingTrip",
+          "line": 866,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "GroceryList",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "GroceryItem",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "DEFAULT_GROCERY_LIST_NAME",
+          "line": 41,
+          "kind": "value"
+        },
+        {
+          "name": "categorizeGroceryItem",
+          "line": 81,
+          "kind": "function"
+        },
+        {
+          "name": "normalizeName",
+          "line": 95,
+          "kind": "function"
+        },
+        {
+          "name": "ensureDefaultList",
+          "line": 99,
+          "kind": "function"
+        },
+        {
+          "name": "GroceryItemInput",
+          "line": 128,
+          "kind": "type"
+        },
+        {
+          "name": "addItems",
+          "line": 154,
+          "kind": "function"
+        },
+        {
+          "name": "listOpen",
+          "line": 236,
+          "kind": "function"
+        },
+        {
+          "name": "checkItem",
+          "line": 277,
+          "kind": "function"
+        },
+        {
+          "name": "removeItem",
+          "line": 302,
+          "kind": "function"
+        },
+        {
+          "name": "clearChecked",
+          "line": 332,
+          "kind": "function"
+        },
+        {
+          "name": "MealPlanGroceryInput",
+          "line": 363,
+          "kind": "type"
+        },
+        {
+          "name": "MealPlanGroceryResult",
+          "line": 372,
+          "kind": "type"
+        },
+        {
+          "name": "planGroceryNeeds",
+          "line": 397,
+          "kind": "function"
+        },
+        {
+          "name": "addFromMealPlan",
+          "line": 431,
+          "kind": "function"
+        },
+        {
+          "name": "PantryItem",
+          "line": 531,
+          "kind": "type"
+        },
+        {
+          "name": "pantryList",
+          "line": 537,
+          "kind": "function"
+        },
+        {
+          "name": "PantryAdjustInput",
+          "line": 567,
+          "kind": "type"
+        },
+        {
+          "name": "pantryAdjust",
+          "line": 588,
+          "kind": "function"
+        },
+        {
+          "name": "SavePantryItemInput",
+          "line": 710,
+          "kind": "type"
+        },
+        {
+          "name": "savePantryItem",
+          "line": 722,
+          "kind": "function"
+        },
+        {
+          "name": "removePantryItem",
+          "line": 792,
+          "kind": "function"
+        },
+        {
+          "name": "parsePurchasedQuantity",
+          "line": 828,
+          "kind": "function"
+        },
+        {
+          "name": "ShoppingTripResult",
+          "line": 859,
+          "kind": "type"
+        },
+        {
+          "name": "recordShoppingTrip",
+          "line": 903,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SERVICE-F7692B5F7C68",
+        "SERVICE-47C62A403E4D",
+        "SERVICE-293A44353CC1",
+        "SERVICE-6C83866322A6",
+        "SERVICE-06EB88C10837",
+        "SERVICE-6D13B66C155B",
+        "SERVICE-26794639F9E5",
+        "SERVICE-30858ACEBF26",
+        "SERVICE-34E12D125FCD",
+        "SERVICE-49667BA82AEC",
+        "SERVICE-F1BC0D78A317",
+        "SERVICE-F61ADDB9C54C",
+        "SERVICE-4CF235360C8E",
+        "SERVICE-F16703E9690C",
+        "SERVICE-E906AD9D3195",
+        "SERVICE-2D912C6AAFA1",
+        "FLOW-121DB83BE141",
+        "MEAL-001"
+      ]
+    },
+    {
+      "path": "lib/services/meals/index.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ab927b5d524a32697e98305b87971214dafab6bdf32244d1786393df94048a08",
+      "sourceSha256": "e5b421fd7755bc86a894fa325610cdaedcada64efb159af38b7c3e2b2028b4b9",
+      "bytes": 38015,
+      "baselineExportedSymbols": [
+        {
+          "name": "Meal",
+          "line": 39,
+          "kind": "type"
+        },
+        {
+          "name": "MealPlanRow",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "Recipe",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "MEAL_TYPES",
+          "line": 43,
+          "kind": "value"
+        },
+        {
+          "name": "Ingredient",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "isDayKey",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "weekDayKeys",
+          "line": 68,
+          "kind": "function"
+        },
+        {
+          "name": "normalizeDishName",
+          "line": 74,
+          "kind": "function"
+        },
+        {
+          "name": "parseIngredients",
+          "line": 83,
+          "kind": "function"
+        },
+        {
+          "name": "ensureMealByName",
+          "line": 117,
+          "kind": "function"
+        },
+        {
+          "name": "PlanSlot",
+          "line": 162,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPlan",
+          "line": 171,
+          "kind": "type"
+        },
+        {
+          "name": "getMealPlan",
+          "line": 174,
+          "kind": "function"
+        },
+        {
+          "name": "PlanEntryInput",
+          "line": 224,
+          "kind": "type"
+        },
+        {
+          "name": "PlanWeekResult",
+          "line": 307,
+          "kind": "type"
+        },
+        {
+          "name": "planWeek",
+          "line": 325,
+          "kind": "function"
+        },
+        {
+          "name": "setSlot",
+          "line": 431,
+          "kind": "function"
+        },
+        {
+          "name": "removeSlot",
+          "line": 445,
+          "kind": "function"
+        },
+        {
+          "name": "RecipeSummary",
+          "line": 473,
+          "kind": "type"
+        },
+        {
+          "name": "listRecipes",
+          "line": 507,
+          "kind": "function"
+        },
+        {
+          "name": "CreateRecipeInput",
+          "line": 531,
+          "kind": "type"
+        },
+        {
+          "name": "createRecipe",
+          "line": 549,
+          "kind": "function"
+        },
+        {
+          "name": "MemberFoodProfile",
+          "line": 615,
+          "kind": "type"
+        },
+        {
+          "name": "FoodProfile",
+          "line": 624,
+          "kind": "type"
+        },
+        {
+          "name": "classifyFoodFact",
+          "line": 635,
+          "kind": "function"
+        },
+        {
+          "name": "foodProfile",
+          "line": 651,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "Meal",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "MealPlanRow",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "Recipe",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "MEAL_TYPES",
+          "line": 44,
+          "kind": "value"
+        },
+        {
+          "name": "Ingredient",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "isDayKey",
+          "line": 58,
+          "kind": "function"
+        },
+        {
+          "name": "weekDayKeys",
+          "line": 69,
+          "kind": "function"
+        },
+        {
+          "name": "normalizeDishName",
+          "line": 75,
+          "kind": "function"
+        },
+        {
+          "name": "parseIngredients",
+          "line": 84,
+          "kind": "function"
+        },
+        {
+          "name": "MealLibraryInput",
+          "line": 109,
+          "kind": "type"
+        },
+        {
+          "name": "ensureMealByName",
+          "line": 148,
+          "kind": "function"
+        },
+        {
+          "name": "PlanSlot",
+          "line": 206,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPlan",
+          "line": 215,
+          "kind": "type"
+        },
+        {
+          "name": "getMealPlan",
+          "line": 218,
+          "kind": "function"
+        },
+        {
+          "name": "PlanEntryInput",
+          "line": 268,
+          "kind": "type"
+        },
+        {
+          "name": "PlanWeekResult",
+          "line": 373,
+          "kind": "type"
+        },
+        {
+          "name": "planWeek",
+          "line": 386,
+          "kind": "function"
+        },
+        {
+          "name": "setSlot",
+          "line": 535,
+          "kind": "function"
+        },
+        {
+          "name": "removeSlot",
+          "line": 549,
+          "kind": "function"
+        },
+        {
+          "name": "RecipeSummary",
+          "line": 577,
+          "kind": "type"
+        },
+        {
+          "name": "listRecipes",
+          "line": 611,
+          "kind": "function"
+        },
+        {
+          "name": "CreateRecipeInput",
+          "line": 635,
+          "kind": "type"
+        },
+        {
+          "name": "createRecipe",
+          "line": 653,
+          "kind": "function"
+        },
+        {
+          "name": "MemberFoodProfile",
+          "line": 719,
+          "kind": "type"
+        },
+        {
+          "name": "FoodProfile",
+          "line": 728,
+          "kind": "type"
+        },
+        {
+          "name": "classifyFoodFact",
+          "line": 739,
+          "kind": "function"
+        },
+        {
+          "name": "foodProfile",
+          "line": 755,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SERVICE-7A5B3EBA9C04",
+        "SERVICE-1AFEDF06D1D4",
+        "SERVICE-D8083971D5A1",
+        "SERVICE-954B825860CD",
+        "SERVICE-BB9CD0546B91",
+        "SERVICE-D5A829CC65B0",
+        "SERVICE-37FEFA156D44",
+        "SERVICE-78FB7849C3BC",
+        "SERVICE-38A29C9F4697",
+        "SERVICE-319A7FA7F843",
+        "SERVICE-81A0E147407C",
+        "SERVICE-B4CA4E943E72",
+        "SERVICE-C124AD838D69",
+        "FLOW-F146172C0036",
+        "MEAL-001"
+      ]
+    },
+    {
+      "path": "scripts/cron-dispatch.mjs",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "6f8d9ebae5a62f8ea219ff8f4cdef8ae29459d236777703dab44e2aa18de41a3",
+      "sourceSha256": "23b89911a6a061123b4449c486f9dde22007152cd213e16227dffb45d88c57fd",
+      "bytes": 9873,
+      "baselineExportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 62,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 82,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 94,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 106,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SCHEDULES",
+          "line": 24,
+          "kind": "value"
+        },
+        {
+          "name": "TICK_MINUTES",
+          "line": 66,
+          "kind": "value"
+        },
+        {
+          "name": "parseCron",
+          "line": 86,
+          "kind": "function"
+        },
+        {
+          "name": "matchesAt",
+          "line": 98,
+          "kind": "function"
+        },
+        {
+          "name": "dueRoutes",
+          "line": 110,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "CRON_BASE_URL",
+        "CRON_SECRET"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DEPLOY-1ED5966CA454",
+        "JOB-001",
+        "SOCIAL-003"
+      ]
+    },
+    {
+      "path": "supabase/migrations/0282_marketing_recurring_ads.sql",
+      "kind": "support",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "5a8c25dfc5827065f202aeeceafe0534594d50152a0fee8e9af7740d795db91b",
+      "bytes": 6451,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DB-TBL-DD6A3A7E1AC0",
+        "DB-TBL-B85388536AE7",
+        "SUPPORT-828B29F5735B"
+      ]
+    },
+    {
+      "path": "tests/ai-meal-plan-persistence.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "71da5bc4470fa3455414739efd7b5b83baffb01ef216b76bf20159f795a5c82f",
+      "sourceSha256": "c282e27e18b4325af6f5d38e7a9162bc625a2fcfd30d2539ce89483fdc5c2dbd",
+      "bytes": 8786,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C0EBD2F22940"
+      ]
+    },
+    {
+      "path": "tests/cron-dispatch.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "387791192436ea2cb799f58636471b9c6e38fff3deb9b998b947d9a195e0ad03",
+      "sourceSha256": "30bb6122cb39ade2060d7ff42dd87d591c732aae2613948b5d561c7461df4788",
+      "bytes": 3330,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A0B42E783221"
+      ]
+    },
+    {
+      "path": "tests/e2e/weekly-meal-durable.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "a12fdb807efbe6ff556abc781e873b19ebdb4d93e0b36de8d322623cf9b06723",
+      "bytes": 12775,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "addedEnvironmentNames": [
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-4BA5A809C3E3"
+      ]
+    },
+    {
+      "path": "tests/e2e/weekly-meal-planner.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "6381a75d76a98bb063a3bf370c710e0a9aef8996c66f4197b44b8dc419c05e88",
+      "bytes": 43050,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-E8F3F434DAC5"
+      ]
+    },
+    {
+      "path": "tests/meal-plan-write-path.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "96b7a37e534659b978a363621180d20f5bd94b18008d978de57aea898b24f652",
+      "sourceSha256": "69207ddbeadb3e5eae1a4a22c05888defc1c62708db155fd771244278119b960",
+      "bytes": 8216,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-371DE2A0AD09"
+      ]
+    },
+    {
+      "path": "tests/meals-substitutions.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "68fa2194682f78b3ad78d477dcf31af9faf371f808022edcf23f785863460de4",
+      "sourceSha256": "b6ca303db0f386272b4ba6ea57bdb084ef12872292400b596d8f0349edf5f7fa",
+      "bytes": 13147,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-48EA5F0F7B81"
+      ]
+    },
+    {
+      "path": "tests/migration-version-safety.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "55cfb4284dd90501e95e827cefbc22a933fa94cd0394eb7b4fd8e3a651b3f657",
+      "sourceSha256": "17712ad0d22e692ac450e0eac0b1f25be50cd1087c9a32436c5a7a3183b2da29",
+      "bytes": 2571,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-E735B7554AC0"
+      ]
+    },
+    {
+      "path": "tests/recurring-ads-runner.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f24316e9613994ce11ac25b44fc046cbcf3ed8130534643d2952c81b6e2453bc",
+      "bytes": 9036,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-72F970F8CE86"
+      ]
+    },
+    {
+      "path": "tests/recurring-ads-schedule.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "aa36b42b47f0f950296a0d3f448754520accbef87f0ddc7c6463d9fbed5b1bf7",
+      "bytes": 13329,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-BBB58B510F38"
+      ]
+    },
+    {
+      "path": "tests/server-actions-contract.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "de9967bd1ed3cd7657a5083c7cd6c38f2f3fc7161c1a3f15d813c0fc9a9f8717",
+      "bytes": 3012,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-E715E678C1D9"
+      ]
+    },
+    {
+      "path": "tests/service-groceries.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "447d24b82cfb9445adc3175e6d52e99e0dc10ab4e55c3f6abf38bed4def6e455",
+      "sourceSha256": "dcf022e8217abb7e9c6d8a5bd6adb58eac780ff39aea85aa9bc969763c1b5bc1",
+      "bytes": 18388,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A459AD87C90F"
+      ]
+    },
+    {
+      "path": "tests/service-layer-forks.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1ad7f882ac80bccc6507b20f7296482c905215ceb93db330092ef7e6bd503242",
+      "sourceSha256": "9867f9b25e894b218d4502b09ec667190611ad72bf77513fd7a893b0557462ae",
+      "bytes": 6982,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-E79CB64144F7"
+      ]
+    },
+    {
+      "path": "tests/service-meals.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1ab2edd661498d788997cb49f70b28ea45f4b8f22b09f9d72a16effa7cac0cc4",
+      "sourceSha256": "6f52ff8bebd9c56619fd9e1c805fc5d29139497eecdcc7e56aab0c39ec06acdb",
+      "bytes": 22405,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-01869BE8B466"
+      ]
+    },
+    {
+      "path": "tests/shopping-handoff-write-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "237acca981c6be75405b231bfcc082015a87bba19f6cffc4289b51bc2703e92e",
+      "sourceSha256": "eb3c4ce3b46bcdba7abaab659963a030b52e54a413622f554341ac5fef2904c1",
+      "bytes": 22061,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-300D5D04D871"
+      ]
+    },
+    {
+      "path": "tests/tool-meals-memory-messages.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "12dfe0274fd2127bdf592b5797b81576176fb3536fab6bc3dba3a39f4bb67911",
+      "sourceSha256": "c0974360170ef0668d17c1f6bb145246c78f95a8efbf3aad91974d9d1817f655",
+      "bytes": 22554,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-77108673B6B4"
+      ]
+    },
+    {
+      "path": "tests/weekly-meal-dates.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "8fcdde3aec766e522266398405a8fd6eb483d28e02a9bf71bfb9cd758acb82ae",
+      "bytes": 2463,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-896D6DD7A407"
+      ]
+    },
+    {
+      "path": "vercel.json",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "72a2d6f9690fad11b4fb80d7e5439068fa279d235ea086a2d788a558f42887ad",
+      "sourceSha256": "836d6c6a749dc84a0073a2be39edce9699fffba10030d6f8cda3daf59df806ca",
+      "bytes": 2173,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A3265310F552",
+        "OPS-INT-022"
+      ]
+    }
+  ]
+}

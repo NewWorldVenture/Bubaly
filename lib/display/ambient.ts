@@ -4,6 +4,7 @@
 // temperature formatting, and display-settings normalization. No React, no
 // Supabase, no `Date.now()` inside the pure fns (callers pass `now`). Unit-tested
 // in tests/display-ambient.test.ts.
+import { displayDayKey, displayTimezone } from '@/lib/display/calendar';
 
 // ── Day parts ────────────────────────────────────────────────────────────────
 export type DayPart = 'dawn' | 'morning' | 'afternoon' | 'evening' | 'night';
@@ -18,8 +19,11 @@ export function dayPartForHour(hour: number): DayPart {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
-export function dayPart(now: Date): DayPart {
-  return dayPartForHour(now.getHours());
+export function dayPart(now: Date, timezone?: string): DayPart {
+  const hour = timezone && Number.isFinite(now.getTime())
+    ? Number(new Intl.DateTimeFormat('en-US', { timeZone: displayTimezone(timezone).timezone, hour: '2-digit', hourCycle: 'h23' }).format(now))
+    : now.getHours();
+  return dayPartForHour(hour);
 }
 
 const GREETINGS: Record<DayPart, string> = {
@@ -58,9 +62,9 @@ export const THEME_OPTIONS = ['auto', 'midnight', 'aurora', 'sunset', 'forest'] 
 export type ThemeChoice = (typeof THEME_OPTIONS)[number];
 
 /** Resolve the background theme from the chosen theme + the current time. */
-export function ambientTheme(theme: ThemeChoice, now: Date): AmbientTheme {
+export function ambientTheme(theme: ThemeChoice, now: Date, timezone?: string): AmbientTheme {
   if (theme !== 'auto' && THEMES[theme]) return THEMES[theme];
-  return THEMES[dayPart(now)];
+  return THEMES[dayPart(now, timezone)];
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -115,10 +119,17 @@ export function normalizeSettings(raw: unknown): DisplaySettings {
 }
 
 // ── Clock + temperature formatting ───────────────────────────────────────────
-export function formatClock(now: Date, opts: { clock24: boolean; seconds: boolean }): { time: string; suffix: string } {
+export function formatClock(now: Date, opts: { clock24: boolean; seconds: boolean; timezone?: string }): { time: string; suffix: string } {
+  if (!Number.isFinite(now.getTime())) return { time: '—', suffix: '' };
   let h = now.getHours();
-  const m = now.getMinutes().toString().padStart(2, '0');
-  const s = now.getSeconds().toString().padStart(2, '0');
+  let m = now.getMinutes().toString().padStart(2, '0');
+  let s = now.getSeconds().toString().padStart(2, '0');
+  if (opts.timezone) {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: displayTimezone(opts.timezone).timezone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(now);
+    h = Number(parts.find(part => part.type === 'hour')!.value);
+    m = parts.find(part => part.type === 'minute')!.value;
+    s = parts.find(part => part.type === 'second')!.value;
+  }
   if (opts.clock24) {
     const time = `${h.toString().padStart(2, '0')}:${m}${opts.seconds ? `:${s}` : ''}`;
     return { time, suffix: '' };
@@ -142,19 +153,18 @@ export function tempFromFahrenheit(fahrenheit: number, unit: TempUnit): string {
 }
 
 // ── Now & Next ───────────────────────────────────────────────────────────────
-export type TimedEvent = { id: string; title: string; starts_at: string; all_day?: boolean; location?: string | null; assignee_id?: string | null };
+export type TimedEvent = { id: string; title: string; starts_at: string; ends_at?: string | null; all_day?: boolean; location?: string | null; assignee_id?: string | null };
 
-/** Resolve what's happening now and what's up next from today's events.
- *  `current` = the most recent timed event that started within `windowMin`
- *  minutes; `next` = the soonest event still to come. */
+/** Timed occupancy is [start,end). Unknown durations never claim current;
+ * all-day dates cannot become timed current/next events. */
 export function nowAndNext<T extends TimedEvent>(
   events: readonly T[],
   now: Date,
-  windowMin = 90,
 ): { current: T | null; next: T | null } {
   const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return { current: null, next: null };
   const timed = [...events]
-    .filter((e) => Number.isFinite(new Date(e.starts_at).getTime()))
+    .filter((e) => !e.all_day && Number.isFinite(new Date(e.starts_at).getTime()))
     .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
 
   let current: T | null = null;
@@ -162,7 +172,8 @@ export function nowAndNext<T extends TimedEvent>(
   for (const e of timed) {
     const t = new Date(e.starts_at).getTime();
     if (t <= nowMs) {
-      if (!e.all_day && nowMs - t <= windowMin * 60_000) current = e;
+      const end = e.ends_at ? Date.parse(e.ends_at) : NaN;
+      if (Number.isFinite(end) && end > t && nowMs < end) current = e;
     } else if (!next) {
       next = e;
     }
@@ -171,17 +182,18 @@ export function nowAndNext<T extends TimedEvent>(
 }
 
 /** Human countdown/time label for an event relative to `now`. */
-export function countdownLabel(startsAt: string, now: Date): string {
+export function countdownLabel(startsAt: string, now: Date, timezone?: string): string {
   const t = new Date(startsAt).getTime();
-  if (!Number.isFinite(t)) return '';
+  if (!Number.isFinite(t) || !Number.isFinite(now.getTime())) return '';
   const diffMs = t - now.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin <= 0 && diffMin > -90) return 'Now';
+  const diffMin = Math.ceil(diffMs / 60_000);
+  if (diffMs === 0) return 'Now';
   if (diffMin > 0 && diffMin < 60) return `in ${diffMin} min`;
   const d = new Date(startsAt);
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? time : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
+  const zone = timezone ? displayTimezone(timezone).timezone : undefined;
+  const sameDay = zone ? displayDayKey(d, zone) === displayDayKey(now, zone) : d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: zone });
+  return sameDay ? time : `${d.toLocaleDateString('en-US', { weekday: 'short', timeZone: zone })} ${time}`;
 }
 
 // ── Kitchen timers ───────────────────────────────────────────────────────────
@@ -217,15 +229,17 @@ export type HintFacts = {
   choresDue?: number;
   birthdays?: { name: string; date: string }[];
   remindersDue?: number;
+  /** False when calendar/reminder reads are unavailable; never infer free time. */
+  availabilityKnown?: boolean;
 };
 
 /** Build the rotating bottom-bar hints from today's data. Pure + deterministic:
  *  facts in, ordered strings out (most actionable first). Empty facts → helpful
  *  evergreen tips so the bar never goes blank. */
-export function buildHints(facts: HintFacts, now: Date): string[] {
+export function buildHints(facts: HintFacts, now: Date, timezone?: string): string[] {
   const hints: string[] = [];
   if (facts.nextEvent) {
-    hints.push(`📅 Next: ${facts.nextEvent.title} · ${countdownLabel(facts.nextEvent.startsAt, now)}`);
+    hints.push(`📅 Next: ${facts.nextEvent.title} · ${countdownLabel(facts.nextEvent.startsAt, now, timezone)}`);
   }
   if (facts.dinner) hints.push(`🍽️ Dinner tonight: ${facts.dinner}`);
   if (facts.choresDue && facts.choresDue > 0) {
@@ -239,7 +253,8 @@ export function buildHints(facts: HintFacts, now: Date): string[] {
     hints.push(`🔔 ${facts.remindersDue} ${facts.remindersDue === 1 ? 'reminder' : 'reminders'} coming up`);
   }
   if (hints.length === 0) {
-    hints.push('✨ All clear — enjoy the quiet', '⏱️ Tap Timers to start a kitchen timer', '✏️ Tap the pencil to customize this display');
+    if (facts.availabilityKnown !== false) hints.push('✨ All clear — enjoy the quiet');
+    hints.push('⏱️ Tap Timers to start a kitchen timer', '✏️ Tap the pencil to customize this display');
   }
   return hints;
 }

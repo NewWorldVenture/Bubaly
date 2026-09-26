@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -586,10 +587,22 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    // This field is FREE TEXT, and what it writes is the zone every wall-clock
+    // answer this family gets is computed from. `Intl` throws on an unknown
+    // zone and every call site catches and degrades to UTC by design — so
+    // "CST", "Central" or a typo like "Amercia/Chicago" saved silently and left
+    // the family on Greenwich time: routines on the wrong local day, "today"
+    // wrong, the medication reminder's day bounds wrong. The form said
+    // "Family profile updated" either way.
+    const tz = timezone.trim() || 'UTC';
+    if (!isValidTimezone(tz)) {
+      toastError(t('familyModule.unknownTimeZone'));
+      return;
+    }
     setSaving(true);
     const sb = createClient();
     const { data, error: err } = await sb.from('families')
-      .update({ name: name.trim(), address: address.trim() || null, timezone: timezone.trim() || 'UTC', cover_url: coverUrl.trim() || null })
+      .update({ name: name.trim(), address: address.trim() || null, timezone: tz, cover_url: coverUrl.trim() || null })
       .eq('id', family.id).select('*').maybeSingle();
     setSaving(false);
     if (err || !data) { toastError(err ? describeDbError(err) : 'Could not save'); return; }

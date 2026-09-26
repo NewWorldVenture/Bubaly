@@ -41,12 +41,12 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({ from: (table: string) => builder(table) }),
 }));
 
-// Only getAllPosts is replaced. isSyntheticBlogSeedSlug stays REAL, because it
+// Only the blog reference read is replaced. isSyntheticBlogSeedSlug stays REAL, because it
 // is the thing under test here: the sitemap must reject exactly what the blog
 // renderer rejects, and a stubbed predicate would prove nothing about that.
 vi.mock('@/lib/blog/posts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/blog/posts')>();
-  return { ...actual, getAllPosts: async () => [] };
+  return { ...actual, getAllPostRefs: async () => [] };
 });
 
 vi.mock('@/lib/network/benchmarks-server', () => ({

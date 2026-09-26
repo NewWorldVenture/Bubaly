@@ -43,6 +43,8 @@ export default async function CaptureLayout({ children }: { children: React.Reac
 
   return (
     <AppProvider
+      membershipId={ctx.active.member.id}
+      membershipUpdatedAt={ctx.active.member.updated_at}
       value={{
         userId: ctx.user.id,
         userEmail: ctx.user.email,

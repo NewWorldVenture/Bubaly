@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
@@ -104,8 +104,14 @@ function translationKeys(modules: Set<string>): Map<string, string> {
  */
 const files = (patterns: string[]): string[] =>
   patterns.flatMap((p) => {
+    // `git ls-files` is spawned WITHOUT a shell, so the glob reaches git as a
+    // pathspec rather than being expanded by sh. Git's default pathspec lets
+    // `*` cross a `/`, which means `.../**/page.tsx` still requires the extra
+    // directory separator and never matches a page at the surface's own root —
+    // so each pattern is also tried with `/**/` collapsed to `/`.
     const both = [p, p.replace('/**/', '/')];
-    const found = both.flatMap((g) => execSync(`git ls-files '${g}'`, { encoding: 'utf8' }).split('\n'))
+    const found = both
+      .flatMap((g) => execFileSync('git', ['ls-files', '--', g], { encoding: 'utf8' }).split(/\r?\n/))
       .filter(Boolean);
     expect(found.length, `no file matches ${p} — the pattern has gone stale`).toBeGreaterThan(0);
     return [...new Set(found)];

@@ -75,8 +75,17 @@ describe('a delegation names two members of this family', () => {
       ACTIONS.indexOf('// ─── Approval decisions'),
     );
     expect(body.length).toBeGreaterThan(200);
-    expect(body).toMatch(/\.select\('id'\)\.maybeSingle\(\)/);
-    expect(body, 'a no-op revoke must not report success').toMatch(/if \(!revoked\) return \{ ok: false/);
+    // Two spellings answer the same question, and this asks for the answer
+    // rather than the spelling: read the row back, and refuse to report success
+    // when none came. `changedNothing(rows)` is the same predicate applied
+    // across all six write paths on this surface; the helper itself is pinned by
+    // tests/a-revoke-that-revoked-nothing.test.ts.
+    expect(body, 'the revoke must be scoped to the caller\'s own family')
+      .toMatch(/\.eq\('family_id', ctx\.active\.familyId\)/);
+    expect(body, 'the revoke must read back the row it claims to have revoked')
+      .toMatch(/\.select\('id'\)/);
+    expect(body, 'a no-op revoke must not report success')
+      .toMatch(/if \((?:!revoked|changedNothing\(rows\))\) return \{ ok: false/);
   });
 
   it('the evaluator still reads to_member_id family-scoped, and never from_member_id', () => {

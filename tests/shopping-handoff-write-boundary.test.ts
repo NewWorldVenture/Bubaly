@@ -417,6 +417,18 @@ describe('Add this week to the list', () => {
     });
   });
 
+  it('forwards the weekly planner pantry opt-out while still applying family allergies', async () => {
+    db.seed('pantry_items', [
+      { id: 'p-1', family_id: FAMILY, name: 'brown rice', quantity: 0.1 },
+      { id: 'p-2', family_id: FAMILY, name: 'Apples', quantity: 1 },
+    ]);
+    db.seed('medical_profiles', [{ family_id: FAMILY, allergies: 'Peanuts' }]);
+    const result = await addMealPlanToGroceryListAction({ from: '2026-09-08', to: '2026-09-08', listId: LIST, usePantry: false });
+    expect(result).toMatchObject({ ok: true, inPantry: [], added: 3 });
+    expect(itemsOn().map((row) => row.name)).toEqual(expect.arrayContaining(['jasmine rice', 'Apples', 'sunflower seed butter']));
+    if (result.ok) expect(result.substitutions.every((item) => item.kind !== 'pantry')).toBe(true);
+  });
+
   it('FAILS CLOSED when the allergy read errors, rather than shopping blind', async () => {
     // `family_allergies()` RAISES for a caller who is not a member of the family
     // rather than answering with an empty list, precisely so this guard has

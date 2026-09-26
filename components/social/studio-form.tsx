@@ -1,6 +1,7 @@
 'use client';
 
-import { useId, useMemo, useState, useTransition } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Sparkles, Save, CalendarClock, Send, Loader2, AlertTriangle, CheckCircle2,
@@ -15,10 +16,11 @@ import { PlatformDot } from './platform';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { resolveScheduleTime, scheduleTimezone } from '@/lib/social/schedule-time';
 
 type AccountLite = { id: string; platform: SocialPlatform; display_name: string | null; handle: string | null; status: string };
 
-export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
+export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLite[]; defaultTimezone?: string }) {
   const tr = useTranslations();
   const router = useRouter();
   const [title, setTitle] = useState('');
@@ -29,15 +31,39 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
   const titleFieldId = `${uid}title`;
   const bodyFieldId = `${uid}body`;
   const linkFieldId = `${uid}link`;
-  const scheduleFieldId = `${uid}schedule`;
   const [body, setBody] = useState('');
   const [link, setLink] = useState('');
   const [kind, setKind] = useState<PostKind>('text');
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatform[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [scheduledFor, setScheduledFor] = useState('');
-  const [pending, startTransition] = useTransition();
+  const [timezone, setTimezone] = useState(defaultTimezone ?? 'UTC');
+  const scheduleTimeId = useId();
+  const scheduleZoneId = useId();
+  useEffect(() => {
+    if (!defaultTimezone) setTimezone(scheduleTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone) ?? 'UTC');
+  }, [defaultTimezone]);
+  const scheduleTime = useMemo(() => resolveScheduleTime(scheduledFor, timezone), [scheduledFor, timezone]);
+  const [pending, setPending] = useState(false);
+  const submission = useRef<'idle' | 'pending' | 'review'>('idle');
   const [result, setResult] = useState<CreatePostResult | null>(null);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const locked = pending || Boolean(result?.postId) || unconfirmed;
+  const draftKey = JSON.stringify([title, body, link, kind, selectedPlatforms, selectedAccounts, scheduledFor, timezone, accounts]);
+  const draftIntent = useMemo(() => ({ key: draftKey }), [draftKey]);
+  const lifetime = useRef({ mounted: false, intent: draftIntent });
+  useLayoutEffect(() => {
+    const current = lifetime.current;
+    current.mounted = true;
+    current.intent = draftIntent;
+    return () => { current.mounted = false; };
+  }, [draftIntent]);
+  function isCurrentDraft() {
+    return lifetime.current.mounted && lifetime.current.intent === draftIntent;
+  }
+  function editDraft(change: () => void) {
+    if (isCurrentDraft() && submission.current === 'idle') change();
+  }
 
   // AI panel
   const [aiKind, setAiKind] = useState<AiGenerationKind>('caption');
@@ -49,9 +75,9 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
   const [aiError, setAiError] = useState('');
 
   const togglePlatform = (p: SocialPlatform) =>
-    setSelectedPlatforms((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
+    editDraft(() => setSelectedPlatforms((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p])));
   const toggleAccount = (id: string) =>
-    setSelectedAccounts((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    editDraft(() => setSelectedAccounts((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])));
 
   const issues = useMemo(
     () =>
@@ -88,7 +114,18 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
     }
   }
 
-  function submit(intent: 'draft' | 'schedule' | 'publish') {
+  async function submit(intent: 'draft' | 'schedule' | 'publish') {
+    // A second create uses a new post ID and cannot share the server's existing
+    // publish claim. Keep this guard synchronous, including queued callbacks.
+    const isCurrent = () => lifetime.current.mounted && lifetime.current.intent === draftIntent;
+    if (!isCurrent() || submission.current !== 'idle') return;
+    const resolvedTime = intent === 'schedule' ? resolveScheduleTime(scheduledFor, timezone) : null;
+    if (resolvedTime && !resolvedTime.ok) {
+      setResult({ ok: false, error: tr(resolvedTime.key) });
+      return;
+    }
+    submission.current = 'pending';
+    setPending(true);
     setResult(null);
     const fd = new FormData();
     fd.set('intent', intent);
@@ -96,18 +133,37 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
     fd.set('body', body);
     fd.set('link', link);
     fd.set('kind', kind);
-    fd.set('scheduled_for', scheduledFor);
+    fd.set('scheduled_for', resolvedTime?.ok ? resolvedTime.scheduledFor : '');
+    fd.set('scheduled_local', intent === 'schedule' ? scheduledFor : '');
+    fd.set('timezone', resolvedTime?.ok ? resolvedTime.timezone : timezone);
     selectedPlatforms.forEach((p) => fd.append('platforms', p));
     selectedAccounts.forEach((a) => fd.append('account_ids', a));
-    startTransition(async () => {
+    try {
       const r = await createPostAction(fd);
+      if (!lifetime.current.mounted) return;
+      if (!isCurrent()) {
+        submission.current = 'review';
+        setUnconfirmed(true);
+        if (r.postId) setResult({ ...r, ok: false, error: tr('socialStudio.requestUnconfirmed') });
+        return;
+      }
+      submission.current = r.postId || r.reviewRequired ? 'review' : 'idle';
       setResult(r);
-      if (r.ok && intent === 'draft' && r.postId) router.push(`/dashboard/social/posts/${r.postId}`);
-    });
+      if (r.reviewRequired) setUnconfirmed(true);
+      if (r.ok && !r.reviewRequired && intent === 'draft' && r.postId) router.push(`/dashboard/social/posts/${r.postId}`);
+    } catch {
+      if (!lifetime.current.mounted) return;
+      // A lost action response may follow a durable create or provider send.
+      // Preserve the draft, but require review instead of creating it again.
+      submission.current = 'review';
+      setUnconfirmed(true);
+    } finally {
+      if (lifetime.current.mounted) setPending(false);
+    }
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <fieldset disabled={locked} className="grid gap-4 lg:grid-cols-3">
       {/* Editor */}
       <div className="space-y-4 lg:col-span-2">
         <Card>
@@ -115,7 +171,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           <input
             id={titleFieldId}
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => editDraft(() => setTitle(e.target.value))}
             placeholder={tr('studio.springBreakRecap')}
             className="mb-3 w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
@@ -125,7 +181,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
               <button
                 key={k}
                 type="button"
-                onClick={() => setKind(k)}
+                onClick={() => editDraft(() => setKind(k))}
                 className={`rounded-lg border px-2.5 py-1 text-xs font-medium capitalize transition ${
                   kind === k ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted hover:text-fg'
                 }`}
@@ -139,7 +195,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           <textarea
             id={bodyFieldId}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={(e) => editDraft(() => setBody(e.target.value))}
             rows={6}
             placeholder={tr('studio.writeYourPostUseHashtagsAnd')}
             className="w-full resize-y rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
@@ -148,7 +204,7 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           <input
             id={linkFieldId}
             value={link}
-            onChange={(e) => setLink(e.target.value)}
+            onChange={(e) => editDraft(() => setLink(e.target.value))}
             placeholder="https://…"
             className="w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
@@ -203,9 +259,10 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           <Card>
             {result.ok ? (
               <div className="space-y-2">
-                <p className="flex items-center gap-2 text-sm font-medium text-success">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {result.action === 'publish' ? 'Publish attempted' : result.action === 'schedule' ? 'Scheduled' : 'Draft saved'}
+                <p className={`flex items-center gap-2 text-sm font-medium ${result.outcome?.status === 'publishing' || result.schedulePhase === 'approval_required' ? 'text-warning' : 'text-success'}`}>
+                  {result.outcome?.status === 'publishing' || result.schedulePhase === 'approval_required' ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {result.action === 'publish' ? 'Publish attempted' : result.action === 'schedule'
+                    ? tr(result.schedulePhase === 'approval_required' ? 'socialSchedule.approvalRequired' : 'socialSchedule.queued') : 'Draft saved'}
                 </p>
                 {result.outcome && (
                   <ul className="space-y-1 text-sm">
@@ -229,6 +286,18 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
                 <AlertTriangle className="h-4 w-4" /> {result.error}
               </p>
             )}
+            {result.postId && (
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="text-muted">{tr(result.action === 'publish' || !result.ok ? 'socialStudio.reviewRequired' : 'socialStudio.savedPost')}</p>
+                <Link href={`/dashboard/social/posts/${result.postId}`} className="text-brand-text underline">{tr('socialStudio.reviewPost')}</Link>
+              </div>
+            )}
+          </Card>
+        )}
+        {unconfirmed && (
+          <Card>
+            <p role="alert" className="text-sm text-warning">{tr('socialStudio.requestUnconfirmed')}</p>
+            <Link href="/dashboard/social/posts" className="mt-2 inline-block text-sm text-brand-text underline">{tr('socialStudio.reviewPosts')}</Link>
           </Card>
         )}
       </div>
@@ -297,8 +366,8 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
             <div className="mt-2 space-y-2">
               <p className="whitespace-pre-wrap rounded-lg border border-border bg-elevated p-2 text-xs">{aiOutput}</p>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setBody(aiOutput)} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">Use</button>
-                <button type="button" onClick={() => setBody((b) => (b ? b + '\n\n' + aiOutput : aiOutput))} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">{tr('studio.append')}</button>
+                <button type="button" onClick={() => editDraft(() => setBody(aiOutput))} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">Use</button>
+                <button type="button" onClick={() => editDraft(() => setBody((b) => (b ? b + '\n\n' + aiOutput : aiOutput)))} className="flex-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-elevated">{tr('studio.append')}</button>
               </div>
             </div>
           )}
@@ -306,22 +375,29 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
 
         {/* Actions */}
         <Card>
-          <label htmlFor={scheduleFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.scheduleFor')}</label>
+          <p className="mb-3 text-xs text-muted">{tr('socialSchedule.supported')}</p>
+          <label htmlFor={scheduleTimeId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.scheduleFor')}</label>
           <input
-            id={scheduleFieldId}
+            id={scheduleTimeId}
             type="datetime-local"
             value={scheduledFor}
-            onChange={(e) => setScheduledFor(e.target.value)}
+            onChange={(e) => editDraft(() => setScheduledFor(e.target.value))}
             className="mb-3 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm"
           />
+          <label htmlFor={scheduleZoneId} className="mb-1 block text-xs font-medium text-muted">{tr('socialSchedule.timezone')}</label>
+          <input id={scheduleZoneId} value={timezone} onChange={event => editDraft(() => setTimezone(event.target.value))}
+            placeholder="America/New_York" className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+          {scheduledFor && <p role={scheduleTime.ok ? 'status' : 'alert'} className={`mb-3 text-xs ${scheduleTime.ok ? 'text-muted' : 'text-danger'}`}>
+            {scheduleTime.ok ? tr('socialSchedule.instant', { instant: scheduleTime.scheduledFor }) : tr(scheduleTime.key)}
+          </p>}
           <div className="space-y-2">
-            <button type="button" disabled={pending} onClick={() => submit('draft')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-elevated disabled:opacity-60">
+            <button type="button" disabled={locked} onClick={() => submit('draft')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-medium hover:bg-elevated disabled:opacity-60">
               <Save className="h-4 w-4" /> {tr('studio.saveDraft')}
             </button>
-            <button type="button" disabled={pending || !scheduledFor} onClick={() => submit('schedule')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-elevated text-sm font-medium hover:bg-elevated/70 disabled:opacity-50">
+            <button type="button" disabled={locked || !scheduledFor} onClick={() => submit('schedule')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-elevated text-sm font-medium hover:bg-elevated/70 disabled:opacity-50">
               <CalendarClock className="h-4 w-4" /> {tr('studio.schedule')}
             </button>
-            <button type="button" disabled={pending || hasErrors || selectedAccounts.length === 0} onClick={() => submit('publish')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-medium text-brand-fg shadow-glow disabled:opacity-50">
+            <button type="button" disabled={locked || hasErrors || selectedAccounts.length === 0} onClick={() => submit('publish')} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-medium text-brand-fg shadow-glow disabled:opacity-50">
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {tr('studio.publishNow')}
             </button>
             {hasErrors && <p className="text-center text-[11px] text-danger">{tr('studio.resolveValidationErrorsToPublish')}</p>}
@@ -329,6 +405,6 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
           </div>
         </Card>
       </div>
-    </div>
+    </fieldset>
   );
 }

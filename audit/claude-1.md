@@ -6072,6 +6072,200 @@ previous scans in this audit made the identical mistake (the Node version check,
 the consent `aria-modal` scan, and this one), which is enough to call it a
 standing hazard rather than a coincidence.
 
+**Self-audit of the above, and a defect it found.** `useDialogBehavior` keys its
+effect on `open` and bails when the ref is not attached yet. The **app-lock
+gate** was adopted with a literal `true`, and it returns early while unlocked
+(`if (!enabled || unlocked) return <>{children}</>`). So the effect ran once on
+mount, found no dialog, and — `true` never changing — never ran again. **A gate
+that locks after mount had no focus trap at all**: the one overlay of the eleven
+where a trap matters most, adopted in a way that silently did nothing.
+
+Fixed by threading the real condition (`enabled && !unlocked`, the same one the
+scroll lock beside it uses). The other five adopters passing `true` were checked
+individually — each renders its dialog on every pass, where `true` is correct.
+The hook's doc now names this case, because the failure is invisible: no error,
+no warning, just a dialog that quietly is not modal.
+
+This is the third defect in this audit found by auditing my own work, after the
+`server-only` guard that closed a hole which was never open and the test that
+asserted the defect it was named for.
+
+---
+
+## [CLAUDE-1][HIGH][DATABASE / BACKEND] The family timezone was free text, and a typo put the household on UTC
+
+- **Where:** `lib/validation.ts` (`createFamilySchema`), `components/modules/family-module.tsx`,
+  `app/(app)/admin/actions.ts`
+- **Problem:** `families.timezone` is the zone every wall-clock answer the app
+  gives a family is computed from. The column is `text not null default 'UTC'`
+  **with no CHECK**; the family settings field is a free-text `<Input>` with
+  placeholder "America/Chicago"; the onboarding schema accepted any non-empty
+  string; the admin create action validated the owner's **email** and not the
+  zone.
+- **Evidence, measured:**
+
+  ```
+  instant 2026-09-19T01:30Z
+  America/Los_Angeles   day 2026-09-18   offset -420 min
+  Mars/Olympus_Mons     day 2026-09-19   offset    0 min   ← identical to UTC
+  ```
+
+  Every reader goes through `Intl.DateTimeFormat`, which throws on an unknown
+  zone — and every call site catches and degrades to UTC **deliberately**, so a
+  bad zone cannot crash a page. The two together make a bad zone
+  **indistinguishable from UTC, silently and permanently.**
+- **Impact:** a parent typing "Central", or fat-fingering "Amercia/Chicago",
+  moved their whole household onto Greenwich time: routines on the wrong local
+  day, "today" wrong, and the medication-reminder day bounds wrong — the exact
+  failure the fix two findings earlier in this file was about. The form said
+  "Family profile updated".
+- **Recommended fix:** applied to all three write paths, through
+  `isValidTimezone` — **which already existed** in `lib/time/zoned.ts` and was
+  used in exactly one place, the marketing recurring-ads schema. *Sixth instance
+  in this audit of "the correct implementation existed and had not reached this
+  call site."*
+- **Status:** FIXED. 13,913 tests pass, build compiles, i18n gate clean (two new
+  strings added to all seven populated catalogues).
+- **Proved load-bearing:** reverting the schema refine fails two cases.
+
+**The asymmetry.** `previewCalendarImportSchema` in the same file has validated
+its timezone all along — its comment reads *"malformed supplied input must not
+guess"* — on a value that is **presentation-only and never stored**. The
+stricter rule was on the throwaway copy and the looser one on the durable
+record. Its inline `try { new Intl.DateTimeFormat(...) }` is now the shared
+helper too, so there is one definition rather than two.
+
+**A correction to the obvious reading, measured rather than assumed.** I began
+by writing that "CST" would fall back to UTC. It does not: `Intl` **accepts**
+"CST", "EST" and "US/Central" as legacy fixed-offset aliases. They resolve to
+zones that **never observe DST**, which is a different and subtler
+wrong-wall-clock outcome for a family that meant `America/Chicago`. They are not
+rejected — they are real zones, and refusing a string `Intl` accepts would break
+anyone using one deliberately — and the guard states this rather than leaving
+the next reader to assume it is covered.
+
+**OPEN:** a `CHECK` constraint on `families.timezone` is the durable fix, since
+the settings form writes to PostgREST directly from the browser and client-side
+validation is defence in depth rather than enforcement. That needs a migration,
+and two other workers are actively on the ledger, so it is recorded for whoever
+owns it next rather than raced for a version number.
+
+---
+
+## [CLAUDE-1][VERIFIED HEALTHY][SECURITY] The SSRF surface — audited call by call, no finding
+
+Recorded as a **negative** result, in full, so the next auditor does not
+re-derive it.
+
+A server that fetches a URL a user chose is a request the user gets to aim:
+at `169.254.169.254` it reads cloud instance credentials, at a private address
+it reaches services nothing else can. This repository defends it, and defends
+it *properly* — the parts most implementations get wrong are the parts this one
+gets right:
+
+- `validatePublicCalendarUrl` **resolves** the hostname (`dns.lookup`) and
+  rejects the **resolved addresses**, not merely the literal — link-local
+  (incl. `0xa9fe0000`, the metadata range), loopback, RFC1918, CGNAT,
+  multicast, TEST-NETs, IPv4-mapped IPv6, `metadata.google.internal`;
+- credentials in the URL (`url.username || url.password`) are refused;
+- `fetchPublicText` fetches with **`redirect: 'manual'`** and **re-validates
+  every redirect target**, so a public host cannot 302 the fetch onto a
+  private one;
+- responses are size-bounded and time-bounded.
+
+**Every call site audited:** nine server-side `fetch()` calls take a
+non-literal URL. Family calendar feeds → `fetchPublicCalendarText`; library RSS
+→ `fetchPublicFeed`; weekend curated feeds → `fetchPublicCalendarText`;
+Ticketmaster, SeatGeek, OpenAI, TheMealDB → constant hosts with only a path or
+query varying; the health probe → the Supabase URL from env.
+
+**Two things that look like findings and are not:**
+
+- `safeFeedUrl` and `normalizeFeedUrl` check **protocol only**, unlike
+  `isSafePublicUrl`. They are *normalizers*, and the real guard wraps them —
+  `lib/library/ingest.ts` says so in its own comment. Not three competing SSRF
+  guards.
+- `isSafeReturnPath` (open redirect) has one importer. Both redirect consumers
+  are covered — the step-up page by it, `auth/callback` by
+  `safeInternalRedirect`. Two helpers for one rule is duplication worth noting,
+  not a hole.
+
+**What was added:** `tests/user-urls-are-fetched-through-the-guard.test.ts`,
+because nothing stopped the next route from writing bare `fetch(userUrl)` beside
+the guard — the same premise gap that produced the `useRealtimeQuery` and
+`aria-modal` findings. It pins **two** properties: the rule (a non-constant
+fetch URL goes through the guard or is named with the reason its host is fixed)
+**and the guard's own substance** (it resolves rather than parses, blocks the
+link-local range, re-checks redirect targets, refuses credentials). Verified
+load-bearing both ways: a probe route calling `fetch(searchParam)` turns it red,
+and so does changing `redirect: 'manual'` to `'follow'`.
+
+---
+
+## [CLAUDE-1][HIGH][SECURITY / UX] Thirty-nine writes reported success for a change the database refused
+
+Full record in `finalaudit.md` Pass K. Summary: browser-direct UPDATE/DELETE on
+the forty-four manager-only tables reported success when RLS had filtered them.
+Proven on Postgres 16 — `UPDATE 0` / `DELETE 0` with **no error**, while INSERT
+raises 42501. All thirty-nine now `.select('id')` and treat zero rows as a
+refusal. Guard: `tests/a-refused-write-is-not-a-success.test.ts`.
+
+Plus five on the trust surface, where the claim is about **access**:
+`tests/a-revoke-that-revoked-nothing.test.ts`.
+
+## [CLAUDE-1][VERIFIED HEALTHY] The modules Section C named, audited
+
+- **locator-module** — writes through server actions that enforce `isManager`
+  server-side; `member_id` comes from the session, never client input; reads are
+  bounded (`location_events` `.limit(120)`) and error-checked. `is_sharing: true`
+  on every position write looked like sharing re-enabling itself and is not —
+  its only caller is the "Share now" button.
+- **paperwork-module** — server actions only, no browser-direct writes.
+- **trust actions** — ten of eleven call the shared `managerCtx()`; the
+  eleventh (`createSharingPresetAction`) delegates to `createDelegationAction`
+  deliberately, so the manager check, the expiry check and the domain filter
+  stay in one place. Its comment says why, and it holds.
+- **RLS is enabled on every health table checked** — `symptom_logs`,
+  `health_goals` (via a `DO` block in 00801), `appointments`, `health_metrics`,
+  `workout_logs` (via the generic sweep in 0004). A plain grep for
+  `ENABLE ROW LEVEL SECURITY` returns **zero** for all five, because every one
+  is enabled through dynamic SQL — recorded so the next sweep does not read that
+  zero as a finding.
+
+## [CLAUDE-1][MEDIUM][SECURITY — OWNER DECISION] Two medical tables are member-writable while their neighbours are manager-only
+
+- **Where:** `immunizations` (0069), `health_visits` (0068)
+- **Evidence:** both carry `FOR ALL … USING (is_family_member(family_id))`. On
+  the **same page** (`/dashboard/medical`), `medical_profiles`,
+  `health_providers` and `insurance_policies` are manager-only, and
+  `medications` was made manager-only by 0309. The page gate is
+  `requireFeature`, a **subscription** check, not a role check — so a child on a
+  qualifying plan reaches it.
+- **So:** any family member, including a child, can insert, edit or delete a
+  sibling's vaccination record and medical visit history, while the same child
+  cannot touch a medication or an insurance policy.
+- **This is NOT the 0309 shape.** Neither module gates its UI on `isManager`, so
+  the interface and the database **agree** — there is no hidden button making a
+  promise the database does not keep. It is an asymmetry, not a lie.
+- **Status: OPEN, owner decision.** Whether a teenager logging their own vaccine
+  should be allowed is a product judgement, and closing it needs a migration —
+  which two other workers are actively holding. Recorded with the evidence
+  rather than changed unilaterally. This is the shape 0309's own header named:
+  *"a class fixed where somebody remembered and left open where nobody did."*
+
+## OPEN — measured, recorded, not changed
+
+- **Sixteen server actions** write manager-only tables without verifying a row
+  and then return `ok: true` (`wallet/actions.ts` ×4, `concierge/actions.ts` ×3,
+  `account/actions.ts` ×2, `economy/actions.ts` ×2, `locator/actions.ts` ×3,
+  `admin/actions.ts`, `assistants/actions.ts`). Outside the permission surface a
+  stale id is a refresh prompt rather than a false claim about access, and each
+  needs its own judgement about what zero rows should mean there.
+- **The three document deletes remove the storage object before the row**, so a
+  refused row delete leaves a row pointing at a file that no longer exists.
+  Verification now makes it visible; reversing the order is the real fix and is
+  a behaviour change worth deciding deliberately.
+
 ## [CLAUDE-1][HIGH][SECURITY/INTEGRATION] Two expressions for one URL, facing each other across an HMAC
 
 **Files:** seven `app/api/guardian/*` routes, three `app/api/contact-center/*`

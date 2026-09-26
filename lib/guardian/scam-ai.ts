@@ -68,7 +68,9 @@ export async function detectScamWithAI(
   transcript: string,
   callerNumber: string | null,
   familyContext: string,
+  signal?: AbortSignal,
 ): Promise<ScamDetectionResult> {
+  signal?.throwIfAborted();
   const patternResult = detectScamFromText(transcript, callerNumber ?? undefined);
 
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY;
@@ -92,17 +94,19 @@ export async function detectScamWithAI(
 
     if (process.env.ANTHROPIC_API_KEY) {
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      signal?.throwIfAborted();
       const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const msg = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 256,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userContent }],
-      });
+      }, { signal });
       responseText = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
     } else {
       const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        signal,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
@@ -120,9 +124,11 @@ export async function detectScamWithAI(
       }
     }
 
+    signal?.throwIfAborted();
     const parsed = JSON.parse(responseText.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
     return validateResult(parsed, patternResult);
   } catch {
+    signal?.throwIfAborted();
     // Fall through to the deterministic pattern result on any failure.
     return patternResult;
   }

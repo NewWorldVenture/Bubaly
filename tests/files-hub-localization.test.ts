@@ -41,10 +41,24 @@ vi.mock('@/components/ui/modal', async () => {
     return element('section', { role: 'dialog', 'aria-label': title }, element('h2', null, title), children);
   } };
 });
+// `.eq()` is thenable AND chains `.select()`, because the module now asks for
+// the affected rows back: a manager-only RLS policy FILTERS an update/delete
+// rather than raising, so `{ error: null }` alone cannot tell a write that
+// happened from one the database refused. A double that answers only the old
+// shape exercises a client the code no longer uses.
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: () => ({
-  insert: h.insert, update: (payload: unknown) => { h.update(payload); return { eq: h.eq }; },
-  delete: () => { h.remove(); return { eq: h.eq }; },
+  insert: h.insert,
+  update: (payload: unknown) => { h.update(payload); return { eq: (...a: unknown[]) => chainEq(a) }; },
+  delete: () => { h.remove(); return { eq: (...a: unknown[]) => chainEq(a) }; },
 }) }) }));
+
+/** `.eq(...)` resolves on its own and also offers `.select()`. */
+function chainEq(args: unknown[]) {
+  const settled = h.eq(...(args as [string, unknown]));
+  return Object.assign(Promise.resolve(settled), {
+    select: () => Promise.resolve(settled),
+  });
+}
 vi.mock('@/lib/storage/documents', () => ({
   uploadFamilyDocument: h.store, getDocumentSignedUrl: h.signed, removeFamilyDocument: h.discard,
   DOCUMENT_MAX_BYTES: 25 * 1024 * 1024, DOCUMENT_MAX_MB: 25,
@@ -130,7 +144,7 @@ beforeEach(() => {
   h.locale = 'en-US'; h.role = 'parent'; h.familyId = 'family-1'; h.slots = []; h.cursor = 0; h.tree = null; h.form = null; h.readError = null; h.docs = [doc()];
   vi.clearAllMocks();
   h.store.mockResolvedValue({ path: 'family-1/path/result.pdf', error: null });
-  h.discard.mockResolvedValue({ error: null }); h.insert.mockResolvedValue({ error: null }); h.eq.mockResolvedValue({ error: null });
+  h.discard.mockResolvedValue({ error: null }); h.insert.mockResolvedValue({ error: null }); h.eq.mockReturnValue({ data: [{ id: 'file-1' }], error: null });
   h.signed.mockResolvedValue({ url: 'https://example.com/signed-document', error: null }); h.confirm.mockReturnValue(true);
   h.feature.mockResolvedValue({ active: { familyId: 'family-1' } }); h.assurance.mockResolvedValue(undefined);
   vi.stubGlobal('window', { confirm: h.confirm });

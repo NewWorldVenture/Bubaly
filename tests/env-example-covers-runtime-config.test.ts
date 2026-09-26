@@ -51,6 +51,13 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
+/**
+ * Names read as `process.env.NAME` — the spelling a scanner can be SURE about.
+ *
+ * Used for the "everything read is documented" direction, where a false positive
+ * is an accusation: it demands a template line for a name that may be nothing
+ * more than a string in a table.
+ */
 function envNamesReadBy(paths: string[]): Map<string, string> {
   const found = new Map<string, string>();
   for (const path of paths) {
@@ -58,6 +65,33 @@ function envNamesReadBy(paths: string[]): Map<string, string> {
     for (const match of source.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
       if (!found.has(match[1])) found.set(match[1], path);
     }
+  }
+  return found;
+}
+
+/**
+ * The same, plus the names a file could plausibly reach INDIRECTLY.
+ *
+ * Two files index `process.env` by a variable rather than naming it inline:
+ * `lib/server/native-push.ts` does it in `privateKeyEnv(name)` so one function
+ * can undo the literal `\n` a PEM picks up when pasted into a dashboard field,
+ * and `lib/social/capabilities.ts` does it over a `credentialEnv` table so each
+ * provider declares its own credentials once.
+ *
+ * This is used for the OPPOSITE direction — "the template offers nothing that is
+ * never read" — and the asymmetry is deliberate. There, a false positive deletes
+ * a working template line: the dotted-only scanner reported FCM_PRIVATE_KEY and
+ * APNS_PRIVATE_KEY as orphans when both are read on every native push. So each
+ * direction is generous in the way that avoids making a wrong accusation, rather
+ * than one scanner being tuned to split the difference and being wrong twice.
+ */
+function envNamesPossiblyReadBy(paths: string[]): Set<string> {
+  const found = new Set<string>();
+  for (const path of paths) {
+    const source = withoutComments(readFileSync(path, 'utf8'));
+    for (const match of source.matchAll(/process\.env\.([A-Z0-9_]+)/g)) found.add(match[1]);
+    if (!/process\.env\[/.test(source)) continue;
+    for (const match of source.matchAll(/['"]([A-Z][A-Z0-9_]{3,})['"]/g)) found.add(match[1]);
   }
   return found;
 }
@@ -72,7 +106,9 @@ function namesDeclaredInTemplate(template: string): Set<string> {
 describe('.env.example covers the runtime configuration surface', () => {
   const template = readFileSync('.env.example', 'utf8');
   const declared = namesDeclaredInTemplate(template);
-  const read = envNamesReadBy([...ROOTS.flatMap((r) => walk(r)), ...FILES]);
+  const sources = [...ROOTS.flatMap((r) => walk(r)), ...FILES];
+  const read = envNamesReadBy(sources);
+  const maybeRead = envNamesPossiblyReadBy(sources);
 
   it('documents every operator-configurable variable shipped code reads', () => {
     const undocumented = [...read]
@@ -98,7 +134,7 @@ describe('.env.example covers the runtime configuration surface', () => {
       'CAP_SERVER_URL',
     ]);
     const orphaned = [...assigned]
-      .filter((name) => !read.has(name) && !scriptsAndTooling.has(name))
+      .filter((name) => !maybeRead.has(name) && !scriptsAndTooling.has(name))
       .sort();
     expect(orphaned).toEqual([]);
   });

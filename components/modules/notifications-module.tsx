@@ -10,6 +10,7 @@ import { notificationAction, type NotificationInlineAction } from '@/lib/notific
 import { partitionByPriority } from '@/lib/notifications/priority';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -68,15 +69,19 @@ export function NotificationsModule() {
 
   async function markRead(id: string) {
     const supabase = createClient();
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    const { error } = await settle(supabase.from('notifications').update({ is_read: true }).eq('id', id));
+    if (error) console.error('[notifications] mark-read failed', { message: error.message });
     void refresh();
   }
 
   async function markAllRead() {
     setMarkingAll(true);
     const supabase = createClient();
-    await supabase.from('notifications').update({ is_read: true })
-      .eq('family_id', familyId).eq('is_read', false);
+    // Zero rows here is NORMAL — nothing was unread — so this checks the error
+    // only. `notifications` is "own row OR manager", not manager-only.
+    const { error } = await settle(supabase.from('notifications').update({ is_read: true })
+      .eq('family_id', familyId).eq('is_read', false));
+    if (error) console.error('[notifications] mark-all-read failed', { message: error.message });
     setMarkingAll(false);
     void refresh();
   }

@@ -2,6 +2,7 @@ import 'server-only';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { resolveInboundEntityContext } from '@/lib/graph/resolve-server';
 import type { ServiceScope } from '@/lib/services/types';
+import { safeContactText, safeSmsReplyText } from './text';
 import {
   classifyIntent, summarizeInbound, autoReplyText,
   type InboundIntent, type InboundChannel,
@@ -52,36 +53,40 @@ export function preferFrontDesk(modelIntent: InboundIntent, fallback: InboundInt
  * routing lib so the line always answers. Never throws.
  */
 export async function runConcierge(input: {
-  channel: InboundChannel; from?: string; text: string; familyLabel?: string;
+  channel: InboundChannel; from?: string; text: string; familyLabel?: string; signal?: AbortSignal;
 }): Promise<ConciergeResult> {
-  const familyLabel = input.familyLabel || 'the family';
+  const familyLabel = safeContactText(input.familyLabel || 'the family', 200);
+  const replyText = (value: string) => input.channel === 'sms' ? safeSmsReplyText(value, 320) : safeContactText(value, 320);
   const fallbackIntent = classifyIntent(input.text);
   const fallback: ConciergeResult = {
     intent: fallbackIntent,
     summary: summarizeInbound(input.text),
-    reply: autoReplyText(fallbackIntent, familyLabel),
+    reply: replyText(autoReplyText(fallbackIntent, familyLabel)),
     aiUsed: false,
   };
 
-  if (!(await isAIConfigured())) return fallback;
+  if (input.signal?.aborted || !(await isAIConfigured()) || input.signal?.aborted) return fallback;
   try {
     const provider = await resolveProvider();
+    if (input.signal?.aborted) return fallback;
     const completion = await provider.complete({
       system: SYSTEM,
       messages: [{
         role: 'user',
-        content: `Channel: ${input.channel}\nFrom: ${input.from ?? 'unknown'}\nReplying on behalf of: ${familyLabel}\nMessage:\n${input.text.slice(0, 2000)}`,
+        content: `Channel: ${input.channel}\nFrom: ${input.from ?? 'unknown'}\nReplying on behalf of: ${familyLabel}\nMessage:\n${safeContactText(input.text, 2000)}`,
       }],
       tools: [],
       maxTokens: 400,
+      signal: input.signal,
     });
+    if (input.signal?.aborted) return fallback;
     const raw = completion.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     const parsed = JSON.parse(raw) as { intent?: unknown; summary?: unknown; reply?: unknown };
     const intent = preferFrontDesk(coerceIntent(parsed.intent), fallbackIntent);
     return {
       intent,
-      summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim().slice(0, 140) : fallback.summary,
-      reply: typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply.trim().slice(0, 320) : autoReplyText(intent, familyLabel),
+      summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? safeContactText(parsed.summary.trim(), 140) : fallback.summary,
+      reply: replyText(typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply.trim() : autoReplyText(intent, familyLabel)),
       aiUsed: true,
     };
   } catch (e) {

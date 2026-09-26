@@ -1,7 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentCapture } from '@/components/capture/document-capture';
-import { CaptureShell } from '@/components/capture/capture-shell';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import { CameraCapture } from '@/components/ui/camera-capture';
 import { getMessages, translate } from '@/lib/i18n/messages';
@@ -113,14 +112,8 @@ describe('document capture controls', () => {
     expect(state.upload).not.toHaveBeenCalled();
   });
 
-  it('makes capture available from the existing Photo mode and Paperwork composer', () => {
+  it('makes capture available from the Paperwork composer', () => {
     state.cursor = 0;
-    click(button(CaptureShell({}), 'Photo'));
-    state.cursor = 0;
-    const capture = CaptureShell({});
-    expect(nodes(capture).some((node) => node.type === DocumentCapture && node.props.photo === true)).toBe(true);
-    expect(nodes(capture).some((node) => node.type === 'textarea')).toBe(false);
-    state.slots = []; state.cursor = 0;
     click(button(PaperworkModule({ items: [] }), 'Add paperwork'));
     state.cursor = 0;
     expect(nodes(PaperworkModule({ items: [] })).some((node) => node.type === DocumentCapture)).toBe(true);

@@ -69,7 +69,19 @@ function walk(dir: string, out: string[] = []): string[] {
 type PagedRead = { file: string; line: number; table: string; orders: string[]; pinned: string[] };
 
 /**
- * Every `readAll` / `readAllInChunks` call whose page factory calls `.range()`.
+ * Every paged read, in BOTH shapes this codebase uses.
+ *
+ * `readAll` / `readAllInChunks` with a `.range()` page factory is one. Keyset
+ * pagination — `.order(k).limit(n)` plus `.gt(k, cursor)` on the next page — is
+ * the other, and lib/marketing/push-audience.ts uses it for the whole marketing
+ * push audience.
+ *
+ * The total-order requirement is identical and the reason is the same: the
+ * cursor is a VALUE, so if two rows share it, `.gt(k, cursor)` skips whichever
+ * of them the previous page did not reach. What differs is only the failure —
+ * `.range()` moves a boundary, a duplicate cursor drops a row outright — and
+ * scanning one shape while the other exists means the registry below shrinks
+ * because a read MOVED, not because it stopped needing a unique key.
  *
  * A PostgREST chain is one STATEMENT, not one line, so the window runs past the
  * call and the orders are taken in the sequence they are chained — the LAST one
@@ -77,6 +89,15 @@ type PagedRead = { file: string; line: number; table: string; orders: string[]; 
  */
 function pagedReads(): PagedRead[] {
   const out: PagedRead[] = [];
+  const collect = (src: string, file: string, at: number, scope: string) => {
+    const table = /\.from\(\s*'([^']+)'/.exec(scope)?.[1] ?? '?';
+    const orders = [...scope.matchAll(/\.order\(\s*'([^']+)'/g)].map((o) => o[1]);
+    // `.eq(col, …)` pins a column to one value for every row the read can
+    // return, so it cannot break a tie — but it does satisfy that member of
+    // a composite key. `.in()`, `.gte()` and friends deliberately do not.
+    const pinned = [...scope.matchAll(/\.eq\(\s*'([^']+)'/g)].map((e) => e[1]);
+    out.push({ file, line: src.slice(0, at).split('\n').length, table, orders, pinned });
+  };
   for (const dir of ['app', 'lib']) {
     for (const abs of walk(join(ROOT, dir))) {
       const src = readFileSync(abs, 'utf8');
@@ -86,14 +107,26 @@ function pagedReads(): PagedRead[] {
       for (const m of src.matchAll(/\b(?:readAll|readAllInChunks)\s*[<(]/g)) {
         const segment = src.slice(m.index ?? 0, (m.index ?? 0) + 900);
         if (!segment.includes('.range(')) continue;
-        const scope = segment.slice(0, segment.indexOf('.range('));
-        const table = /\.from\(\s*'([^']+)'/.exec(scope)?.[1] ?? '?';
-        const orders = [...scope.matchAll(/\.order\(\s*'([^']+)'/g)].map((o) => o[1]);
-        // `.eq(col, …)` pins a column to one value for every row the read can
-        // return, so it cannot break a tie — but it does satisfy that member of
-        // a composite key. `.in()`, `.gte()` and friends deliberately do not.
-        const pinned = [...scope.matchAll(/\.eq\(\s*'([^']+)'/g)].map((e) => e[1]);
-        out.push({ file, line: src.slice(0, m.index).split('\n').length, table, orders, pinned });
+        collect(src, file, m.index ?? 0, segment.slice(0, segment.indexOf('.range(')));
+      }
+      // Keyset: `.order(k).limit(n)` whose next page advances with `.gt(k, …)`
+      // on the SAME column, carrying a cursor.
+      //
+      // All three conditions earn their place. Without `.limit(` an ordinary
+      // filtered read matches. Without the cursor, a one-shot `.gt('starts_at',
+      // today)` filter does. And without requiring the SAME column, five bounded
+      // reads matched on nothing more than a `.gt()` appearing somewhere nearby —
+      // `blog_posts` ordered by `published_at` next to an unrelated date filter,
+      // reported as a paged read that drops rows. A guard that names innocent
+      // call sites gets exemptions bolted onto it until it means nothing.
+      for (const m of src.matchAll(/\.order\(\s*'([^']+)'[^;]*?\.limit\(/g)) {
+        const start = src.lastIndexOf('.from(', m.index ?? 0);
+        if (start < 0) continue;
+        const key = m[1];
+        const window = src.slice(start, Math.min(src.length, (m.index ?? 0) + 600));
+        const advance = new RegExp(`\\.gt\\(\\s*'${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'\\s*,\\s*cursor`);
+        if (!advance.test(window)) continue;
+        collect(src, file, start, src.slice(start, (src.indexOf(';', m.index ?? 0) + 1) || src.length));
       }
     }
   }

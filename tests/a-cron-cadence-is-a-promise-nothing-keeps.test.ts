@@ -82,6 +82,15 @@ const DISPATCHER_DEPENDENT: Record<string, number> = {
   '/api/cron/marketing': 288,
   '/api/cron/close-auctions': 288,
   '/api/cron/ai-runs': 288,
+  // Three routes added since this table was first measured, each asking for
+  // every 5 minutes against a once-daily guarantee. The two recovery sweeps are
+  // the sharpest entries in the whole table: they exist to re-drive an urgent
+  // escalation or an inbound text whose first attempt did not land, and a
+  // once-a-day floor means the worst case for a message a family is waiting on
+  // is a day, not the five minutes the schedule advertises.
+  '/api/cron/contact-center-urgent': 288,
+  '/api/cron/guardian-sms-recovery': 288,
+  '/api/cron/social-publish': 288,
   '/api/cron/marketing-social': 96,
   '/api/cron/family-routines': 96,
   '/api/cron/feedback-github-sync': 24,

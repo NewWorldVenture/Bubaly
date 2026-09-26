@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+// These tests exercise schedule and outcome classification. Publishing must
+// never enter the request-authenticated connector stack from this pure suite.
+vi.mock('@/lib/social/connectors', () => ({
+  getConnector: () => { throw new Error('Unexpected provider call in schedule tests'); },
+}));
 import {
   classifyOutcome, validPlatforms, scheduleFromRow, firstRunFor, type AdRow,
 } from '@/lib/marketing/recurring-ads-runner';

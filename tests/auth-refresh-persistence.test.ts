@@ -46,9 +46,36 @@ describe('refresh fetch boundary', () => {
     const original = new Response('unchanged', { status: 429 });
     expect(await createSessionRefreshFetch(origin, vi.fn(async () => original))(url, { method })).toBe(original);
   });
-  it.each([200, 400, 401, 403, 404, 422])('preserves definitive HTTP %i responses', async (status) => {
+  it.each([400, 401, 403, 404, 422])('preserves definitive HTTP %i responses', async (status) => {
     const original = new Response('unchanged', { status });
     expect(await createSessionRefreshFetch(origin, vi.fn(async () => original))(`${origin}/auth/v1/token?grant_type=refresh_token`, { method: 'POST' })).toBe(original);
+  });
+  it('preserves the original valid refresh response and its unread body', async () => {
+    const value = session('rotated-refresh', false);
+    const original = Response.json(value, { headers: { 'x-fixture': 'original' } });
+    const response = await createSessionRefreshFetch(origin, async () => original)(`${origin}/auth/v1/token?grant_type=refresh_token`, { method: 'POST' });
+    expect(response).toBe(original);
+    expect(response.bodyUsed).toBe(false);
+    expect(response.headers.get('x-fixture')).toBe('original');
+    expect(await response.json()).toEqual(value);
+  });
+  it.each([
+    {}, null, [], { ...session('rotated', false), access_token: '' },
+    { ...session('rotated', false), refresh_token: ' ' },
+    { ...session('rotated', false), token_type: null },
+    { ...session('rotated', false), expires_in: 0 },
+    { ...session('rotated', false), expires_in: '3600' },
+  ])('keeps malformed successful token data retryable (%j)', async (value) => {
+    const response = await createSessionRefreshFetch(origin, async () => Response.json(value))(`${origin}/auth/v1/token?grant_type=refresh_token`, { method: 'POST' });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ message: 'Session refresh temporarily unavailable.' });
+  });
+  it('leaves successful responses for other operations untouched', async () => {
+    for (const url of [`${origin}/auth/v1/token?grant_type=password`, `${origin}/auth/v1/logout`, 'https://other.invalid/auth/v1/token?grant_type=refresh_token']) {
+      const original = Response.json({});
+      expect(await createSessionRefreshFetch(origin, async () => original)(url, { method: 'POST' })).toBe(original);
+      expect(original.bodyUsed).toBe(false);
+    }
   });
   it('supports Request inputs and an explicit method override without reading the request body', async () => {
     const request = new Request(`${origin}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', body: 'synthetic refresh' });
@@ -63,16 +90,18 @@ describe('refresh fetch boundary', () => {
 
 for (const kind of ['browser', 'server', 'native'] as const) {
   describe(`${kind} installed SDK persistence`, () => {
-    function fixture(initialStatus: number, expired = true) {
+    function fixture(initialStatus: number, expired = true, initialResponse?: () => Response) {
       const original = session('original-refresh', expired);
       const values = new Map([[key, kind === 'native' ? JSON.stringify(original) : encode(original)]]);
       let status = initialStatus;
+      let responseOverride = initialResponse;
       const calls: string[] = [];
       const deletions: string[] = [];
       const fetcher: typeof fetch = async (input) => {
         const url = String(input); calls.push(url);
         if (url.endsWith('/logout?scope=local')) return new Response(null, { status: 204 });
         if (url.includes('/auth/v1/user')) return Response.json(user);
+        if (responseOverride) return responseOverride();
         if (status !== 200) return Response.json({ code: status === 400 || status === 401 ? 'refresh_token_not_found' : 'temporary_failure', message: 'Synthetic failure' }, { status, headers: { 'x-supabase-api-version': '2024-01-01' } });
         return Response.json(session('rotated-refresh', false));
       };
@@ -96,8 +125,30 @@ for (const kind of ['browser', 'server', 'native'] as const) {
         : kind === 'browser'
           ? createBrowserClient(origin, 'synthetic-anon', { global, auth, cookies, isSingleton: false, cookieOptions: durableCookieOptions(false) })
           : createServerClient(origin, 'synthetic-anon', { global, auth, cookies, cookieOptions: durableCookieOptions(false) });
-      return { client, values, calls, deletions, recover: () => { status = 200; } };
+      return { client, values, calls, deletions, recover: () => { status = 200; responseOverride = undefined; } };
     }
+
+    it.each([
+      ['empty object', () => Response.json({})],
+      ['missing refresh token', () => Response.json({ ...session('rotated-refresh', false), refresh_token: '' })],
+      ['empty response', () => new Response(null, { status: 204 })],
+      ['cancelled transport', () => { throw new DOMException('The operation was aborted.', 'AbortError'); }],
+      ['timed-out transport', () => { throw new DOMException('The operation timed out.', 'TimeoutError'); }],
+    ])('retains storage after an unusable successful refresh: %s', async (_name, response) => {
+      const f = fixture(200, true, response);
+      const before = [...f.values];
+      const pending = f.client.auth.getSession();
+      await vi.advanceTimersByTimeAsync(35_000);
+      const failed = await pending;
+      expect.soft(f.values.has(key), 'The saved session must survive an incomplete provider response').toBe(true);
+      expect(failed.error?.name).toBe('AuthRetryableFetchError');
+      expect([...f.values]).toEqual(before);
+      expect(f.deletions).toEqual([]);
+      f.recover();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect((await f.client.auth.getSession()).data.session?.refresh_token).toBe('rotated-refresh');
+      await f.client.auth.stopAutoRefresh();
+    });
 
     it.each([408, 429, 507])('retains exact stored bytes after HTTP %i and later rotates successfully', async (status) => {
       const f = fixture(status);
@@ -136,9 +187,9 @@ for (const kind of ['browser', 'server', 'native'] as const) {
 }
 
 describe('actual middleware refresh', () => {
-  it('keeps cookies and avoids a login redirect after a temporary refresh failure', async () => {
+  it.each([429, 200])('keeps cookies and avoids a login redirect after an unusable refresh (HTTP %i)', async (status) => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', origin); vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-anon');
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ message: 'Busy' }, { status: 429 })));
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ message: 'Busy' }, { status })));
     const cookie = encode(session('original-refresh', true));
     const req = new NextRequest('https://bubaly.example/home', { headers: { cookie: `${key}=${cookie}` } });
     const pending = middleware(req);

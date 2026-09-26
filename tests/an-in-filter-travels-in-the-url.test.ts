@@ -84,8 +84,31 @@ describe('readInChunks', () => {
 const UNBOUNDED_ID_READS: { file: string; why: string }[] = [
   { file: 'lib/server/notification-emails.ts', why: 'userIds from a .limit(500) page of pending notifications' },
   { file: 'app/api/cron/return-reminders/route.ts', why: 'listingIds from a BATCH=200 page of orders' },
-  { file: 'app/(app)/admin/marketing/push/actions.ts', why: 'uniqueIds from a readAll-paged device list' },
+  // The push audience read moved out of the action into its own module, which
+  // also turned an incomplete read into a refusal — so a `URI too long` there
+  // does not silently shrink the audience, it stops the campaign. That makes
+  // the bound on the id list matter MORE, not less.
+  { file: 'lib/marketing/push-audience.ts', why: 'uniqueIds from a keyset-paged device list' },
 ];
+
+/**
+ * The shared helper, or a local loop that names its own bound.
+ *
+ * lib/marketing/push-audience.ts cannot use `readInChunks`: that helper returns
+ * the rows gathered so far when a chunk fails, and this module's whole contract
+ * is that an incomplete read is a REFUSAL, never a smaller audience. So a local
+ * chunk loop is accepted — on the condition the ratchet is really asking about,
+ * which is the SIZE of the id list, not which function builds it. A loop
+ * stepping by a constant above CHUNK_LIMIT is still an offender.
+ */
+function chunksItsIds(source: string): boolean {
+  if (/read(All)?InChunks\s*[<(]/.test(source)) return true;
+  if (!/\.in\(/.test(source)) return false;
+  const stride = source.match(/\+=\s*([A-Z][A-Z0-9_]*)\s*\)/);
+  if (!stride) return false;
+  const declared = source.match(new RegExp(`const\\s+${stride[1]}\\s*=\\s*(\\d+)`));
+  return declared !== null && Number(declared[1]) <= CHUNK_LIMIT;
+}
 
 describe('an .in() filter travels in the URL', () => {
   it('each named file still exists and still reads by id', () => {
@@ -101,7 +124,7 @@ describe('an .in() filter travels in the URL', () => {
     const offenders: string[] = [];
     for (const { file, why } of UNBOUNDED_ID_READS) {
       const source = readFileSync(join(ROOT, file), 'utf8');
-      if (!/readInChunks\s*[<(]/.test(source)) offenders.push(`${file} — ${why}`);
+      if (!chunksItsIds(source)) offenders.push(`${file} — ${why}`);
     }
     expect(
       offenders,
@@ -111,6 +134,16 @@ describe('an .in() filter travels in the URL', () => {
       + 'readInChunks from @/lib/supabase/chunked-in:\n'
       + offenders.map((o) => `  ${o}`).join('\n'),
     ).toEqual([]);
+  });
+
+  it('a hand-rolled loop is accepted only while its own constant is small enough', () => {
+    const loop = (n: number) => `.in('id', chunk)\nconst ID_CHUNK = ${n};\nfor (let i = 0; i < ids.length; i += ID_CHUNK) {}`;
+    expect(chunksItsIds(loop(100))).toBe(true);
+    // The number is the whole point: 200 UUIDs is the ~8 KB request line
+    // chunked-in.ts exists to stay under, so the same shape must fail.
+    expect(chunksItsIds(loop(200))).toBe(false);
+    // No bound named at all, and no helper either.
+    expect(chunksItsIds(".in('id', ids)")).toBe(false);
   });
 
   it('matches readInChunks through a generic argument too', () => {

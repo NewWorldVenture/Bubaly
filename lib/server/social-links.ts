@@ -39,7 +39,10 @@ export async function getSocialLinks(supabase: DB): Promise<SocialLinks> {
  * different facts.
  */
 async function readSocialLinksOrThrow(supabase: DB): Promise<SocialLinks> {
-  const { data, error } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  // Optional footer profiles must not hold the whole public layout through
+  // database retry backoff. A timeout still throws outside the cache below.
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', KEY)
+    .abortSignal(AbortSignal.timeout(1500)).maybeSingle();
   if (error) throw error;
   return sanitizeSocialLinks(data?.value);
 }

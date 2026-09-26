@@ -84,7 +84,36 @@ function withoutComments(source: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
+/**
+ * Comparisons this rule deliberately does not claim.
+ *
+ * Each names a file and the substring that identifies the line, and each is
+ * checked for NON-VACUITY below: an exemption whose line has gone away fails,
+ * so the list cannot outlive the code it excuses.
+ */
+const NOT_A_SECRET_COMPARISON: { file: string; contains: string; why: string }[] = [
+  {
+    file: 'lib/auth/browser-session-storage.ts',
+    contains: "=== `Bearer ${currentToken}`",
+    why: 'Both sides are values this BROWSER already holds: the outgoing request\'s own '
+      + 'Authorization header against the access token read from this tab\'s storage, to '
+      + 'decide whether a logout call belongs to the current session. A timing side '
+      + 'channel needs an attacker who can guess and measure; anything running here can '
+      + 'read both values outright, so there is nothing to leak. `secretEquals` is '
+      + 'server-only and importing it would not make this browser code safer.',
+  },
+];
+
 describe('no secret is compared with ===', () => {
+  it('each exemption still points at a real line', () => {
+    // An exemption is a claim about code. When the code moves, the claim has to
+    // be re-made rather than silently inherited.
+    for (const { file, contains } of NOT_A_SECRET_COMPARISON) {
+      const source = withoutComments(readFileSync(`${process.cwd()}/${file}`, 'utf8'));
+      expect(source.includes(contains), `${file} no longer contains ${contains}; drop the exemption`).toBe(true);
+    }
+  });
+
   it('has no remaining byte-by-byte secret comparison', () => {
     const files = execSync("git ls-files 'app/*.ts' 'lib/*.ts'", { encoding: 'utf8' })
       .split('\n').filter(Boolean)
@@ -101,6 +130,14 @@ describe('no secret is compared with ===', () => {
       // a footnote rather than a defect.
       withoutComments(readFileSync(`${process.cwd()}/${file}`, 'utf8')).split('\n').forEach((line, i) => {
         if (/\b(NODE_ENV|VERCEL_ENV)\b/.test(line)) return; // not secrets
+        // A line that ALREADY compares in constant time is not the offender —
+        // the `!==` beside it is doing something else. recovery-server.ts reads
+        // `signature.toString('base64url') !== parts[1]`, which re-encodes the
+        // decoded bytes to reject a non-canonical base64url spelling, and then
+        // hands the same bytes to `timingSafeEqual`. Flagging that asked it to
+        // replace the canonicalisation check with the comparison it already makes.
+        if (/\b(timingSafeEqual|secretEquals)\s*\(/.test(line)) return;
+        if (NOT_A_SECRET_COMPARISON.some((e) => e.file === file && line.includes(e.contains))) return;
         if (/(===|!==)[^;]*\b(SECRET|secret|Bearer)\b/.test(line)) {
           offenders.push(`${file}:${i + 1}  ${line.trim()}`);
         }
