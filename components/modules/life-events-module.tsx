@@ -24,7 +24,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -131,8 +131,10 @@ export function LifeEventsModule({
   }
 
   async function toggleItem(it: Item) {
-    const { error } = await createClient().from('life_event_plan_items').update({ is_done: !it.is_done }).eq('id', it.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('life_event_plan_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function setPlanStatus(planId: string, status: 'active' | 'completed' | 'archived') {
     const res = await setLifeEventStatusAction(planId, status);

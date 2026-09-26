@@ -137,8 +137,10 @@ export function ConciergeModule() {
 
   async function deletePlan(plan: Plan) {
     const supabase = createClient();
-    const { error } = await supabase.from('concierge_plans').delete().eq('id', plan.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await supabase.from('concierge_plans').delete().eq('id', plan.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     if (selectedPlan?.id === plan.id) setSelectedPlan(null);
     void refreshPlans();
   }

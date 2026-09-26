@@ -72,6 +72,19 @@ const FIXED = [
   'components/modules/family-tree-module.tsx',
   'components/modules/behavior-module.tsx',
   'components/modules/binder-module.tsx',
+  'components/modules/announcements-module.tsx',
+  'components/modules/assistant-module.tsx',
+  'components/modules/celebrations-module.tsx',
+  'components/modules/concierge-module.tsx',
+  'components/modules/insurance-module.tsx',
+  'components/modules/life-events-module.tsx',
+  'components/modules/screen-time-module.tsx',
+  'components/modules/security-module.tsx',
+  'components/modules/tax-vault-module.tsx',
+  'components/modules/timetable-module.tsx',
+  'components/modules/trip-memories-module.tsx',
+  'components/modules/utilities-module.tsx',
+  'components/modules/voice-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -99,7 +112,9 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
   it('a zero-row write says it was not saved, in the family\'s language', () => {
     const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
     expect(en['errors.thatChangeWasNotSaved']).toBe("That change wasn't saved — you may not have permission. Refresh and try again.");
-    for (const file of FIXED.filter((f) => !f.endsWith('health-module.tsx'))) {
+    // The assistant says it with its own translated conversation errors
+    // (`assistantModule.couldNotDeleteThatConversation`, C1-S9-86).
+    for (const file of FIXED.filter((f) => !f.endsWith('health-module.tsx') && !f.endsWith('assistant-module.tsx'))) {
       expect(readFileSync(file, 'utf8'), file).toMatch(/\(['"]errors\.thatChangeWasNotSaved['"]\)/);
     }
   });
@@ -266,6 +281,28 @@ describe('a refused listing save lets go of nothing it uploaded (C1-S9-85)', () 
     expect(src).toContain('({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));');
     expect(at(src, 'let { data: saved, error } = await run(fullUpdate, fullInsert);')).toBeLessThan(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }"));
     expect(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }")).toBeLessThan(at(src, "success(reminder ? 'Reminder updated' : 'Reminder created')"));
+  });
+});
+
+describe('the last thirteen modules (C1-S9-86)', () => {
+  it('assistant: a conversation leaves the list only when its row is confirmed gone', () => {
+    const src = readFileSync('components/modules/assistant-module.tsx', 'utf8');
+    const fn = bodyOf(src, 'async function deleteConversation(', '\n  }\n');
+    expect(at(fn, 'if (wroteNoRows(removed))')).toBeLessThan(at(fn, 'setConversations((prev) => prev.filter((c) => c.id !== id));'));
+    const rename = bodyOf(src, 'async function renameConversation(', '\n  }\n');
+    expect(at(rename, 'if (wroteNoRows(renamed))')).toBeLessThan(at(rename, 'setConversations((prev) => prev.map('));
+  });
+
+  it('tax vault and trip memories keep object-first, and a refused row is not "deleted"', () => {
+    for (const [file, table, ok] of [
+      ['components/modules/tax-vault-module.tsx', 'tax_documents', "success(t('taxVaultModule.deleted'))"],
+      ['components/modules/trip-memories-module.tsx', 'trip_memories', "success(t('tripMemoriesModule.deleted'))"],
+    ] as const) {
+      const src = readFileSync(file, 'utf8');
+      expect(at(src, 'if (storageError)')).toBeLessThan(at(src, `from('${table}').delete()`));
+      expect(at(src, `from('${table}').delete()`)).toBeLessThan(at(src, 'wroteNoRows(removed)'));
+      expect(at(src, 'wroteNoRows(removed)')).toBeLessThan(at(src, ok));
+    }
   });
 });
 

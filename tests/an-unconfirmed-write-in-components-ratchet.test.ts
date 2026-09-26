@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirmed-writes';
 
 /**
@@ -37,26 +38,14 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // → 44/29 (C1-S9-84: everything outside components/modules/ — vacations,
 // family views, meals views, marketplace answers) → 26/20 (C1-S9-85:
 // contacts, journal, marketplace, pets, planning, reminders, family tree,
-// behavior, binder).
+// behavior, binder) → 8/7 (C1-S9-86: the last thirteen modules). Every entry
+// left is DELIBERATE, and says so beside the write — see the last case below.
 const BASELINE = new Map<string, number>([
-  ['components/modules/announcements-module.tsx', 2],
-  ['components/modules/assistant-module.tsx', 2],
   ['components/modules/career-module.tsx', 1],
-  ['components/modules/celebrations-module.tsx', 1],
-  ['components/modules/concierge-module.tsx', 1],
-  ['components/modules/insurance-module.tsx', 1],
-  ['components/modules/life-events-module.tsx', 1],
   ['components/modules/meals-module.tsx', 1],
   ['components/modules/messages-module.tsx', 1],
   ['components/modules/notifications-module.tsx', 1],
   ['components/modules/routines-panel.tsx', 1],
-  ['components/modules/screen-time-module.tsx', 2],
-  ['components/modules/security-module.tsx', 2],
-  ['components/modules/tax-vault-module.tsx', 1],
-  ['components/modules/timetable-module.tsx', 2],
-  ['components/modules/trip-memories-module.tsx', 1],
-  ['components/modules/utilities-module.tsx', 1],
-  ['components/modules/voice-module.tsx', 1],
   ['components/modules/voting-module.tsx', 2],
   ['components/modules/weather-module.tsx', 1],
 ]);
@@ -96,6 +85,23 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(26);
+    expect(total).toBe(8);
+  });
+
+  // C1-S9-86: the burn-down is finished. What is left is a register of writes
+  // where zero rows is the ORDINARY answer (nothing unread, no prior ballot,
+  // no other primary), and each must say so where it is written: an audit ID
+  // in the comment above it. A baseline entry without one is a to-do, not a
+  // decision, and this refuses it.
+  it('every write left in the baseline says why, beside it', () => {
+    const undocumented: string[] = [];
+    for (const file of BASELINE.keys()) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      for (const site of unconfirmedWritesIn(file)) {
+        const lead = lines.slice(Math.max(0, site.line - 16), site.line + 1).join('\n');
+        if (!/Audit C1-S9-\d+/.test(lead)) undocumented.push(`${file}:${site.line}`);
+      }
+    }
+    expect(undocumented, 'a deliberate unconfirmed write must carry its audit ID in the comment above it').toEqual([]);
   });
 });

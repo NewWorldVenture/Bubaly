@@ -9,7 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -63,8 +63,10 @@ export function InsuranceModule() {
 
   async function removePolicy(id: string) {
     if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
-    const { error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setSelected(null);
     success(tr('insuranceModule.policyRemoved'));
   }

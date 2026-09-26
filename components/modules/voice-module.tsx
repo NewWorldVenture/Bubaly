@@ -9,7 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
@@ -181,8 +181,10 @@ function VoiceCaptureSession() {
 
   async function remove(c: VoiceCommand) {
     const sb = createClient();
-    const { error: err } = await sb.from('voice_commands').delete().eq('id', c.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error: err } = await sb.from('voice_commands').delete().eq('id', c.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   return (

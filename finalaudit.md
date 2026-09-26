@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-226 finding IDs from four workers and two parallel sessions; none of it was
+227 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 236 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 237 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -36182,6 +36182,90 @@ them deliberate.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-86 — the last thirteen modules, and a ratchet that is now a register
+
+**Announcements, assistant, celebrations, concierge, insurance, life events,
+screen time, security, tax vault, timetable, trip memories, utilities and
+voice: 18 writes.** The transformer converted 13; five were done by hand.
+- **Assistant: deleting and renaming a conversation.** A refused delete (no
+  error, zero rows) took the conversation off the list, and it came back on
+  the next load. A refused rename showed a title the conversation did not
+  have. The list now changes only after the row is confirmed. Both use the
+  module's own translated errors (`assistantModule.couldNot…`), so the guard
+  exempts this file from the shared message.
+- **Tax vault and trip memories** remove the file first and check it
+  (`a-deleted-file-is-really-deleted`, C1-S6-01), then delete the row. The
+  row delete is now confirmed, so a refused one no longer says "deleted".
+  - **Could the file be lost while the row survives?** Measured: the
+    `documents` bucket's delete policy (0266) is family membership by folder.
+    Its sensitive-document clause looks only at `public.documents` rows, and
+    both tables' row policies (0077, 0079) are `is_family_member`. So a
+    refused row means the storage removal was refused too, silently. Nothing
+    is lost; the false "deleted" was the defect.
+  - **Residual risk, OPEN (LOW):** if those policies ever diverge, object-first
+    would leave a row pointing at a removed file. The marketing-asset action's
+    model (soft-delete the row, remove the file, roll the row back on
+    refusal) would close it.
+- **Timetable, announcements, and the rest:** ordinary conversions.
+  - **Observed, not fixed (LOW, copy):** timetable's save failure is
+    hard-coded English ("Failed to update class"), not translated. It gives
+    the right answer in the wrong language, so it is logged.
+
+**The components ratchet is burned down: 8 writes in 7 files, all
+deliberate.** In each, zero rows is the ordinary answer:
+- career: clearing other primaries (C1-S9-80);
+- voting: un-voting, and clearing a prior single-choice vote (C1-S9-81);
+- messages: the read-receipt fallback (C1-S9-81);
+- notifications: mark-all-read (C1-S9-82);
+- routines: the step clear behind the confirmed template update (C1-S9-82);
+- weather: clearing the other defaults after the confirmed set (C1-S9-83);
+- meals: the prior-ballot clear (C1-S9-83).
+
+**A new case holds that line.** Every write left in the baseline must carry
+its audit ID in the comment above it, so the baseline is a register of
+decisions rather than a to-do list. Removing the reason from career's clear,
+or from voting's pair, goes red.
+
+**The sweep, end to end.** The components ratchet went from 198 writes in 70
+files (`C1-S9-77`) to 8 in 7, over ten passes (`C1-S9-77` to `C1-S9-86`).
+
+Most of those writes were the base class: "Saved" said about a refused row.
+Every pass was checked for follow-on writes; 13 were found and fixed. Each
+had licensed a second write on an unconfirmed first:
+- a reminder's next occurrence;
+- a concierge plan materialised from an acceptance that never landed;
+- a quote chain;
+- a career primary;
+- a declutter session;
+- an inventory move's history;
+- a photo's file removal;
+- a routine's step replacement;
+- a memory undo that removed files whose rows survived;
+- a default city;
+- a marketplace listing's uploaded photo;
+- a split rollback's silence;
+- a closet outfit's wear counts.
+
+Four instrument fixes came out of the sweep:
+- the ordering meta-guard's lazy slice check (`C1-S9-77`);
+- the client-write guard's binding window (`C1-S9-85`);
+- the pre-check for render mocks and regex-literal pins (`C1-S9-82`,
+  `C1-S9-85`);
+- the raw-message ban (`C1-S9-84`).
+
+**8 mutations, all red:**
+- five converted checks dropped: the assistant delete and rename, the tax
+  vault row, the timetable save, the announcements remove;
+- a voice delete reverted;
+- the two lost reasons.
+
+**Status:** FIXED. **OPEN:** none in the components ratchet beyond its 8
+documented decisions. **OPEN (LOW):** the object-first residual risk above;
+timetable's untranslated failure copy; `display-grid`'s two raw-message
+toasts (`C1-S9-84`).
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -36251,8 +36335,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,515 passing / 17,518 across 1,371
-files.** (Re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,531 passing / 17,534 across 1,371
+files.** (After `C1-S9-86`, green on its first run; 17,515 / 17,518 re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

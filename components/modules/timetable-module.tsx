@@ -5,6 +5,7 @@ import { CalendarRange, Plus, Pencil, Trash2, Clock, MapPin, Repeat } from 'luci
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -98,11 +99,13 @@ export function TimetableModule() {
       day_of_week: form.day_of_week === '' ? null : parseInt(form.day_of_week, 10),
       week_pattern: form.week_pattern, school_name: form.school_name.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('school_classes').update(fields).eq('id', form.id)
-      : await sb.from('school_classes').insert({ ...fields, family_id: familyId, member_id: form.member_id, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as "Class updated". Audit C1-S9-86.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('school_classes').update(fields).eq('id', form.id).select('id')
+      : await sb.from('school_classes').insert({ ...fields, family_id: familyId, member_id: form.member_id, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(form.id ? 'Failed to update class' : 'Failed to add class'); return; }
+    if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Class updated' : 'Class added');
     setOpen(false);
     refresh();
@@ -111,8 +114,9 @@ export function TimetableModule() {
   async function remove(c: SchoolClass) {
     if (!confirm(`Remove ${c.subject} from the timetable?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('school_classes').delete().eq('id', c.id);
+    const { data: removed, error: err } = await sb.from('school_classes').delete().eq('id', c.id).select('id');
     if (err) { toastError(t('timetableModule.failedToRemoveClass')); return; }
+    if (wroteNoRows(removed)) { toastError(t('timetableModule.failedToRemoveClass')); return; }
     success(t('timetableModule.classRemoved'));
     refresh();
   }

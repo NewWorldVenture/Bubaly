@@ -5,7 +5,7 @@ import { BookHeart, Plus, Trash2, MapPin, Plane, ImageIcon } from 'lucide-react'
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -108,8 +108,9 @@ export function TripMemoriesModule() {
       const { error: storageError } = await removeFamilyDocument(supabase, m.photo_path);
       if (storageError) return toastError(storageError);
     }
-    const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('tripMemoriesModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

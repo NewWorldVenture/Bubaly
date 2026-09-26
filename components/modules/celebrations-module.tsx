@@ -5,7 +5,7 @@ import { Cake, Heart, PartyPopper, CalendarHeart, Plus, Trash2, Gift } from 'luc
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -80,8 +80,9 @@ export function CelebrationsModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, ''));
-    if (error) toastError(describeDbError(error)); else success(t('celebrationsModule.removed'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, '')).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('celebrationsModule.removed'));
   }
 
   return (
