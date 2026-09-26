@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..');
@@ -39,6 +39,12 @@ const GATES = [
   'auth.getUser', 'getUser()',
   'requireMarketingAdmin', 'isSuperAdmin',
   'hasInternalSecret',       // server-action-only endpoints
+  // The shared cron secret. It was ABSENT from this list, and the gap was
+  // invisible while the file only looked at POST/PUT/PATCH/DELETE: every cron
+  // route is a GET, so none of them was ever checked against it. Extending the
+  // scan to reads is what surfaced the omission — 24 scheduled jobs, all gated in
+  // the code, none of them gated by this test.
+  'hasCronAuthorization',
   'secretEquals',
   'stripe.webhooks', 'constructEvent', 'svix-signature',  // signature-verified webhooks
   'validateTwilioSignature',  // the Twilio callbacks: guardian inbound, screening, contact centre
@@ -83,6 +89,93 @@ const writeRoutes = routeFiles(API)
   .map((p) => ({ path: p.slice(ROOT.length + 1), src: readFileSync(p, 'utf8') }))
   .filter((r) => /export async function (POST|PUT|PATCH|DELETE)/.test(r.src));
 
+/**
+ * The other half of the surface: a GET that reads a table.
+ *
+ * This file was named for WRITE routes and filtered to POST/PUT/PATCH/DELETE, so
+ * 56 GET handlers were never examined by it at all. A write with no gate lets a
+ * stranger change something; a READ with no gate lets them see it, and on these
+ * tables what they would see is one family's calendar, documents or health
+ * records. Both belong here.
+ *
+ * Four GETs read a table with no identity gate, and all four are public BY
+ * DESIGN — so this list is the point of the rule rather than an exception to it:
+ * each is named with the capability that stands in for a session, and a fifth
+ * appearing fails until someone writes down which it is.
+ */
+const PUBLIC_READS: { path: string; why: string }[] = [
+  {
+    path: 'app/api/blog/like/route.ts',
+    why: 'The public blog ♥. Anonymous by design, keyed by the durable bubaly_vid '
+      + 'visitor id with one like per (post, visitor) enforced by a unique constraint, '
+      + 'IP rate-limited, and it reads blog_posts — published marketing content, not '
+      + 'family data.',
+  },
+  {
+    path: 'app/api/blog/unsubscribe/route.ts',
+    why: 'The one-click unsubscribe link a digest email carries. The UUID token IS the '
+      + 'authorization — requiring a session would break the only flow it exists for — '
+      + 'and it is idempotent, so a second visit is still unsubscribed.',
+  },
+  {
+    path: 'app/api/marketing/unsubscribe/route.ts',
+    why: 'The same shape for marketing email, rendering an HTML confirmation page '
+      + 'rather than JSON because a person clicked it from their inbox.',
+  },
+  {
+    path: 'app/api/sync/feeds/[token]/route.ts',
+    why: 'The iCalendar feed. The feed_token is an unguessable capability slug and no '
+      + 'OAuth is possible — Apple Calendar and Outlook cannot sign in. Its own header '
+      + 'records that NOTHING ISSUES A TOKEN yet, so every request is a 404 today, and '
+      + 'tests/a-capability-nothing-can-issue.test.ts goes red the moment a writer '
+      + 'appears.',
+  },
+];
+
+const readRoutes = routeFiles(API)
+  .map((p) => ({ path: p.slice(ROOT.length + 1).split(sep).join('/'), src: readFileSync(p, 'utf8') }))
+  .filter((r) => /export async function GET/.test(r.src))
+  // Only the ones that actually touch a table. A GET that computes, proxies or
+  // renders reads nothing there is to leak, and demanding a gate would be asking
+  // for a check with no subject.
+  .filter((r) => /\.from\('[a-z_]+'\)/.test(r.src));
+
+describe('a read route is gated, or is public on purpose', () => {
+  it('finds the GET routes it claims to cover', () => {
+    expect(readRoutes.length, 'no data-reading GET routes found — the filter broke').toBeGreaterThanOrEqual(20);
+  });
+
+  it('every data-reading GET is gated on identity, or named as public with its reason', () => {
+    const named = new Set(PUBLIC_READS.map((p) => p.path));
+    const ungated = readRoutes
+      .filter((r) => !GATES.some((g) => uses(r.src, g)))
+      .filter((r) => !named.has(r.path))
+      .map((r) => `${r.path} — reads a table with no identity gate and is not in PUBLIC_READS`);
+    expect(
+      ungated,
+      'a GET with no gate lets a stranger SEE what a write would let them change. '
+      + 'Either gate it, or add it to PUBLIC_READS with the capability that stands in '
+      + 'for a session:\n' + ungated.map((u) => `  ${u}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('every PUBLIC_READS entry still exists, still has a GET, and still lacks a gate', () => {
+    // Non-vacuity in three directions. An entry whose file moved, whose GET went
+    // away, or which has SINCE been gated is a claim nobody is checking — and the
+    // third is the one that matters: a stale exemption is a hole the next edit
+    // falls into.
+    for (const { path, why } of PUBLIC_READS) {
+      expect(why.length, `${path} does not say why it is public`).toBeGreaterThan(40);
+      const route = readRoutes.find((r) => r.path === path);
+      expect(route, `${path} is in PUBLIC_READS but reads no table (moved, or gone)`).toBeTruthy();
+      expect(
+        GATES.some((g) => uses(route!.src, g)),
+        `${path} is gated now — remove it from PUBLIC_READS so the rule applies`,
+      ).toBe(false);
+    }
+  });
+});
+
 describe('a write route is gated and bounded', () => {
   it('finds the routes it claims to cover', () => {
     // Non-vacuity: a broken walker or filter makes every assertion below pass
@@ -122,7 +215,14 @@ describe('a write route is gated and bounded', () => {
   it('the gate list is not padded with entries nothing uses', () => {
     // The other way a list rots: it grows names that stopped meaning anything,
     // and then "is it in the list" stops being a real question.
-    const dead = [...GATES, ...RATE_GATES].filter((g) => !writeRoutes.some((r) => uses(r.src, g)));
-    expect(dead, `gate entries no write route uses: ${dead.join(', ')}`).toEqual([]);
+    //
+    // Scanned over READ routes as well, and that is not a widening for
+    // convenience — GATES now serves both rules, and while this looked only at
+    // writes it would have REJECTED adding `hasCronAuthorization`, which every one
+    // of the 24 scheduled GETs uses and none of the write routes does. A check
+    // that forbids the fix for the gap beside it is how the gap survived.
+    const everyRoute = [...writeRoutes, ...readRoutes];
+    const dead = [...GATES, ...RATE_GATES].filter((g) => !everyRoute.some((r) => uses(r.src, g)));
+    expect(dead, `gate entries no route uses at all: ${dead.join(', ')}`).toEqual([]);
   });
 });

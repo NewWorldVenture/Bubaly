@@ -29393,3 +29393,49 @@ exit 0; lint exit 0 at 10 of 12 warnings; i18n gate clean across eight surfaces;
 Supabase query audit clean. The three remaining failures are this container's Node
 22.22.2 against the declared 24.21.0 — CI resolves Node from `.nvmrc` and the same
 suite passed there.
+
+---
+
+## Q55 — The route guard was named for writes, so 56 reads were never examined
+
+`tests/a-write-route-is-gated-and-bounded.test.ts` filtered its scan to
+`POST|PUT|PATCH|DELETE`. There are **146 route files and 56 GET handlers**, and
+none of them was checked for a gate.
+
+The asymmetry is not defensible on these tables: a write with no gate lets a
+stranger *change* something, and a read with no gate lets them *see* it — and what
+they would see is one family's calendar, documents or health records.
+
+**Four data-reading GETs have no identity gate, and all four are public by
+design.** So the list is the point of the rule rather than an exception to it:
+each is named with the capability that stands in for a session, and a fifth
+appearing now fails until someone writes down which it is.
+
+| route | what stands in for a session |
+|---|---|
+| `blog/like` | the durable `bubaly_vid` visitor id, one like per (post, visitor) by unique constraint, IP rate-limited — and it reads `blog_posts`, published marketing copy, not family data |
+| `blog/unsubscribe` | the UUID token in a digest email's link. Requiring a session would break the only flow it exists for |
+| `marketing/unsubscribe` | the same, rendering an HTML page because a person clicked it from their inbox |
+| `sync/feeds/[token]` | an unguessable capability slug; Apple Calendar and Outlook cannot sign in. Its own header records that **nothing issues a token yet**, so every request is a 404 today, and `tests/a-capability-nothing-can-issue.test.ts` goes red the moment a writer appears |
+
+The exemption list is checked in three directions, and the third is the one that
+matters: an entry whose file moved, whose GET went away, **or which has since been
+gated**. A stale exemption is a hole the next edit falls into.
+
+### The gate list was missing the gate 24 routes use — and a check was stopping it being added
+
+`hasCronAuthorization` was absent from `GATES`. The gap was invisible while the
+file looked only at writes, because **every cron route is a GET**: 24 scheduled
+jobs, all gated in the code, none of them gated by this test.
+
+And adding it failed a different assertion — *"the gate list is not padded with
+entries nothing uses"* — which scanned `writeRoutes` only. No write route uses the
+cron secret, so the anti-padding rule **would have rejected the fix for the gap
+beside it.** That is how the omission survived: not an oversight anyone had to
+repeat, but a guard actively refusing the correction. It scans every route now,
+which is what `GATES` serving both rules requires.
+
+**Verified:** 17,123 of 17,126 tests green; calibrated in both directions — a new
+ungated GET reading `medications` is named by path, and gating one of the four
+public routes fails the file until its entry is removed. Lint exit 0, typecheck
+exit 0.
