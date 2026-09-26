@@ -228,7 +228,7 @@ export function DeclutterModule() {
                           <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{HEALTH_LABEL[h.health]}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <div className="flex gap-0.5" aria-label={`Clutter ${z.clutter_score} of 5`}>
+                          <div className="flex gap-0.5" aria-label={tr('declutter.clutterScoreOfFive', { score: z.clutter_score })}>
                             {[1, 2, 3, 4, 5].map((n) => <span key={n} className={cn('h-2 w-5 rounded-sm', n <= z.clutter_score ? (z.clutter_score >= 4 ? 'bg-rose-400/80' : z.clutter_score === 3 ? 'bg-amber-400/80' : 'bg-emerald-400/80') : 'bg-border')} />)}
                           </div>
                           <span className="text-xs text-muted">{SCORE_LABELS[z.clutter_score]}</span>

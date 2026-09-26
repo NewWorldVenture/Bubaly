@@ -140,7 +140,7 @@ export function WatchlistModule() {
               );
             })}
             {unavailableAudience.map((id, index) => (
-              <button key={id} type="button" aria-pressed={true} aria-label={`Remove unavailable participant ${index + 1} from tonight`}
+              <button key={id} type="button" aria-pressed={true} aria-label={tr('watchlist.removeUnavailableParticipant', { n: index + 1 })}
                 onClick={() => setAudience(audience.filter((selectedId) => selectedId !== id))}
                 className="rounded-full border border-brand bg-brand/15 px-3 py-1 text-xs text-brand-text coarse:min-h-11">
                 {tr('watchlist.unavailableParticipant')} {index + 1}{tr('watchlist.removeFromTonight')}
@@ -369,7 +369,7 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
   }
 
   return (
-    <Modal open title={`We watched · ${title.title}`} onClose={onClose}>
+    <Modal open title={tr('watchlist.weWatchedTitle', { name: title.title })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('watchlist.when')}>{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayIso()} />}</Field>

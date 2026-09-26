@@ -251,7 +251,7 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={`Research · ${event.location}`} className="max-w-2xl">
+    <Modal open onClose={onClose} title={tr('tripIntel.researchTitle', { place: event.location })} className="max-w-2xl">
       <div className="space-y-4">
         {!recs && (
           <>
@@ -488,7 +488,7 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
   const numCls = 'h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring';
 
   return (
-    <Modal open onClose={onClose} title={`Plan departure · ${event.title}`}>
+    <Modal open onClose={onClose} title={tr('tripIntel.planDepartureTitle', { name: event.title })}>
       <div className="space-y-4">
         <div className="rounded-xl border border-brand/20 bg-brand/5 px-4 py-2.5 text-sm">
           <p className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand-text" /> {event.location}</p>

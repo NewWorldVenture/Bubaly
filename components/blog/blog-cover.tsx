@@ -98,8 +98,10 @@ export function BlogCover({
     <svg
       viewBox="0 0 400 280"
       preserveAspectRatio="xMidYMid slice"
-      role="img"
-      aria-label={`Illustrated cover for “${title}”`}
+      // Decorative: every use sits beside the post's own visible title, so a
+      // label only made a screen reader say the title twice (and in English).
+      aria-hidden="true"
+      focusable="false"
       className={className}
       xmlns="http://www.w3.org/2000/svg"
     >

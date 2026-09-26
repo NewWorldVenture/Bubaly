@@ -5,8 +5,10 @@ import { useEffect, useState } from 'react';
 import { useTheme } from './use-theme';
 import { resolveTheme } from './theme-core';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function ThemeToggle({ className }: { className?: string }) {
+  const t = useTranslations();
   const { theme, toggle } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -20,7 +22,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       type="button"
       onClick={toggle}
-      aria-label={`Switch to ${resolved === 'dark' ? 'light' : 'dark'} mode`}
+      aria-label={t(resolved === 'dark' ? 'root.switchToLightMode' : 'root.switchToDarkMode')}
       className={cn(
         'inline-flex h-10 w-10 items-center justify-center rounded-full glass text-fg transition hover:bg-elevated focus-ring',
         className,

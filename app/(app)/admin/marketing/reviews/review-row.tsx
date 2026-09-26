@@ -23,7 +23,7 @@ export function ReviewRow({ review }: { review: Review }) {
     <div className="rounded-xl border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1 text-amber-400" aria-label={`${review.rating} stars`}>
+          <div className="flex items-center gap-1 text-amber-400" aria-label={review.rating === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: review.rating })}>
             {[1, 2, 3, 4, 5].map((v) => <Star key={v} className={`h-4 w-4 ${v <= review.rating ? 'fill-amber-400' : 'text-border'}`} />)}
           </div>
           {review.title && <p className="mt-1 font-semibold">{review.title}</p>}

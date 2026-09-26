@@ -59,6 +59,8 @@ export const AUTH_SCOPE = [
 export const PUBLIC_LINK_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'publicGift', 'publicGiftForm', 'reviewForm', 'reviewsNewReviewForm',
+  // The star picker on the public review form names each star ("4 stars").
+  'rating',
 ] as const;
 
 /**

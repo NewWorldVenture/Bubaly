@@ -144,7 +144,7 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
   }
 
   return (
-    <Modal open onClose={onClose} title={`Allowance — ${row.name}`}>
+    <Modal open onClose={onClose} title={t('allowance.allowanceFor', { name: row.name })}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('allowance.amountUsd')}>{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
         <div>

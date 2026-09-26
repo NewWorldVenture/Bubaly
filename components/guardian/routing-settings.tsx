@@ -203,7 +203,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
               <textarea id={`${a11yId}-f2`}
                 value={form.ai_greeting_template ?? ''}
                 onChange={e => setForm(p => ({ ...p, ai_greeting_template: e.target.value }))}
-                placeholder={`Hello! You've reached the [Family] family. I'm ${form.ai_persona_name}, the AI assistant for ${member.display_name}. How can I help?`}
+                placeholder={tr('routingSettings.greetingPlaceholder', { assistant: form.ai_persona_name, name: member.display_name })}
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm min-h-[80px]"
               />
             </div>
@@ -212,7 +212,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
               <textarea id={`${a11yId}-f3`}
                 value={form.voicemail_greeting ?? ''}
                 onChange={e => setForm(p => ({ ...p, voicemail_greeting: e.target.value }))}
-                placeholder={`You've reached ${member.display_name}. Please leave a message.`}
+                placeholder={tr('routingSettings.voicemailPlaceholder', { name: member.display_name })}
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm min-h-[80px]"
               />
             </div>

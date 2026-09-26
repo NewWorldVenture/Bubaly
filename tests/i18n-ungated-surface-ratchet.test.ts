@@ -94,7 +94,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then 63 of I18N-003's attribute templates ("Edit ${name}", "Move ${x} up",
 // "Approve: ${title}") through 34 shared itemAction.* keys, and the assistant
 // pane's "New conversation" fallback, 2,934 -> 2,870.
-const CEILING = 2870;
+// Then batch 2: 70 context-specific attribute templates (wallet dialog titles,
+// star ratings with a one/many split, inventory, closet, routing placeholders,
+// theme toggle, OTP digits and more), 2,870 -> 2,800.
+const CEILING = 2800;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

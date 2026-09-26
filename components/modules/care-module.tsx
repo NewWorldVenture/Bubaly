@@ -218,7 +218,7 @@ export function CareModule() {
 
           {/* Timeline */}
           {recipientEntries.length === 0 ? (
-            <EmptyState icon={HeartHandshake} title={`No care logged for ${memberName(recipientId)}`}
+            <EmptyState icon={HeartHandshake} title={tr('careModule.noCareLoggedFor', { name: memberName(recipientId) ?? '' })}
               description={tr('careModule.useTheQuickLogButtons')}
               action={<Button onClick={() => openNew()} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('care.logCare')}</Button>} />
           ) : (

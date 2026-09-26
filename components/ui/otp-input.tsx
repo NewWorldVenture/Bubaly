@@ -6,6 +6,7 @@
 // handles focus advance/retreat, paste of a full code, and arrow navigation.
 import { useRef, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function OtpInput({
   value,
@@ -14,7 +15,7 @@ export function OtpInput({
   autoFocus = false,
   disabled = false,
   onComplete,
-  ariaLabel = 'Verification code',
+  ariaLabel,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -24,6 +25,7 @@ export function OtpInput({
   onComplete?: (code: string) => void;
   ariaLabel?: string;
 }) {
+  const t = useTranslations();
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const digits = value.split('').slice(0, length);
 
@@ -85,7 +87,7 @@ export function OtpInput({
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3" role="group" aria-label={ariaLabel}>
+    <div className="flex items-center justify-center gap-2 sm:gap-3" role="group" aria-label={ariaLabel ?? t('phoneAuth.verificationCode')}>
       {Array.from({ length }, (_, i) => (
         <input
           key={i}
@@ -100,7 +102,7 @@ export function OtpInput({
           maxLength={1}
           disabled={disabled}
           autoFocus={autoFocus && i === 0}
-          aria-label={`Digit ${i + 1}`}
+          aria-label={t('phoneAuth.digitN', { n: i + 1 })}
           className={cn(
             'h-14 w-12 min-w-0 rounded-xl border bg-bg text-center text-2xl font-semibold transition focus-ring',
             'disabled:opacity-50',

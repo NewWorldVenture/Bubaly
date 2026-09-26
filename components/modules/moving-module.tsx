@@ -198,8 +198,8 @@ export function MovingWorkspace() {
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {b.status !== 'unpacked' && <Button size="sm" variant="secondary" onClick={() => advanceBox(b)}>{boxStatusLabel(BOX_ORDER[BOX_ORDER.indexOf(b.status) + 1])}</Button>}
-          <button onClick={() => setBoxForm({ open: true, box: b })} aria-label={`Edit box ${b.box_number}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => deleteBox(b)} aria-label={`Delete box ${b.box_number}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => setBoxForm({ open: true, box: b })} aria-label={tr('moving.editBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+          <button onClick={() => deleteBox(b)} aria-label={tr('moving.deleteBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
     </li>

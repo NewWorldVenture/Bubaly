@@ -709,7 +709,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                   {step.step}
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
-                  placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
+                  placeholder={tr('recipes.stepPlaceholder', { n: step.step })} className="flex-1 min-h-[60px]" />
                 <button aria-label={tr('iconAction.remove')} type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}

@@ -255,7 +255,7 @@ export function FamilyModule() {
           <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-56">
             {family?.cover_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={media(family.cover_url) ?? ''} alt={`${famName} cover`} className="h-full w-full object-cover" />
+              <img src={media(family.cover_url) ?? ''} alt={t('family.coverAlt', { name: famName })} className="h-full w-full object-cover" />
             ) : (
               <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/25 via-violet-600/15 to-blue-900/20 text-muted">
                 <Users className="h-10 w-10" />

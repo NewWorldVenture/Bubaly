@@ -118,7 +118,7 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
             {t('publicGift.helpMeWriteSomething')}
           </button>
         </div>
-        <textarea id={`${a11yId}-message`} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Write a note for ${childName}…`}
+        <textarea id={`${a11yId}-message`} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t('publicGift.writeANoteFor', { name: childName })}
           className="min-h-[70px] w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm" />
         {ideas.length > 0 && (
           <div className="mt-2 space-y-1.5">

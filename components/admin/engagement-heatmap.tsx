@@ -33,7 +33,7 @@ export async function EngagementHeatmap({ timestamps }: { timestamps: string[] }
               <div key={label} className="contents">
                 <div className="flex items-center text-xs text-muted">{label}</div>
                 {grid[day].map((count, hour) => (
-                  <div key={hour} className="aspect-square m-0.5 rounded-sm bg-brand" style={{ opacity: count > 0 ? 0.15 + (count / max) * 0.85 : 0.04 }} title={`${count} events`} />
+                  <div key={hour} className="aspect-square m-0.5 rounded-sm bg-brand" style={{ opacity: count > 0 ? 0.15 + (count / max) * 0.85 : 0.04 }} title={count === 1 ? t('engagementHeatmap.eventsOne') : t('engagementHeatmap.eventsMany', { count })} />
                 ))}
               </div>
             ))}

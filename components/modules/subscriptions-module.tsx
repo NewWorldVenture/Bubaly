@@ -275,7 +275,7 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
               <div className="mt-3 space-y-3 text-sm">
                 <p>{candidate.explanation}</p>
                 <p className="text-muted">{t('subscriptions.observedWindow')} {candidate.observed.from} to {candidate.observed.to}.</p>
-                <ul aria-label={`Recorded expense evidence for ${candidate.name}`} className="space-y-2">
+                <ul aria-label={t('subscriptions.expenseEvidenceFor', { name: candidate.name })} className="space-y-2">
                   {candidate.evidence.map((item) => <li key={item.recordId} className="break-words text-xs text-muted"><time dateTime={item.date}>{item.date}</time> - USD {(item.amountCents / 100).toFixed(2)} - <code className="break-all">transactions/{item.recordId}</code></li>)}
                 </ul>
                 <p className="text-xs text-muted">{t('subscriptions.useThisEvidenceToPreFill')}</p>

@@ -455,7 +455,7 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
   }
 
   return (
-    <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
+    <Modal open onClose={onClose} title={tr('childDetail.requestToSpendFor', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-xs text-muted">{formatCents(spendable)} {tr('walletDashboard.availableInSpendLargerAmountsNeed')}</p>
         <Field label={tr('walletDashboard.whatFor')}>
@@ -556,7 +556,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
   }
 
   return (
-    <Modal open onClose={onClose} title={`Add funds — ${child.name}`}>
+    <Modal open onClose={onClose} title={tr('childDetail.addFundsFor', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-xs text-muted">{tr('walletDashboard.fundsAreSplitAcross')} {child.name}{tr('walletDashboard.aposSBucketsUsingYourAllocation')}</p>
         <Field label={tr('walletDashboard.amountUsd')}>

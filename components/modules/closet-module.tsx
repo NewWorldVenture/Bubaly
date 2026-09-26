@@ -292,7 +292,7 @@ export function ClosetModule() {
       </div>
 
       {memberItems.length === 0 ? (
-        <EmptyState icon={Shirt} title={`${memberName(memberId)}’s closet is empty`} description={t('closetModule.addTopsBottomsShoesAnd')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addTheFirstItem')}</Button>} />
+        <EmptyState icon={Shirt} title={t('closet.emptyFor', { name: memberName(memberId) })} description={t('closetModule.addTopsBottomsShoesAnd')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {t('closet.addTheFirstItem')}</Button>} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
@@ -319,9 +319,9 @@ export function ClosetModule() {
                   </span>
                   <div className="flex items-center gap-1 opacity-80 transition group-hover:opacity-100">
                     {item.status === 'active' ? (
-                      <button onClick={() => setItemStatus(item, 'laundry')} aria-label={`Send ${item.name} to the laundry`} title={t('closet.toLaundry')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><WashingMachine className="h-4 w-4" /></button>
+                      <button onClick={() => setItemStatus(item, 'laundry')} aria-label={t('closet.sendToLaundry', { name: item.name })} title={t('closet.toLaundry')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><WashingMachine className="h-4 w-4" /></button>
                     ) : (
-                      <button onClick={() => setItemStatus(item, 'active')} aria-label={`Return ${item.name} to the closet`} title={t('closet.backInCloset')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Check className="h-4 w-4" /></button>
+                      <button onClick={() => setItemStatus(item, 'active')} aria-label={t('closet.returnToCloset', { name: item.name })} title={t('closet.backInCloset')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Check className="h-4 w-4" /></button>
                     )}
                     <button onClick={() => setItemForm({ open: true, item })} aria-label={t('itemAction.edit', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => deleteItem(item)} aria-label={t('itemAction.remove', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>

@@ -412,7 +412,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
   }
 
   return (
-    <Modal open title={`Order physical card — ${child.name}`} onClose={onClose}>
+    <Modal open title={tr('moneyCards.orderPhysicalCardFor', { name: child.name })} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
           <Package className="h-5 w-5 flex-shrink-0 text-brand-text" />

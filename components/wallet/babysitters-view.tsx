@@ -245,7 +245,7 @@ function PaymentModal({ sitter, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={`Pay ${sitter.name}`} onClose={onClose}>
+    <Modal open title={tr('babysitters.payName', { name: sitter.name })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('babysitters.hours')}>{(id) => <Input id={id} name="hours" type="number" min="0" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="3" />}</Field>

@@ -168,7 +168,7 @@ export function SleepModule() {
                   <li key={l.id} className="group relative flex h-full flex-1 flex-col justify-end" title={`${l.sleep_date}: ${fmtHours(l.duration_min)}`}>
                     <div className={cn('rounded-t-md transition', short ? 'bg-amber-400/70' : 'bg-brand/70')} style={{ height: `${(l.duration_min / maxMinutes) * 100}%` }} />
                     <span className="mt-1 text-center text-[10px] text-muted">{fmtDay(l.sleep_date)}</span>
-                    <button onClick={() => deleteLog(l)} aria-label={`Delete night ${l.sleep_date}`} className="absolute -top-1 right-0 hidden rounded p-0.5 text-muted hover:text-rose-400 group-hover:block"><Trash2 className="h-3 w-3" /></button>
+                    <button onClick={() => deleteLog(l)} aria-label={t('sleep.deleteNight', { date: l.sleep_date })} className="absolute -top-1 right-0 hidden rounded p-0.5 text-muted hover:text-rose-400 group-hover:block"><Trash2 className="h-3 w-3" /></button>
                   </li>
                 );
               })}

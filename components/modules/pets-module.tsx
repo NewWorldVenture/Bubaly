@@ -319,7 +319,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
   }
 
   return (
-    <Modal open title={`Add care · ${pet.name}`} onClose={onClose}>
+    <Modal open title={t('pets.addCareTitle', { name: pet.name })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('pets.type')}>{(id) => <Select id={id} name="kind" defaultValue="vet_visit">{CARE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>

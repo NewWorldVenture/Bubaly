@@ -390,7 +390,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
   }
 
   return (
-    <Modal open onClose={onClose} title={`Request to spend — ${child.name}`}>
+    <Modal open onClose={onClose} title={t('childDetail.requestToSpendFor', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {formatCents(spendable)} {t('childDetail.availableInSpend')}
@@ -450,7 +450,7 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
   const selectCls = 'w-full rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm focus:border-brand/40 focus:outline-none';
 
   return (
-    <Modal open onClose={onClose} title={`Send from ${child.name}`}>
+    <Modal open onClose={onClose} title={t('childDetail.sendFrom', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {formatCents(spendable)} {t('childDetail.availableIn')} {child.name}{t('childDetail.aposSSpendBucket')}
@@ -500,7 +500,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
   }
 
   return (
-    <Modal open onClose={onClose} title={`Add funds — ${child.name}`}>
+    <Modal open onClose={onClose} title={t('childDetail.addFundsFor', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {t('childDetail.splitAcross')} {child.name}{t('childDetail.aposSBuckets')} {child.split.spend}{t('childDetail.spend')} {child.split.save}{t('childDetail.save')}
@@ -553,7 +553,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
   }
 
   return (
-    <Modal open onClose={onClose} title={`Request allowance — ${child.name}`}>
+    <Modal open onClose={onClose} title={t('childDetail.requestAllowanceFor', { name: child.name })}>
       <form onSubmit={submit} className="space-y-4">
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {t('childDetail.aParentWillSeeYourRequest')}

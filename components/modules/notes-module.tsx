@@ -467,7 +467,7 @@ function NoteModal({ note, onClose, onSaved }: {
             id={`${a11yId}-content`}
             value={bodyValue}
             onChange={(e) => setBodyValue(e.target.value)}
-            placeholder={`Write anything…\n\nTip: [ ] unchecked item\n     [x] checked item`}
+            placeholder={t('notes.contentPlaceholder')}
             className="min-h-[200px] font-mono text-sm"
             autoFocus={!!note} />
 

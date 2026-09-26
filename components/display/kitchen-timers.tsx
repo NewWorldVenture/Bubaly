@@ -161,7 +161,7 @@ export function KitchenTimers() {
                         {t.done ? 'Done!' : formatDuration(remaining)}
                       </p>
                     </div>
-                    <button onClick={() => dismiss(t.id)} aria-label={`Dismiss ${t.label} timer`}
+                    <button onClick={() => dismiss(t.id)} aria-label={tr('kitchenTimers.dismissTimer', { name: t.label })}
                       className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-black/25 text-white/70 hover:bg-black/45 hover:text-white">
                       <X className="h-4 w-4" />
                     </button>

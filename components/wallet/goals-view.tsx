@@ -276,7 +276,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
   const kindMeta = GOAL_KIND_META[goal.kind] ?? GOAL_KIND_META.custom;
 
   return (
-    <Modal open onClose={onClose} title={`Fund — ${goal.title}`}>
+    <Modal open onClose={onClose} title={t('goals.fundGoal', { name: goal.title })}>
       <form onSubmit={submit} className="space-y-4">
         {/* Goal progress mini-card */}
         <div className="rounded-xl border border-border bg-surface/40 p-3">

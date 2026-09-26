@@ -298,6 +298,7 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
 }
 
 function TrendChart({ trend }: { trend: { label: string; credits: number; debits: number }[] }) {
+  const tr = useTranslations();
   const maxVal = Math.max(...trend.flatMap((t) => [t.credits, t.debits]), 1);
   return (
     <div className="flex h-32 items-end gap-1.5">
@@ -307,12 +308,12 @@ function TrendChart({ trend }: { trend: { label: string; credits: number; debits
             <div
               className="w-full rounded-t bg-emerald-500/30 transition-all"
               style={{ height: `${(t.credits / maxVal) * 80}px` }}
-              title={`In: ${formatCents(t.credits)}`}
+              title={tr('treasury.inAmount', { amount: formatCents(t.credits) })}
             />
             <div
               className="w-full rounded-t bg-rose-500/30 transition-all"
               style={{ height: `${(t.debits / maxVal) * 80}px` }}
-              title={`Out: ${formatCents(t.debits)}`}
+              title={tr('treasury.outAmount', { amount: formatCents(t.debits) })}
             />
           </div>
           <p className="text-[9px] text-muted">{t.label}</p>

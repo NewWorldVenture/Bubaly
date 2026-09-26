@@ -107,7 +107,7 @@ export function HomeMomentCard() {
 
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-brand/30 bg-gradient-to-r from-brand/10 to-transparent p-4 sm:p-5">
-      <Link href="/dashboard/moments" className="group flex min-w-0 flex-1 items-center gap-4" aria-label={`Get ready for ${event.title}`}>
+      <Link href="/dashboard/moments" className="group flex min-w-0 flex-1 items-center gap-4" aria-label={t('moments.getReadyFor', { name: event.title })}>
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand-text">
           <Sparkles className="h-6 w-6" />
         </span>

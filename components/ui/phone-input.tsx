@@ -109,7 +109,7 @@ export function PhoneInput({
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-haspopup="listbox"
-          aria-label={`Country: ${country.name}`}
+          aria-label={tr('phoneAuth.countryLabel', { name: country.name })}
           className="flex shrink-0 items-center gap-1.5 border-r border-border bg-elevated px-3 transition hover:bg-elevated/80"
         >
           <span className="text-base leading-none" aria-hidden>{country.flag}</span>

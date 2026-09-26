@@ -210,7 +210,7 @@ export function InventoryModule() {
                     <button onClick={() => setLocationFilter(location.id)} className={cn('flex min-h-9 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm', locationFilter === location.id ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated')}>
                       <span>{locationKindMeta(location.kind).emoji}</span><span className="truncate">{location.name}</span><span className="ml-auto text-xs text-muted">{itemsIn(location.id)}</span>
                     </button>
-                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={`Add a container in ${location.name}`} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={tr('inventory.addContainerIn', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setLocationForm({ open: true, parent: null, location })} aria-label={tr('itemAction.edit', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => deleteLocation(location)} aria-label={tr('itemAction.delete', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
@@ -505,7 +505,7 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
   }
 
   return (
-    <Modal open title={`Moved · ${item.name}`} description={`Currently: ${locationLabel(locations, item.location_id)}`} onClose={onClose}>
+    <Modal open title={tr('inventory.movedTitle', { name: item.name })} description={tr('inventory.currentlyAt', { place: locationLabel(locations, item.location_id) })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('inventory.nowIn')}>{(id) => <Select id={id} name="to_location_id" defaultValue={item.location_id ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
         <Field label="Why">{(id) => <Input id={id} name="reason" placeholder={tr('inventory.springCleanBackFromRepair')} />}</Field>
@@ -536,7 +536,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
   }
 
   return (
-    <Modal open title={`Lend out · ${item.name}`} onClose={onClose}>
+    <Modal open title={tr('inventory.lendOutTitle', { name: item.name })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder={tr('inventory.theNguyensNextDoor')} />}</Field>

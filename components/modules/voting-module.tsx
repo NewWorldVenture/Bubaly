@@ -329,13 +329,13 @@ export function VotingModule() {
                   {form.options.map((opt, i) => (
                     <div key={i} className="rounded-lg border border-border p-2">
                       <div className="flex gap-2">
-                        <Input value={opt.label} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], label: e.target.value }; setForm({ ...form, options: o }); }} placeholder={`Option ${i + 1}`} />
+                        <Input value={opt.label} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], label: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.optionN', { n: i + 1 })} />
                         {form.options.length > 2 && <button type="button" onClick={() => setForm({ ...form, options: form.options.filter((_, j) => j !== i) })} className="text-muted hover:text-danger" aria-label={tr('voting.removeOption')}><Trash2 className="h-4 w-4" /></button>}
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.cost')} aria-label={`Option ${i + 1} cost`} />
-                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={`Option ${i + 1} travel`} />
-                        <Input value={opt.tags} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], tags: e.target.value }; setForm({ ...form, options: o }); }} placeholder="tags" aria-label={`Option ${i + 1} tags`} />
+                        <Input type="number" min="0" value={opt.cost} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], cost: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.cost')} aria-label={tr('voting.optionNCost', { n: i + 1 })} />
+                        <Input type="number" min="0" value={opt.travel} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], travel: e.target.value }; setForm({ ...form, options: o }); }} placeholder={tr('voting.travelMin')} aria-label={tr('voting.optionNTravel', { n: i + 1 })} />
+                        <Input value={opt.tags} onChange={(e) => { const o = [...form.options]; o[i] = { ...o[i], tags: e.target.value }; setForm({ ...form, options: o }); }} placeholder="tags" aria-label={tr('voting.optionNTags', { n: i + 1 })} />
                       </div>
                     </div>
                   ))}
