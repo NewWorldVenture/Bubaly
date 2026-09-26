@@ -2,15 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
+- Last Updated: 2026-09-26T13:40:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 1
+- Fixed + Passed: 2
 - Blocked: 0
-- Failed: 3
+- Failed: 2
 - Overall Completion: 0.01%
+
+2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 moves ❌ FAIL → 🛠 FIXED + PASS in the repository (migration 0318 + docs/audit/social-restriction-delete-check.sql; production needs the F-001 ledger repair). The remaining FAIL items are SEC-001 and AUTHZ-005. Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -84,7 +86,7 @@ PRODUCTION READY: NO
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
-- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
+- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 is repaired in the repository by migration 0318 (2026-09-26) and is live in production only after the F-001 ledger repair. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
 - EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
@@ -98,8 +100,8 @@ PRODUCTION READY: NO
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003's DELETE bypass is repaired in the repository by migration 0318, not by the required-read guard; production needs the F-001 ledger repair.
+- AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.
@@ -13541,7 +13543,7 @@ PRODUCTION READY: NO
 | DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
-| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
+| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🛠 FIXED + PASS | Critical | Reproduced against the replayed schema (docs/audit/social-restriction-delete-check.sql): a `read_only` adult deleted their own row (1 row), resolved to `marketing_manager` and could publish. | Migration 0318 gives social_access_permissions DELETE the UPDATE predicate (is_family_admin or manage_access). The app never deletes these rows, so no legitimate path narrows. | Probe passes after 0318 (restriction holds; parent can still remove it); 0318 re-applies idempotently; 42/42 probes; migration audits and 41 migration-related test files pass. | Repository-verified 2026-09-26 (Pass C1-K). Production carries it only after the F-001 migration-ledger repair; deployed policy unverified. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -15910,35 +15912,39 @@ Executed real access/roles/settle code with controlled database responses: activ
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: Critical
-Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; social_access_permissions; social_role_for
+Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; supabase/migrations/0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql; social_access_permissions; social_role_for; social_has_permission
 
 #### Expected Behavior
 Members assigned restrictive social permissions cannot remove their own restriction through direct database requests.
 
 #### Test Cases
-- [ ] Happy path through every required layer and persisted readback
-- [ ] Missing, invalid, unauthorized and cross-tenant inputs
-- [ ] Empty, loading, provider failure and retry states
-- [ ] Duplicate submissions and concurrent execution where applicable
-- [ ] Refresh, restart, keyboard and mobile behavior where applicable
-- [ ] Console and network inspection; related regression
+- [x] Restriction in force: a `read_only` adult resolves to `read_only` and cannot publish (control)
+- [x] The restricted adult's direct DELETE of their own row matches zero rows
+- [x] After the attempted DELETE the adult still resolves to `read_only` and still cannot publish
+- [x] A parent (family admin) can still remove the restriction (control)
+- [x] Migration re-applies idempotently onto an existing schema
+- [ ] Deployed production policy (blocked: migrations from 0296 on are not applied in production — F-001)
 
 #### Issues Found
 Generic family-member DELETE policy includes social_access_permissions. Later granular policies tighten only INSERT/UPDATE. An active adult with explicit read_only can delete that row and regain marketing_manager connect/publish permissions via successful role fallback.
 
+Reproduced 2026-09-26 against the replayed repository schema, before the fix: the adult's DELETE removed 1 row, `social_role_for` then returned `marketing_manager`, and `social_has_permission(…, 'publish_posts')` returned true.
+
 #### Fixes Applied
-None. Standing no-SQL boundary prevents changing the database policy in this cycle.
+`0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql` replaces `social_access_permissions_delete` with the predicate UPDATE already uses: `is_family_admin(family_id) or social_has_permission(family_id, 'manage_access')`. Removing a restriction is exactly as privileged as changing one. The app only upserts these rows (`app/(app)/dashboard/social/actions.ts`), never deletes them, so no legitimate path narrows.
+
+The separate parent/admin `manage_access` difference between the SQL matrix and `lib/social/roles.ts` noted in social-access-cycle.md is unchanged by this fix.
 
 #### Retest Results
-Pending database policy repair and isolated role/tenant execution.
+`docs/audit/social-restriction-delete-check.sql`: 3 failures before 0318 (breach, fallback to marketing_manager with publish, and the parent control finding nothing left to delete); passes after. 0318 applied twice without error. Full probe suite 42/42. `scripts/audit-migration-versions.mjs` passes (next free version 0319). 41 migration-related unit test files, 365 tests, pass.
 
 #### Evidence
-Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md.
+docs/audit/social-restriction-delete-check.sql; docs/final-audit/social-access-cycle.md; Pass C1-K in this file.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS in the repository. Production needs the F-001 migration-ledger repair before this policy is live there.
 
 ### DATA-005 — Medication dose actions must use current verified household and daily state
 
@@ -20905,7 +20911,7 @@ Status: 🔄 IN PROGRESS — the outer boundary is verified from outside; databa
 
 The middleware boundary was probed exhaustively (see APIs below): no route exposed family data to an unauthenticated caller. The assistant exemption was confirmed exact — POST /api/assistant answers 401 and POST /api/assistant/alexa answers 403 from their own handlers, GET on both answers 307, and /api/assistant/link and /api/assistant/other answer 307 on both verbs, so the namespace was not opened.
 
-NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 through AUTHZ-005 remain open, and AUTHZ-003 and AUTHZ-005 remain release failures requiring SQL this audit is not authorized to author.
+NOT verified here: role and RLS behaviour inside the database, which needs authenticated sessions at several role levels. AUTHZ-002 through AUTHZ-005 remain open, and AUTHZ-005 remains a release failure requiring SQL. (AUTHZ-003 was repaired in the repository on 2026-09-26 by migration 0318; production needs the F-001 ledger repair.)
 
 ## Core User Journeys
 Status: 🔄 IN PROGRESS — public journeys verified; authenticated journeys not exercised in this pass.
@@ -20938,7 +20944,7 @@ Status: 🔄 IN PROGRESS — migration integrity verified in CI; live policy beh
 
 The Database job (migration replay and RLS boundary probes) passes on head 92340315. This branch authors no SQL and changes no migration — `git diff origin/main...HEAD -- supabase/migrations/` is empty.
 
-NOT verified here: the applied production catalog, which no static evidence establishes. The three release failures (SEC-001 public family-media bucket, AUTHZ-003 social-member DELETE, AUTHZ-005 Guardian contact/profile writes) are all policy state on main, not regressions from this branch, and all need SQL applied by a human.
+NOT verified here: the applied production catalog, which no static evidence establishes. The release failures (SEC-001 public family-media bucket, AUTHZ-005 Guardian contact/profile writes) are policy state on main, not regressions from this branch, and need SQL applied by a human. AUTHZ-003 (social-member DELETE) was repaired in the repository on 2026-09-26 by migration 0318 and also needs applying to production.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — no live provider exchange was performed in this pass.
@@ -21006,7 +21012,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
-- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
+- SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 is repaired in the repository by migration 0318 (2026-09-26) and is live in production only after the F-001 ledger repair. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
 - EMAIL-002: Concurrent counter loss is fixed with a compare-and-set; the double count after a failed receipt finalization remains and needs per-event idempotency (a schema change).
@@ -21020,8 +21026,8 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003's DELETE bypass is repaired in the repository by migration 0318, not by the required-read guard; production needs the F-001 ledger repair.
+- AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.
@@ -26435,6 +26441,53 @@ Also swept clean for refusal-as-success, against the live policies:
 `is_family_member` for every command, so a zero-row write can only be a race;
 `rides` is manager-gated and `rides-module` already counts rows on every
 update and delete.
+
+## C1-K-16 · CI · The mobile-menu E2E failed whenever the service worker won a race
+
+`tests/e2e/marketing-public.spec.ts` › *the mobile menu becomes usable when its
+client code is ready* failed on `main`'s own head (`ad742c2b`, iPad) and on this
+branch (`0b38e5db`, iPad and Pixel), at `expect.poll(() => heldScripts)`: the
+test holds every `/_next/static/*.js` request so it can see the toggle disabled
+before hydration, and it held none.
+
+**Root cause.** `beforeEach` loads the homepage in the same browser context, and
+that page registers `public/sw.js`, which calls `clients.claim()` and serves
+scripts cache-first. The test's second page is then controlled by the worker,
+and a request the worker answers never reaches `page.route`. Measured directly
+against a production build, with the worker given time to take control:
+
+| context | first page controlled | scripts seen by `page.route` on the second page |
+| --- | --- | --- |
+| service workers allowed | yes | **0** |
+| service workers blocked | no | 16 |
+
+Whether CI failed depended on whether the worker activated before the second
+page loaded, which is why it was intermittent and why it did not reproduce in
+20 local runs of the unfixed test.
+
+**Fix.** The test is about a first visit, so it now runs with
+`serviceWorkers: 'block'` (a `test.describe` with `test.use`), scoped to that
+one test. With the fix, 20/20 pass locally on Pixel and iPad. No application
+code changed; the service worker's behavior is correct for real users.
+
+The other E2E red on this PR, three `phone-auth-http` cases, is also on `main`
+(`ad742c2b` and the three pushes before it) and is not this branch's; it stalls
+after a successful OTP request, before any `/auth/v1/verify` POST. It was
+explained in a PR comment. No fix exists yet, and it could not be reproduced
+here (no Docker daemon, so no local GoTrue).
+
+## AUTHZ-003 closed in the repository (was ❌ FAIL)
+
+The master ledger's Critical AUTHZ-003 was held open since 2026-09-12 only by
+that cycle's no-SQL rule. Reproduced against the replayed schema: an adult
+pinned to `read_only` deleted their own `social_access_permissions` row, then
+resolved to `marketing_manager` and could publish. 0034 had tightened INSERT and
+UPDATE and left DELETE on the generic `is_family_member` policy.
+`0318_a_social_restriction_cannot_be_deleted_by_its_subject.sql` gives DELETE
+the UPDATE predicate. `docs/audit/social-restriction-delete-check.sql` fails 3
+ways before it and passes after; a parent can still lift the restriction.
+The ledger row and detailed record are updated to 🛠 FIXED + PASS in the
+repository; production carries it only after the F-001 ledger repair.
 
 ## The master ledger's open list, worked to the end
 
