@@ -7,7 +7,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -89,16 +89,19 @@ export function InventoryModule() {
 
   async function deleteItem(item: Item) {
     if (!confirm(`Remove ${item.name} from the inventory?`)) return;
-    const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: removed, error } = await createClient().from('inventory_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('inventoryModule.itemRemoved'));
   }
 
   async function setStatus(item: Item, status: InventoryStatus) {
     const patch: Database['public']['Tables']['inventory_items']['Update'] = { status };
     if (status !== 'lent') { patch.lent_to = null; patch.lent_on = null; }
-    const { error } = await createClient().from('inventory_items').update(patch).eq('id', item.id);
+    const { data: updated, error } = await createClient().from('inventory_items').update(patch).eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
@@ -117,8 +120,9 @@ export function InventoryModule() {
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
     if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
-    const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
+    const { data: removed2, error } = await createClient().from('home_locations').delete().eq('id', location.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('inventoryModule.locationDeleted'));
   }
 
@@ -383,11 +387,12 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('inventory_items').update(payload).eq('id', item.id)
-      : await supabase.from('inventory_items').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved, error } = item
+      ? await supabase.from('inventory_items').update(payload).eq('id', item.id).select('id')
+      : await supabase.from('inventory_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
@@ -454,11 +459,12 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     setLoading(true);
     const payload = { name, kind: String(f.get('kind') ?? 'room') as HomeLocationKind, parent_id: String(f.get('parent_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
-    const { error } = location
-      ? await supabase.from('home_locations').update(payload).eq('id', location.id)
-      : await supabase.from('home_locations').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved2, error } = location
+      ? await supabase.from('home_locations').update(payload).eq('id', location.id).select('id')
+      : await supabase.from('home_locations').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved(location ? 'Location updated' : parent ? `Added to ${parent.name}` : 'Room added');
   }
 
@@ -493,8 +499,11 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
     const to = String(f.get('to_location_id') ?? '') || null;
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('inventory_items').update({ location_id: to, status: item.status === 'lost' ? 'in_place' : item.status }).eq('id', item.id);
+    // The move licenses the history row below. One that matched nothing used to
+    // record a move for an item still where it was. Audit C1-S9-80.
+    const { data: moved, error } = await supabase.from('inventory_items').update({ location_id: to, status: item.status === 'lost' ? 'in_place' : item.status }).eq('id', item.id).select('id');
     if (error) { setLoading(false); return toastError(describeDbError(error)); }
+    if (wroteNoRows(moved)) { setLoading(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
     const { error: moveError } = await supabase.from('inventory_moves').insert({
       family_id: familyId, item_id: item.id, from_location_id: item.location_id, to_location_id: to, moved_by: memberId,
       reason: String(f.get('reason') ?? '').trim() || null, created_by: userId,
@@ -529,9 +538,10 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     const to = String(f.get('lent_to') ?? '').trim();
     if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
-    const { error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id);
+    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(lent)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

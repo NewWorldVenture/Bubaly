@@ -5,7 +5,7 @@ import { Truck, Plus, Check, Pencil, Trash2, Package, Wand2, CalendarClock, Wall
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -104,15 +104,18 @@ export function MovingWorkspace() {
   }
 
   async function setTaskStatus(t: Task, status: Task['status']) {
-    const { error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     if (status === 'done') success(tr('movingModule.done'));
   }
 
   async function deleteTask(t: Task) {
     if (!confirm(`Delete “${t.title}”?`)) return;
-    const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
+    const { data: removed, error } = await createClient().from('move_tasks').delete().eq('id', t.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('movingModule.taskDeleted'));
   }
 
@@ -120,28 +123,32 @@ export function MovingWorkspace() {
     const idx = BOX_ORDER.indexOf(b.status);
     const next = BOX_ORDER[Math.min(BOX_ORDER.length - 1, idx + 1)];
     if (next === b.status) return;
-    const { error } = await createClient().from('move_boxes').update({ status: next, packed_by: next === 'packed' ? (selfMember?.id ?? b.packed_by) : b.packed_by }).eq('id', b.id);
+    const { data: updated2, error } = await createClient().from('move_boxes').update({ status: next, packed_by: next === 'packed' ? (selfMember?.id ?? b.packed_by) : b.packed_by }).eq('id', b.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteBox(b: Box) {
     if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
-    const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
+    const { data: removed2, error } = await createClient().from('move_boxes').delete().eq('id', b.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('movingModule.boxDeleted'));
   }
 
   async function setMoveStatus(status: MoveStatus) {
     if (!move) return;
-    const { error } = await createClient().from('moves').update({ status }).eq('id', move.id);
+    const { data: updated3, error } = await createClient().from('moves').update({ status }).eq('id', move.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`Move marked ${statusLabel(status).toLowerCase()}`);
   }
 
   async function deleteMove(m: Move) {
     if (!confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)) return;
-    const { error } = await createClient().from('moves').delete().eq('id', m.id);
+    const { data: removed3, error } = await createClient().from('moves').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setMoveId('');
     success(tr('movingModule.moveDeleted'));
   }
@@ -467,11 +474,12 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
       assignee_id: String(f.get('assignee_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = task
-      ? await supabase.from('move_tasks').update(payload).eq('id', task.id)
-      : await supabase.from('move_tasks').insert({ family_id: familyId, move_id: move.id, created_by: userId, status: 'todo', ...payload });
+    const { data: saved, error } = task
+      ? await supabase.from('move_tasks').update(payload).eq('id', task.id).select('id')
+      : await supabase.from('move_tasks').insert({ family_id: familyId, move_id: move.id, created_by: userId, status: 'todo', ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -517,11 +525,12 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
       packed_by: String(f.get('packed_by') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = box
-      ? await supabase.from('move_boxes').update(payload).eq('id', box.id)
-      : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload });
+    const { data: savedBox, error } = box
+      ? await supabase.from('move_boxes').update(payload).eq('id', box.id).select('id')
+      : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(error.code === '23505' ? `Box #${boxNumber} already exists for this move` : describeDbError(error));
+    if (wroteNoRows(savedBox)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

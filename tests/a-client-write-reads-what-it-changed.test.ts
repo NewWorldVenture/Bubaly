@@ -22,6 +22,12 @@ const FIXED = [
   'components/modules/reminders-module.tsx',
   'components/modules/concierge-module.tsx',
   'components/modules/projects-module.tsx',
+  'components/modules/career-module.tsx',
+  'components/modules/declutter-module.tsx',
+  'components/modules/moving-module.tsx',
+  'components/modules/inventory-module.tsx',
+  'components/modules/language-module.tsx',
+  'components/modules/watchlist-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -77,6 +83,29 @@ describe('accepting a quote is one chain that stops where it fails (C1-S9-79)', 
   it('success is said only after the link lands, and never after a failed one', () => {
     expect(fn).toContain('if (linkError) return toastError(');
     expect(at(fn, 'if (wroteNoRows(linked))')).toBeLessThan(at(fn, 'success(`Accepted'));
+  });
+});
+
+describe('a write that licenses the next one is confirmed before it (C1-S9-80)', () => {
+  it('career: the new primary is set and confirmed before the others are cleared', () => {
+    const src = readFileSync('components/modules/career-module.tsx', 'utf8');
+    const fn = between(src, 'async function setPrimary(r: Resume) {', 'async function deleteResume(');
+    expect(at(fn, 'if (wroteNoRows(made))')).toBeLessThan(at(fn, 'update({ is_primary: false })'));
+    // Clearing the others is NOT confirmed: there is often no other primary.
+    expect(fn).not.toMatch(/is_primary: false \}\)[^;]*\.select\(/);
+  });
+
+  it('declutter: a completed mission is confirmed before its session is logged', () => {
+    const src = readFileSync('components/modules/declutter-module.tsx', 'utf8');
+    expect(at(src, 'if (wroteNoRows(completed))')).toBeLessThan(at(src, ".from('declutter_sessions').insert("));
+  });
+
+  it('inventory: an item move is confirmed before its history row is written', () => {
+    const src = readFileSync('components/modules/inventory-module.tsx', 'utf8');
+    // Scoped to MoveForm: another handler earlier in the file inserts into
+    // inventory_moves too, and an unscoped at() would find that one first.
+    const form = src.slice(at(src, 'function MoveForm('));
+    expect(at(form, 'if (wroteNoRows(moved))')).toBeLessThan(at(form, ".from('inventory_moves').insert("));
   });
 });
 

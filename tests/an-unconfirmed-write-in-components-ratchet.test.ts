@@ -22,7 +22,9 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // family membership, health, visits, immunizations, care, devices, and the
 // reminder completion that could schedule a recurrence twice) → 182/64 (the
 // concierge plan status move that licensed materialising the plan) → 172/63
-// (projects: the quote acceptance chain, C1-S9-79).
+// (projects: the quote acceptance chain, C1-S9-79) → 126/58 (C1-S9-80: career,
+// declutter, moving, inventory, language, watchlist; career keeps one
+// deliberate write — clearing the other primaries, where zero is ordinary).
 const BASELINE = new Map<string, number>([
   ['components/family/check-in-view.tsx', 1],
   ['components/family/driving-safety-view.tsx', 1],
@@ -35,7 +37,7 @@ const BASELINE = new Map<string, number>([
   ['components/modules/assistant-module.tsx', 2],
   ['components/modules/behavior-module.tsx', 2],
   ['components/modules/binder-module.tsx', 2],
-  ['components/modules/career-module.tsx', 9],
+  ['components/modules/career-module.tsx', 1],
   ['components/modules/celebrations-module.tsx', 1],
   ['components/modules/chores-module.tsx', 1],
   ['components/modules/closet-module.tsx', 6],
@@ -43,21 +45,17 @@ const BASELINE = new Map<string, number>([
   ['components/modules/connections-module.tsx', 1],
   ['components/modules/contacts-module.tsx', 2],
   ['components/modules/decisions-module.tsx', 2],
-  ['components/modules/declutter-module.tsx', 9],
   ['components/modules/expenses-module.tsx', 3],
   ['components/modules/family-tree-module.tsx', 2],
   ['components/modules/home-module.tsx', 3],
   ['components/modules/homework-module.tsx', 3],
   ['components/modules/inbox-module.tsx', 3],
   ['components/modules/insurance-module.tsx', 1],
-  ['components/modules/inventory-module.tsx', 7],
   ['components/modules/journal-module.tsx', 2],
-  ['components/modules/language-module.tsx', 7],
   ['components/modules/life-events-module.tsx', 1],
   ['components/modules/marketplace-module.tsx', 2],
   ['components/modules/meals-module.tsx', 2],
   ['components/modules/messages-module.tsx', 4],
-  ['components/modules/moving-module.tsx', 8],
   ['components/modules/notifications-module.tsx', 3],
   ['components/modules/pets-module.tsx', 2],
   ['components/modules/photos-module.tsx', 3],
@@ -78,7 +76,6 @@ const BASELINE = new Map<string, number>([
   ['components/modules/utilities-module.tsx', 1],
   ['components/modules/voice-module.tsx', 1],
   ['components/modules/voting-module.tsx', 4],
-  ['components/modules/watchlist-module.tsx', 7],
   ['components/modules/weather-module.tsx', 2],
   ['components/modules/weekend-module.tsx', 4],
   ['components/modules/wishlists-module.tsx', 4],
@@ -124,6 +121,6 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(172);
+    expect(total).toBe(126);
   });
 });

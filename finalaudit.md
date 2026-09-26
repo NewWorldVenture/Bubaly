@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-220 finding IDs from four workers and two parallel sessions; none of it was
+221 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 230 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 231 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35641,6 +35641,61 @@ Components ratchet: 182/64 → **172/63**.
 
 **Status:** FIXED.
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-80 — six more modules, three follow-on writes, and a transformer that knows when to stop
+
+**Career, declutter, moving, inventory, language and watchlist: 47 writes, the
+six largest files left in the components ratchet.** Most were the ordinary
+shape and are converted mechanically. Three were different answers, where
+the first write licenses the next:
+- **Career, making a resume primary.** It cleared *every* primary and then set
+  this one, so a set that matched nothing left the search with **no** primary
+  resume while saying "is now the primary". It now sets this one first,
+  confirmed, and then clears the others. There is no unique index to forbid
+  two primaries for a moment (0247), and a failed clear leaves two, which is
+  visible and fixable. The clear is **deliberately not confirmed**: there is
+  often no other primary, so zero rows is ordinary. A guard asserts it stays
+  unconfirmed, and it is the one write left in career.
+- **Declutter, completing a mission.** The completion licenses a logged session
+  (minutes, streaks). A completion that matched nothing used to log a session
+  for a mission still open.
+- **Inventory, moving an item.** The move licenses a history row. One that
+  matched nothing used to record a move for an item still where it was.
+
+**How the other 38 were done, and where the tool stopped.** A transformer
+(kept in the scratchpad) converts exactly two shapes and nothing else:
+- a single-row write keyed by `.eq('id', …)` followed by
+  `if (error) return toastError(describeDbError(error))`;
+- the ternary update-or-insert form.
+
+It **refuses** any write filtered by `.neq`, `.in` or a non-id column, because
+zero rows may be the ordinary case there. That refusal is what caught the
+career clear; converting it would have been an over-tightening. It reported
+five other shapes, and each was fixed by hand: the declutter and inventory
+chains, the inventory lend, the watchlist vote (a three-way ternary), and the
+moving box save (a custom duplicate message).
+
+**Twelve more exact-statement guards went red on an improvement (the
+nineteenth to thirtieth).** All six modules' `…-module-write-boundary` tests
+share a template that pinned `const { error } =`. The twelfth pinned
+watchlist's `const { error: statusError }` and surfaced only in the full run,
+because I hand-fixed that site after running the file. Each is re-pointed at
+its property (the error is bound and surfaced) and says so in the file. The
+first full run was red on it and was re-run, not carried over.
+
+**Guard.** `a-client-write-reads-what-it-changed` now covers the six modules,
+plus the three orderings: primary set before clear (with the clear
+unconfirmed), completion before session, and move before history. The
+inventory case is scoped to `MoveForm`, because another handler earlier in the
+file inserts into the same table and an unscoped `at()` found that one first.
+The guard failed on that before it passed, which is the trap `at()`'s
+first-occurrence rule sets.
+
+**7 mutations, all red.** They include the old career order, confirming the
+clear (over-tightening), and a converted delete reverted. Components ratchet:
+**172/63 → 126/58.**
+
+**Status:** FIXED. **OPEN (ratchet):** 126 across 58 files.
+
 ---
 
 ## What this pass did NOT establish
@@ -35712,8 +35767,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,437 passing / 17,440 across 1,370
-files.** (Re-run after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,446 passing / 17,449 across 1,370
+files.** (Re-run after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
@@ -35730,6 +35785,11 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Twentieth run, on `1961c6c5` (run 36259043593): 1,293 passed, 3 failed, 0 flaky
+in 10.5m**, covering `C1-S9-76` (including the AI config throw and the AEO
+insert) and `C1-S9-77` (seven client modules). Only the known `phone-auth-http`
+cases. `C1-S9-78` to `-80` were held until it reported.
 
 **Nineteenth run, on `4efdd223` (run 36257995212): 1,293 passed, 3 failed, 0 flaky
 in 10.4m. Back to steady state.** The two `signup-boundaries` cases that the

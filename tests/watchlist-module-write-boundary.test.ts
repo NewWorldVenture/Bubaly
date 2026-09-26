@@ -9,16 +9,22 @@ function body(fn: string): string {
   return src.slice(start, after === -1 ? undefined : after);
 }
 
+// Re-pointed under C1-S9-80 from the exact `const { error } =`: each write
+// now also binds the rows it changed (`{ data: updated, error }`), and reads
+// them. The property is unchanged — the error is bound and surfaced.
 describe('watchlist-module writes fail visibly', () => {
   for (const fn of ['castVote', 'setStatus', 'deleteTitle', 'deleteSession', 'onSubmit']) {
     it(`${fn} guards its Supabase result`, () => {
       const b = body(fn);
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
       expect(b).toMatch(/toastError\(describeDbError\(error\)\)/);
     });
   }
   it('logging a movie night also reports a failed status flip', () => {
-    expect(src).toContain("const { error: statusError } = await supabase.from('watchlist_titles').update({ status: 'watched' })");
+    // Re-pointed under C1-S9-80 from the exact `const { error: statusError }`:
+    // the flip now also binds its rows (`{ data: marked, error: statusError }`)
+    // and reads them. The failure is still reported.
+    expect(src).toMatch(/const \{ (?:data: \w+, )?error: statusError \} = await supabase\.from\('watchlist_titles'\)\.update\(\{ status: 'watched' \}\)/);
     expect(src).toContain('if (statusError) return toastError(describeDbError(statusError));');
   });
   it('votes are one row per member per title (toggle off = delete, change = update)', () => {

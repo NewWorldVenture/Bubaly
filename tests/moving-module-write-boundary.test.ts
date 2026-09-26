@@ -13,12 +13,15 @@ function bodies(fn: string): string[] {
   return out;
 }
 
+// Re-pointed under C1-S9-80 from the exact `const { error } =`: each write
+// now also binds the rows it changed (`{ data: updated, error }`), and reads
+// them. The property is unchanged — the error is bound and surfaced.
 describe('moving-module writes fail visibly', () => {
   it('every inline mutation guards its result', () => {
     for (const fn of ['generateTasks', 'setTaskStatus', 'deleteTask', 'advanceBox', 'deleteBox', 'setMoveStatus', 'deleteMove']) {
       const [b] = bodies(fn);
       expect(b, fn).toBeTruthy();
-      expect(b, fn).toMatch(/const \{ error \} =/);
+      expect(b, fn).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
       expect(b, fn).toContain('toastError(describeDbError(error))');
     }
   });
@@ -26,7 +29,7 @@ describe('moving-module writes fail visibly', () => {
     const forms = bodies('onSubmit');
     expect(forms).toHaveLength(3);
     for (const b of forms) {
-      expect(b).toMatch(/const \{ (data, )?error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
       expect(b).toContain('describeDbError(error)');
     }
   });
