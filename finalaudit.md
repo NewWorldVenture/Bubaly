@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-202 finding IDs from four workers and two parallel sessions; none of it was
+203 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 212 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 213 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34475,6 +34475,67 @@ about the scanner first.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][API ROUTES]` C1-S9-62 — the first route tranche, and an E2E test that raced a service worker
+
+**Fourteen route writes triaged.** From `C1-S9-61`'s inventory of 137 outside
+server actions, the ones a person or a scheduler calls directly.
+
+**Confirmed — a different answer (6).**
+
+- **Billing, after Stripe has already changed** — `cancel` and `change-plan`.
+  A local sync matching no rows left the row saying the opposite of what the
+  family just chose ("cancels at period end" against a subscription that now
+  renews, or the reverse) and answered `ok`. Both routes already had a 503 for
+  exactly this situation — *"Stripe updated the subscription, but local billing
+  sync is pending"* — which a failed write reached and a no-op did not. Now both
+  do. **Proved behaviourally**, not just by source: the existing billing suite's
+  fake already modelled `.select()` honestly (rows when the row exists, `[]`
+  otherwise), so a third failure mode, `matchedNone`, joins `returned` and
+  `thrown` in its sync-failure case, and deleting the zero-row check turns it
+  red.
+- **Newsletter re-subscribe.** On the service role, zero rows means the row was
+  deleted since the read, and `ok` told the person they were subscribed with no
+  row to send to. It now falls through to a fresh insert.
+- **Concierge calls `parked` count.** The status guard exists "so a row a person
+  already acted on is not overwritten" — and then `parked++` counted those rows
+  anyway. Counted only when a row moved.
+- **Chat metadata** and **marketing visitor tracking**, both confirmed so a
+  failure is reported at the write that found it. Chat never fails the turn for
+  it; tracking already returned 503, and a vanished visitor would otherwise
+  have been blamed on the foreign-key insert after it.
+
+**Deliberate, reasons beside the code (5).** Newsletter **unsubscribe** and both
+**sync disconnects** run on the service role, so zero rows can only mean the row
+is already gone, and gone *is* unsubscribed or disconnected. **Push unsubscribe**
+runs on the user's client, but `push_devices_delete` (0035) is
+`user_id = auth.uid()` and the route filters on that same user, so RLS cannot
+refuse a matching row. Zero rows is "already unregistered". **The briefing's
+mark-read** was already documented as best-effort; it gains its audit marker.
+
+**Error no longer discarded (3).** The blog like/save toggle-deletes and the
+weekend-feed bookkeeping threw their result away whole, **error included**. The
+toggles re-read the state they return, so no one was ever told anything false,
+but a delete that kept failing was invisible. Rows deliberately still unchecked.
+
+**The E2E test.** Recorded in full under Final Regression. The short version:
+`marketing-public`'s pre-hydration test could only observe the page before its
+scripts arrived if no service worker answered them, and the `beforeEach` in the
+same context registers one. That is a race in the test, not a regression.
+Reproduced deterministically, then fixed by blocking service workers for that one
+test, which restores its precondition and leaves its assertions alone. The
+worker itself belongs to the parallel session's open SEC-001 work and was not
+touched.
+
+**Status:** FIXED. Guard: `tests/a-route-write-is-confirmed.test.ts`, 13 cases,
+every one proved red by mutation. Eleven mutations, **five of them
+over-tightening** (gating the newsletter unsubscribe, push unsubscribe, the
+Google disconnect and the briefing mark-read, and failing a chat turn for its
+metadata). Plus the behavioural billing case. **Ratchet: 137 → 131 across 68
+files.** The eight deliberate or log-only sites stay counted, as the
+server-action set's did.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34544,9 +34605,9 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,227 passing / 17,230 across 1,354
-files.** (Re-run after `C1-S9-61`, which added the scanner's fixture suite and
-the second write ratchet; was 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
+Status: ✅ PASS — `npx vitest run`: **17,241 passing / 17,244 across 1,355
+files.** (Re-run after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed
 and this count re-run rather than carried over. The three failures are `C1-S9-09`, BLOCKED: this container runs Node
@@ -34559,6 +34620,28 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Ninth run, on `a33cfbe5` (run 36244848484) — NOT a clean re-confirmation:
+1,291 passed, 4 failed, 1 flaky in 10.3m.** The three `phone-auth-http` cases,
+plus **one new failure**: `[pixel] marketing-public.spec.ts › the mobile menu
+becomes usable when its client code is ready`, red on both attempts. Root-caused
+rather than re-run: the test holds `/_next/static/*.js` with `page.route` to
+observe the page before hydration, but its `beforeEach` loads `/` in the same
+context, and the production build registers `public/sw.js`, which claims clients
+and answers script requests itself — requests `page.route` never sees. Whenever
+the worker was active before the slow page navigated, nothing was held. **Not
+caused by this branch's diff** (none of `sw.js`, its registration, or the page
+changed); it passed or failed on timing, and this run was ~50% slower than the
+usual ~11m. **Reproduced locally by forcing the condition** — awaiting
+`navigator.serviceWorker.ready` first — red 3/3 with the identical error at the
+identical line; blocking workers for that test, green 4/4 even with a 3s head
+start, and the whole spec 16/16 on `pixel` + `chromium`. Fixed in the test under
+`C1-S9-62`. `public/sw.js` itself was **not touched**: it is IN PROGRESS by the
+parallel session (SUPPORT-98FD1D4C44AD, SEC-001), charter rule 9. The flaky case
+was `oauth-initiation.spec.ts:230`, green on retry, unrelated to the diff and
+recorded as such rather than explained. The local run used the container's
+Chromium 1194 via a scratch `executablePath` override, because the pinned
+Playwright expects a newer build that cannot be fetched here.
 
 **Eighth re-confirmation, on `2178a69d` (run 35595435391): 1,293 passed, 3
 failed in 9.6m**, with Typecheck/Lint/Test/Build, Database and Mobile all green.

@@ -123,7 +123,13 @@ export async function POST(req: NextRequest) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
         status = 'Request failed.';
       }
-      await supabase.from('weekend_feeds').update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      // Bookkeeping on the feed row: its result was discarded whole, so a
+      // settings page could go on showing a stale "last fetched" forever. Zero
+      // rows is a feed deleted mid-request and stays ordinary; the ERROR is now
+      // logged. Audit C1-S9-62.
+      const { error: statusError } = await supabase.from('weekend_feeds')
+        .update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
     }));
   }
 

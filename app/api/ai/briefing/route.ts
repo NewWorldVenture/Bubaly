@@ -486,7 +486,10 @@ ${UNTRUSTED_CONTENT_RULE}
         .eq('family_id', familyId)
         .in('id', brief.alsoToday.map(item => item.id));
       // A brief that showed the notices is still a correct brief; failing to
-      // mark them read only means they appear again tomorrow.
+      // mark them read only means they appear again tomorrow. Deliberately NOT
+      // confirmed for the same reason — zero rows means they were already read
+      // or dismissed elsewhere, which is the state being asked for.
+      // Audit C1-S9-62.
       if (markError) console.error('[api/ai/briefing] mark folded notifications read failed', markError);
     }
 

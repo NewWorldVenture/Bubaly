@@ -30,6 +30,10 @@ export async function POST(req: Request) {
       headers: { 'Retry-After': String(limited.retryAfter) },
     });
   }
+  // Deliberately NOT confirmed. `push_devices_delete` (0035) is
+  // `user_id = auth.uid()`, and this is filtered on that same user, so RLS
+  // cannot refuse a row that matches: zero rows means this device is already
+  // unregistered, which is the state being asked for. Audit C1-S9-62.
   const { error } = await supabase
     .from('push_devices')
     .delete()

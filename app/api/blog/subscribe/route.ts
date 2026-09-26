@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -70,14 +71,18 @@ export async function POST(req: NextRequest) {
   }
 
   if (existing) {
-    if (existing.status !== 'active') {
-      const { error } = await supabase
-        .from('blog_subscribers')
-        .update({ status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) })
-        .eq('id', existing.id);
-      if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true, already: existing.status === 'active' });
+    if (existing.status === 'active') return NextResponse.json({ ok: true, already: true });
+    // Service role, so zero rows means the row was deleted between the read and
+    // this write — and answering `ok` told the person they were subscribed with
+    // no row to send to. Fall through and subscribe them afresh instead.
+    // Audit C1-S9-62.
+    const { data: reactivated, error } = await supabase
+      .from('blog_subscribers')
+      .update({ status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) })
+      .eq('id', existing.id)
+      .select('id');
+    if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+    if (!wroteNoRows(reactivated)) return NextResponse.json({ ok: true, already: false });
   }
 
   const { error } = await supabase

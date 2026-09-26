@@ -21,17 +21,16 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
  * lease reclaim that is meant to lose a race — and those will stay, with their
  * reasons written beside them, exactly as the first ratchet's did.
  */
-// Known unconfirmed writes as of C1-S9-61. ONLY REMOVE or DECREASE entries.
+// Known unconfirmed writes. ONLY REMOVE or DECREASE entries.
+//
+// Burn-down: 137 across 74 files (C1-S9-61 baseline) → 131/68 (C1-S9-62: six
+// route writes confirmed; eight more documented as deliberate or log-only
+// and left counted, each with its reason beside the code).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
-  ['app/api/ai/chat/route.ts', 1],
-  ['app/api/billing/cancel/route.ts', 1],
-  ['app/api/billing/change-plan/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
   ['app/api/blog/save/route.ts', 1],
-  ['app/api/blog/subscribe/route.ts', 1],
   ['app/api/blog/unsubscribe/route.ts', 1],
-  ['app/api/concierge-calls/place/route.ts', 1],
   ['app/api/cron/ai-runs/route.ts', 1],
   ['app/api/cron/checkout-abandoned/route.ts', 1],
   ['app/api/cron/family-routines/route.ts', 8],
@@ -41,7 +40,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/guardian/inbound/whatsapp/route.ts', 1],
   ['app/api/guardian/screen/route.ts', 4],
   ['app/api/guardian/status/voicemail/route.ts', 1],
-  ['app/api/mkt/track/route.ts', 1],
   ['app/api/push/unsubscribe/route.ts', 1],
   ['app/api/sync/[provider]/disconnect/route.ts', 1],
   ['app/api/sync/google/disconnect/route.ts', 1],
@@ -137,6 +135,6 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(137);
+    expect(total).toBe(131);
   });
 });

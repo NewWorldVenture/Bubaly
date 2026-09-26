@@ -8,42 +8,58 @@ test.beforeEach(async ({ page }) => {
   if (await rejectCookies.isVisible()) await rejectCookies.click();
 });
 
-test('the mobile menu becomes usable when its client code is ready', async ({ context }) => {
-  const slowPage = await context.newPage();
-  await slowPage.setViewportSize({ width: 390, height: 844 });
-  let releaseScripts!: () => void;
-  const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
-  let heldScripts = 0;
-  await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
-    heldScripts += 1;
-    await scriptsReady;
-    await route.continue();
+test.describe('before the page\'s scripts arrive', () => {
+  // This test holds every `/_next/static/*.js` request to observe the page
+  // before hydration, and `page.route` is how it holds them. But the
+  // `beforeEach` above loads `/` in the SAME context, and the production build
+  // registers `public/sw.js`, which claims clients and answers script requests
+  // itself — and requests a service worker handles never reach `page.route`.
+  // Whenever the worker was active before the slow page navigated, nothing was
+  // held, `heldScripts` stayed 0, and the test failed at its first poll. It
+  // passed or failed on timing alone (CI run 36244848484, both attempts).
+  // Reproduced by awaiting `navigator.serviceWorker.ready` first: red 3/3.
+  // Blocking workers here restores the precondition the test is about; it
+  // does not touch what the test asserts. Audit C1-S9-62.
+  test.use({ serviceWorkers: 'block' });
+
+  test('the mobile menu becomes usable when its client code is ready', async ({ context }) => {
+    const slowPage = await context.newPage();
+    await slowPage.setViewportSize({ width: 390, height: 844 });
+    let releaseScripts!: () => void;
+    const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
+    let heldScripts = 0;
+    await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+      heldScripts += 1;
+      await scriptsReady;
+      await route.continue();
+    });
+
+    try {
+      await slowPage.goto('/', { waitUntil: 'commit' });
+      const toggle = slowPage.getByRole('button', { name: 'Toggle menu' });
+      const navigation = slowPage.getByRole('navigation', { name: 'Mobile navigation' });
+      await expect(toggle).toBeVisible();
+      await expect.poll(() => heldScripts).toBeGreaterThan(0);
+      await expect(toggle).toBeDisabled();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(navigation).toBeHidden();
+
+      releaseScripts();
+      await expect(toggle).toBeEnabled({ timeout: 15_000 });
+      await toggle.focus();
+      await expect(toggle).toBeFocused();
+      await slowPage.keyboard.press('Enter');
+      await expect(navigation).toBeVisible();
+      await slowPage.keyboard.press('Escape');
+      await expect(navigation).toBeHidden();
+      await expect(toggle).toBeFocused();
+    } finally {
+      releaseScripts();
+      await slowPage.close();
+    }
   });
-
-  try {
-    await slowPage.goto('/', { waitUntil: 'commit' });
-    const toggle = slowPage.getByRole('button', { name: 'Toggle menu' });
-    const navigation = slowPage.getByRole('navigation', { name: 'Mobile navigation' });
-    await expect(toggle).toBeVisible();
-    await expect.poll(() => heldScripts).toBeGreaterThan(0);
-    await expect(toggle).toBeDisabled();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(navigation).toBeHidden();
-
-    releaseScripts();
-    await expect(toggle).toBeEnabled({ timeout: 15_000 });
-    await toggle.focus();
-    await expect(toggle).toBeFocused();
-    await slowPage.keyboard.press('Enter');
-    await expect(navigation).toBeVisible();
-    await slowPage.keyboard.press('Escape');
-    await expect(navigation).toBeHidden();
-    await expect(toggle).toBeFocused();
-  } finally {
-    releaseScripts();
-    await slowPage.close();
-  }
 });
+
 
 test('Get started reaches the welcome page before sign-in', async ({ page }) => {
   await page.getByRole('link', { name: /get started/i }).first().click();

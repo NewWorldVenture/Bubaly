@@ -39,6 +39,11 @@ export async function GET(req: NextRequest) {
   }
 
   if (data && data.status !== 'unsubscribed') {
+    // Deliberately NOT confirmed. This runs on the service role, so RLS cannot be
+    // what makes it match nothing: zero rows means the row was deleted since the
+    // read, and a person with no row is not on the list — which is what they
+    // asked for. Confirming it would show "error" on an unsubscribe that took.
+    // Audit C1-S9-62.
     const { error: writeError } = await supabase
       .from('blog_subscribers')
       .update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() })

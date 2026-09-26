@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUserContext, requireUserContext, type UserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace, slugToStripePlan } from '@/lib/billing/plans';
@@ -127,11 +128,15 @@ export async function POST(req: NextRequest) {
 
       // Optimistic local sync; the customer.subscription.updated webhook confirms.
       try {
-        const { error: syncError } = await createServiceClient()
+        // As in the cancel route: Stripe has changed, and a sync matching no rows
+        // is the situation the 503 below already names. Audit C1-S9-62.
+        const { data: synced, error: syncError } = await createServiceClient()
           .from('subscriptions')
           .update({ cancel_at_period_end: false })
-          .eq('family_id', familyId);
+          .eq('family_id', familyId)
+          .select('id');
         if (syncError) throw syncError;
+        if (wroteNoRows(synced)) throw new Error('subscription sync matched no rows');
       } catch (syncError) {
         console.error('[billing-change-plan] Subscription sync write failed', syncError);
         return NextResponse.json({ error: t('changePlan.stripeChangedThePlanBut'), providerUpdated: true, providerRef: stripeSub.id }, { status: 503 });

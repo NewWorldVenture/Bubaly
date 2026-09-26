@@ -6,6 +6,7 @@ import { getConsentState, canRecordAnalytics } from '@/lib/marketing/consent';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -89,14 +90,18 @@ export async function POST(req: NextRequest) {
 
   let visitorId: string | null = existing?.id ?? null;
   if (visitorId) {
-    const { error: updateError } = await supabase.from('mkt_visitors').update({
+    // A visitor row deleted since the read would leave `visitorId` stale, and
+    // the attribution inserts below would then fail on the foreign key — still a
+    // 503, but blamed on the wrong write. Confirmed so the failure is reported
+    // where it happened. Audit C1-S9-62.
+    const { data: touched, error: updateError } = await supabase.from('mkt_visitors').update({
       last_seen: now,
       session_count: (existing!.session_count ?? 0) + 1,
       device_type: clean(body.deviceType) ?? undefined,
       country: clean(body.country) ?? undefined,
-    }).eq('id', visitorId);
-    if (updateError) {
-      console.error('[mkt-track] visitor update failed', updateError);
+    }).eq('id', visitorId).select('id');
+    if (updateError || wroteNoRows(touched)) {
+      console.error('[mkt-track] visitor update failed', updateError ?? 'no rows updated');
       return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
     }
   } else {
