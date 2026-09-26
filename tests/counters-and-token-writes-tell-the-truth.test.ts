@@ -50,7 +50,12 @@ describe('the routines tick counts only work that happened (C1-S6-03)', () => {
     // armPendingRoutines only counts an arm whose update landed. `filed` now
     // holds the same line, and this asserts the model is still there to match.
     const armed = source.slice(source.indexOf('async function armPendingRoutines'));
-    expect(armed).toContain('const { error: armError }');
+    // Re-pointed under C1-S9-63 from the exact `const { error: armError }`, which
+    // went red when the same write learned to ask for its row as well. What it
+    // guards is the ORDER — no arm counted before its write is known to have
+    // landed — and "landed" now includes matching a row.
+    expect(armed).toContain('error: armError }');
     expect(at(armed, 'if (armError)')).toBeLessThan(at(armed, 'armed += 1'));
+    expect(at(armed, 'if (wroteNoRows(armedRow)) continue;')).toBeLessThan(at(armed, 'armed += 1'));
   });
 });

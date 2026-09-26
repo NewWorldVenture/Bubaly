@@ -98,6 +98,9 @@ export async function GET(req: NextRequest) {
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // Rows deliberately not checked: the stamp exists so the NEXT run does not
+        // notify again, and on the service role zero rows means the order was
+        // deleted — which no run will sweep. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };
@@ -117,6 +120,7 @@ export async function GET(req: NextRequest) {
           body: `Time to return this ${verb}. Tap to see the exchange details.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // As above. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };

@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
     // until it ages out of the 24h look-back, silently. The fire itself is
     // deduped on (workflow_id, subject_key), so the re-sweep does not double
     // send; it is the run's own report that was wrong.
+    // Rows deliberately not checked: on the service role zero rows means the
+    // session row is gone, and a gone row is not swept again. Audit C1-S9-63.
     const { error: markError } = await supabase
       .from('checkout_sessions')
       .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })

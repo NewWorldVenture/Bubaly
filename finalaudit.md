@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-203 finding IDs from four workers and two parallel sessions; none of it was
+204 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 213 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 214 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34536,6 +34536,78 @@ server-action set's did.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][API ROUTES]` C1-S9-63 — the rest of the routes: a live call, a trip rollback, and crons that counted what they had not done
+
+**Twenty-one route writes** across the guardian screening webhook, the
+vacation trip builder, and six crons, plus two examined and left alone. That completes the API routes in the
+`C1-S9-61` inventory except two, which are **not mine to touch**:
+`guardian/inbound/whatsapp` is IN PROGRESS by the parallel session
+(API-90346B8397DA), and `guardian/status/voicemail` already confirms its write by
+an **exact readback** of the saved row, a third valid route after `.select()`
+and `count: 'exact'`, and one the scanner cannot see.
+
+**A live call (4, confirmed for the log, never raised).** Every write in
+`guardian/screen` runs while a caller is on the line, and failing the webhook
+drops them, so none may bail. All four discarded their result **whole, error
+included**. The one that mattered: the **conversation transcript** the next
+screening turn reasons from. A silent failure left the AI deciding on a
+conversation that stopped turns ago. The others are the resolve stamp (a
+session left "in progress" in the family's call log) and the handled stamp,
+which carries the risk classification, the one field a parent reviewing a scam
+call reads.
+
+**Counts that counted what had not happened (2).** Two more of the `parked`
+shape from `C1-S9-62`:
+
+- **`family-routines` `armed`.** The file's own standard is *"it may only
+  count writes that landed, so a quiet tick reads differently from a broken
+  one."* An error was excluded; a rule deleted since the tick read it — an
+  update that returns no error and matches nothing — was counted as armed.
+  **Proved behaviourally**: the suite's fake already returns only matching rows,
+  and a hook that deletes the rule at the moment of the write turns the new case
+  red without the fix.
+- **`ai-runs` `returned`.** Incremented **even when the write errored**, and the
+  `state = 'executing'` guard that makes zero rows ordinary (an approval or a
+  cancel moved the run on) was not consulted either.
+
+**The routine ledger (4 → one helper).** Four `routine_runs` stamps (skipped,
+failed, filed, abandoned) discarded their result whole, so a refused stamp left
+the family's routine history showing a reservation that never resolved. They go
+through one confirmed, logged, never-raising `stampRun()`, and a guard asserts
+no stamp bypasses it. **The first draft cast its patch `as never` and its due
+time `as string`**; both were removed. The patch is typed by the table's own
+`Update` type, and the parameter is `string` because every caller had already
+narrowed it. The cast had been hiding that, not solving anything.
+
+**A trip builder's rollback (2).** The rollback deletes now compare what they
+removed with what **this request created**. An exact count is right here, as it
+was not for the grocery undo in `C1-S9-60`: every id was minted moments ago, so
+removing fewer is a partial failed build left in the family's trip. The budget
+restore reports a restore that matched nothing. (The recommendation clear in
+the same file is among the deliberate nine below.)
+
+**Deliberate, reasons beside the code (9).** The three `family-routines` rule
+reschedules (a rule deleted mid-tick cannot wedge); the two `return-reminders`
+stamps (on the service role, zero rows means the order is gone, and no run will
+sweep it again, so there is no double notification); `wallet-allowance`'s
+rollback; `checkout-abandoned`'s mark; `guardian-learning`'s housekeeping
+dismiss; and the vacation recommendation clear. Each was checked for being on
+the service role before "zero rows means gone" was written down.
+
+**An eleventh `toContain("<exact statement>")` guard red on an improvement** —
+`counters-and-token-writes-tell-the-truth`, from `C1-S6-03`, **my own**, pinning
+`const { error: armError }`. Re-pointed at the order it protects, which now
+includes the zero-row check.
+
+**Status:** FIXED. Guard: 16 new cases in `tests/a-route-write-is-confirmed.test.ts`
+plus the behavioural cron case. 13 mutations, **five of them over-tightening**
+(a bail in the live call, the recommendation clear gated, the stamp helper
+throwing, a reschedule gated, and the checkout mark gated), all killed.
+**Ratchet: 131 → 119 across 66 files.** API routes are done apart from the two
+named above. What remains is `lib/`.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34605,8 +34677,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,241 passing / 17,244 across 1,355
-files.** (Re-run after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,258 passing / 17,261 across 1,355
+files.** (Re-run after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

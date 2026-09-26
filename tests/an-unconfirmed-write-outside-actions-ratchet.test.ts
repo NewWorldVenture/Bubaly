@@ -25,25 +25,25 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
 //
 // Burn-down: 137 across 74 files (C1-S9-61 baseline) → 131/68 (C1-S9-62: six
 // route writes confirmed; eight more documented as deliberate or log-only
-// and left counted, each with its reason beside the code).
+// and left counted, each with its reason beside the code) → 119/66 (C1-S9-63:
+// the guardian screening webhook, the trip builder's rollback, and the crons;
+// the deliberate ones stay counted with their reasons).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
   ['app/api/blog/save/route.ts', 1],
   ['app/api/blog/unsubscribe/route.ts', 1],
-  ['app/api/cron/ai-runs/route.ts', 1],
   ['app/api/cron/checkout-abandoned/route.ts', 1],
-  ['app/api/cron/family-routines/route.ts', 8],
+  ['app/api/cron/family-routines/route.ts', 3],
   ['app/api/cron/guardian-learning/route.ts', 1],
   ['app/api/cron/return-reminders/route.ts', 2],
   ['app/api/cron/wallet-allowance/route.ts', 1],
   ['app/api/guardian/inbound/whatsapp/route.ts', 1],
-  ['app/api/guardian/screen/route.ts', 4],
   ['app/api/guardian/status/voicemail/route.ts', 1],
   ['app/api/push/unsubscribe/route.ts', 1],
   ['app/api/sync/[provider]/disconnect/route.ts', 1],
   ['app/api/sync/google/disconnect/route.ts', 1],
-  ['app/api/vacations/ai/route.ts', 3],
+  ['app/api/vacations/ai/route.ts', 1],
   ['app/api/weekend/discover/route.ts', 1],
   ['lib/ai/assistant-engine.ts', 1],
   ['lib/ai/context/builder.ts', 1],
@@ -135,6 +135,6 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(131);
+    expect(total).toBe(119);
   });
 });

@@ -127,3 +127,98 @@ describe('best-effort writes keep their error (C1-S9-62)', () => {
     expect(briefing).toContain('zero rows means they were already read');
   });
 });
+
+/**
+ * Audit C1-S9-63 — the rest of the API routes: a live-call webhook, a trip
+ * builder's rollback, and the crons.
+ */
+const screen = read('app/api/guardian/screen/route.ts');
+const vacations = read('app/api/vacations/ai/route.ts');
+const routines = read('app/api/cron/family-routines/route.ts');
+const aiRuns = read('app/api/cron/ai-runs/route.ts');
+
+describe('a live call never bails, and never discards a write (C1-S9-63)', () => {
+  const sites = [
+    ['historySaved', 'historyError', 'transcript save failed'],
+    ['summarised', 'summaryError', 'voicemail summary save failed'],
+    ['resolved', 'resolveError', 'session resolve failed'],
+    ['handled', 'handledError', 'communication handled-stamp failed'],
+  ] as const;
+  for (const [rows, err, log] of sites) {
+    it(`${rows}: logged on error or zero rows, and nothing leaves the handler`, () => {
+      const b = code(block(screen, `if (${err} || wroteNoRows(${rows})) {`));
+      expect(b, rows).toContain(log);
+      // A return or throw here would drop the caller mid-screening.
+      expect(b, rows).not.toMatch(/\breturn\b|\bthrow\b/);
+    });
+  }
+
+  it('no screening write discards its result any more', () => {
+    expect(code(screen)).not.toMatch(/^\s*await gFrom\([^)]*\)\s*\.update\(/m);
+  });
+});
+
+describe('a failed trip build is rolled back and counted (C1-S9-63)', () => {
+  it('rollback deletes compare what they removed with what this request created', () => {
+    expect(vacations).toContain("else if ((removed?.length ?? 0) !== ids.length) {");
+    expect(vacations).toContain(".in('id', ids).select('id');");
+  });
+
+  it('the budget restore reports a restore that matched nothing', () => {
+    expect(vacations).toContain('else if (wroteNoRows(restoredBudget)) {');
+  });
+
+  it('the recommendation clear stays ungated on rows, with its reason', () => {
+    const w = vacations.slice(at(vacations, "const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete()"));
+    expect(w.split('\n')[0]).not.toContain('.select(');
+    expect(vacations).toContain('on a first run there is\n    // no prior set');
+  });
+});
+
+describe('the routine cron only counts what landed (C1-S9-63)', () => {
+  it('every routine_runs stamp goes through one confirmed helper', () => {
+    const helper = block(routines, 'async function stampRun(');
+    expect(helper).toContain(".eq('due_at', dueAt).select('id');");
+    expect(helper).toContain('if (error || wroteNoRows(data)) {');
+    expect(code(helper)).not.toMatch(/\breturn\b|\bthrow\b/);
+    // And no stamp bypasses it.
+    expect(code(routines).match(/from\('routine_runs'\)\s*\.update\(/g) ?? []).toHaveLength(1);
+    expect(code(routines).match(/await stampRun\(/g) ?? []).toHaveLength(4);
+  });
+
+  it('the helper is typed by the table, not cast', () => {
+    expect(routines).toContain("patch: Database['public']['Tables']['routine_runs']['Update'],");
+    expect(block(routines, 'async function stampRun(')).not.toMatch(/as never|as any|as string/);
+  });
+
+  it('the rule reschedules stay ungated on rows — a deleted rule cannot wedge', () => {
+    const reschedules = code(routines).match(/from\('family_automation_rules'\)\s*\.update\(\{ next_run_at: [^}]*last_run_at[^;]*;/g) ?? [];
+    expect(reschedules).toHaveLength(3);
+    for (const r of reschedules) expect(r).not.toContain('.select(');
+  });
+});
+
+describe('ai-runs counts a run as returned only when it was (C1-S9-63)', () => {
+  it('neither an error nor the state guard declining is counted', () => {
+    expect(aiRuns).toContain(".eq('state', 'executing')\n            .select('id');");
+    expect(aiRuns).toContain('else if (!wroteNoRows(requeued)) returned += 1;');
+    expect(code(aiRuns)).not.toMatch(/^\s*returned \+= 1;/m);
+  });
+});
+
+describe('crons whose zero rows means the row is gone stay ungated (C1-S9-63)', () => {
+  const cases = [
+    ['app/api/cron/return-reminders/route.ts', "update({ overdue_notified_at: nowIso }).eq('id', o.id)", 'which no run will sweep'],
+    ['app/api/cron/wallet-allowance/route.ts', ".from('allowance_rules')\n          .update({ next_run_on: rule.next_run_on", 'no schedule to restore'],
+    ['app/api/cron/checkout-abandoned/route.ts', ".update({ status: 'abandoned', abandoned_at: new Date().toISOString() })", 'a gone row is not swept again'],
+    ['app/api/cron/guardian-learning/route.ts', ".update({ status: 'auto_dismissed' })", 'ordinary "nothing expired" tick'],
+  ] as const;
+  for (const [file, write, reason] of cases) {
+    it(file, () => {
+      const src = read(file);
+      const stmt = src.slice(at(src, write));
+      expect(stmt.slice(0, stmt.indexOf(';')), file).not.toContain('.select(');
+      expect(src, file).toContain(reason);
+    });
+  }
+});

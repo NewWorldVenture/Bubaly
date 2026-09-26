@@ -207,6 +207,20 @@ describe('the routine worker', () => {
     expect(state.rules[0].next_run_at).toBeNull();
   });
 
+  // "Landed" means MATCHED as well as not-refused (C1-S9-63). A rule deleted
+  // after the tick read it takes an update that returns no error and changes
+  // nothing — and that was counted as armed. The hook deletes the rule at the
+  // moment of the write, which is when the real race would put it.
+  it('does not count an arming whose rule was deleted mid-tick', async () => {
+    state.rules = [{ ...RULE, next_run_at: null }];
+    state.failUpdate = (table) => {
+      if (table === 'family_automation_rules') state.rules = [];
+      return false;
+    };
+    const res = await GET(req() as never);
+    expect((await res.json()).armed, 'counted an arm that matched no rule').toBe(0);
+  });
+
   it('still counts an arming that did land', async () => {
     state.rules = [{ ...RULE, next_run_at: null }];
     const res = await GET(req() as never);
