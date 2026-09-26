@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:50:00Z
+- Last Updated: 2026-09-26T18:51:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -27297,6 +27297,18 @@ requires the caller to be the assignee or a manager (a parent submitting on a
 young child's behalf). `tests/a-sibling-cannot-submit-your-chore-proof.test.ts`
 pins it: the sibling is refused before anything is written, and the test fails
 with the action reverted. Chore and mission suites pass (186/186).
+
+## C1-K-50 · MEDIUM · A paid chore could be disputed back open, by anyone in the family
+
+`disputeSubmissionAction` checked neither who was disputing nor what. Any
+family member could dispute any submission. It also accepted an *approved*
+submission, which it reset to `disputed` and whose assignment it put back to
+`submitted`, after the reward had been paid. No component calls the action
+today, but it is exported from a `'use server'` module whose other actions are
+used, so it cannot be assumed unreachable. It now requires the submitter or a
+manager, and only a `rejected` or `needs_improvement` verdict.
+`tests/a-sibling-cannot-submit-your-chore-proof.test.ts` gains both cases;
+both fail with the action reverted (3/3 now).
 
 ## Swept clean · the API routes this file never named
 

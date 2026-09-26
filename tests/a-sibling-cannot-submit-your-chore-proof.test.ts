@@ -22,7 +22,7 @@ vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
 });
-const { submitProofAction } = await import('@/app/(app)/missions/actions');
+const { submitProofAction, disputeSubmissionAction } = await import('@/app/(app)/missions/actions');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 
 describe('submitting chore proof', () => {
@@ -46,5 +46,42 @@ describe('submitting chore proof', () => {
     expect(res).toEqual({ ok: false, error: translate(SOURCE_MESSAGES, 'actions.choreNotFound') });
     expect(db.table('chore_submissions')).toEqual([]);
     expect(db.table('chore_assignments')[0]).toMatchObject({ status: 'pending' });
+  });
+});
+
+describe('disputing a chore verdict', () => {
+  let db: InMemorySupabase;
+  beforeEach(() => {
+    db = createInMemorySupabase();
+    harness.db = db;
+    db.seed('chore_assignments', [{ id: 'assign-1', family_id: 'family-1', chore_id: 'chore-1', member_id: 'member-kid', status: 'approved' }]);
+    db.seed('chore_submissions', [
+      { id: 'sub-rejected', family_id: 'family-1', assignment_id: 'assign-1', member_id: 'member-kid', status: 'rejected' },
+      { id: 'sub-approved', family_id: 'family-1', assignment_id: 'assign-1', member_id: 'member-kid', status: 'approved' },
+    ]);
+  });
+
+  const dispute = (id: string) => {
+    const form = new FormData();
+    form.set('submission_id', id);
+    form.set('reason', 'unfair');
+    return disputeSubmissionAction(form);
+  };
+
+  it('refuses a sibling disputing someone else\'s verdict', async () => {
+    harness.memberId = 'member-sib';
+    harness.role = 'child';
+    await dispute('sub-rejected');
+    expect(db.table('chore_disputes')).toEqual([]);
+    expect(db.table('chore_submissions').find((r) => r.id === 'sub-rejected')).toMatchObject({ status: 'rejected' });
+  });
+
+  it('refuses reopening an approved (already paid) submission', async () => {
+    harness.memberId = 'member-kid';
+    harness.role = 'child';
+    await dispute('sub-approved');
+    expect(db.table('chore_disputes')).toEqual([]);
+    expect(db.table('chore_submissions').find((r) => r.id === 'sub-approved')).toMatchObject({ status: 'approved' });
+    expect(db.table('chore_assignments')[0]).toMatchObject({ status: 'approved' });
   });
 });

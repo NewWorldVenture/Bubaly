@@ -366,6 +366,12 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
   if (!submissionId) return;
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
   if (!submission) return;
+  // A dispute is the submitter's (or a manager's on their behalf), and only
+  // against a verdict that went against them. Without these a sibling could
+  // dispute someone else's chore, and an APPROVED submission could be thrown
+  // back to 'submitted' after its reward was paid.
+  if (submission.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) return;
+  if (!['rejected', 'needs_improvement'].includes(String(submission.status))) return;
 
   const { data: dispute, error: disputeError } = await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' }).select('id').single();
   if (disputeError || !dispute) return;
