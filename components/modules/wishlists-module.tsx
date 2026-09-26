@@ -157,7 +157,7 @@ export function WishlistsModule() {
       )}
 
       {visible.length === 0 ? (
-        <EmptyState icon={Gift} title={isOwnList ? 'Your wish list is empty' : `${memberName(activeMember)} hasn't added wishes yet`}
+        <EmptyState icon={Gift} title={isOwnList ? t('wishlists.yourListEmpty') : t('wishlists.memberNoWishes', { name: memberName(activeMember) })}
           description={isOwnList ? 'Add things you\'d love for birthdays and holidays — your family can claim them as gifts.' : 'Check back later, or nudge them to add some ideas.'}
           action={isOwnList && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('wishlists.addAWish')}</Button>} />
       ) : (

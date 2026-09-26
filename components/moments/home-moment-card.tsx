@@ -82,12 +82,12 @@ export function HomeMomentCard() {
     if (!moment) return null;
     const { event, prep } = moment;
     if (prep.leaveByISO) {
-      return { title: `Leave for ${event.title}`, at: reminderTimeFor({ domain: 'time', stepId: 'leave-by', eventStartsAtISO: event.starts_at, leaveByISO: prep.leaveByISO }) };
+      return { title: t('homeMomentCard.leaveFor', { title: event.title }), at: reminderTimeFor({ domain: 'time', stepId: 'leave-by', eventStartsAtISO: event.starts_at, leaveByISO: prep.leaveByISO }) };
     }
     const step = prep.items.find((i) => i.reminderTitle);
     if (!step) return null;
     return { title: step.reminderTitle as string, at: reminderTimeFor({ domain: step.domain, stepId: step.id, eventStartsAtISO: event.starts_at }) };
-  }, [moment]);
+  }, [moment, t]);
 
   if (!moment) return null;
   const { event, prep } = moment;
@@ -153,7 +153,7 @@ export function HomeMomentCard() {
           type="button"
           onClick={setReminder}
           disabled={remindState !== 'idle'}
-          aria-label={remindState === 'done' ? t('homeMomentCard.reminderSet') : `Remind me: ${primaryReminder.title}`}
+          aria-label={remindState === 'done' ? t('homeMomentCard.reminderSet') : t('homeMomentCard.remindMe', { title: primaryReminder.title })}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/10 px-3 py-2 text-xs font-semibold text-brand-text transition hover:bg-brand/15 disabled:opacity-60"
         >
           {remindState === 'saving' ? <Loader2 className="h-4 w-4 animate-spin" />

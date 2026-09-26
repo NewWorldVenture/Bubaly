@@ -37,15 +37,15 @@ const blankSchedule = { time_of_day: '08:00', days_of_week: [0, 1, 2, 3, 4, 5, 6
 
 // Refill badge for an active medication. Surfaces what Autopilot already reasons
 // about (refill_on) right in the list, within the member-set reminder window.
-function refillBadge(refillOn: string | null, remindDays: number | null): { label: string; cls: string } | null {
+function refillBadge(refillOn: string | null, remindDays: number | null, t: (key: string, params?: Record<string, string | number>) => string): { label: string; cls: string } | null {
   if (!refillOn) return null;
   const exp = new Date(`${refillOn}T00:00:00`).getTime();
   if (Number.isNaN(exp)) return null;
   const days = Math.ceil((exp - Date.now()) / 86_400_000);
   const window = Math.max(0, Math.min(90, remindDays ?? 7));
-  if (days < 0) return { label: 'Refill overdue', cls: 'bg-rose-500/15 text-rose-400' };
-  if (days === 0) return { label: 'Refill today', cls: 'bg-rose-500/15 text-rose-400' };
-  if (days <= window) return { label: `Refill in ${days}d`, cls: 'bg-amber-500/15 text-amber-400' };
+  if (days < 0) return { label: t('medications.refillOverdue'), cls: 'bg-rose-500/15 text-rose-400' };
+  if (days === 0) return { label: t('medications.refillToday'), cls: 'bg-rose-500/15 text-rose-400' };
+  if (days <= window) return { label: t('medications.refillInDays', { n: days }), cls: 'bg-amber-500/15 text-amber-400' };
   return null;
 }
 
@@ -532,7 +532,7 @@ export function MedicationsModule() {
                         {m.name}
                         {!m.is_active && <span className="text-[10px] uppercase tracking-wide text-muted border border-border rounded px-1.5 py-0.5">{t('medications.inactive')}</span>}
                         {m.is_active && (() => {
-                          const rb = refillBadge(m.refill_on, m.refill_reminder_days);
+                          const rb = refillBadge(m.refill_on, m.refill_reminder_days, t);
                           return rb ? <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', rb.cls)}>{rb.label}</span> : null;
                         })()}
                       </div>

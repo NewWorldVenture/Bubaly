@@ -8,6 +8,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
@@ -227,10 +230,10 @@ describe('assistant module', () => {
   });
 
   it('labels outcome chips from what the card says, and turns stored run ids into run cards once', () => {
-    expect(cardChipLabel(CARDS[0])).toBe('Meal plan · 7 days');
-    expect(cardChipLabel(CARDS[1])).toBe('1 conflict');
-    expect(cardChipLabel(CARDS[2])).toBe('No conflicts');
-    expect(cardChipLabel(CARDS[10])).toBe('Needs your approval');
+    expect(cardChipLabel(CARDS[0], en)).toBe('Meal plan · 7 days');
+    expect(cardChipLabel(CARDS[1], en)).toBe('1 conflict');
+    expect(cardChipLabel(CARDS[2], en)).toBe('No conflicts');
+    expect(cardChipLabel(CARDS[10], en)).toBe('Needs your approval');
     const cards = withRunCards([CARDS[11]], ['r1', 'r2']);
     expect(cards.map((c) => (c.kind === 'run_status' ? c.run_id : c.kind))).toEqual(['r1', 'r2']);
     expect(withRunCards([], [])).toEqual([]);

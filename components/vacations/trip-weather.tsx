@@ -44,7 +44,7 @@ export function TripWeather({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/weather', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vacationId, location: loc }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Failed to fetch weather');
-      else success(data.note || `Updated forecast for ${data.location}`);
+      else success(data.note || t('tripWeather.updatedFor', { location: data.location }));
     } catch { toastError(t('tripWeather.networkError')); }
     setBusy(false);
   }

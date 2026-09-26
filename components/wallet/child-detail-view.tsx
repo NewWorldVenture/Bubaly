@@ -50,11 +50,11 @@ type Coaching = { headline: string; insights: string[]; suggestion: string };
 
 // ─── Bucket metadata ──────────────────────────────────────────────────────────
 
-const BUCKET_META: Record<string, { label: string; icon: typeof PiggyBank; color: string; ring: string; bg: string }> = {
-  spend: { label: 'Spend', icon: ShoppingBag, color: 'text-sky-500', ring: '#38bdf8', bg: 'bg-sky-500/10' },
-  save:  { label: 'Save',  icon: PiggyBank,  color: 'text-emerald-500', ring: '#34d399', bg: 'bg-emerald-500/10' },
-  give:  { label: 'Give',  icon: HandHeart,  color: 'text-rose-500', ring: '#fb7185', bg: 'bg-rose-500/10' },
-  invest: { label: 'Invest', icon: TrendingUp, color: 'text-violet-500', ring: '#a78bfa', bg: 'bg-violet-500/10' },
+const BUCKET_META: Record<string, { label: string; labelKey: string; icon: typeof PiggyBank; color: string; ring: string; bg: string }> = {
+  spend: { label: 'Spend', labelKey: 'walletDashboard.spend', icon: ShoppingBag, color: 'text-sky-500', ring: '#38bdf8', bg: 'bg-sky-500/10' },
+  save:  { label: 'Save', labelKey: 'walletDashboard.bucket.save', icon: PiggyBank,  color: 'text-emerald-500', ring: '#34d399', bg: 'bg-emerald-500/10' },
+  give:  { label: 'Give', labelKey: 'walletDashboard.bucket.give', icon: HandHeart,  color: 'text-rose-500', ring: '#fb7185', bg: 'bg-rose-500/10' },
+  invest: { label: 'Invest', labelKey: 'walletDashboard.bucket.invest', icon: TrendingUp, color: 'text-violet-500', ring: '#a78bfa', bg: 'bg-violet-500/10' },
 };
 
 const BUCKET_KINDS: BucketKind[] = ['spend', 'save', 'give', 'invest'];
@@ -114,7 +114,7 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
           return (
             <div key={k} className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: m.ring }} />
-              <span className="text-xs text-muted">{m.label}</span>
+              <span className="text-xs text-muted">{t(m.labelKey)}</span>
               <span className="text-xs font-semibold">{Math.round(pct * 100)}%</span>
               <span className="text-xs text-muted">· {formatCents(amount)}</span>
             </div>
@@ -348,7 +348,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
           {tx.description || txnTypeLabel(tx.type)}
         </p>
         <p className="flex items-center gap-1 text-[11px] text-muted">
-          {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} · </span>}
+          {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {t(meta.labelKey)} · </span>}
           {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
           {isPending && <span className="text-amber-500"> {t('childDetail.pendingApproval')}</span>}
           {trustLabel && <span className="ml-1 rounded bg-border/60 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">{trustLabel}</span>}
@@ -395,8 +395,8 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
         <p className="rounded-xl bg-surface/60 px-3 py-2 text-xs text-muted">
           {formatCents(spendable)} {t('childDetail.availableInSpend')}
           {spendable < child.approvalThresholdCents
-            ? ` Requests over ${formatCents(child.approvalThresholdCents)} need a parent's OK.`
-            : ' A parent will review this request.'}
+            ? ` ${t('childDetail.requestsOverNeedOk', { amount: formatCents(child.approvalThresholdCents) })}`
+            : ` ${t('childDetail.parentWillReview')}`}
         </p>
         <Field label={t('childDetail.whatFor')}>
           {(id) => <Input id={id} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t('childDetailView.eGLegoSet')} autoFocus maxLength={120} />}
@@ -744,13 +744,13 @@ export function ChildDetailView({
           return (
             <div key={k} className="rounded-2xl border border-border bg-surface/40 p-4">
               <div className={cn('flex items-center gap-1.5 text-xs font-medium', m.color)}>
-                <m.icon className="h-3.5 w-3.5" /> {m.label}
+                <m.icon className="h-3.5 w-3.5" /> {tr(m.labelKey)}
               </div>
               <p className="mt-1.5 text-lg font-bold">{formatCents(bal)}</p>
               <p className="mt-0.5 text-[10px] text-muted">Target {targetPct}%</p>
               <div
                 className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/40"
-                {...progressBarA11y(child.total > 0 ? (bal / child.total) * 100 : 0, `${m.label} bucket share of balance`)}
+                {...progressBarA11y(child.total > 0 ? (bal / child.total) * 100 : 0, tr('childDetail.bucketShareOfBalance', { bucket: tr(m.labelKey) }))}
               >
                 <div
                   className="h-full rounded-full opacity-80 transition-all duration-500"

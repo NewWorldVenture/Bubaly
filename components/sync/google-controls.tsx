@@ -19,7 +19,7 @@ export function GoogleControls() {
     try {
       const res = await fetch('/api/sync/google/sync', { method: 'POST' });
       const data = (await res.json()) as RunResult & { error?: string };
-      if (!res.ok || data.error) setError(data.error ?? `Sync failed (${res.status})`);
+      if (!res.ok || data.error) setError(data.error ?? t('sync.failedStatus', { status: res.status }));
       setResult(data);
     } catch {
       setError(t('googleControls.networkErrorPleaseTryAgain'));

@@ -99,7 +99,7 @@ export function WeekendModule() {
       const res = await fetch('/api/weekend/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ zip, radius, days }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Search failed');
-      else success(data.count > 0 ? `Found ${data.count} events near ${data.zip}` : `No events found near ${data.zip} in the next ${data.days} days`);
+      else success(data.count === 1 ? t('weekend.foundOneEventNear', { zip: data.zip }) : data.count > 0 ? t('weekend.foundEventsNear', { n: data.count, zip: data.zip }) : t('weekend.noEventsNear', { zip: data.zip, days: data.days }));
     } catch { toastError(t('weekendModule.networkError')); }
     setBusy(false);
   }

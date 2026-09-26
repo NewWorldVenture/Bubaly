@@ -68,7 +68,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
               {r.booked && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">{t('tripActivities.booked')}</span>}
             </div>
             <p className="mt-0.5 text-sm text-muted">{[r.kind, r.location].filter(Boolean).join(' · ') || 'Reservation'}</p>
-            <p className="mt-0.5 text-xs text-muted">{[fmtDT(r.reserved_at, locale), r.party_size && `Party of ${r.party_size}`, r.confirmation_code && `Conf ${r.confirmation_code}`, r.cost_cents != null && dollars(r.cost_cents)].filter(Boolean).join(' · ')}</p>
+            <p className="mt-0.5 text-xs text-muted">{[fmtDT(r.reserved_at, locale), r.party_size && t('tripActivities.partyOf', { n: r.party_size }), r.confirmation_code && t('tripActivities.confirmation', { code: r.confirmation_code }), r.cost_cents != null && dollars(r.cost_cents)].filter(Boolean).join(' · ')}</p>
           </div>
         )}
       />

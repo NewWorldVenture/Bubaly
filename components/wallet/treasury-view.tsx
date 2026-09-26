@@ -134,7 +134,7 @@ export function TreasuryView({
                 {goalPct}%
               </div>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(goalPct, `Family savings goals: ${goalPct}% funded`)}>
+            <div className="h-2.5 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(goalPct, tr('treasury.savingsGoalsFunded', { pct: goalPct }))}>
               <div
                 className="h-full rounded-full bg-gradient-to-r from-brand to-brand/70 transition-all"
                 style={{ width: `${goalPct}%` }}

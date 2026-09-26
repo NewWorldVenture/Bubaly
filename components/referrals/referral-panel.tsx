@@ -57,7 +57,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
   async function share() {
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({ title: 'Join my family on Bubaly', text: `Use my code ${code} and get ${rewardLabel}!`, url: link });
+        await navigator.share({ title: t('referralPanel.shareTitle'), text: t('referralPanel.shareText', { code, reward: rewardLabel }), url: link });
       } catch { /* user cancelled */ }
     } else {
       copy(link, 'link');

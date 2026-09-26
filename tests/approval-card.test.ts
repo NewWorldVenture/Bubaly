@@ -8,6 +8,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 vi.mock('@/app/(app)/dashboard/approvals-actions', () => ({
@@ -80,9 +83,25 @@ describe('ApprovalCard', () => {
     expect(html).not.toContain('aria-label="Edit');
     expect(html).toContain('aria-label="Approve');
 
+    // The attribute, not the substring: every button's class list carries the
+    // Tailwind variant `disabled:cursor-not-allowed`, which `/disabled/` matched
+    // whether or not the button was disabled.
     const expired = render(React.createElement(ApprovalCard, { approval: { ...data, expiresAt: '2020-01-01T00:00:00Z' }, canDecide: true }));
     expect(expired).toContain('Expired');
-    expect(expired.match(/<button[^>]*disabled/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(expired.match(/<button[^>]* disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('knows an approval has expired in any language (the label is translated; the decision is not)', async () => {
+    // The card used to decide `expired` by comparing its own label to 'Expired',
+    // which a German family's label never equals, so the decision buttons would
+    // have stayed live on a request the server will refuse.
+    const { LocaleProvider } = await import('@/components/i18n/locale-provider');
+    const { localeOrDefault } = await import('@/lib/i18n/locales');
+    const html = render(React.createElement(LocaleProvider, { locale: localeOrDefault('de-DE'), source: 'cookie', messages: getMessages('de-DE') },
+      React.createElement(ApprovalCard, { approval: { ...data, expiresAt: '2020-01-01T00:00:00Z' }, canDecide: true })));
+    expect(html).toContain(translate(getMessages('de-DE'), 'approvalCard.expired'));
+    expect(html).not.toContain('>Expired<');
+    expect(html.match(/<button[^>]* disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   it('renders the compact variant on Home from a bare {id,title} row without throwing', () => {
@@ -162,11 +181,11 @@ describe('editable fields', () => {
 describe('formatting', () => {
   it('formats expiry relative to now and amounts without noise', () => {
     const now = Date.parse('2026-09-05T12:00:00Z');
-    expect(formatExpiry('2026-09-05T12:30:00Z', now)).toBe('Expires in 30 min');
-    expect(formatExpiry('2026-09-05T18:00:00Z', now)).toBe('Expires in 6h');
-    expect(formatExpiry('2026-09-08T12:00:00Z', now)).toBe('Expires in 3 days');
-    expect(formatExpiry('2026-09-01T12:00:00Z', now)).toBe('Expired');
-    expect(formatExpiry(null, now)).toBeNull();
+    expect(formatExpiry('2026-09-05T12:30:00Z', en, now)).toBe('Expires in 30 min');
+    expect(formatExpiry('2026-09-05T18:00:00Z', en, now)).toBe('Expires in 6h');
+    expect(formatExpiry('2026-09-08T12:00:00Z', en, now)).toBe('Expires in 3 days');
+    expect(formatExpiry('2026-09-01T12:00:00Z', en, now)).toBe('Expired');
+    expect(formatExpiry(null, en, now)).toBeNull();
     expect(formatAmount(4200)).toBe('$42');
     expect(formatAmount(1050)).toBe('$10.50');
     expect(formatAmount(null)).toBeNull();

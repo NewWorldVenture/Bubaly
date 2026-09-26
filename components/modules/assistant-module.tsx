@@ -75,16 +75,16 @@ function newConversationId() {
 }
 
 /** One-line label for the outcome chip in the thread that points at the card in the plan pane. */
-export function cardChipLabel(card: ResultCard): string {
+export function cardChipLabel(card: ResultCard, t: (key: string, params?: Record<string, string | number>) => string): string {
   switch (card.kind) {
-    case 'meal_plan': return `Meal plan · ${card.days.length} ${card.days.length === 1 ? 'day' : 'days'}`;
-    case 'calendar_conflict': return card.conflicts.length ? `${card.conflicts.length} ${card.conflicts.length === 1 ? 'conflict' : 'conflicts'}` : 'No conflicts';
-    case 'budget_analysis': return 'Spending';
-    case 'vacation_prep': return 'Trip prep';
-    case 'task_group': return `${card.tasks.length} ${card.tasks.length === 1 ? 'task' : 'tasks'}`;
-    case 'grocery_list': return `Grocery list · ${card.items.length}`;
-    case 'readiness': return `Readiness ${Math.round(card.score)}`;
-    case 'approval': return 'Needs your approval';
+    case 'meal_plan': return card.days.length === 1 ? t('assistantChip.mealPlanOne') : t('assistantChip.mealPlanMany', { n: card.days.length });
+    case 'calendar_conflict': return card.conflicts.length === 0 ? t('assistantChip.noConflicts') : card.conflicts.length === 1 ? t('assistantChip.conflictsOne') : t('assistantChip.conflictsMany', { n: card.conflicts.length });
+    case 'budget_analysis': return t('assistantChip.spending');
+    case 'vacation_prep': return t('assistantChip.tripPrep');
+    case 'task_group': return card.tasks.length === 1 ? t('assistantChip.tasksOne') : t('assistantChip.tasksMany', { n: card.tasks.length });
+    case 'grocery_list': return t('assistantChip.groceryList', { n: card.items.length });
+    case 'readiness': return t('assistantChip.readiness', { n: Math.round(card.score) });
+    case 'approval': return t('assistantChip.needsApproval');
     case 'run_status': return card.title;
     default: return card.title;
   }
@@ -465,7 +465,7 @@ export function AssistantModule() {
                               highlightId === id ? 'border-brand/60 bg-brand/15 text-brand-text' : 'border-brand/30 bg-brand/10 text-brand-text',
                             )}
                           >
-                            <LayoutList className="h-3 w-3" aria-hidden /> {cardChipLabel(card)}
+                            <LayoutList className="h-3 w-3" aria-hidden /> {cardChipLabel(card, t)}
                           </button>
                         </li>
                       );

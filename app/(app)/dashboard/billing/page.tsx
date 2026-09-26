@@ -5,6 +5,7 @@ import { FinancesModule } from '@/components/modules/finances-module';
 import { CloseAccountCard } from '@/components/app/close-account-card';
 import { createServiceClient } from '@/lib/supabase/server';
 import { serviceFeeEnabled, resolveServiceFeeCents, formatServiceFee } from '@/lib/stripe/service-fee';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Finances' };
 
@@ -28,7 +29,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     const { data } = await createServiceClient()
       .from('stripe_settings').select('enabled, service_fee_cents, service_fee_price_id').eq('id', 'singleton').maybeSingle();
     if (serviceFeeEnabled(data)) {
-      serviceFeeNotice = `A one-time ${formatServiceFee(resolveServiceFeeCents(data))} Bubaly service fee is added at checkout.`;
+      serviceFeeNotice = (await getTranslations())('billing.serviceFeeNotice', { fee: formatServiceFee(resolveServiceFeeCents(data)) });
     }
   } catch {
     /* stripe_settings may not exist yet — no notice */

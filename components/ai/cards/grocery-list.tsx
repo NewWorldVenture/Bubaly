@@ -4,15 +4,17 @@
 import { ShoppingCart } from 'lucide-react';
 import type { GroceryListCard } from '@/lib/ai/result-cards';
 import { CardFrame, CardRow, MoreRow } from './index';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const COMPACT_ROWS = 5;
 const FULL_ROWS = 16;
 
 export function GroceryListCardView({ card, compact = false, className }: { card: GroceryListCard; compact?: boolean; className?: string }) {
+  const t = useTranslations();
   const rows = card.items.slice(0, compact ? COMPACT_ROWS : FULL_ROWS);
   const notes = [
-    card.skipped.length ? `${card.skipped.length} already on the list` : null,
-    card.in_pantry.length ? `${card.in_pantry.length} in the pantry` : null,
+    card.skipped.length ? t('groceryCard.alreadyOnList', { n: card.skipped.length }) : null,
+    card.in_pantry.length ? t('groceryCard.inPantry', { n: card.in_pantry.length }) : null,
   ].filter(Boolean).join(' · ');
   const byAisle = !compact && card.items.length > 6;
   const groups = byAisle

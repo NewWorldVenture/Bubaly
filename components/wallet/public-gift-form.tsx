@@ -136,7 +136,7 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
 
       <button type="submit" disabled={loading}
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50 transition">
-        <Gift className="h-4 w-4" /> {loading ? 'Sending…' : `Send gift to ${childName}`}
+        <Gift className="h-4 w-4" /> {loading ? t('publicGiftForm.sending') : t('publicGiftForm.sendGiftTo', { name: childName })}
       </button>
       <p className="text-center text-[11px] text-muted">{t('publicGift.noChargeIsMadeNowThe')}</p>
     </form>

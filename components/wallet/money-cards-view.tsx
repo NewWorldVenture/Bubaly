@@ -206,8 +206,8 @@ export function MoneyCardsView({
             <Zap className="h-5 w-5 flex-shrink-0 text-brand-text" />
             <p className="text-sm font-medium">
               {childrenWithoutCards.length === 1
-                ? `${childrenWithoutCards[0].name} doesn't have a card yet.`
-                : `${childrenWithoutCards.length} children don't have cards yet.`}
+                ? t('moneyCards.childNoCard', { name: childrenWithoutCards[0].name })
+                : t('moneyCards.childrenNoCards', { n: childrenWithoutCards.length })}
             </p>
           </div>
           <Button size="sm" onClick={issueAllVirtual} loading={busy === 'issue-all'}>

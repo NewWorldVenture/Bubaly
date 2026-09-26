@@ -109,7 +109,8 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // this scanner already read), 2,655 -> 2,654.
 // Then batch 2, including the English text beside each template (the family
 // dashboard's suggestion buttons, budget messages, auction states), 2,654 -> 2,646.
-const CEILING = 2646;
+// Then batches 3 and 4, including most of the assistants page, 2,646 -> 2,627.
+const CEILING = 2627;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
