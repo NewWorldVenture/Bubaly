@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Radar, ShieldCheck, Lock, Users, Info, Globe } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -38,7 +39,11 @@ export function IntelligenceModule({
   benchmarksPublished?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
+  // Joining the network shares the family's (anonymised) data, so it is the
+  // family managers' decision — a minor's toggle is not consent. The database
+  // enforces the same since 0327; other members see the setting read-only.
+  const canConsent = isManager(role);
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
 
@@ -125,7 +130,7 @@ export function IntelligenceModule({
           <h3 className="font-semibold">{t('intelligence.joinTheIntelligenceNetwork')}</h3>
           <p className="text-sm text-muted">{contributing ? t('intelligence.contributingStatus') : t('intelligence.privateStatus')}</p>
         </div>
-        <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
+        <Toggle on={consent.enabled} disabled={saving || !canConsent} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
       </div>
 
       {/* Scopes */}
@@ -137,7 +142,7 @@ export function IntelligenceModule({
                 <h4 className="text-sm font-semibold">{t(s.labelKey)}</h4>
                 <p className="text-xs text-muted">{t(s.descriptionKey)}</p>
               </div>
-              <Toggle on={consent.scopes[s.key] === true} disabled={saving} onClick={() => toggleScope(s.key)} label={t(s.labelKey)} />
+              <Toggle on={consent.scopes[s.key] === true} disabled={saving || !canConsent} onClick={() => toggleScope(s.key)} label={t(s.labelKey)} />
             </div>
           ))}
         </div>

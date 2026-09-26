@@ -26794,6 +26794,33 @@ the 0297 read-scope list; who may write it is not a product question.
 after, with controls that a member still reports their own location and
 check-in and a parent can still manage a child's row; 50/50 probes.
 
+## C1-K-28 · HIGH · Forgeable affiliate commissions, and network consent a child could give
+
+Same sweep.
+
+1. **Affiliate commissions a family member could file.** `affiliate_referrals`
+   is one row per referral an outside affiliate earns commission on; the admin
+   affiliates page sums `commission_cents` over `converted` rows and "mark
+   paid" settles them — real money to a partner. The table carried member
+   INSERT, UPDATE and DELETE policies that nothing in the application uses
+   (referrals are recorded and settled by the service role). Measured on the
+   replayed schema: a family member converted a pending referral while raising
+   its commission a thousandfold, and filed a new converted referral against
+   an affiliate. Member writes are dropped; member SELECT is kept.
+2. **Network consent a child could give.** `network_consent` is the family's
+   opt-in to contributing anonymised data to cohort insights. Member-writable,
+   and the intelligence module showed the toggles to everyone: a child opted
+   the family in. A minor's toggle is not consent. Writes need
+   `can_manage_family`; the module shows the setting read-only to other
+   members.
+
+`0327_consent_and_commission_are_not_a_members_write.sql`;
+`docs/audit/consent-and-commission-check.sql` passes after (51/51 probes),
+with controls that a parent can opt in and a child can still read the setting;
+the pre-fix behaviour was measured directly under the old policies.
+`network-consent-is-a-managers-decision` pins the UI gate (fails with the
+module reverted).
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
