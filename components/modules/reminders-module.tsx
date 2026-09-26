@@ -842,7 +842,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                   {tags.map((t) => (
                     <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand-text">
                       <Tag className="h-3 w-3" />{t}
-                      <button type="button" onClick={() => setTags((cur) => cur.filter((x) => x !== t))} aria-label={`Remove ${t}`}><X className="h-3 w-3" /></button>
+                      <button type="button" onClick={() => setTags((cur) => cur.filter((x) => x !== t))} aria-label={tr('itemAction.remove', { name: t })}><X className="h-3 w-3" /></button>
                     </span>
                   ))}
                 </div>

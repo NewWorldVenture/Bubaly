@@ -281,7 +281,7 @@ export function MomentsView({ departures, departuresFailed = false }: {
                           >
                             <Bell className="h-3.5 w-3.5" />{' '}{t('momentsView.remind')}</button>
                         ) : item.actionHref ? (
-                          <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={`Open: ${item.label}`}>
+                          <Link href={item.actionHref} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg" aria-label={t('itemAction.openTitled', { name: item.label })}>
                             <ChevronRight className="h-4 w-4" />
                           </Link>
                         ) : null}

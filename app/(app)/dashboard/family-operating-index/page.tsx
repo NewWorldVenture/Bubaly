@@ -222,7 +222,7 @@ export default async function FamilyOperatingIndexPage() {
                     </span>
                     <Link
                       href={s.href}
-                      aria-label={`Open ${s.title}`}
+                      aria-label={t('itemAction.open', { name: s.title })}
                       className="group shrink-0 rounded-lg p-1 hover:bg-elevated"
                     >
                       <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />

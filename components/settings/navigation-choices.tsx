@@ -254,15 +254,15 @@ export function NavigationChoices() {
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button type="button" onClick={() => move(index, -1)} disabled={index === 0 || saving}
-                    aria-label={`Move ${item.label} up`} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30">
+                    aria-label={t('itemAction.moveUp', { name: item.label })} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30">
                     <ArrowUp className="h-4 w-4" />
                   </button>
                   <button type="button" onClick={() => move(index, 1)} disabled={index === items.length - 1 || saving}
-                    aria-label={`Move ${item.label} down`} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30">
+                    aria-label={t('itemAction.moveDown', { name: item.label })} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30">
                     <ArrowDown className="h-4 w-4" />
                   </button>
                   <button type="button" onClick={() => remove(item.href)} disabled={items.length <= 1 || saving}
-                    aria-label={`Remove ${item.label}`} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-30">
+                    aria-label={t('itemAction.remove', { name: item.label })} className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-30">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -280,11 +280,11 @@ export function NavigationChoices() {
                           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-elevated text-muted"><kid.icon className="h-3.5 w-3.5" /></span>
                           <span className="min-w-0 flex-1 truncate text-sm">{kid.label}</span>
                           <button type="button" onClick={() => moveChild(item.href, ki, -1)} disabled={ki === 0 || saving}
-                            aria-label={`Move ${kid.label} up`} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                            aria-label={t('itemAction.moveUp', { name: kid.label })} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
                           <button type="button" onClick={() => moveChild(item.href, ki, 1)} disabled={ki === kidItems.length - 1 || saving}
-                            aria-label={`Move ${kid.label} down`} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                            aria-label={t('itemAction.moveDown', { name: kid.label })} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
                           <button type="button" onClick={() => removeChild(item.href, kid.href)} disabled={saving}
-                            aria-label={`Remove ${kid.label}`} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-30"><X className="h-3.5 w-3.5" /></button>
+                            aria-label={t('itemAction.remove', { name: kid.label })} className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-30"><X className="h-3.5 w-3.5" /></button>
                         </li>
                       ))}
                     </ul>

@@ -361,7 +361,7 @@ function StartModal({ template, launching, initialDate, onClose, onLaunch }: {
   }, [template.defaultLeadDays, initialDate]);
   const [date, setDate] = useState(defaultDate);
   return (
-    <Modal open onClose={onClose} title={`Start: ${template.title}`} description={template.description}>
+    <Modal open onClose={onClose} title={tr('itemAction.startTitled', { name: template.title })} description={template.description}>
       <div className="space-y-4">
         <Field label={tr('lifeEvents.whenIsItTheChecklistSchedules')}>
           {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}

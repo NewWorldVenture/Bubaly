@@ -409,8 +409,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                     <p className="text-[11px] text-muted">{money(materialLineCents(m))}{m.is_purchased && m.actual_cost_cents !== null && m.est_cost_cents !== null && m.actual_cost_cents !== m.est_cost_cents ? ` (est. ${money(Math.round(m.est_cost_cents * m.quantity))})` : ''}{m.store ? ` · ${m.store}` : ''}</p>
                   </div>
                   {m.url && <a href={m.url} target="_blank" rel="noreferrer" aria-label={tr('projects.openLink')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
-                  <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={`Edit ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => deleteMaterial(m)} aria-label={`Delete ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={tr('itemAction.edit', { name: m.name })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => deleteMaterial(m)} aria-label={tr('itemAction.delete', { name: m.name })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>
               ))}
               <li className="flex justify-between px-3 pt-1 text-xs text-muted"><span>{mt.purchased}/{mt.count} {tr('projects.bought')} {money(mt.actualCents)} spent</span><span>{money(mt.remainingCents)} {tr('projects.stillToBuy')}</span></li>

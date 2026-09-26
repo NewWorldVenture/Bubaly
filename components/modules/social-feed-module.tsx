@@ -137,7 +137,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {PLATFORMS.map((p) => (
           <button key={p.key} type="button" onClick={() => setShowAdd(true)}
-            className="flex flex-col items-center gap-1 rounded-xl p-1.5 hover:bg-elevated" title={`Add ${p.label}`}>
+            className="flex flex-col items-center gap-1 rounded-xl p-1.5 hover:bg-elevated" title={tr('itemAction.add', { name: p.label })}>
             <PlatformGlyph platform={p.key} />
             <span className="text-[10px] text-muted">{p.label}</span>
           </button>

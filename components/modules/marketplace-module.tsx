@@ -293,7 +293,7 @@ export function MarketplaceModule({
               return (
                 <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
                   l.status === 'claimed' && 'opacity-80')}>
-                  <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={`View ${l.title}`}>
+                  <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={t('itemAction.view', { name: l.title })}>
                   <ListingImage
                     src={l.photo_url}
                     alt={l.title}

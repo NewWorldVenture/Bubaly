@@ -91,7 +91,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // reads a confirm() prompt, template or quoted. Measured with the tree held
 // fixed: 35 English questions asked right before something is deleted.
 // All 35 then translated (28 confirmPrompt.* keys), 2,969 -> 2,934.
-const CEILING = 2934;
+// Then 63 of I18N-003's attribute templates ("Edit ${name}", "Move ${x} up",
+// "Approve: ${title}") through 34 shared itemAction.* keys, and the assistant
+// pane's "New conversation" fallback, 2,934 -> 2,870.
+const CEILING = 2870;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

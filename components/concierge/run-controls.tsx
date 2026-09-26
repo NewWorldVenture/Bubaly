@@ -135,7 +135,7 @@ export function RunControls({
                   type="button" variant="outline" size="sm" className={cn(ACTION, 'shrink-0')}
                   loading={busy === 'rerun'} disabled={busy !== null}
                   onClick={() => control('rerun', step.id)}
-                  aria-label={`Try again: ${step.description}`}
+                  aria-label={t('itemAction.tryAgain', { name: step.description })}
                 >
                   {busy !== 'rerun' && <RotateCcw className="h-3.5 w-3.5" aria-hidden />} Try again
                 </Button>
@@ -154,7 +154,7 @@ export function RunControls({
             {editableSteps.map((step) => (
               <li key={step.id} className="flex items-center justify-between gap-3">
                 <span className="min-w-0 flex-1 truncate text-sm text-fg/90">{step.description}</span>
-                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={`Edit: ${step.description}`}>{t('runControls.edit')}</Button>
+                <Button type="button" variant="ghost" size="sm" className={cn(ACTION, 'shrink-0')} disabled={busy !== null} onClick={() => setEditing(step)} aria-label={t('itemAction.editTitled', { name: step.description })}>{t('runControls.edit')}</Button>
               </li>
             ))}
           </ul>

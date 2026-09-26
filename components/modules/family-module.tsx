@@ -275,7 +275,7 @@ export function FamilyModule() {
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
                     {canManageMember(m) && (
                       <div className="absolute right-1.5 top-1.5">
-                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
+                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={t('itemAction.manage', { name: m.display_name })} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                         {menuId === m.id && (

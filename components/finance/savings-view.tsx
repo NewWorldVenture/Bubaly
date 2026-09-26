@@ -143,7 +143,7 @@ function ContributeModal({ goal, onAdd, onClose }: { goal: Goal; onAdd: (delta: 
   const t = useTranslations();
   const [amt, setAmt] = useState('');
   return (
-    <Modal open onClose={onClose} title={`Add to ${goal.name}`}>
+    <Modal open onClose={onClose} title={t('itemAction.addTo', { name: goal.name })}>
       <form onSubmit={(e) => { e.preventDefault(); onAdd(Math.abs(parseFloat(amt) || 0)); }} className="space-y-4">
         <Field label={t('savings.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">

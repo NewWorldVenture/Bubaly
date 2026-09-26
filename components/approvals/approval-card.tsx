@@ -242,7 +242,7 @@ export function ApprovalCard({
             className={ACTION}
             disabled={busy !== null || expired}
             onClick={() => decide('rejected')}
-            aria-label={`Decline: ${approval.title}`}
+            aria-label={t('itemAction.declineTitled', { name: approval.title })}
           >
             {busy === 'declining' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <X className="h-3.5 w-3.5" aria-hidden />}
             {busy === 'declining' ? 'Declining…' : 'Decline'}
@@ -255,7 +255,7 @@ export function ApprovalCard({
               className={ACTION}
               disabled={busy !== null || expired}
               onClick={() => setEditing(true)}
-              aria-label={`Edit: ${approval.title}`}
+              aria-label={t('itemAction.editTitled', { name: approval.title })}
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden /> {t('approval.edit')}
             </Button>
@@ -267,7 +267,7 @@ export function ApprovalCard({
             className={ACTION}
             disabled={busy !== null || expired}
             onClick={() => decide('approved')}
-            aria-label={`Approve: ${approval.title}`}
+            aria-label={t('itemAction.approveTitled', { name: approval.title })}
           >
             {busy === 'approving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
             {busy === 'approving' ? 'Approving…' : needsMore ? `Approve (${recorded + 1} of ${threshold})` : 'Approve'}

@@ -150,8 +150,8 @@ export function CareerModule() {
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
             {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
-            <button onClick={() => setAppForm({ open: true, application: a })} aria-label={`Edit ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-            <button onClick={() => deleteApplication(a)} aria-label={`Delete ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={() => setAppForm({ open: true, application: a })} aria-label={tr('itemAction.edit', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+            <button onClick={() => deleteApplication(a)} aria-label={tr('itemAction.delete', { name: a.company })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>
         </div>
       </li>
@@ -279,8 +279,8 @@ export function CareerModule() {
                         </div>
                         <div className="flex shrink-0 items-center gap-0.5">
                           {!r.is_primary && <button onClick={() => setPrimary(r)} aria-label={tr('career.makePrimary')} title={tr('career.makePrimary')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Star className="h-4 w-4" /></button>}
-                          <button onClick={() => setResumeForm({ open: true, resume: r })} aria-label={`Edit ${r.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => deleteResume(r)} aria-label={`Delete ${r.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => setResumeForm({ open: true, resume: r })} aria-label={tr('itemAction.edit', { name: r.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => deleteResume(r)} aria-label={tr('itemAction.delete', { name: r.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
                     </li>

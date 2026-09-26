@@ -178,10 +178,10 @@ export function MovingWorkspace() {
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {t.status === 'todo' && <button onClick={() => setTaskStatus(t, 'doing')} aria-label={tr('moving.markInProgress')} title={tr('moving.inProgress')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ChevronRight className="h-4 w-4" /></button>}
-          {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={`Skip ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
-          {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={`Restore ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
-          <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={`Edit ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => deleteTask(t)} aria-label={`Delete ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+          {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={tr('itemAction.skip', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
+          {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={tr('itemAction.restore', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
+          <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={tr('itemAction.edit', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+          <button onClick={() => deleteTask(t)} aria-label={tr('itemAction.delete', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
         </div>
       </li>
     );

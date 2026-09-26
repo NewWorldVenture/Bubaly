@@ -323,8 +323,8 @@ export function ClosetModule() {
                     ) : (
                       <button onClick={() => setItemStatus(item, 'active')} aria-label={`Return ${item.name} to the closet`} title={t('closet.backInCloset')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Check className="h-4 w-4" /></button>
                     )}
-                    <button onClick={() => setItemForm({ open: true, item })} aria-label={`Edit ${item.name}`} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => deleteItem(item)} aria-label={`Remove ${item.name}`} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => setItemForm({ open: true, item })} aria-label={t('itemAction.edit', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => deleteItem(item)} aria-label={t('itemAction.remove', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
               </div>

@@ -152,9 +152,9 @@ export function DeclutterModule() {
         {m.status === 'planned' ? (
           <div className="flex shrink-0 items-center gap-1">
             <Button size="sm" onClick={() => setCompleting(m)}><Check className="h-3.5 w-3.5" /> {tr('declutter.done')}</Button>
-            <button onClick={() => skipMission(m)} aria-label={`Skip ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>
-            <button onClick={() => setMissionForm({ open: true, mission: m })} aria-label={`Edit ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-            <button onClick={() => deleteMission(m)} aria-label={`Delete ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={() => skipMission(m)} aria-label={tr('itemAction.skip', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>
+            <button onClick={() => setMissionForm({ open: true, mission: m })} aria-label={tr('itemAction.edit', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+            <button onClick={() => deleteMission(m)} aria-label={tr('itemAction.delete', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>
         ) : (
           <button onClick={() => reopenMission(m)} className="shrink-0 text-xs text-muted hover:text-fg">{tr('declutter.reopen')}</button>
@@ -252,9 +252,9 @@ export function DeclutterModule() {
                       <div className="flex shrink-0 flex-col items-center gap-0.5">
                         {z.is_active ? (
                           <>
-                            <button onClick={() => resetZone(z)} aria-label={`Mark ${z.name} reset`} title={tr('declutter.markResetTidy')} className="rounded-lg p-1.5 text-muted hover:text-emerald-400"><RotateCcw className="h-4 w-4" /></button>
-                            <button onClick={() => setZoneForm({ open: true, zone: z })} aria-label={`Edit ${z.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                            <button onClick={() => archiveZone(z, false)} aria-label={`Archive ${z.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Archive className="h-4 w-4" /></button>
+                            <button onClick={() => resetZone(z)} aria-label={tr('itemAction.markReset', { name: z.name })} title={tr('declutter.markResetTidy')} className="rounded-lg p-1.5 text-muted hover:text-emerald-400"><RotateCcw className="h-4 w-4" /></button>
+                            <button onClick={() => setZoneForm({ open: true, zone: z })} aria-label={tr('itemAction.edit', { name: z.name })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => archiveZone(z, false)} aria-label={tr('itemAction.archive', { name: z.name })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Archive className="h-4 w-4" /></button>
                           </>
                         ) : (
                           <button onClick={() => archiveZone(z, true)} className="text-xs text-muted hover:text-fg">{tr('declutter.restore')}</button>

@@ -134,7 +134,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                       <button
                         onClick={() => run(() => skipMilestoneAction(r.id), 'skip-' + r.id, 'Skipped — it won’t be suggested again.')}
                         disabled={pending}
-                        aria-label={`Skip ${r.title}`}
+                        aria-label={t('itemAction.skip', { name: r.title })}
                         className="rounded-lg p-2 text-muted transition hover:text-fg disabled:opacity-50">
                         {busy === 'skip-' + r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                       </button>

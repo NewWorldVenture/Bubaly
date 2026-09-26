@@ -23,7 +23,7 @@ vi.mock('@/lib/hooks/use-signed-family-media', () => ({ useSignedFamilyMedia: ()
 vi.mock('@/lib/supabase/client', () => ({ createClient: state.db }));
 vi.mock('@/app/(app)/dashboard/reminders/actions', () => ({ createReminderAction: vi.fn(), deleteReminderAction: vi.fn(), snoozeReminderAction: vi.fn() }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages('en-US'), key) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));
 vi.mock('@/components/ui/modal', () => ({ Modal: ({ children }: { children: ReactNode }) => createElement('div', null, children) }));
