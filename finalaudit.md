@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-225 finding IDs from four workers and two parallel sessions; none of it was
+226 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 235 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 236 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -36095,6 +36095,93 @@ harness change).
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES + INSTRUMENT]` C1-S9-85 — a listing that let go of its photo, a test that passed on a throwing save, and a guard that could not see two bindings
+
+**Contacts, journal, marketplace, pets, planning, reminders, family tree,
+behavior and binder: 18 writes, two per file.** The transformer converted 13;
+five were done by hand.
+
+**One different answer.**
+- **Marketplace, saving a listing.** On an error, it deletes the photo just
+  uploaded for the listing (`cleanupOwnedPhoto()`). On a refused update (no
+  error, zero rows) it said "Listing updated" and **let go of that photo**,
+  which then sat in storage referenced by nothing.
+- **Fix:** zero rows now takes the failure path, cleanup included. A guard
+  holds that order: the zero-row check, then the cleanup, then success.
+
+**Reminders needed care.** Its save reaches the database through a local
+`run` helper, and retries with legacy columns before migration 0100. Both
+branches of the helper now read back their row. The retry must **rebind**
+`data` as well as `error`. Otherwise a failed first attempt followed by a
+successful retry reads the first attempt's null as zero rows and says "not
+saved" about a saved reminder. That is an over-tightening, and its mutation
+is red.
+
+**Two render tests modelled the old contract:**
+- **`contacts-localization`**: `update().eq()` resolved directly; 7 cases
+  went red, one per locale. The mock now returns the `.select('id')` step,
+  and a refused edit is added for every locale: it shows
+  `errors.thatChangeWasNotSaved` and no "Contact updated".
+- **`reminder-provenance-ui` stayed GREEN on a broken save.** Its mock made
+  the new `.select` throw inside the save's `try`, the `catch` toasted, and
+  the test asserted only that `update` was called. The mock now models the
+  confirmed write, and the test asserts "Reminder updated" and no error
+  toast. This is the class of test the corrected pre-check exists for: it
+  imports the component and mocks the client.
+
+**A pin my pre-check could not see (the forty-second re-pointed).** The first
+full run was red on `pets-module-write-boundary`. It pins the delete with a
+**regex literal**, `/const \{ error \} = await/`, and my pin search looked
+for the text `const { error`, which that escaped source never contains.
+- The pin is re-pointed like the others: the error is still bound and
+  surfaced.
+- The search now also runs as a fixed string for the escaped form
+  (`grep -F 'const \{ error'`). Across the suite it finds three more files
+  with such pins, none aimed at a module left in the ratchet.
+- The full suite was re-run on the final tree; the red run is not carried
+  over.
+
+**The guard could not see two bindings.**
+The first mutation run had **two survivors**:
+- the reminders save check dropped;
+- the family-tree edit check dropped.
+
+Neither was a weak fix. `a-client-write-reads-what-it-changed` never saw
+either binding:
+- it matched only `const { data: x, error } =`, and the reminders save is
+  `let` (the retry reassigns it);
+- it looked 400 characters ahead for `.select('id')`, and the family-tree
+  update's payload is longer than that.
+
+**Fix:** match `let` too, and look 1,200 ahead. My first widening, over any
+character (`[\s\S]`), then reported two Storage uploads (`data: stored`) as
+unread writes, because they borrowed the next statement's `.select('id')`. The
+window is now bounded to the binding's own statement (`[^;]`).
+
+Measured across all 59 guarded files, the new pattern lost **no** binding
+the old one saw. It gained two, both read: family tree's `edited` and
+voting's `poll`, which the old window had missed since `C1-S9-81`. Because
+the reminders save reaches `.select` through the helper, no binding regex
+can see it. A scoped check covers it instead: the helper's two selects, the
+rebinding retry, and the check before "Reminder updated".
+
+**10 mutations, all red after the guard fix:**
+- marketplace skipping cleanup on zero rows;
+- the retry not rebinding;
+- the reminders save check dropped, and over-tightened;
+- the subtask check dropped;
+- the contacts save check dropped, and over-tightened;
+- the contacts delete check dropped;
+- the family-tree edit check dropped;
+- a journal delete reverted.
+
+Components ratchet: **44/29 → 26/20.**
+
+**Status:** FIXED (18 writes). **OPEN (ratchet):** 26 across 20 files, 8 of
+them deliberate.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -36164,8 +36251,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,497 passing / 17,500 across 1,371
-files.** (After `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,515 passing / 17,518 across 1,371
+files.** (Re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

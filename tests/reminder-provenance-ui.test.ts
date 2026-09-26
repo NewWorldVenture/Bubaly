@@ -4,7 +4,7 @@ import { RemindersModule } from '@/components/modules/reminders-module';
 import { withReminderProvenance, visibleReminderTags } from '@/lib/reminders/provenance';
 import { getMessages, translate } from '@/lib/i18n/messages';
 
-const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, tags: [] as string[], update: vi.fn(), db: vi.fn() }));
+const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, tags: [] as string[], update: vi.fn(), db: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock('react', async (original) => ({ ...await original<typeof import('react')>(),
   useState: (initial: unknown) => { const index = state.cursor++; if (!(index in state.slots)) state.slots[index] = typeof initial === 'function' ? initial() : initial;
     return [state.slots[index], (value: unknown) => { state.slots[index] = typeof value === 'function' ? value(state.slots[index]) : value; }]; },
@@ -19,7 +19,7 @@ vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: ({ table }:
 vi.mock('@/lib/hooks/use-action', () => ({ useAction: () => ({ run: vi.fn(), isPending: () => false }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: state.db }));
 vi.mock('@/app/(app)/dashboard/reminders/actions', () => ({ createReminderAction: vi.fn(), deleteReminderAction: vi.fn(), snoozeReminderAction: vi.fn() }));
-vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages('en-US'), key) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));
@@ -43,7 +43,11 @@ const fingerprint = `autopilot-source:${'a'.repeat(64)}`;
 function render() { state.cursor = 0; return expand(RemindersModule()); }
 beforeEach(() => {
   state.slots = []; state.tags = ['school', fingerprint]; state.update.mockReset();
-  state.update.mockReturnValue({ eq: () => Promise.resolve({ error: null }) }); state.db.mockReturnValue({ from: () => ({ update: state.update }) });
+  state.success.mockReset(); state.error.mockReset();
+  // The save reads back its row with .select('id') (Audit C1-S9-85); a mock
+  // that resolved at .eq() made the save throw into its catch, and this test,
+  // which asserted only the update call, stayed green.
+  state.update.mockReturnValue({ eq: () => ({ select: () => Promise.resolve({ data: [{ id: 'r1' }], error: null }) }) }); state.db.mockReturnValue({ from: () => ({ update: state.update }) });
 });
 
 it('hides internal provenance from row/filter chips and the editable tag list, and retains it on an actual edit submission', async () => {
@@ -59,6 +63,8 @@ it('hides internal provenance from row/filter chips and the editable tag list, a
   const form = nodes(tree).find((node) => node.type === 'form')!;
   await (form.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault: () => {}, currentTarget: {} });
   expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ title: 'Edited reminder', tags: [fingerprint] }));
+  expect(state.error).not.toHaveBeenCalled();
+  expect(state.success).toHaveBeenCalledWith('Reminder updated');
   vi.unstubAllGlobals();
 });
 

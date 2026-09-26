@@ -12,7 +12,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidEmail, isValidPhone } from '@/lib/utils/validation';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -98,8 +98,10 @@ export function ContactsModule() {
 
   function deleteContact(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error: err } = await createClient().from('family_contacts').delete().eq('id', id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as deleted. Audit C1-S9-85.
+      const { data: removed, error: err } = await createClient().from('family_contacts').delete().eq('id', id).select('id');
       if (err) throw err;
+      if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t('contactsModule.contactDeleted'));
       void refresh();
       if (selected?.id === id) setSelected(null);
@@ -432,10 +434,12 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = contact
-        ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id)
-        : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId });
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+      const { data: saved, error } = contact
+        ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id).select('id')
+        : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId }).select('id');
       if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t(contact ? 'contactsModule.contactUpdated' : 'contactsModule.contactAdded'));
       onSaved();
     } catch (err) {

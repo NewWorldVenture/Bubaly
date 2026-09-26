@@ -9,7 +9,7 @@ import { CalendarClock, Sparkles, Check, X, Plane, Cake, FileText, GraduationCap
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
@@ -73,13 +73,16 @@ export function PlanningModule() {
 
   async function toggleStep(step: Step) {
     const sb = createClient();
-    const { error } = await sb.from('prep_plan_steps').update({ is_done: !step.is_done }).eq('id', step.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: updated, error } = await sb.from('prep_plan_steps').update({ is_done: !step.is_done }).eq('id', step.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function dismiss(planId: string) {
     const sb = createClient();
-    const { error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId);
+    const { data: updated2, error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId).select('id');
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(updated2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('planningModule.planDismissed'));
   }
 

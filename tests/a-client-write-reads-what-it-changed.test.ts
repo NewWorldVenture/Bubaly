@@ -63,12 +63,27 @@ const FIXED = [
   'components/meals/favorites-view.tsx',
   'components/meals/nutrition-view.tsx',
   'components/marketplace/listing-questions.tsx',
+  'components/modules/contacts-module.tsx',
+  'components/modules/journal-module.tsx',
+  'components/modules/marketplace-module.tsx',
+  'components/modules/pets-module.tsx',
+  'components/modules/planning-module.tsx',
+  'components/modules/reminders-module.tsx',
+  'components/modules/family-tree-module.tsx',
+  'components/modules/behavior-module.tsx',
+  'components/modules/binder-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
   it.each(FIXED)('%s checks every row set it asks for', (file) => {
     const src = readFileSync(file, 'utf8');
-    const bindings = [...src.matchAll(/const \{ data: (\w+), error(?:: \w+)? \} = [\s\S]{0,400}?\.select\('id'\)/g)].map((m) => m[1]);
+    // `let` too: a save that retries reassigns its result. 1,200, not 400: a
+    // long update payload put `.select('id')` beyond 400 characters (family
+    // tree), and the binding went unseen — a mutation survived on exactly that
+    // (C1-S9-85). `[^;]`, not `[\s\S]`: the `.select('id')` must be in the
+    // binding's OWN statement, or a storage upload's `data: stored` borrows the
+    // next statement's select and is reported as an unread write.
+    const bindings = [...src.matchAll(/(?:const|let) \{ data: (\w+), error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map((m) => m[1]);
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
       // Read as "none", against an exact expected count, or — for a
@@ -230,6 +245,27 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
     const fn = bodyOf(src, 'async function castVote(', '\n  }\n');
     expect(fn).toContain(".delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);");
     expect(fn).toContain('Audit C1-S9-83');
+  });
+});
+
+describe('a refused listing save lets go of nothing it uploaded (C1-S9-85)', () => {
+  it('marketplace: zero rows takes the failure path, photo cleanup included', () => {
+    const src = readFileSync('components/modules/marketplace-module.tsx', 'utf8');
+    expect(src).toContain('if (err || wroteNoRows(saved)) {');
+    expect(at(src, 'if (err || wroteNoRows(saved)) {')).toBeLessThan(at(src, 'await cleanupOwnedPhoto();'));
+    expect(at(src, 'await cleanupOwnedPhoto();')).toBeLessThan(at(src, "success(form.id ? 'Listing updated' : 'Posted to the family marketplace')"));
+  });
+
+  it('reminders: both attempts read back their row, and zero rows stops the claim', () => {
+    const src = readFileSync('components/modules/reminders-module.tsx', 'utf8');
+    // The save reaches .select('id') through a local `run` helper, which no
+    // binding regex can see — so this is checked here, in its own function.
+    const helper = bodyOf(src, 'const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder', ';\n');
+    expect(helper).toContain(".update(uStrip).eq('id', reminder.id).select('id')");
+    expect(helper).toContain(".insert(iStrip).select('id')");
+    expect(src).toContain('({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));');
+    expect(at(src, 'let { data: saved, error } = await run(fullUpdate, fullInsert);')).toBeLessThan(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }"));
+    expect(at(src, "if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }")).toBeLessThan(at(src, "success(reminder ? 'Reminder updated' : 'Reminder created')"));
   });
 });
 

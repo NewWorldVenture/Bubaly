@@ -19,7 +19,9 @@ function body(fn: string): string {
 describe('pets-module deleteRecord fails visibly', () => {
   it('captures the Supabase error and toasts it', () => {
     const b = body('deleteRecord');
-    expect(b, 'deleteRecord must destructure { error }').toMatch(/const \{ error \} = await/);
+    // Re-pointed (Audit C1-S9-85): the delete now also reads back its row
+    // (`const { data: x, error } =`); the error is still bound and surfaced.
+    expect(b, 'deleteRecord must destructure { error }').toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await/);
     expect(b, 'deleteRecord must guard on error').toContain('if (error) toastError(describeDbError(error))');
   });
 });

@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -79,8 +79,10 @@ export function PetsModule() {
 
   async function removePet(id: string) {
     if (!confirm(t('petsModule.removeThisPetAndAll'))) return;
-    const { error } = await createClient().from('pets').update({ is_active: false }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: updated, error } = await createClient().from('pets').update({ is_active: false }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     setSelected(null);
     success(t('petsModule.petRemoved'));
   }
@@ -351,8 +353,9 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
-    const { error } = await createClient().from('pet_care_records').delete().eq('id', id);
+    const { data: removed, error } = await createClient().from('pet_care_records').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   return (

@@ -13,7 +13,7 @@ type NodeProps = Record<string, unknown> & { children?: ReactNode; action?: Reac
 const harness = vi.hoisted(() => ({
   slots: [] as unknown[], cursor: 0, contacts: [] as Contact[], locale: 'en-US' as LocaleCode, deleting: false,
   tree: null as ReactNode, form: null as ReactElement<NodeProps> | null,
-  success: vi.fn(), error: vi.fn(), refresh: vi.fn(), insert: vi.fn(), update: vi.fn(), eq: vi.fn(),
+  success: vi.fn(), error: vi.fn(), refresh: vi.fn(), insert: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(),
 }));
 
 // Keep the real component, provider, fields and server rendering. Simulated
@@ -123,9 +123,11 @@ beforeEach(() => {
   harness.contacts = [];
   harness.locale = 'en-US';
   harness.deleting = false;
-  for (const mock of [harness.success, harness.error, harness.refresh, harness.insert, harness.update, harness.eq]) mock.mockReset();
-  harness.insert.mockResolvedValue({ error: null });
-  harness.eq.mockResolvedValue({ error: null });
+  for (const mock of [harness.success, harness.error, harness.refresh, harness.insert, harness.update, harness.eq, harness.select]) mock.mockReset();
+  // Both saves read back their row with .select('id') (Audit C1-S9-85).
+  harness.select.mockResolvedValue({ data: [{ id: 'contact-saved' }], error: null });
+  harness.insert.mockReturnValue({ select: harness.select });
+  harness.eq.mockReturnValue({ select: harness.select });
   harness.update.mockReturnValue({ eq: harness.eq });
   vi.stubGlobal('FormData', class {
     constructor(private values: Record<string, string>) {}
@@ -194,6 +196,22 @@ describe.each(LOCALES)('family contacts in %s', (locale) => {
     expect(harness.update).toHaveBeenCalledWith(expect.objectContaining({ category: 'doctor', birthday_month: 5, birthday_day: 1 }));
     expect(harness.eq).toHaveBeenCalledWith('id', 'contact-doctor');
     expect(harness.success).toHaveBeenLastCalledWith(t('contactsModule.contactUpdated'));
+  });
+
+  it('an edit refused with no error and zero rows says it was not saved (Audit C1-S9-85)', async () => {
+    // Under RLS a refused update comes back with no error and zero rows; this
+    // used to say "Contact updated" about a contact that did not change.
+    harness.contacts = [contact('doctor')];
+    render();
+    selectContact('Person doctor');
+    render();
+    clickText(t('contacts.edit'));
+    render();
+    harness.select.mockResolvedValue({ data: [], error: null });
+    await submit({ name: 'Edited person', category: 'doctor', birthday_month: '5', birthday_day: '1' });
+    expect(harness.update).toHaveBeenCalled();
+    expect(harness.success).not.toHaveBeenCalled();
+    expect(harness.error).toHaveBeenLastCalledWith(t('errors.thatChangeWasNotSaved'));
   });
 
   it('translates both empty-state branches and validation failures without saving', async () => {

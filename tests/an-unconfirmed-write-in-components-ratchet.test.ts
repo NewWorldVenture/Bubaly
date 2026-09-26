@@ -35,27 +35,20 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // create-memory, chores, meals; two deliberate — weather's clear of the OTHER
 // defaults after the confirmed set, and a meal ballot's prior-vote clear)
 // → 44/29 (C1-S9-84: everything outside components/modules/ — vacations,
-// family views, meals views, marketplace answers).
+// family views, meals views, marketplace answers) → 26/20 (C1-S9-85:
+// contacts, journal, marketplace, pets, planning, reminders, family tree,
+// behavior, binder).
 const BASELINE = new Map<string, number>([
   ['components/modules/announcements-module.tsx', 2],
   ['components/modules/assistant-module.tsx', 2],
-  ['components/modules/behavior-module.tsx', 2],
-  ['components/modules/binder-module.tsx', 2],
   ['components/modules/career-module.tsx', 1],
   ['components/modules/celebrations-module.tsx', 1],
   ['components/modules/concierge-module.tsx', 1],
-  ['components/modules/contacts-module.tsx', 2],
-  ['components/modules/family-tree-module.tsx', 2],
   ['components/modules/insurance-module.tsx', 1],
-  ['components/modules/journal-module.tsx', 2],
   ['components/modules/life-events-module.tsx', 1],
-  ['components/modules/marketplace-module.tsx', 2],
   ['components/modules/meals-module.tsx', 1],
   ['components/modules/messages-module.tsx', 1],
   ['components/modules/notifications-module.tsx', 1],
-  ['components/modules/pets-module.tsx', 2],
-  ['components/modules/planning-module.tsx', 2],
-  ['components/modules/reminders-module.tsx', 2],
   ['components/modules/routines-panel.tsx', 1],
   ['components/modules/screen-time-module.tsx', 2],
   ['components/modules/security-module.tsx', 2],
@@ -103,6 +96,6 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(44);
+    expect(total).toBe(26);
   });
 });

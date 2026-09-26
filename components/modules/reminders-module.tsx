@@ -209,10 +209,13 @@ export function RemindersModule() {
     return run(`subtask:${reminder.id}:${subtaskId}`, async () => {
       const next = normalizeSubtasks(reminder.subtasks).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
       const supabase = createClient();
-      const { error } = await supabase.from('family_reminders')
-        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id);
+      const { data: ticked, error } = await supabase.from('family_reminders')
+        .update({ subtasks: next as unknown as Reminder['subtasks'] }).eq('id', reminder.id).select('id');
       // Pre-0100 the subtasks column may not exist yet — degrade silently.
       if (error && !isMissingRelationError(error)) throw error;
+      // A refused row is no error and zero rows: the box ticked, and nothing
+      // moved. Audit C1-S9-85.
+      if (!error && wroteNoRows(ticked)) toastError(tr('errors.thatChangeWasNotSaved'));
       void refresh();
     });
   }
@@ -704,18 +707,21 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
       const supabase = createClient();
       const fullUpdate = { ...payload, updated_at: new Date().toISOString() };
       const fullInsert = { ...payload, family_id: familyId, created_by: userId };
+      // Both branches read back the row they wrote: under RLS a refused edit is
+      // no error and zero rows, and this said "Reminder updated". Audit C1-S9-85.
       const run = (uStrip: typeof fullUpdate, iStrip: typeof fullInsert) => reminder
-        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id)
-        : supabase.from('family_reminders').insert(iStrip);
+        ? supabase.from('family_reminders').update(uStrip).eq('id', reminder.id).select('id')
+        : supabase.from('family_reminders').insert(iStrip).select('id');
 
-      let { error } = await run(fullUpdate, fullInsert);
+      let { data: saved, error } = await run(fullUpdate, fullInsert);
       // Forward-compatible: before migration 0100 the new columns don't exist —
       // retry with only the legacy fields so the core reminder still saves (the
       // extra fields light up once 0100 lands).
       if (error && isMissingRelationError(error)) {
-        ({ error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));
+        ({ data: saved, error } = await run(stripNewCols(fullUpdate), stripNewCols(fullInsert)));
       }
       if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(reminder ? 'Reminder updated' : 'Reminder created');
       onSaved();
     } catch (err) {
