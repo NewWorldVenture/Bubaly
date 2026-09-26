@@ -52,6 +52,17 @@ const FIXED = [
   'components/memories/create-memory.tsx',
   'components/modules/chores-module.tsx',
   'components/modules/meals-module.tsx',
+  'components/vacations/shared.tsx',
+  'components/vacations/trip-itinerary.tsx',
+  'components/vacations/trip-packing.tsx',
+  'components/vacations/trip-budget.tsx',
+  'components/vacations/trip-overview.tsx',
+  'components/family/play-dates-view.tsx',
+  'components/family/check-in-view.tsx',
+  'components/family/driving-safety-view.tsx',
+  'components/meals/favorites-view.tsx',
+  'components/meals/nutrition-view.tsx',
+  'components/marketplace/listing-questions.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {

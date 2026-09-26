@@ -5,6 +5,7 @@ import { CalendarRange, Plus, Trash2, Pencil, AlertTriangle, Wand2 } from 'lucid
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -80,7 +81,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
+    if (error) toastError(describeDbError(error)); else success(`Added ${toAdd.length} days`);
   }
 
   async function saveItem(e: React.FormEvent) {
@@ -93,18 +94,21 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
       booked: form.booked, notes: form.notes.trim() || null,
     };
-    const { error } = form.id
-      ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id)
-      : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId });
-    if (error) return toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: saved, error } = form.id
+      ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id).select('id')
+      : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId }).select('id');
+    if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(form.id ? 'Saved' : 'Added');
     setForm(null);
   }
 
   async function removeItem(id: string) {
     if (!confirm(t('tripItinerary.deleteThisItem'))) return;
-    const { error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id);
-    if (error) toastError(error.message);
+    const { data: removed, error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   function editItem(it: Item) {

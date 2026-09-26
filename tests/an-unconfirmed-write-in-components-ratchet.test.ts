@@ -33,14 +33,10 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // and a routine's step clear, behind its confirmed template update) → 59/40
 // (C1-S9-83: settings, weather, decisions, shopping, connections,
 // create-memory, chores, meals; two deliberate — weather's clear of the OTHER
-// defaults after the confirmed set, and a meal ballot's prior-vote clear).
+// defaults after the confirmed set, and a meal ballot's prior-vote clear)
+// → 44/29 (C1-S9-84: everything outside components/modules/ — vacations,
+// family views, meals views, marketplace answers).
 const BASELINE = new Map<string, number>([
-  ['components/family/check-in-view.tsx', 1],
-  ['components/family/driving-safety-view.tsx', 1],
-  ['components/family/play-dates-view.tsx', 2],
-  ['components/marketplace/listing-questions.tsx', 1],
-  ['components/meals/favorites-view.tsx', 1],
-  ['components/meals/nutrition-view.tsx', 1],
   ['components/modules/announcements-module.tsx', 2],
   ['components/modules/assistant-module.tsx', 2],
   ['components/modules/behavior-module.tsx', 2],
@@ -70,11 +66,6 @@ const BASELINE = new Map<string, number>([
   ['components/modules/voice-module.tsx', 1],
   ['components/modules/voting-module.tsx', 2],
   ['components/modules/weather-module.tsx', 1],
-  ['components/vacations/shared.tsx', 2],
-  ['components/vacations/trip-budget.tsx', 1],
-  ['components/vacations/trip-itinerary.tsx', 2],
-  ['components/vacations/trip-overview.tsx', 1],
-  ['components/vacations/trip-packing.tsx', 2],
 ]);
 
 const COMPONENT_FILES = () => filesMatching("grep -rlE '\\.(update|delete)\\(' components --include='*.ts' --include='*.tsx'");
@@ -112,6 +103,6 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(59);
+    expect(total).toBe(44);
   });
 });

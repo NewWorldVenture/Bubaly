@@ -5,6 +5,7 @@ import { Wallet, Receipt, AlertTriangle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
@@ -50,10 +51,13 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
   async function savePlanned(cat: VacBudgetCategory) {
     const cents = draft ? Math.round(parseFloat(draft) * 100) : 0;
     const existing = plannedByCat.get(cat);
-    const { error } = existing
-      ? await createClient().from('vacation_budgets').update({ planned_cents: cents }).eq('id', existing.id)
-      : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId });
-    if (error) toastError(error.message); else success(t('tripBudget.budgetUpdated'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as "Budget updated". Audit C1-S9-84.
+    const { data: saved, error } = existing
+      ? await createClient().from('vacation_budgets').update({ planned_cents: cents }).eq('id', existing.id).select('id')
+      : await createClient().from('vacation_budgets').insert({ family_id: familyId, vacation_id: vacationId, category: cat, planned_cents: cents, created_by: userId }).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(saved)) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(t('tripBudget.budgetUpdated'));
     setEditing(null);
   }
 

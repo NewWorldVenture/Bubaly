@@ -6,6 +6,7 @@ import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, 
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -128,8 +129,10 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   async function dismissReco(id: string) {
-    const { error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
-    if (error) toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: updated, error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   if (loading) return <LoadingBlock />;
