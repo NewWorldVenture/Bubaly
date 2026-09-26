@@ -2728,3 +2728,32 @@ tag answers `no_campaign`, an unknown counter or an unclaimed event is refused,
 and a signed-in member cannot call it. It turns red on a function without the
 marker. 62/62 probes on the local stack and on a fresh replay on the exact CI
 image, and the migration re-applies onto an existing schema.
+
+## 0341 — a child could take any chore off the family's chore board (MAIN-F20)
+
+`supabase/migrations/0341_a_chore_is_taken_off_the_board_by_a_manager.sql`
+
+**Severity: medium (authorization). Not deploy-coupled: apply in either
+order.** The app's only delete path for a chore assignment,
+`deleteChoreAssignmentAction`, already refuses a non-manager. This makes the
+database agree, so no code change depends on it and nothing the app does is
+refused.
+
+`chore_assignments` has had one permissive `is_family_member` policy FOR ALL
+since 0004. A child with the public anon key and their own session could
+delete a sibling's chore, or their own, straight through PostgREST. 0341 adds
+a RESTRICTIVE DELETE policy, `can_manage_family(family_id)`, which is ANDed
+with the existing one and cannot widen anything. Foreign-key cascades (a
+chore, member or family deleted) are not subject to RLS and are unaffected,
+and the service role bypasses it.
+
+INSERT is deliberately untouched. Missions' `createChoreAction` lets a member
+create an unpriced chore for family members (0307 made only the price a
+manager's), and whether a child may add chores to a sibling's board is a
+product decision, recorded on MAIN-F20 in finalaudit.md.
+
+Verified locally. `docs/audit/chore-assignment-delete-is-a-managers-check.sql`
+reproduced both breaches before the migration (a child deleted a sibling's
+chore and their own, 1 row each) on the local stack and the CI replica. After
+it, both are refused (0 rows) while the child can still see the rows, and a
+parent can still remove a child's chore (the control).
