@@ -9,8 +9,9 @@ import 'server-only';
 import { fenceUntrusted } from '@/lib/ai/safety/untrusted';
 import { FACT_CATEGORY_LABELS, type FactCategory } from '@/lib/memory/facts';
 import { isAiFact, isExpiredFact, isSensitiveMemory, listMemories } from '@/lib/services/memory';
-import { getAISettings } from '@/lib/services/ai-settings';
-import { ok } from '@/lib/services/types';
+import { getTranslations } from '@/lib/i18n/server';
+import { loadAISettings } from '@/lib/services/ai-settings';
+import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { memberName, type SliceDefinition } from '../policy';
 
 const MAX_FACTS = 60;
@@ -34,7 +35,18 @@ export const memorySlice: SliceDefinition = {
     // "Allow memory" off means Bubaly does not use what it learned next time —
     // the other half of the promise the toggle makes. The facts stay in the
     // family's own module; they just do not reach the model.
-    const settings = await getAISettings(scope);
+    //
+    // Read STRICTLY: the forgiving read answered a failed query with memory
+    // ON, so one timeout put every remembered fact in front of the model for a
+    // family that had switched memory off (SEC-009). A failed read fails the
+    // slice, and the builder fails closed on a failed slice — the same answer
+    // it gives when the facts themselves cannot be read.
+    const read = await loadAISettings(scope);
+    if (!read.ok) {
+      const t = await getTranslations();
+      return fail(t('aiSettings.readFailedMemoryNotUsed'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    const settings = read.data;
     if (!settings.memoryEnabled) {
       return ok({
         data: { facts: [], pending: [], withheld: 0 } satisfies MemorySliceData,

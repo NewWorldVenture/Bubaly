@@ -13,7 +13,7 @@
 //     counted rather than thrown; the caller finishes regardless.
 
 import 'server-only';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { rememberFact } from '@/lib/services/memory';
 import type { ServiceScope } from '@/lib/services/types';
 import { ONBOARDING_FACT_NOTE, ONBOARDING_FACT_SOURCE, onboardingFacts, type OnboardingAnswers } from './facts';
@@ -34,8 +34,17 @@ export async function rememberOnboardingFacts(
   const facts = onboardingFacts(answers);
   if (facts.length === 0) return { written: 0, failed: 0, memoryDisabled: false };
 
-  const settings = await getAISettings(scope);
-  if (!settings.memoryEnabled) return { written: 0, failed: 0, memoryDisabled: true };
+  // Read STRICTLY. The forgiving read answered a failed query with memory ON,
+  // so a timeout here wrote the answers for a family that had switched memory
+  // off (SEC-009). A read that failed writes nothing and reports every answer
+  // as not written — not as `memoryDisabled`, which would claim a choice the
+  // family may not have made. Onboarding still finishes (see the header).
+  const read = await loadAISettings(scope);
+  if (!read.ok) {
+    console.error('[onboarding] Bubaly settings could not be read, so no answer was remembered', { error: read.error });
+    return { written: 0, failed: facts.length, memoryDisabled: false };
+  }
+  if (!read.data.memoryEnabled) return { written: 0, failed: 0, memoryDisabled: true };
 
   let written = 0;
   let failed = 0;

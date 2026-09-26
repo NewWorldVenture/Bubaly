@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
 import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
 import { createRequest, createRun } from '@/lib/ai/runs/store';
@@ -155,18 +155,32 @@ export async function GET(req: NextRequest) {
 
     // The family's own switch. A paused Bubaly does not get to file work for
     // itself on a schedule the family set up before pausing it.
-    const settings = await getAISettings(scope);
+    //
+    // Read STRICTLY. The forgiving read answered a failed query with the
+    // defaults — "Bubaly on" — so one timeout filed a paused family's routine
+    // anyway (SEC-009). A switch we cannot read holds the occurrence exactly as
+    // a pause does, with a detail that says which of the two it was, and the
+    // tick reports it as a problem rather than a quiet skip.
+    const read = await loadAISettings(scope);
     const schedule = scheduleOf(rule);
-    if (!settings.enabled || !schedule) {
+    const held = !read.ok || !read.data.enabled;
+    if (held || !schedule) {
       await db.from('routine_runs').update({
         status: 'skipped',
-        detail: settings.enabled ? 'The routine no longer has a readable schedule.' : 'Bubaly is switched off for this family.',
+        detail: !held
+          ? 'The routine no longer has a readable schedule.'
+          : read.ok
+            ? 'Bubaly is switched off for this family.'
+            : "Bubaly could not read this family's settings, so this occurrence was not filed.",
       }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (!read.ok) problems.push(rule.id);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
       // it (what this used to do) silently lost every routine a family owned
-      // the moment they paused for a week.
-      const after = schedule && !settings.enabled
+      // the moment they paused for a week. An unreadable switch is advanced the
+      // same way, so a read failure costs this one occurrence and never the
+      // routine.
+      const after = schedule && held
         ? await nextFireAfter(db, rule.family_id, schedule, now, tz)
         : null;
       // Same field as the reschedule below, so the same risk — though this one

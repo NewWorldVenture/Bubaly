@@ -42,7 +42,8 @@ import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memo
 import { describeDbError } from '@/lib/supabase/errors';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
-import { getAISettings } from '../ai-settings';
+import { getTranslations } from '@/lib/i18n/server';
+import { loadAISettings } from '../ai-settings';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -167,8 +168,18 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   //
   // Checked after the sensitive-content refusals above, which are absolute and
   // need no settings read to say no.
+  //
+  // Read STRICTLY. The forgiving read answered a failed query with the
+  // defaults — memory ON — so one timeout let Bubaly keep what it noticed for
+  // a family that had said not to (SEC-009). What it noticed is refused, as a
+  // retryable failure that says the settings could not be read.
   if (!fromPerson) {
-    const settings = await getAISettings(scope);
+    const read = await loadAISettings(scope);
+    if (!read.ok) {
+      const t = await getTranslations();
+      return fail(t('aiSettings.readFailedNothingRemembered'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    const settings = read.data;
     if (!settings.memoryEnabled) {
       return fail('This family has memory switched off, so Bubaly does not keep what it notices.', { code: SERVICE_CODES.denied });
     }

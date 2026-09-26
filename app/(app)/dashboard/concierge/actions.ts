@@ -29,7 +29,7 @@ import {
 } from '@/lib/autonomy/loop';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { behaviorForDomain } from '@/lib/ai/family-settings';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { scopeFromUserContext } from '@/lib/services/scope';
 
 type Result = { ok: true; applied: WriteBackKind[] } | { ok: false; error: string };
@@ -120,6 +120,19 @@ export async function planAcceptedAction(
   const pendingKinds = kinds.filter((k) => !already.has(k));
   if (pendingKinds.length === 0) return { ok: true, mode: 'off', applied: [], summary: null };
 
+  // The family's own settings, not just their trust policies (0257). This path
+  // materialises calendar events and reminders on `auto`, and it used to read
+  // neither the master switch nor the scheduling dial — so "Switch Bubaly off"
+  // left accepted plans still writing themselves into the calendar.
+  //
+  // Read STRICTLY, and before the engine: the forgiving read answered a failed
+  // query with the defaults — "Bubaly on", `execute` — so a timeout let a
+  // switched-off family's plan write itself in (SEC-009). A read that failed
+  // does nothing, opens no approval, and says so.
+  const read = await loadAISettings(scopeFromUserContext(ctx, sb));
+  if (!read.ok) return { ok: false, error: t('aiSettings.readFailedNothingChanged') };
+  const settings = read.data;
+
   // Ask the family's own trust policies what the AI may do here.
   const { decision, approvalId } = await evaluateTrust(sb, familyId, {
     actor: { kind: 'ai_agent', id: AUTOPILOT_AGENT, role: roleOf(ctx.active.role) },
@@ -131,11 +144,6 @@ export async function planAcceptedAction(
     payload: { plan_id: planId, kinds: pendingKinds },
     context: { amountCents: plan.budget_cents ?? undefined },
   });
-  // The family's own settings, not just their trust policies (0257). This path
-  // materialises calendar events and reminders on `auto`, and it used to read
-  // neither the master switch nor the scheduling dial — so "Switch Bubaly off"
-  // left accepted plans still writing themselves into the calendar.
-  const settings = await getAISettings(scopeFromUserContext(ctx, sb));
   const behavior = behaviorForDomain(settings, AUTOPILOT_DOMAIN);
   const mode = !settings.enabled
     ? 'off'

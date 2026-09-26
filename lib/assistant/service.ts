@@ -21,7 +21,7 @@ import type { VoiceRoute } from '@/lib/voice/command-router';
 import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 import { instantForLocalTime } from '@/lib/time/zoned';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
-import { readAISettings } from '@/lib/services/ai-settings';
+import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { settleAll } from '@/lib/supabase/settle';
 
 type Client = SupabaseClient<Database>;
@@ -338,8 +338,15 @@ export async function answerAssistant(
       // After the link's own scope, not before: the scope is a property of this
       // link and costs no query, and a read-only link deserves the more
       // specific sentence about what IT may do.
-      const settings = await readAISettings(supabase, link.family_id);
-      if (!settings.enabled) {
+      //
+      // Read STRICTLY: a settings read that failed used to answer the defaults
+      // ("Bubaly on"), so a timeout let a switched-off family's speaker write
+      // anyway (SEC-009). A failure throws, and the route answers with its
+      // "something went wrong on my side, so I have not changed anything" —
+      // true, and not a claim that the family switched anything off.
+      const settings = await loadAISettingsFor(supabase, link.family_id);
+      if (!settings.ok) throw new Error(`capture refused: Bubaly settings could not be read (${settings.error})`);
+      if (!settings.data.enabled) {
         return { speech: BUBALY_SWITCHED_OFF_SPEECH, outcome: 'refused', intent: 'capture' };
       }
       const saved = await saveAssistantCapture(supabase, link, intent.route, now);

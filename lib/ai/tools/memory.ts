@@ -21,7 +21,8 @@ import { FACT_CATEGORY_LABELS } from '@/lib/memory/facts';
 import {
   forgetFact, isAiFact, isSensitiveMemory, recallFacts, rememberFact, type FamilyFact,
 } from '@/lib/services/memory';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { getTranslations } from '@/lib/i18n/server';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveAssigneeId } from './family';
@@ -172,8 +173,18 @@ export const memoryTools: ToolDefinition[] = [
     execute: async (scope, input) => {
       // The other half of "Allow memory": off means Bubaly does not use what it
       // remembers, whether it arrives through the context slice or by asking.
-      const settings = await getAISettings(scope);
-      if (!settings.memoryEnabled) return ok({ facts: [] });
+      //
+      // Read STRICTLY: the forgiving read answered a failed query with memory
+      // ON, so one timeout handed a family's facts to the model after they had
+      // said not to use them (SEC-009). A failed read looks nothing up, and
+      // says so — an empty list here would tell the model "nothing is
+      // remembered", which is not what happened either.
+      const read = await loadAISettings(scope);
+      if (!read.ok) {
+        const t = await getTranslations();
+        return fail(t('aiSettings.readFailedMemoryNotUsed'), { code: SERVICE_CODES.db, retryable: true });
+      }
+      if (!read.data.memoryEnabled) return ok({ facts: [] });
 
       const member = await resolveAssigneeId(scope, { assignee_id: input.member_id, assignee: input.member });
       if (!member.ok) return member;

@@ -92,7 +92,13 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: (req: Request) => req.headers.get('authorization') === 'Bearer test-secret' }));
-vi.mock('@/lib/services/ai-settings', () => ({ getAISettings: mocks.getAISettings }));
+// The cron reads the switch STRICTLY (SEC-009): `loadAISettings` answers a
+// ServiceResult. The cases below still set the family's settings through
+// `mocks.getAISettings`; a failed read is its own case in
+// tests/an-opt-out-that-cannot-be-read-is-still-an-opt-out.test.ts.
+vi.mock('@/lib/services/ai-settings', () => ({
+  loadAISettings: async (scope: unknown) => ({ ok: true, data: await mocks.getAISettings(scope) }),
+}));
 vi.mock('@/lib/ai/runs/store', () => ({ createRequest: mocks.createRequest, createRun: mocks.createRun }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: mocks.kickRun }));
 vi.mock('@/lib/services/routines', async () => {
