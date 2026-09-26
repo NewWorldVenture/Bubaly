@@ -125,6 +125,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The web app's audit runs at `moderate` (above). The Expo app had none at
+      # all (MAIN-F-C10). It runs at `high` for now: on 2026-09-27 the lockfile
+      # carried 14 moderate advisories, all transitive through @expo/config and
+      # @expo/config-plugins, whose fix is a breaking Expo upgrade. None high or
+      # critical, so this passes today and stops anything worse arriving.
+      - name: Dependency audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
