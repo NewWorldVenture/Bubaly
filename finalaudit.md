@@ -35645,6 +35645,13 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Nineteenth run, on `4efdd223` (run 36257995212): 1,293 passed, 3 failed, 0 flaky
+in 10.4m. Back to steady state.** The two `signup-boundaries` cases that the
+C1-S9-74 retry broke are green again. `C1-S9-75`'s onboarding change also
+passes: step 2c's subscription ensure is exercised by the authenticated
+suite's "completes onboarding". Only the known `phone-auth-http` cases fail.
+`C1-S9-76` and `-77` were held until it reported.
+
 **Eighteenth run, on `e64bedeb` (run 36256461009): 1,291 passed, 5 failed, 0 flaky
 in 10.6m. TWO NEW FAILURES, BOTH MINE:**
 - `signup-boundaries.spec.ts:228` (confirmation-required signup sends the
