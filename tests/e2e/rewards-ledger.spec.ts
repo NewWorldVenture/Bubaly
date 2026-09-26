@@ -29,7 +29,7 @@ const familyId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const childId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const parentId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions';
+type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions' | 'family_members';
 type Row = Record<string, unknown> & { id: string };
 type Fixture = {
   rows: Record<Table, Row[]>;
@@ -62,11 +62,17 @@ const reward: Row = { id: 'reward-1', family_id: familyId, title: 'Movie night',
 const assignment: Row = { id: 'assignment-1', family_id: familyId, member_id: childId, status: 'approved', points_awarded: 100 };
 const spent: Row = { id: 'spent-1', family_id: familyId, reward_id: reward.id, member_id: childId, reward_title: 'Past reward', cost_points: 100, status: 'fulfilled', created_at: '2026-09-10T00:00:00Z' };
 const requested: Row = { ...spent, id: 'requested-1', reward_title: 'Movie night', status: 'requested' };
+// The action confirms whose points these are against the family's active
+// members before it queues anything (DATA-004), so the fixture carries them.
+const members: Row[] = [
+  { id: childId, family_id: familyId, role: 'child', is_active: true },
+  { id: parentId, family_id: familyId, role: 'parent', is_active: true },
+];
 
 async function fixture(page: Page): Promise<Fixture> {
   const held = new Map<Table, Array<() => Promise<void>>>(), pendingWrites: Array<() => Promise<void>> = [];
   const state: Fixture = {
-    rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }] },
+    rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }], family_members: members.map(member => ({ ...member })) },
     mode: {}, reads: [], writes: [], holdMutations: false, failMutation: false, denyMutation: false,
     release: async table => { delete state.mode[table]; await Promise.all((held.get(table) ?? []).splice(0).map(release => release())); },
     releaseOne: async table => { const release = held.get(table)?.shift(); if (!release) throw new Error('No held read'); await release(); },
@@ -227,11 +233,12 @@ test('sufficient verified points create one request despite same-turn duplicate 
   await page.evaluate(() => { void window.__rewardsLedger.captured(); void window.__rewardsLedger.captured(); });
   await expect.poll(() => state.writes.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toBeDisabled();
-  await state.finishWrites(); await expect.poll(() => state.reads.length).toBeGreaterThan(reads + 1);
+  await state.finishWrites(); await expect.poll(() => new Set(state.reads.slice(reads)).size).toBe(4);
   expect(state.rows.reward_redemptions).toHaveLength(1);
   expect(state.rows.reward_redemptions[0]).toMatchObject({ member_id: childId, reward_title: 'Movie night', cost_points: 100, status: 'requested' });
-  // The action verifies the current reward before the UI reloads both ledgers.
-  expect(new Set(state.reads.slice(reads))).toEqual(new Set(['rewards', 'chore_assignments', 'reward_redemptions']));
+  // The action verifies the current reward and the member whose points these
+  // are before the UI reloads both ledgers.
+  expect(new Set(state.reads.slice(reads))).toEqual(new Set(['rewards', 'family_members', 'chore_assignments', 'reward_redemptions']));
 });
 
 test('manager request, approval and fulfillment use persisted readback and update spendable points', async ({ page }) => {
