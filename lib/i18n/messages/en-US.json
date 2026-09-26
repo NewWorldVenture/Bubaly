@@ -1303,6 +1303,7 @@
   "adminMarketingSms.smsProviderConnectedOnlySmsConsented": "SMS provider connected. Only SMS-consented contacts will receive messages.",
   "adminMarketingSms.toEnableSendingDraftNowSends": "to enable sending. Draft now — sends are never faked, and require valid opt-in consent.",
   "adminMarketingSocial.addPost": "Add post",
+  "adminMarketingSocial.endDateHasPassed": "This campaign's end date has already passed, so it will not be posted. Change the end date first if you want it to run again.",
   "adminMarketingSocial.linkOptional": "Link (optional)",
   "adminMarketingSocial.newPost": "New post",
   "adminMarketingSocial.noPostsPlanned": "No posts planned",

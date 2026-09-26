@@ -1303,6 +1303,7 @@
   "adminMarketingSms.smsProviderConnectedOnlySmsConsented": "Sms-provider verbonden. Alleen contacten met sms-toestemming ontvangen berichten.",
   "adminMarketingSms.toEnableSendingDraftNowSends": "om verzenden in te schakelen. Stel nu op — verzendingen worden nooit nagebootst en vereisen geldige toestemming.",
   "adminMarketingSocial.addPost": "Bericht toevoegen",
+  "adminMarketingSocial.endDateHasPassed": "De einddatum van deze campagne is al verstreken, dus hij wordt niet geplaatst. Wijzig eerst de einddatum als je hem opnieuw wilt laten lopen.",
   "adminMarketingSocial.linkOptional": "Link (optioneel)",
   "adminMarketingSocial.newPost": "Nieuw bericht",
   "adminMarketingSocial.noPostsPlanned": "Geen berichten gepland",

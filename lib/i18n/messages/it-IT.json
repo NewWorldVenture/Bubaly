@@ -1303,6 +1303,7 @@
   "adminMarketingSms.smsProviderConnectedOnlySmsConsented": "Provider SMS collegato. Solo i contatti con consenso agli SMS riceveranno messaggi.",
   "adminMarketingSms.toEnableSendingDraftNowSends": "per abilitare l'invio. Scrivi ora: gli invii non vengono mai simulati e richiedono un consenso valido.",
   "adminMarketingSocial.addPost": "Aggiungi post",
+  "adminMarketingSocial.endDateHasPassed": "La data di fine di questa campagna è già passata, quindi non verrà pubblicata. Modifica prima la data di fine se vuoi che riparta.",
   "adminMarketingSocial.linkOptional": "Link (facoltativo)",
   "adminMarketingSocial.newPost": "Nuovo post",
   "adminMarketingSocial.noPostsPlanned": "Nessun post pianificato",

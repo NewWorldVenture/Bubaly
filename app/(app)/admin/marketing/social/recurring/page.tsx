@@ -7,7 +7,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { PROVIDERS, PLATFORMS, providerReadiness } from '@/lib/social/capabilities';
 import { CADENCES, describeSchedule } from '@/lib/marketing/recurring-ads';
-import { scheduleFromRow, type AdRow } from '@/lib/marketing/recurring-ads-runner';
+import { campaignFinished, scheduleFromRow, type AdRow } from '@/lib/marketing/recurring-ads-runner';
 import { RecurringAdControls, NewRecurringAdForm } from './controls';
 
 export const metadata: Metadata = { title: 'Marketing · Recurring social ads', robots: { index: false } };
@@ -45,6 +45,7 @@ export default async function RecurringAdsPage() {
   const readiness = PLATFORMS.map((p) => ({ platform: p, label: PROVIDERS[p].label, state: providerReadiness(p) }));
   const readyCount = readiness.filter((r) => r.state === 'ready').length;
   const active = rows.filter((a) => a.status === 'active').length;
+  const now = new Date();
 
   return (
     <div className="space-y-4">
@@ -80,7 +81,18 @@ export default async function RecurringAdsPage() {
             <EmptyState icon={Repeat} title="No recurring campaigns yet" description="Create one on the right. It will post on its own from then on." />
           ) : rows.map((ad) => {
             const history = runsByAd.get(ad.id) ?? [];
-            const finished = ad.max_occurrences != null && ad.occurrences >= ad.max_occurrences;
+            // "Finished" means no run is left — the cap, the END DATE, or no
+            // slot inside the window (campaignFinished) — not just the cap. A
+            // campaign retired on its end date is stored status 'paused' with
+            // next_run_at null, so reading the cap alone badged it "Paused":
+            // indistinguishable from one somebody paused on purpose last
+            // Tuesday, and the obvious thing to do with a paused campaign is
+            // start it again. RecurringAdControls hides BOTH Pause and Resume
+            // for a finished campaign, as it always did for a capped one: an
+            // active row past its end date has nothing left to pause (the next
+            // tick retires it) and Resume would be refused. Post now and Remove
+            // stay; Post now asks the same stopping rule itself.
+            const finished = campaignFinished(ad, now);
             return (
               <Card key={ad.id} className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">

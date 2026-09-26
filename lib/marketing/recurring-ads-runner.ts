@@ -28,8 +28,8 @@ import type { Database } from '@/lib/database.types';
 import { getConnector } from '@/lib/social/connectors';
 import { PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
 import {
-  decideRun, nextRunAt, variantForOccurrence,
-  type Cadence, type RecurringAdSchedule,
+  decideRun, nextRunAt, stoppingCondition, variantForOccurrence, withinWindow,
+  type Cadence, type RecurringAdSchedule, type RecurringAdWindow,
 } from './recurring-ads';
 
 type Client = SupabaseClient<Database>;
@@ -83,6 +83,40 @@ export function scheduleFromRow(ad: AdRow): RecurringAdSchedule {
   };
 }
 
+/** The row's stopping conditions, read the same way by every caller. */
+export function windowFromRow(ad: AdRow): RecurringAdWindow {
+  return {
+    startsAt: new Date(ad.starts_at),
+    endsAt: ad.ends_at ? new Date(ad.ends_at) : null,
+    maxOccurrences: ad.max_occurrences,
+    occurrences: ad.occurrences,
+  };
+}
+
+/**
+ * The run a resumed campaign would get: its next slot from `now`, provided
+ * that slot is still inside the window. Null means Resume has nothing to arm.
+ */
+export function resumeRunFor(ad: AdRow, now: Date): Date | null {
+  const window = windowFromRow(ad);
+  return withinWindow(firstRunFor(scheduleFromRow(ad), window.startsAt, now), window.endsAt);
+}
+
+/**
+ * Has this campaign finished — as opposed to being paused by someone who means
+ * to resume it? The admin list badges the answer and hides Pause/Resume on it.
+ *
+ * Finished is: the cap is reached, the end date has passed, or the campaign is
+ * not running and Resume would be refused because no slot is left inside the
+ * window. The last clause is what a retired row looks like between its final
+ * post and its end date (see claimOccurrence): stored exactly like a hand-paused
+ * one, and badging it "Paused" invites the operator to start it again.
+ */
+export function campaignFinished(ad: AdRow, now: Date): boolean {
+  if (stoppingCondition(windowFromRow(ad), now)) return true;
+  return ad.status !== 'active' && resumeRunFor(ad, now) === null;
+}
+
 /** The connector's two-value answer, widened back into the reason it gave. */
 export function classifyOutcome(ok: boolean, errorCode: string | null | undefined): RunStatus {
   if (ok) return 'published';
@@ -97,16 +131,23 @@ export function classifyOutcome(ok: boolean, errorCode: string | null | undefine
  * The `.eq('next_run_at', …)` is the whole point: it makes the read-then-write
  * a compare-and-set. `select` returns the rows actually updated, so an empty
  * result means another worker moved the ad on between our read and our write.
+ *
+ * `nextAfter` null means this is the last occurrence the cap or the end date
+ * allows. The row is then retired in the same write — next_run_at null, status
+ * 'paused', exactly what the retire branch in runDueRecurringAds writes — rather
+ * than armed with a slot the stopping rule will refuse, which the admin list
+ * would show as a "Next post" that is never coming.
  */
 async function claimOccurrence(
-  supabase: Client, ad: AdRow, nextAfter: Date, ranAt: Date,
+  supabase: Client, ad: AdRow, nextAfter: Date | null, ranAt: Date,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from('marketing_recurring_ads')
     .update({
-      next_run_at: nextAfter.toISOString(),
+      next_run_at: nextAfter?.toISOString() ?? null,
       last_run_at: ranAt.toISOString(),
       occurrences: ad.occurrences + 1,
+      ...(nextAfter ? {} : { status: 'paused' }),
     } as never)
     .eq('id', ad.id)
     .eq('next_run_at', ad.next_run_at as string)
@@ -214,12 +255,7 @@ export async function runDueRecurringAds(supabase: Client, now = new Date()): Pr
     const schedule = scheduleFromRow(row);
     const decision = decideRun(
       schedule,
-      {
-        startsAt: new Date(row.starts_at),
-        endsAt: row.ends_at ? new Date(row.ends_at) : null,
-        maxOccurrences: row.max_occurrences,
-        occurrences: row.occurrences,
-      },
+      windowFromRow(row),
       row.next_run_at ? new Date(row.next_run_at) : null,
       now,
       row.status === 'active',
