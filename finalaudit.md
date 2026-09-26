@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:25:00Z
+- Last Updated: 2026-09-26T18:35:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26691,7 +26691,10 @@ fails 6 ways before and passes after; 45/45 probes.
 `audit_logs` and `wallet_audit_logs`, because the app writes those trails from
 members' own sessions (`logAudit`, `logWalletAudit`). A forged entry cannot
 erase a real one any more, but making the trails service-only means moving
-those writers to the service role first.
+those writers to the service role first. *Since narrowed:* 0329 and 0330 remove
+member INSERT on `sync_change_logs` and `social_audit_logs`, whose only writers
+are the engine and a SECURITY DEFINER trigger; 0334 (C1-K-35) makes a member's
+`audit_logs` / `wallet_audit_logs` entry name the member as its actor.
 
 ## C1-K-23 · HIGH · A social admin could hand out social access, including owner to themselves
 
@@ -27001,6 +27004,30 @@ reviewee on the matching sides, and the unused review UPDATE and DELETE are
 dropped. `docs/audit/marketplace-review-check.sql` fails 5 ways before and
 passes after (57/57), with a control that the buyer still reviews their own
 completed exchange. Marketplace suites pass (580/580).
+
+## C1-K-35 · MEDIUM · A child could write "the parent approved this" into the audit trail
+
+`audit_logs` and `wallet_audit_logs` are append-only for members (0321), but
+their INSERT policies checked only family membership, so a member could append
+an entry naming any actor, or none. Measured: a child wrote a wallet audit
+entry reading "Parent approved $200 to Kid" as the parent, a general audit
+entry as the parent, and an unattributed one. Every writer that runs in a
+member's session (`logAudit` from 16 call sites, `logWalletAudit`, the AI-run
+controls, the household activity trail) records the caller's own user id. The
+writers that record no actor or someone else (the allowance cron, card
+issuing, the site-admin tools) run as the service role.
+`0334_an_audit_entry_is_written_as_yourself.sql` makes a member's INSERT name
+the caller (`actor_id` / `actor_user_id = auth.uid()`).
+`docs/audit/audit-actor-check.sql` fails 3 ways before and passes after
+(58/58), with a control that the child's own entries still land. This narrows
+the C1-K-22 follow-up. The remaining step, making the trails fully
+service-written, is unchanged.
+
+Also swept this pass and left as designed: `family_app_installs` (the app-store
+list; nothing consumes an install), `family_connections` (connection labels;
+the module lets any member disconnect), `smart_devices` (a manual inventory, no
+device control), `calendar_feeds` (the feeds page lets any member subscribe
+the family to an ICS URL; the fetcher's SSRF guard is C1-K's NAT64 fix).
 
 ## Swept clean · the API routes this file never named
 
