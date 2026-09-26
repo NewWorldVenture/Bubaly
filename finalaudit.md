@@ -26079,6 +26079,37 @@ them sorted. It was reverted before commit and the key inserted as one line per
 file. With other sessions editing the same catalogues, a re-sort is a
 guaranteed merge conflict for all of them.
 
+## Swept clean · every service-client API route has a gate
+
+27 routes reach `createServiceClient()` (which bypasses RLS) with no gate a
+simple pattern recognises. Read individually, every one is either public by
+design or authenticated by something the pattern missed:
+
+- **Inbound provider webhooks** (`guardian/inbound/{sms,voice,whatsapp}`,
+  `guardian/screen`, `guardian/status/voicemail`, `contact-center/*`) verify
+  `X-Twilio-Signature`. The validator fails closed (`if (!TWILIO_AUTH_TOKEN)
+  return false`) and compares with `timingSafeEqual`. Verification is gated on
+  `NODE_ENV === 'production'`, which covers every Vercel deployment including
+  previews, since `next build` sets it; only `next dev` skips it.
+- **`guardian/escalate`**, which sends SMS and places calls, is internal-only
+  behind a fail-closed shared secret, and says so.
+- **`assistant`** resolves a hashed link token and 401s without one;
+  **`assistant/alexa`** additionally verifies Amazon's request signature;
+  **`sync/feeds/[token]`** checks its feed token.
+- The rest are public by purpose: tracking pixels, the contact form,
+  unsubscribe links, `blog/like`, `forms/submit`.
+
+Two things this confirmed about C1-K-10: `resolveAssistantLink` filters
+`.is('revoked_at', null)`, so a key that *is* revoked genuinely stops working —
+the revocation message is now true in both halves. And `blog/like` /
+`blog/save`, whose writes C1-K-07 made log-only, can't mislead either: each
+re-reads the real state after writing and returns *that*, so a failed unlike
+still reports "liked".
+
+Recorded as a fragility, not a defect: gating a signature check on
+`NODE_ENV` rather than on the presence of the secret means a staging box run
+with `next dev` would accept unsigned webhooks.
+
 ## Converged with another session on C1-K-01/03
 
 While this pass was running, another session found the **same class
