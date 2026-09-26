@@ -59,7 +59,7 @@ export function CalendarSyncPanel() {
     const res = await syncCalendarFeed(feed.id);
     setSyncing(null);
     if (!res.ok) { toastError(res.error); return; }
-    success(`Synced — ${res.imported ?? 0} events`);
+    success(t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 }));
   }
 
   async function remove(feed: CalendarFeed) {

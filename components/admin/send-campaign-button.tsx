@@ -34,7 +34,7 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Send failed.'); return; }
-      success(`Sent to ${json.sent} recipient${json.sent === 1 ? '' : 's'}.`);
+      success(json.sent === 1 ? t('sendCampaign.sentToRecipientOne', { count: json.sent }) : t('sendCampaign.sentToRecipientsMany', { count: json.sent ?? 0 }));
       router.refresh();
     } catch {
       toastError(t('sendCampaignButton.networkErrorPleaseTryAgain'));

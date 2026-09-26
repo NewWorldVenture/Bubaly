@@ -15,7 +15,7 @@ export function RecomputeButton() {
   return (
     <button
       onClick={() => startTransition(async () => {
-        try { const { scored } = await recomputeLeadScoresAction(); success(`Recomputed ${scored} lead score${scored === 1 ? '' : 's'}`); }
+        try { const { scored } = await recomputeLeadScoresAction(); success(scored === 1 ? t('leadScores.recomputedOne', { count: scored }) : t('leadScores.recomputedMany', { count: scored })); }
         catch { error(t('leadScoresClient.couldNotRecomputeScores')); }
       })}
       disabled={pending}
