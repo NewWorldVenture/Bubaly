@@ -7,8 +7,16 @@
    offline to whoever next opens the app on a shared/family device — so only the
    public app shell below is ever cached for navigations; every other page is
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
-   previous worker cached, via the activate-time cleanup.) */
-const CACHE = 'bubaly-v4';
+   previous worker cached, via the activate-time cleanup.)
+
+   The same holds for bytes that are not HTML (SEC-001). Family photos live on
+   the Supabase origin and were never cached here, but Next's image optimizer
+   re-serves them from THIS origin at /_next/image, and the worker cached every
+   same-origin image cache-first with no partition by session: after logout the
+   next person on the device was served the previous family's photos offline.
+   So an optimizer response is never cached, nor is anything the server marks
+   private or no-store. (The v4→v5 bump purges what v4 already holds.) */
+const CACHE = 'bubaly-v5';
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown
@@ -33,6 +41,17 @@ self.addEventListener('activate', (event) => {
     ).then(() => self.clients.claim()),
   );
 });
+
+/* May this response be kept for whoever opens the app next? Only static
+   styles, scripts and images that carry no user's data: never the image
+   optimizer (it proxies private family media from this origin), and never a
+   response the server marked private or no-store. */
+function isSharedStaticAsset(request, url, res) {
+  if (!(request.destination === 'style' || request.destination === 'script' || request.destination === 'image')) return false;
+  if (url.pathname.startsWith('/_next/image')) return false;
+  const cacheControl = (res.headers.get('Cache-Control') || '').toLowerCase();
+  return !/(^|[,\s])(private|no-store)([,\s=]|$)/.test(cacheControl);
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -64,7 +83,7 @@ self.addEventListener('fetch', (event) => {
       (cached) =>
         cached ||
         fetch(request).then((res) => {
-          if (res.ok && (request.destination === 'style' || request.destination === 'script' || request.destination === 'image')) {
+          if (res.ok && isSharedStaticAsset(request, url, res)) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(request, copy));
           }

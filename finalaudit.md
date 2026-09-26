@@ -14662,10 +14662,14 @@ Existing obligations remain SEC-001, STORAGE-EA481A772907, LIBRARY-02F9B7049DA7,
 Required rollout order: define strict configured-project/bucket/family reference parsing and the desired revocation/cache contract; prove authorized/cross-family, stale-owner, expiry/idle and range/download behavior on disposable data; deploy every legacy/new-reference consumer before changing bucket access; then verify a reviewed private-bucket change, denial of old public reads, permitted member reads, old-client behavior and cache handling. A signed bearer URL grants access until its expiry and alone cannot promise per-request membership or immediate logout revocation. Current provider configuration, old public cache exposure and production schema prerequisites need independent verification before such a rollout.
 
 #### Fixes Applied
-None
+2026-09-26 (Pass C1-K, C1-K-18) — the cache-disclosure half. `public/sw.js` no longer caches any `/_next/image` response (the optimizer proxies family media from this origin) or any response marked `private`/`no-store`; content-hashed static assets and public images are still cached. The cache name moves `bubaly-v4` → `bubaly-v5`, so the activate sweep purges whatever v4 already holds on every device. `tests/a-private-image-does-not-outlive-logout.test.ts` runs the real worker file against a fake Cache Storage and network: 4 of 5 fail on the old worker (optimizer response kept, private/no-store kept, a second user served the first user's bytes, v4 still named) and all pass now; the static-asset control passes both ways.
+
+Not fixed: the bucket itself is still `public = true`, so an object URL is still the only credential. See Retest Results for what remains and the proposed route.
 
 #### Retest Results
-Read-only source/caller map complete. Controlled private-image cache isolation regression fails as described above; provider access and native worker/optimizer acceptance are unexecuted. No privacy fix has been applied; SEC-001 stays FAIL.
+Read-only source/caller map complete. Private-image cache isolation: the executed regression above was RED; the equivalent sandboxed regression is now GREEN. Remaining RED: bucket visibility (public in migration 0216 and in the replayed catalog), so SEC-001 stays FAIL.
+
+Proposed route for the bucket half, which avoids the expiry, offline-cache and cross-household problems listed above for signed URLs: a same-origin authenticated media route (for example `/media/family-media/<path>`) that checks the caller's membership in the path's family on every request and streams the object with `Cache-Control: private, no-store` (which the worker now refuses to cache). Render-time rewriting maps stored `…/storage/v1/object/public/family-media/<path>` URLs to it, so no stored row changes. Once every consumer renders through it, a migration can set the bucket private without breaking any reader. Grandparent-portal reads work because the check is the path's family, not the active household.
 
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
@@ -26538,6 +26542,31 @@ passes an audit client; all four dashboard handlers have a rejection path.
 Reverting the three source files fails 9 of 10 (the non-manager control holds
 both ways). Full unit suite: 16,908 pass; the 3 failures are the known
 Node-22-container-only cases.
+
+## C1-K-18 · CRITICAL (half) · SEC-001: a previous family's photos served offline from the worker cache
+
+The last master-ledger FAIL. SEC-001 has two halves, and one is fixed.
+
+**Fixed — the cache.** Family photos live on the Supabase origin, which the
+service worker skips. Next's image optimizer re-serves them from this origin at
+`/_next/image`, and `public/sw.js` cached every same-origin image cache-first,
+with no partition by session and no regard for `Cache-Control`. Sign-out clears
+cookies and the query cache, not Cache Storage. On a shared device, the next
+person to open the app was served the previous family's photos, offline. The
+worker now never caches an optimizer response or anything marked `private` or
+`no-store`, still caches content-hashed static assets and public images, and
+moves to `bubaly-v5` so every device purges what v4 holds.
+`tests/a-private-image-does-not-outlive-logout.test.ts` runs the real worker
+file against a fake Cache Storage and network; 4 of 5 fail on the old worker,
+all pass now, and the static-asset control passes both ways.
+
+**Still open — the bucket.** `family-media` is `public = true` (0216 and the
+replayed catalog), so an object URL is the only credential; unguessable object
+names (`familyMediaPath`) are the mitigation in place. The SEC-001 record
+proposes the route: a same-origin, membership-checked media route with
+`Cache-Control: private, no-store`, render-time rewriting of stored public URLs
+to it (no data migration), and only then a migration setting the bucket
+private. SEC-001 stays ❌ FAIL until that lands.
 
 ## The master ledger's open list, worked to the end
 
