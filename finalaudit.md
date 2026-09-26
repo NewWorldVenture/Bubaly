@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:51:00Z
+- Last Updated: 2026-09-26T18:56:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -12,7 +12,7 @@
 - Failed: 1
 - Overall Completion: 0.01%
 
-2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001 (its cache half is fixed: SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS, verified natively; its public-bucket half is an owner decision). Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well. The member-writable-table sweep continues through C1-K-48. Migrations 0318–0346, each pinned by a probe that fails before and passes after, 70/70 probes. The highest-impact fixes: the sync engine could be steered into deleting or rewriting a parent's Google Calendar events and publishing a public feed (C1-K-30); the social permission matrix was enforced only by the app (C1-K-31); checkout nudges could be sent to any address (C1-K-29); plus forgeable commissions, consent, votes, reviews, reports and audit entries. All of these are inert in production until the F-001 ledger repair. Owner decisions recorded along the way: direct messages visible to the whole family (C1-K-43), whether an adult may make themselves Admin or demote the parents, dose logging (`medication_doses`, alongside F-K05), grade entry (`grades`), who may read whose location, guardian_communications member INSERT, and the SEC-001 bucket.
+2026-09-26 (Pass C1-K, session 01KRUgA6hD6QgzmtpSP6TUmP): AUTHZ-003 and AUTHZ-005 move ❌ FAIL → 🛠 FIXED + PASS in the repository (migrations 0318 and 0319, each pinned by a probe that fails before and passes after; production needs the F-001 ledger repair). The one remaining FAIL item is SEC-001 (its cache half is fixed: SUPPORT-98FD1D4C44AD → 🛠 FIXED + PASS, verified natively; its public-bucket half is an owner decision). Pass C1-K's own records (C1-K-01 … C1-K-16: refused writes reported as success, TwiML injection, an open redirect, NAT64 SSRF, a revoked key that was not revoked, and the rest) sit in their own section near the end of this file and are not counted in the master-ledger totals above. The E2E job's two red groups are root-caused there: the mobile-menu test (fixed; a service worker bypassed page.route) and three phone-auth cases that are red on `main` as well. The member-writable-table sweep continues through C1-K-51. Migrations 0318–0347, each pinned by a probe that fails before and passes after, 71/71 probes. The highest-impact fixes: the sync engine could be steered into deleting or rewriting a parent's Google Calendar events and publishing a public feed (C1-K-30); the social permission matrix was enforced only by the app (C1-K-31); checkout nudges could be sent to any address (C1-K-29); plus forgeable commissions, consent, votes, reviews, reports and audit entries. All of these are inert in production until the F-001 ledger repair. Owner decisions recorded along the way: direct messages visible to the whole family (C1-K-43), whether an adult may make themselves Admin or demote the parents, dose logging (`medication_doses`, alongside F-K05), grade entry (`grades`), who may read whose location, guardian_communications member INSERT, and the SEC-001 bucket.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -27309,6 +27309,38 @@ used, so it cannot be assumed unreachable. It now requires the submitter or a
 manager, and only a `rejected` or `needs_improvement` verdict.
 `tests/a-sibling-cannot-submit-your-chore-proof.test.ts` gains both cases;
 both fail with the action reverted (3/3 now).
+
+## C1-K-51 · HIGH · A child could get spent reward points back, or spend a sibling's
+
+Points are earned from approved chores and spent by `reward_redemptions` rows
+in `approved` / `fulfilled` (`lib/rewards/points.ts`). Tokens work the same way
+through `economy_redemptions`. `reward_redemptions` was member FOR ALL. 0295's
+decision guard stops a move *to* a decision, and the cost guard stops
+repricing. Nothing stopped the rest. Measured, as a child:
+- cancelled their own *approved* 500-point redemption, and separately moved it
+  back to `requested`, getting the points back either way;
+- re-pointed it at a sibling, moving the spend onto the sibling's balance;
+- filed a request that would spend a sibling's points;
+- deleted a sibling's request;
+- filed a token request on a sibling's balance.
+
+6 breaches. Both request actions also took the member from the caller. The
+rewards module only offers a non-manager themselves; the economy view offered
+every child.
+
+Fix, at both layers:
+- The two `requestRedemptionAction`s refuse a non-manager asking for someone
+  else, and the economy view now offers a child only themselves.
+- `0347_a_redemption_spends_your_own_points.sql` pins INSERT (both tables) to
+  yourself or a manager. For `reward_redemptions`, DELETE is a manager's, and
+  UPDATE is a manager's except that a member may withdraw their own request
+  while it is still `requested` (0295 deliberately keeps that).
+
+`docs/audit/redemption-owner-check.sql` fails 6 ways before and passes after,
+and 0295's `reward-redemption-decision-check.sql` still passes (71/71).
+`tests/a-redemption-spends-your-own-points.test.ts` pins both actions: the
+refusal fails with them reverted, and the parent/self controls pass. Reward and
+economy suites pass (66/66).
 
 ## Swept clean · the API routes this file never named
 

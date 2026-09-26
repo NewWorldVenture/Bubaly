@@ -136,6 +136,11 @@ export async function setRewardActiveAction(input: { rewardId: string; isActive:
 export async function requestRedemptionAction(input: { rewardId: string; memberId: string }): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // Tokens are spent from input.memberId's balance: a child requests only for
+  // themselves; a manager may request for any child (0347 holds RLS to this).
+  if (!isManager(ctx.active.role) && input.memberId !== ctx.active.member.id) {
+    return { ok: false, error: t('actions.familyMemberNotFound') };
+  }
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 

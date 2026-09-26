@@ -50,6 +50,12 @@ export async function requestRedemptionAction(input: {
   if (!input?.rewardId || !input?.forMemberId) {
     return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
   }
+  // Points are spent from forMemberId's balance, so only a manager may request
+  // on someone else's behalf (the module already offers nothing else; 0347
+  // holds the database to the same).
+  if (!isManager(ctx.active.role) && input.forMemberId !== ctx.active.member.id) {
+    return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
+  }
 
   try {
     const supabase = await createServer();
