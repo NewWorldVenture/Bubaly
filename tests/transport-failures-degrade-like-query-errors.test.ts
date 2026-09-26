@@ -18,6 +18,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { loadInboxQueue } from '@/lib/inbox/server';
+import { getMessages, translate } from '@/lib/i18n/messages';
+import type { PaperworkReader } from '@/lib/paperwork/triage';
 import { verifyOnboardingOwner } from '@/lib/onboarding/verify-owner';
 import { checkScheduleActor, readScheduleSnapshot } from '@/lib/social/scheduled-authority';
 import { readFileSync } from 'node:fs';
@@ -25,6 +27,9 @@ import { dirname, resolve } from 'node:path';
 import ts from 'typescript';
 
 type DB = SupabaseClient<Database>;
+
+// loadInboxQueue writes paperwork snippets for a reader, and requires one.
+const INBOX_READER: PaperworkReader = { locale: 'en-US', t: (key, params) => translate(getMessages('en-US'), key, params) };
 
 /**
  * A client whose named tables reject the way a transport failure does, and
@@ -81,7 +86,7 @@ describe('the inbox queue', () => {
 
     // Under Promise.all this call REJECTED: the one unreachable table took the
     // two healthy ones with it, and the caller never reached its own handling.
-    const queue = await loadInboxQueue(client, 'fam-1', { now: new Date('2026-09-07T12:00:00Z') });
+    const queue = await loadInboxQueue(client, 'fam-1', INBOX_READER, { now: new Date('2026-09-07T12:00:00Z') });
 
     expect(queue.unavailable.paperwork).toBe(true);
     expect(queue.unavailable.messages).toBe(false);
@@ -94,7 +99,7 @@ describe('the inbox queue', () => {
   it('reports every source unavailable when the database is unreachable entirely', async () => {
     const { client } = clientRejecting(['family_inbox_messages', 'paperwork_items', 'family_communications'], rows);
 
-    const queue = await loadInboxQueue(client, 'fam-1', { now: new Date('2026-09-07T12:00:00Z') });
+    const queue = await loadInboxQueue(client, 'fam-1', INBOX_READER, { now: new Date('2026-09-07T12:00:00Z') });
 
     expect(queue.unavailable).toEqual({ messages: true, paperwork: true, communications: true });
     // Never "your inbox is empty" because the database was down.

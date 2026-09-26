@@ -5,6 +5,7 @@ import {
   recordConsentEvents, getConsentState, toConsentCategory,
   isValidConsentMap, type ConsentCategory, type ConsentDecision,
 } from '@/lib/marketing/consent';
+import { carriedVisitorId, namesAnotherVisitor } from '@/lib/marketing/visitor-cookie';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -34,18 +35,8 @@ export const runtime = 'nodejs';
 // A request that still names an id (older cached clients send it in the body)
 // is accepted only when that id IS the cookie; naming anyone else is refused
 // rather than silently re-targeted, so a mismatch is visible, not absorbed.
-const VISITOR_COOKIE = 'bubaly_vid';
-const MAX_VISITOR_ID = 200;
-
-function carriedVisitorId(req: NextRequest): string {
-  return req.cookies.get(VISITOR_COOKIE)?.value?.trim().slice(0, MAX_VISITOR_ID) ?? '';
-}
-
-/** True when the caller named a visitor id and it is not the one it carries. */
-function namesAnotherVisitor(named: unknown, carried: string): boolean {
-  if (named === undefined || named === null) return false;
-  return typeof named !== 'string' || named.trim().slice(0, MAX_VISITOR_ID) !== carried;
-}
+// The binding lives in lib/marketing/visitor-cookie.ts, shared with
+// /api/mkt/track (SEC-007), which had the same caller-chosen-id shape.
 
 type ConsentBody = {
   anonymousId?: string;

@@ -1,11 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
   triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
+  formatPaperworkAmount, paperworkActionLabel, paperworkSummary, paperworkSummaryFacts, type PaperworkReader,
 } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -102,6 +103,14 @@ export async function materializePaperworkActionAction(input: {
   if (!action || action.materialized_id) return; // unknown or already materialized
 
   const dueOn = action.due_on ?? item.due_on;
+  // The event or reminder this creates is a family record the member who tapped
+  // is authoring, so it is written in THEIR language with the fee in their
+  // format — the same owner money-timeline's refresh gives the rows it writes.
+  // The row's stored `summary` is an en-US record (lib/paperwork/triage.ts,
+  // RECORD_LOCALE) and is not copied in: it is re-rendered from the row.
+  const { locale } = await getLocaleContext();
+  const writer: PaperworkReader = { locale: locale.code, t: tr };
+  const actionName = paperworkActionLabel(action, writer);
   let materializedAs: 'calendar_event' | 'reminder';
   let materializedId: string | null = null;
 
@@ -113,7 +122,10 @@ export async function materializePaperworkActionAction(input: {
     const { data, error } = await supabase.from('calendar_events').insert({
       family_id: ctx.active.familyId,
       title: `${item.title}`.slice(0, 200),
-      description: `From Paperwork Inbox — ${action.label}. ${item.summary ?? ''}`.trim().slice(0, 500),
+      description: tr('paperworkTriage.eventDescription', {
+        action: actionName,
+        summary: item.summary === null ? '' : paperworkSummary(paperworkSummaryFacts(item), writer),
+      }).trim().slice(0, 500),
       category: item.kind === 'sports' ? 'sports' : item.kind === 'medical_form' ? 'appointment' : 'school',
       starts_at: startsAt,
       all_day: Boolean(dueOn),
@@ -123,15 +135,24 @@ export async function materializePaperworkActionAction(input: {
     materializedAs = 'calendar_event';
     materializedId = data?.id ?? null;
   } else {
-    const amountBit = action.amount != null ? ` ($${action.amount})` : '';
+    const title = action.amount != null
+      ? tr('paperworkTriage.reminderTitleWithAmount', {
+        action: actionName, amount: formatPaperworkAmount(action.amount, writer.locale), title: item.title,
+      })
+      : tr('paperworkTriage.reminderTitle', { action: actionName, title: item.title });
+    const notes = [
+      tr('paperworkTriage.fromPaperworkInbox'),
+      item.sender,
+      dueOn ? tr('paperworkTriage.due', { date: dueOn }) : null,
+    ].filter((part): part is string => Boolean(part)).join(' · ');
     // Through the service. This insert sent `status: 'pending'` and, off the
     // urgent branch, `priority: 'normal'` — neither is in 0014's CHECK sets, so
     // Postgres rejected it and materialising a sign/pay/provide action always
     // threw. The service writes a legal status and maps an unknown priority onto
     // the column default instead of sending it on.
     const reminder = await createReminder(scopeFromUserContext(ctx, supabase), {
-      title: `${action.label}${amountBit} — ${item.title}`.slice(0, 200),
-      notes: `From Paperwork Inbox${item.sender ? ` · ${item.sender}` : ''}${dueOn ? ` · due ${dueOn}` : ''}`,
+      title: title.slice(0, 200),
+      notes,
       kind: 'task',
       priority: item.urgency === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,

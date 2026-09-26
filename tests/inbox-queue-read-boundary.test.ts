@@ -12,6 +12,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { readFileSync } from 'node:fs';
 import { loadInboxQueue } from '@/lib/inbox/server';
+import { getMessages, translate } from '@/lib/i18n/messages';
+import type { PaperworkReader } from '@/lib/paperwork/triage';
+
+// loadInboxQueue writes paperwork snippets for a reader, and requires one.
+const READER: PaperworkReader = { locale: 'en-US', t: (key, params) => translate(getMessages('en-US'), key, params) };
 
 type Reply = { data: unknown; error: unknown };
 
@@ -51,7 +56,7 @@ describe('loadInboxQueue read boundary', () => {
       family_inbox_messages: { data: [messageRow], error: null },
       paperwork_items: { data: null, error: { message: 'permission denied for table paperwork_items' } },
       family_communications: OK,
-    }), 'fam-1', { now: NOW });
+    }), 'fam-1', READER, { now: NOW });
 
     expect(queue.unavailable).toEqual({ messages: false, paperwork: true, communications: false });
     expect(queue.allFailed).toBe(false);
@@ -67,7 +72,7 @@ describe('loadInboxQueue read boundary', () => {
       family_inbox_messages: { data: null, error: readError },
       paperwork_items: { data: null, error: readError },
       family_communications: { data: null, error: readError },
-    }), 'fam-1', { now: NOW });
+    }), 'fam-1', READER, { now: NOW });
 
     expect(queue.allFailed).toBe(true);
     expect(queue.items).toEqual([]);
@@ -85,7 +90,7 @@ describe('loadInboxQueue read boundary', () => {
       family_inbox_messages: { data: [messageRow], error: null },
       paperwork_items: { data: [paperworkRow], error: null },
       family_communications: OK,
-    }), 'fam-1', { now: NOW });
+    }), 'fam-1', READER, { now: NOW });
 
     expect(err).not.toHaveBeenCalled();
     expect(queue.allFailed).toBe(false);
@@ -101,7 +106,7 @@ describe('loadInboxQueue read boundary', () => {
       family_inbox_messages: OK,
       paperwork_items: OK,
       family_communications: OK,
-    }), 'fam-1', { now: NOW });
+    }), 'fam-1', READER, { now: NOW });
 
     expect(queue.items).toEqual([]);
     expect(queue.allFailed).toBe(false);
