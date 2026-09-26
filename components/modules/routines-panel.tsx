@@ -170,7 +170,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   }
 
   function deleteTemplate(t: Template) {
-    if (!confirm(`Delete the "${t.name}" routine? (Events already added to your calendar stay.)`)) return;
+    if (!confirm(tr('confirmPrompt.deleteRoutine', { name: t.name }))) return;
     return run(`del:${t.id}`, async () => {
       const { error } = await createClient().from('routine_templates').delete().eq('id', t.id);
       if (error) throw error;

@@ -102,7 +102,7 @@ export function DeclutterModule() {
   }
 
   async function deleteMission(m: Mission) {
-    if (!confirm(`Delete “${m.title}”?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteNamed', { name: m.title }))) return;
     const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     success(tr('declutterModule.missionDeleted'));

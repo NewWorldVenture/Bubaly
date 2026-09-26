@@ -109,7 +109,7 @@ export function TimetableModule() {
   }
 
   async function remove(c: SchoolClass) {
-    if (!confirm(`Remove ${c.subject} from the timetable?`)) return;
+    if (!confirm(t('confirmPrompt.removeFromTimetable', { name: c.subject }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('school_classes').delete().eq('id', c.id);
     if (err) { toastError(t('timetableModule.failedToRemoveClass')); return; }

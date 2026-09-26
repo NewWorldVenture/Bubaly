@@ -75,7 +75,7 @@ export function ProjectsModule() {
   }
 
   async function deleteProject(p: Project) {
-    if (!confirm(`Delete “${p.title}” with its materials and quotes?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteProjectWithMaterials', { name: p.title }))) return;
     const { error } = await createClient().from('home_projects').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setOpenId(null);

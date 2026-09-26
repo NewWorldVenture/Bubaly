@@ -185,7 +185,7 @@ export function ChoresModule() {
   async function removeChore(a: Assignment) {
     if (busy) return;
     setMenuFor(null);
-    if (typeof window !== 'undefined' && !window.confirm(`Delete "${a.chore?.title ?? 'this chore'}"?`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(a.chore?.title ? tr('confirmPrompt.deleteNamed', { name: a.chore.title }) : tr('confirmPrompt.deleteThisChore'))) return;
     setBusy(a.id);
     const result = await deleteChoreAssignmentAction(a.id);
     setBusy(null);

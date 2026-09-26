@@ -130,7 +130,7 @@ export function SignupsModule() {
   }
 
   async function remove(o: Opportunity) {
-    if (!confirm(`Delete "${o.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.deleteNamed', { name: o.title }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }

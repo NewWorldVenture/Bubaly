@@ -128,7 +128,7 @@ export function RidesModule() {
   }
 
   async function remove(r: Ride) {
-    if (!confirm(`Delete the ride "${r.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.deleteRide', { name: r.title }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('rides').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }

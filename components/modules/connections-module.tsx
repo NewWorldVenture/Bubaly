@@ -52,7 +52,7 @@ export function ConnectionsModule() {
   const connected = connectedCount(states);
 
   async function disconnect(p: ProviderState) {
-    if (!confirm(`Disconnect ${p.name}?`)) return;
+    if (!confirm(t('confirmPrompt.disconnectNamed', { name: p.name }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('family_connections').delete().eq('family_id', familyId).eq('provider', p.id);
     if (err) { toastError(describeDbError(err)); return; }

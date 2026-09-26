@@ -198,7 +198,7 @@ export function LocatorModule() {
     success(placeForm.id ? 'Place updated' : 'Place added'); setPlaceModal(false); void refreshPlaces();
   }
   async function removePlace(p: Place) {
-    if (typeof window !== 'undefined' && !window.confirm(`Delete "${p.name}"?`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(tr('confirmPrompt.deleteNamed', { name: p.name }))) return;
     const res = await deletePlace(p.id);
     if (!res.ok) { toastError(res.error ?? 'Failed'); return; }
     success(tr('locatorModule.placeDeleted')); void refreshPlaces();

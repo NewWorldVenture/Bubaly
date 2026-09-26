@@ -407,6 +407,16 @@ const TEMPLATE_COPY_ATTR_PATTERN = new RegExp(
 const TEMPLATE_JSX_CHILD_PATTERN = new RegExp(String.raw`(?<![$=]\s*)\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
 
 /**
+ * The question asked before something is deleted (I18N-005). `confirm()` shows
+ * its argument verbatim in a native dialog, so `confirm(`Remove ${name} from the
+ * inventory?`)` asked a German parent in English, at the one moment the answer
+ * cannot be taken back, and neither the backtick rule nor the quoted-string
+ * rules read a confirm() argument.
+ */
+const CONFIRM_TEMPLATE_PATTERN = new RegExp(String.raw`\b(?:window\.)?confirm\(\s*` + TEMPLATE_BODY, 'g');
+const CONFIRM_QUOTED_PATTERN = /\b(?:window\.)?confirm\(\s*(['"])((?:(?!\1)[^\\\n]|\\.)+)\1\s*\)/g;
+
+/**
  * A prose argument to a helper that puts it in front of a user.
  *
  * Every name here was read before it was listed — `actionFailure` returns the
@@ -560,6 +570,8 @@ export function scanFile(file) {
     for (const m of source.matchAll(TEMPLATE_COPY_ATTR_PATTERN)) push(m[2].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
     for (const m of source.matchAll(TEMPLATE_JSX_CHILD_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
   }
+  for (const m of source.matchAll(CONFIRM_TEMPLATE_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+  for (const m of source.matchAll(CONFIRM_QUOTED_PATTERN)) push(m[2], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) {
     // `data-*` is machine state and `aria-hidden`/`aria-live` are enum values;
     // `aria-label` is the one ARIA attribute that carries a sentence.

@@ -144,7 +144,7 @@ export function ClosetModule() {
   }
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the closet?`)) return;
+    if (!confirm(t('confirmPrompt.removeFromCloset', { name: item.name }))) return;
     const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.itemRemoved'));
@@ -156,7 +156,7 @@ export function ClosetModule() {
   }
 
   async function deleteOutfit(outfit: Outfit) {
-    if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
+    if (!confirm(t('confirmPrompt.deleteOutfit', { name: outfit.name }))) return;
     const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.outfitDeleted'));

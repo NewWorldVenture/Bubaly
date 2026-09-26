@@ -84,7 +84,7 @@ export function WalletHub() {
   );
 
   async function del(table: string, id: string, label: string) {
-    if (!confirm(`Remove ${label}?`)) return;
+    if (!confirm(tr('confirmPrompt.removeNamed', { name: label }))) return;
     const res = await deleteWalletRowAction({ table, id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
     success(t('walletHub.removed'));

@@ -116,7 +116,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteTask(t: Task) {
-    if (!confirm(`Delete “${t.title}”?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteNamed', { name: t.title }))) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.taskDeleted'));
@@ -131,7 +131,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteBox(b: Box) {
-    if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteBox', { number: b.box_number, name: b.label }))) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.boxDeleted'));
@@ -145,7 +145,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteMove(m: Move) {
-    if (!confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)) return;
+    if (!confirm(tr('confirmPrompt.deleteMoveWithEverything', { name: m.title }))) return;
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');

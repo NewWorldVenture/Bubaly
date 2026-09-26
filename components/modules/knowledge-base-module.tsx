@@ -86,7 +86,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
   }
 
   async function remove(f: Fact) {
-    if (!confirm(`Forget "${f.label}"?`)) return;
+    if (!confirm(t('confirmPrompt.forgetNamed', { name: f.label }))) return;
     const sb = createClient();
     const res = await forgetFactAction(f.id);
     if (!res.ok) { toastError(res.error); return; }

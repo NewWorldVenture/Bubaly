@@ -124,7 +124,7 @@ export function RenewalsModule() {
   }
 
   async function remove(r: Renewal) {
-    if (!confirm(`Delete "${r.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.deleteNamed', { name: r.title }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('renewals').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }

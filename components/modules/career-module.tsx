@@ -88,7 +88,7 @@ export function CareerModule() {
   }
 
   async function deleteApplication(a: Application) {
-    if (!confirm(`Remove ${a.role_title} at ${a.company}?`)) return;
+    if (!confirm(tr('confirmPrompt.removeApplication', { role: a.role_title, company: a.company }))) return;
     const { error } = await createClient().from('job_applications').delete().eq('id', a.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.applicationRemoved'));
@@ -104,7 +104,7 @@ export function CareerModule() {
   }
 
   async function deleteResume(r: Resume) {
-    if (!confirm(`Delete “${r.title}”?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteNamed', { name: r.title }))) return;
     const { error } = await createClient().from('resume_versions').delete().eq('id', r.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.resumeDeleted'));
@@ -117,7 +117,7 @@ export function CareerModule() {
   }
 
   async function deleteProfile(p: Profile) {
-    if (!confirm(`Delete “${p.title}” for ${nameOf(p.member_id)} with every application and resume?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteCareerPlan', { name: p.title, member: nameOf(p.member_id) }))) return;
     const { error } = await createClient().from('career_profiles').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setProfileId('');

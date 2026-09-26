@@ -249,7 +249,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     router.refresh();
   }
   async function remove(p: Policy) {
-    if (typeof window !== 'undefined' && !window.confirm(`Delete policy "${p.name}"?`)) return;
+    if (typeof window !== 'undefined' && !window.confirm(tr('confirmPrompt.deletePolicy', { name: p.name }))) return;
     setBusy(p.id);
     const res = await deletePolicyAction({ id: p.id });
     setBusy(null);

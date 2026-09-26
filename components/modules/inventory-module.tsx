@@ -85,7 +85,7 @@ export function InventoryModule() {
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the inventory?`)) return;
+    if (!confirm(tr('confirmPrompt.removeFromInventory', { name: item.name }))) return;
     const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.itemRemoved'));
@@ -113,7 +113,7 @@ export function InventoryModule() {
 
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
-    if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
+    if (!confirm(count ? tr(count === 1 ? 'confirmPrompt.deleteLocationOne' : 'confirmPrompt.deleteLocationMany', { name: location.name, count }) : tr('confirmPrompt.deleteNamed', { name: location.name }))) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.locationDeleted'));

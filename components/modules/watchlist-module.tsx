@@ -95,7 +95,7 @@ export function WatchlistModule() {
   }
 
   async function deleteTitle(title: Title) {
-    if (!confirm(`Remove “${title.title}” from the watchlist?`)) return;
+    if (!confirm(tr('confirmPrompt.removeFromWatchlist', { name: title.title }))) return;
     const { error } = await createClient().from('watchlist_titles').delete().eq('id', title.id);
     if (error) return toastError(describeDbError(error));
     success(tr('watchlistModule.titleRemoved'));

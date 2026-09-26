@@ -84,7 +84,14 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // ones (the tree's child templates are separators such as ` · ${when}`), every
 // one an existing English string a screen reader or tooltip already shows. The
 // gated surfaces stay at zero.
-const CEILING = 2936;
+//
+// Then lowered to 2,934 (two strings translated with A11Y-003 and MAIN-F-D06:
+// the contact list's "Unknown" and the notes list's "Untitled"), and raised
+// 2,934 -> 2,969 for the one legitimate reason (I18N-005): the scanner now also
+// reads a confirm() prompt, template or quoted. Measured with the tree held
+// fixed: 35 English questions asked right before something is deleted.
+// All 35 then translated (28 confirmPrompt.* keys), 2,969 -> 2,934.
+const CEILING = 2934;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -170,5 +177,26 @@ describe('the scanner sees copy written as a template in an attribute or a JSX c
     expect(texts).toContain('… items left');
     // A class list, a key, an href and a bare separator are not copy.
     expect(texts.some((t: string) => /row|items\/|^·/.test(t) && !t.includes('left'))).toBe(false);
+  });
+});
+
+describe('the scanner sees the question asked before a delete (I18N-005)', () => {
+  it('reports a confirm() prompt, template or quoted', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-confirm-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      'export function Row({ name, on }: { name: string; on: () => void }) {',
+      '  const del = () => { if (confirm(`Remove ${name} from the inventory?`)) on(); };',
+      "  const wipe = () => { if (window.confirm('Delete everything in this list?')) on(); };",
+      '  return <button onClick={() => { del(); wipe(); }} />;',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Remove … from the inventory?');
+    expect(texts).toContain('Delete everything in this list?');
   });
 });

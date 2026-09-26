@@ -131,7 +131,7 @@ export function TripsModule() {
     setTripModal(false);
   }
   async function removeTrip(t: Trip) {
-    if (!confirm(`Delete "${t.name}" and its checklist?`)) return;
+    if (!confirm(tr('confirmPrompt.deleteTripWithChecklist', { name: t.name }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }

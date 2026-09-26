@@ -161,7 +161,7 @@ export function RewardsModule() {
 
   async function remove(r: Reward) {
     if (!canManage || !canWrite()) return;
-    if (!confirm(`Delete the reward "${r.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.deleteReward', { name: r.title }))) return;
     await mutate(r.id, () => createClient().from('rewards').delete().eq('id', r.id).eq('family_id', familyId).select('id').single(), refreshRewards, t('rewardsModule.rewardDeleted'));
   }
 

@@ -117,7 +117,7 @@ export function HomeworkModule() {
   }
 
   async function remove(h: Homework) {
-    if (!confirm(`Delete "${h.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.deleteNamed', { name: h.title }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
     if (err) { toastError(describeDbError(err)); return; }

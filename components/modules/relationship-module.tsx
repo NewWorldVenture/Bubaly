@@ -167,7 +167,7 @@ export function RelationshipModule() {
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
-    if (!confirm(`Remove "${d.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.removeNamed', { name: d.title }))) return;
     const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
     if (err) { toastError(describeDbError(err)); return; }
     success(t('relationshipModule.removed'));

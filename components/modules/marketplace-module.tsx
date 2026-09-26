@@ -165,7 +165,7 @@ export function MarketplaceModule({
   }
 
   async function remove(l: Listing) {
-    if (!confirm(`Remove "${l.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.removeNamed', { name: l.title }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
     if (err) { toastError(describeDbError(err)); return; }

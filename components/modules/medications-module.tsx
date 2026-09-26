@@ -343,7 +343,7 @@ export function MedicationsModule() {
 
   async function deleteMed(m: Medication) {
     if (!canMutate(true) || !latest.current.meds.some((item) => item.id === m.id && item.family_id === familyId)) return;
-    if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
+    if (!confirm(t('confirmPrompt.deleteMedication', { name: m.name }))) return;
     await mutate('remove-medication', true, () => createClient().from('medications').delete().eq('id', m.id).eq('family_id', familyId).select('id').single(),
       confirmAll, () => success(t('medicationsModule.medicationDeleted')));
   }

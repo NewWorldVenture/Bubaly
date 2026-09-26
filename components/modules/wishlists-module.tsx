@@ -97,7 +97,7 @@ export function WishlistsModule() {
   }
 
   async function remove(w: Wish) {
-    if (!confirm(`Remove "${w.title}"?`)) return;
+    if (!confirm(t('confirmPrompt.removeNamed', { name: w.title }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('wishlist_items').delete().eq('id', w.id);
     if (err) { toastError(describeDbError(err)); return; }

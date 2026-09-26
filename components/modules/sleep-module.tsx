@@ -81,7 +81,7 @@ export function SleepModule() {
   }
 
   async function archiveRoutine(r: Routine) {
-    if (!confirm(`Retire “${r.name}”?`)) return;
+    if (!confirm(t('confirmPrompt.retireNamed', { name: r.name }))) return;
     const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
     success(t('sleepModule.routineRetired'));

@@ -58,7 +58,7 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
             )}
             <button
               onClick={() => {
-                if (confirm(`Remove admin access for ${email}?`)) act(revokeAdminAction);
+                if (confirm(t('confirmPrompt.removeAdminAccess', { email }))) act(revokeAdminAction);
               }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated"
             >
