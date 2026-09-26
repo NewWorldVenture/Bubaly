@@ -153,6 +153,13 @@ export async function requestRedemptionAction(input: { rewardId: string; memberI
   if (!reward || !reward.is_active) return { ok: false, error: t('actions.thatRewardIsNotAvailable') };
   if (reward.stock != null && reward.stock <= 0) return { ok: false, error: t('actions.thatRewardIsOutOf') };
 
+  // A child asks for themselves; a manager may ask on anyone's behalf. The
+  // family check below stops a stranger, not a sibling: without this, a child
+  // could queue a redemption against a brother's tokens for a parent to
+  // approve at a glance. The same rule as dashboard/rewards (DATA-004).
+  if (!isManager(ctx.active.role) && input.memberId !== ctx.active.member.id) {
+    return { ok: false, error: t('actions.familyMemberNotFound') };
+  }
   const { data: mem, error: memError } = await supabase.from('family_members').select('id').eq('id', input.memberId).eq('family_id', familyId).maybeSingle();
   if (memError) return actionFailure('verify the family member', t('economy.couldNotVerifyTheFamilyMember'), memError);
   if (!mem) return { ok: false, error: t('actions.familyMemberNotFound') };
