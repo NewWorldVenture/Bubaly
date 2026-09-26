@@ -3,6 +3,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { loadAndSnapshotReasoning, loadReasoningReport } from '@/lib/reasoning/engine-server';
 
+// Both loaders now take the family's zone, because the operating index they
+// compose keys on the family's day. Named here rather than defaulted: a zone
+// these tests did not choose is the host's, and that is what
+// tests/the-suite-runs-on-both-sides-of-greenwich.test.ts exists to forbid.
+const TZ = 'America/Los_Angeles';
+
 // A chainable query stub: select/eq/order/limit all return the chain, and the
 // chain is awaitable, resolving to the supplied PostgREST-shaped result.
 function signalsChain(result: { data: unknown; error: unknown }) {
@@ -33,7 +39,7 @@ describe('loadReasoningReport family_signals read boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase({ data: null, error: { message: 'permission denied for table family_signals' } });
 
-    const report = await loadReasoningReport(supabase, 'fam-1', new Date('2026-07-16T12:00:00Z'));
+    const report = await loadReasoningReport(supabase, 'fam-1', TZ, new Date('2026-07-16T12:00:00Z'));
 
     expect(report.answers).toHaveLength(6);
     expect(report.allClear).toBe(false);
@@ -48,7 +54,7 @@ describe('loadReasoningReport family_signals read boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase({ data: [], error: null });
 
-    const report = await loadReasoningReport(supabase, 'fam-1', new Date('2026-07-16T12:00:00Z'));
+    const report = await loadReasoningReport(supabase, 'fam-1', TZ, new Date('2026-07-16T12:00:00Z'));
 
     const logged = err.mock.calls.map((c) => String(c[0]));
     expect(logged).not.toContain('[reasoning-engine] family_signals read failed');
@@ -79,7 +85,7 @@ describe('loadAndSnapshotReasoning snapshot write boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = snapshotSupabase({ error: { message: 'relation reasoning_snapshots does not exist' } });
 
-    const report = await loadAndSnapshotReasoning(supabase, 'fam-1', null, new Date('2026-07-16T12:00:00Z'));
+    const report = await loadAndSnapshotReasoning(supabase, 'fam-1', null, TZ, new Date('2026-07-16T12:00:00Z'));
 
     expect(report.answers).toHaveLength(6);
     expect(report.readErrors).toEqual(['operating_index', 'relationship_graph']);
@@ -91,7 +97,7 @@ describe('loadAndSnapshotReasoning snapshot write boundary', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = snapshotSupabase({ error: null });
 
-    await loadAndSnapshotReasoning(supabase, 'fam-1', null, new Date('2026-07-16T12:00:00Z'));
+    await loadAndSnapshotReasoning(supabase, 'fam-1', null, TZ, new Date('2026-07-16T12:00:00Z'));
 
     const logged = err.mock.calls.map((c) => String(c[0]));
     expect(logged).not.toContain('[reasoning-engine] reasoning_snapshots upsert failed');

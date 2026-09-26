@@ -283,10 +283,17 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // the leave-by time and top prep steps from the Moments engine. The related_id
   // embeds the event's date, so each occurrence pings at most once and 'general'
   // events stay covered by the plain calendar_event notification above.
+  // `tz` is the family's zone, resolved at the top of this function and already
+  // spent on dayKeyInTz/zonedDayBoundsMs. It was not handed down here, so the
+  // "get ready" push said Greenwich's Tomorrow and Greenwich's leave-by time —
+  // the same shape as app/(app)/home/page.tsx, which picked the right events and
+  // printed the wrong clocks, and this is the third place it turned up.
   for (const m of imminentMomentNotices(
     (events ?? []).map((e) => ({ id: e.id, title: e.title, category: null, location: e.location, starts_at: e.starts_at, all_day: e.all_day })),
     members ?? [],
     now,
+    36,
+    tz,
   )) {
     candidates.push({
       type: 'system', related_type: 'calendar_events', related_id: m.relatedId,

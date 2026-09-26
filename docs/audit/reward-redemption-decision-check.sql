@@ -13,6 +13,22 @@
 --
 -- What a member may still do is asserted alongside what they may not, because a
 -- guard that also blocks asking for a reward would be a different bug.
+-- Wrapped in a transaction that is always rolled back.
+--
+-- This probe COMMITTED everything it seeded, and its own assertions count rows
+-- — a second run against the same database fails on
+-- `family_members_family_id_user_id_key`, because run one's member rows are
+-- still there under a different generated primary key.
+-- It was masked for as long as it existed: this file and
+-- ai-surface-role-privacy-check.sql shared the family id
+-- `dddddddd-…`, so whichever ran second had its whole seed skipped by
+-- `on conflict do nothing` and never reached its own defect. Giving each probe
+-- its own ids (tests/boundary-probes-are-rerunnable.test.ts pins that) is what
+-- surfaced it.
+--
+-- CI never saw any of this, because the Database job bootstraps a fresh
+-- container every time and the suite had only ever been run ONCE per database.
+begin;
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
 -- `alter default privileges` already gives `authenticated` full DML on every
@@ -23,9 +39,9 @@ grant usage on schema public to authenticated;
 
 do $$
 declare
-  fam        uuid := 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-  parent_uid uuid := 'd0000000-0000-4000-8000-000000000001';
-  child_uid  uuid := 'd0000000-0000-4000-8000-000000000002';
+  fam        uuid := 'ddddbbbb-dddd-4ddd-8ddd-dddddddddddd';
+  parent_uid uuid := 'd0000000-0000-4000-8000-0000000000b1';
+  child_uid  uuid := 'd0000000-0000-4000-8000-0000000000b2';
   parent_mid uuid;
   child_mid  uuid;
   red        uuid;
@@ -102,3 +118,5 @@ begin
   reset role;
   raise notice 'OK  reward redemption decisions are a manager''s alone; asking and cancelling are not';
 end $$;
+
+rollback;

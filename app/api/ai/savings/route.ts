@@ -69,7 +69,7 @@ export async function POST() {
   const readFailures = ([
     ['transactions', txnsResult], ['budgets', budgetsResult],
     ['bills', billsResult], ['subscriptions', subsResult],
-  ] as const).filter(([, r]) => r.error).map(([label, r]) => `${label}: ${describeReadError(r.error)}`);
+  ] as const).filter(([, r]) => r.error).map(([label, r]) => ({ label, detail: describeReadError(r.error) }));
   if (readFailures.length > 0) {
     // 503, not a cheerful 200. There is no honest answer to "am I overspending?"
     // built on a read that did not happen.

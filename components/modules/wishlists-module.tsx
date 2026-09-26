@@ -25,6 +25,7 @@ import {
 } from '@/lib/wishlists/gifts';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Wish = Tables<'wishlist_items'>;
 
@@ -45,6 +46,7 @@ const blank = { id: '', title: '', url: '', price: '', priority: 'medium' as Wis
 
 export function WishlistsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -99,7 +101,7 @@ export function WishlistsModule() {
   }
 
   async function remove(w: Wish) {
-    if (!confirm(`Remove "${w.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: w.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
     const { data: removed, error: err } = await sb.from('wishlist_items').delete().eq('id', w.id).select('id');

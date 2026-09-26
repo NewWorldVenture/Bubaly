@@ -6,17 +6,18 @@
 // server action is its own endpoint: a gate in the page that renders the form
 // does not protect the function the form posts to.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { PLATFORMS } from '@/lib/social/capabilities';
 import {
-  CADENCES, isValidTimezone, nextRunAt, parseTimesOfDay, parseVariants,
+  CADENCES, isValidTimezone, nextRunAfterClaim, parseTimesOfDay, parseVariants, stoppingCondition, withinWindow,
   type RecurringAdSchedule,
 } from '@/lib/marketing/recurring-ads';
 import {
-  firstRunFor, publishOccurrence, scheduleFromRow, validPlatforms, type AdRow,
+  firstRunFor, publishOccurrence, resumeRunFor, scheduleFromRow, validPlatforms, windowFromRow, type AdRow,
 } from '@/lib/marketing/recurring-ads-runner';
 
 const PAGE = '/admin/marketing/social/recurring';
@@ -90,7 +91,7 @@ export async function createRecurringAdAction(formData: FormData): Promise<Actio
   // sitting in the list marked active while nothing happens is worse than a
   // form error, because nobody goes looking for it.
   if (!firstRun) return { ok: false, error: 'That schedule never comes round. Check the days and times.' };
-  if (endsAt && firstRun.getTime() > endsAt.getTime()) {
+  if (!withinWindow(firstRun, endsAt)) {
     return { ok: false, error: 'The first run would fall after the end date.' };
   }
 
@@ -132,9 +133,11 @@ export async function setRecurringAdStatusAction(id: string, status: 'active' | 
   // make a campaign paused over a holiday fire the moment it came back, for a
   // slot that passed days ago.
   const ad = row as unknown as AdRow;
-  const nextRun = status === 'active'
-    ? firstRunFor(scheduleFromRow(ad), new Date(ad.starts_at), new Date())
-    : null;
+  // resumeRunFor applies the end date too — firstRunFor alone has no end-date
+  // parameter, which is why the create path above asks withinWindow. Without it
+  // resuming an ended campaign succeeded and stored a next_run_at past the
+  // window, and the error message below already claimed it had looked.
+  const nextRun = status === 'active' ? resumeRunFor(ad, new Date()) : null;
   if (status === 'active' && !nextRun) {
     return { ok: false, error: 'This campaign has no future run left. Edit its schedule or end date.' };
   }
@@ -188,6 +191,7 @@ export async function deleteRecurringAdAction(id: string): Promise<ActionResult>
  * cron runner uses.
  */
 export async function runRecurringAdNowAction(id: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const gate = await requireAdmin();
   if ('error' in gate) return { ok: false, error: gate.error };
   const supabase = createServiceClient();
@@ -196,39 +200,67 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
     .from('marketing_recurring_ads').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
   if (readError || !row) return { ok: false, error: 'That campaign could not be found.' };
   const ad = row as unknown as AdRow;
+  const now = new Date();
 
-  if (ad.max_occurrences != null && ad.occurrences >= ad.max_occurrences) {
+  // BOTH halves of the stopping conditions, because the docstring above promises
+  // both and this function used to check only the first. The cron runner asks
+  // decideRun (lib/marketing/recurring-ads.ts), which refuses `occurrence_cap`
+  // AND `window_closed` and then retires the row — status 'paused',
+  // next_run_at null. The admin list badges that row "Paused", which is what a
+  // deliberately-paused campaign looks like too, so the inviting next move is
+  // "Post now". Without the second check that published last December's holiday
+  // promo to the live brand accounts in September: exactly the "visible mistake
+  // on a public account that cannot be taken back" that
+  // lib/marketing/recurring-ads-runner.ts opens by naming. Both halves now come
+  // from the one stoppingCondition decideRun asks, so they cannot drift apart
+  // again; an end date that will not parse counts as closed (see windowClosed).
+  const campaignWindow = windowFromRow(ad);
+  const stopped = stoppingCondition(campaignWindow, now);
+  if (stopped === 'occurrence_cap') {
     return { ok: false, error: 'This campaign has already run its full number of posts.' };
+  }
+  if (stopped === 'window_closed') {
+    return { ok: false, error: t('adminMarketingSocial.endDateHasPassed') };
   }
   const { variantForOccurrence } = await import('@/lib/marketing/recurring-ads');
   const body = variantForOccurrence(ad.body_variants ?? [], ad.occurrences);
   if (!body) return { ok: false, error: 'This campaign has no message to post.' };
   if (validPlatforms(ad.platforms).length === 0) return { ok: false, error: 'This campaign has no platforms selected.' };
 
-  const now = new Date();
-  const schedule = scheduleFromRow(ad);
-  // The claim is a compare-and-set: `.eq('occurrences', ad.occurrences)` is what
-  // stops two "Run now" clicks — or a click racing the cron — from both posting
-  // the same occurrence and from walking past `max_occurrences`. It could not
-  // report its own failure. An UPDATE that matches nothing SUCCEEDS in Postgres
-  // (zero rows, no error), and without `.select()` PostgREST returns no rows at
-  // all, so `claimError` was null whether the claim was won or lost and the code
-  // went on to publish either way. `.select('id')` is what makes the lost claim
-  // visible, and a lost claim means somebody else already posted this one.
+  // Re-arm exactly as the cron's claim does: the next slot, or null when the
+  // cap or the end date leaves none — and then the row is retired in the same
+  // write, as claimOccurrence retires it. An unclamped slot would advertise a
+  // "Next post" in the admin list that is never coming; a null next_run_at on a
+  // row left 'active' would sit outside the due index, never retired.
+  const nextRun = nextRunAfterClaim(scheduleFromRow(ad), campaignWindow, now);
+  // The same compare-and-set the cron runner's claimOccurrence makes, read the
+  // same way: `.select('id')` is what makes PostgREST return the rows actually
+  // updated. Without it a lost race answers 204 with `data: null, error: null`,
+  // which is indistinguishable from a won one — and the occurrence goes out to
+  // the brand account a second time.
   const { data: claimed, error: claimError } = await supabase
     .from('marketing_recurring_ads')
     .update({
       occurrences: ad.occurrences + 1,
       last_run_at: now.toISOString(),
-      next_run_at: nextRunAt(schedule, now, new Date(ad.starts_at))?.toISOString() ?? null,
+      next_run_at: nextRun?.toISOString() ?? null,
+      ...(nextRun ? {} : { status: 'paused' as const }),
       updated_by: gate.userId,
     })
     .eq('id', id)
     .eq('occurrences', ad.occurrences)
     .select('id');
-  if (claimError) return { ok: false, error: 'Could not start this run.' };
-  if (!claimed || claimed.length === 0) {
-    return { ok: false, error: 'This occurrence has already been posted. Reload to see the latest run.' };
+  if (claimError) {
+    console.error('[recurring-ads] run now claim failed', id, claimError);
+    return { ok: false, error: 'Could not start this run.' };
+  }
+  if ((claimed?.length ?? 0) === 0) {
+    // Through the catalogue, not as a literal. This is the only NEW sentence
+    // this fix adds, and tests/i18n-ungated-surface-ratchet.test.ts counts it —
+    // as TWO, because the scanner splits on sentences. The ratchet's two
+    // legitimate reasons to rise are a stricter scanner and a tree merge; adding
+    // copy is neither, and its own message says to lift it instead.
+    return { ok: false, error: t('adminMarketingSocial.thisRunWasAlreadyTaken') };
   }
 
   const result = await publishOccurrence(supabase, ad, ad.occurrences, now, body);

@@ -265,7 +265,7 @@ export default async function SecurityPage() {
                       <th scope="col" className="pb-2 font-semibold">{t('trustCenter.automationHeader')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/8">
+                  <tbody className="divide-y divide-white/10">
                     {ROLE_ORDER.map((role) => {
                       const trusted = ROLE_DEFAULTS[role].automationTrusted;
                       return (

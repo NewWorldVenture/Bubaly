@@ -19,14 +19,18 @@ export const TRUST_LEVELS: TrustLevel[] = [
   'blocked',
 ];
 
-export const TRUST_LABELS: Record<TrustLevel, string> = {
-  immediate_family: 'Immediate Family',
-  close_family: 'Close Family',
-  trusted_friend: 'Trusted Friend',
-  known_contact: 'Known Contact',
-  unknown: 'Unknown',
-  suspected_spam: 'Suspected Spam',
-  blocked: 'Blocked',
+/** Catalogue KEYS, not copy. This module is imported by webhook routes and by
+ *  five client components; only the components have a reader, so the words are
+ *  resolved there. A Dutch family reading why a call was blocked used to get a
+ *  fully translated page with the reason in English. */
+export const TRUST_LABEL_KEYS: Record<TrustLevel, string> = {
+  immediate_family: 'guardian.trustImmediateFamily',
+  close_family: 'guardian.trustCloseFamily',
+  trusted_friend: 'guardian.trustTrustedFriend',
+  known_contact: 'guardian.trustKnownContact',
+  unknown: 'guardian.trustUnknown',
+  suspected_spam: 'guardian.trustSuspectedSpam',
+  blocked: 'guardian.trustBlocked',
 };
 
 export const TRUST_ICONS: Record<TrustLevel, string> = {

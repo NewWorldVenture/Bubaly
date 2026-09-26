@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { describeReadError, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
@@ -69,15 +69,15 @@ export async function closeMealVote(voteId: string): Promise<Result> {
     supabase.from('meal_vote_options').select('id').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
     supabase.from('meal_vote_ballots').select('option_id, choice').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
   ]);
-  // These two reads DECIDE the winner, and `?? []` turned a failed read into
-  // "nobody voted". `settleAll` hands a transport failure back in the same
-  // { data: null, error } shape, so a database blip closed the vote with
-  // `winner_option_id: null` — the family's dinner picked by an outage, stamped
-  // as final, and reported to them as a success. A vote that could not be
-  // counted must stay open.
-  if (optionsError || ballotsError) {
+  // A failed read is not "nobody voted". Coercing it to `[]` tallies nothing,
+  // `winningOption` returns null for that exactly as it does for a real tie-less
+  // empty vote, and the UPDATE below would stamp winner_option_id = NULL over a
+  // vote the family actually decided — then toast "Vote closed". Fail closed, the
+  // way the page this action serves already does (vote/page.tsx). Audit C1-S9-75.
+  const readError = optionsError ?? ballotsError;
+  if (readError) {
     console.error('[meal-vote] could not read the ballots to close the vote', { voteId, optionsError, ballotsError });
-    return { ok: false, error: t('vote.couldNotLoadMealVoting') };
+    return { ok: false, error: describeReadError(readError) };
   }
   const ids = (options ?? []).map((o) => o.id);
   const winner = winningOption(tallyVotes(ids, (ballots ?? []) as { option_id: string; choice: string }[]));

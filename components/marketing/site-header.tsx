@@ -123,7 +123,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-        <div id="mobile-navigation" hidden={!open} className="max-h-[calc(100dvh-3.5rem-var(--safe-top))] overflow-y-auto overscroll-contain border-t border-border/70 bg-bg/98 px-4 py-4 backdrop-blur-xl lg:hidden">
+        <div id="mobile-navigation" hidden={!open} className="max-h-[calc(100dvh-3.5rem-var(--safe-top))] overflow-y-auto overscroll-contain border-t border-border/70 bg-bg/95 px-4 py-4 backdrop-blur-xl lg:hidden">
           <nav aria-label={t('nav.mobileNavigation')} className="flex flex-col gap-1">
             {MARKETING_NAV.map((item) => (
               <Link

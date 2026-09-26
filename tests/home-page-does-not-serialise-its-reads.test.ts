@@ -47,7 +47,9 @@ describe('the landing page does not wait on one read at a time', () => {
   });
 
   it('resolves translations once, not twice', () => {
-    const calls = body.match(/await getTranslations\(\)/g) ?? [];
+    // Calls, awaited alone or batched: the merge with main (Audit C1-S9-89)
+    // reads it inside one Promise.all with getLocaleContext().
+    const calls = body.match(/getTranslations\(\)/g) ?? [];
     expect(calls).toHaveLength(1);
   });
 

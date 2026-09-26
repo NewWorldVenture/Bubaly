@@ -9,8 +9,14 @@ import {
 } from '@/lib/autopilot/engine';
 import type { MemberTraits } from '@/lib/autopilot/twin';
 
+// These cases pin the zone to UTC EXPLICITLY. They used to assert against a
+// snapshot with no zone at all, which is not "no zone" — it is whichever one
+// the host happened to be in. Naming UTC keeps every expectation below
+// unchanged and makes the zone a stated premise rather than an accident.
+// tests/autopilot-the-familys-day.test.ts covers the non-UTC zones.
 const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   today: '2026-06-24',
+  tz: 'UTC',
   renewals: [],
   appointments: [],
   overdueChores: [],

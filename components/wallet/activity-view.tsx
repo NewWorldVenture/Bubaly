@@ -3,10 +3,11 @@
 import { useMemo, useState } from 'react';
 import { Receipt, ArrowDownLeft, ArrowUpRight, Download } from 'lucide-react';
 import { EmptyState } from '@/components/ui/states';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Row = ActivityTxn & { childName: string | null };
 
@@ -15,11 +16,16 @@ const TYPES: { value: string; label: string }[] = [
   ...['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'transfer', 'goal_transfer', 'babysitter_payment', 'card_spend', 'card_refund', 'adjustment', 'reversal'].map((v) => ({ value: v, label: txnTypeLabel(v) })),
 ];
 
-function dayLabel(date: string): string {
-  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-}
+const dayLabelIn = (locale: LocaleCode) => (date: string): string => {
+  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childOptions: { id: string; name: string }[] }) {
+  const locale = useLocale();
+  const dayLabel = dayLabelIn(locale.code);
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const [child, setChild] = useState('');
   const [type, setType] = useState('');

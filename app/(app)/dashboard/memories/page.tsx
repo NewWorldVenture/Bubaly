@@ -16,7 +16,8 @@ import {
   type AlbumRow, type PhotoRow, type MemberLite,
 } from '@/lib/memories/memories';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export const metadata: Metadata = { title: 'Memories' };
 export const dynamic = 'force-dynamic';
@@ -30,13 +31,13 @@ const TABS: { key: TabKey; label: string; icon: typeof ImageIcon }[] = [
   { key: 'stories', label: 'Stories', icon: BookOpen },
 ];
 
-function fmtDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDay(iso: string, locale: LocaleCode): string {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function fmtEventRange(start: string, end: string | null): string {
-  const s = new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtEventRange(start: string, end: string | null, locale: LocaleCode): string {
+  const s = new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
   if (!end || end.slice(0, 10) === start.slice(0, 10)) return s;
-  return `${new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  return `${new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric' })} – ${new Date(end).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 const EVENT_ICON: Record<string, typeof Cake> = { birthday: Cake, holiday: Cake, school: GraduationCap, sports: GraduationCap };
@@ -49,6 +50,8 @@ function countVideos(photos: PhotoRow[] | undefined): number {
 
 export default async function MemoriesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const tr = await getTranslations();
+  // A server page: the locale comes from the request, as the translator does.
+  const { locale } = await getLocaleContext();
   const sp = await searchParams;
   const tab: TabKey = (TABS.find((t) => t.key === sp.tab)?.key ?? 'highlights') as TabKey;
   const q = (sp.q ?? '').trim();
@@ -112,7 +115,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     photosByAlbum.set(p.album_id, arr);
   }
 
-  const timeline = buildTimeline(highlights);
+  const timeline = buildTimeline(highlights, new Date(), 12, locale.code, tr);
   const stats = memoryStats({ photos: photoCount ?? 0, videos: videoCount ?? 0, albums: albumCount ?? 0, memories: memoriesCount ?? 0 });
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));
@@ -188,7 +191,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 <div className="flex w-28 shrink-0 flex-col">
                   <div className="flex items-center gap-2">
                     <span className="grid h-4 w-4 place-items-center rounded-full border-2 border-brand"><span className="h-1.5 w-1.5 rounded-full bg-brand" /></span>
-                    <span className="text-sm font-semibold">{new Date(row.album.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <span className="text-sm font-semibold">{new Date(row.album.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
                   <span className="ml-6 text-xs text-muted">{row.relative}</span>
                 </div>
@@ -278,7 +281,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                             <p className="truncate text-sm font-semibold text-white">{a.name}</p>
                             <div className="mt-0.5 flex items-center justify-between text-[11px] text-white/80">
-                              <span>{fmtDay(a.created_at)}</span>
+                              <span>{fmtDay(a.created_at, locale.code)}</span>
                               <span className="inline-flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5"><ImageIcon className="h-3 w-3" />{a.photo_count}</span>
                             </div>
                           </div>
@@ -387,7 +390,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{e.title}</span>
-                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at)}</span>
+                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at, locale.code)}</span>
                       </span>
                     </Link>
                   );
@@ -413,7 +416,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <Avatar name={s.name} color={m?.color ?? undefined} size={32} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm"><span className="font-medium">{s.name}</span> shared {s.label}</span>
-                        <span className="block text-xs text-muted">{relativeTime(s.at, now)}</span>
+                        <span className="block text-xs text-muted">{relativeTime(s.at, now, locale.code)}</span>
                       </span>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
                     </Link>

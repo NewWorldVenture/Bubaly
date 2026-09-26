@@ -34,7 +34,7 @@ export default async function FamilyStressPage() {
   const supabase = await createServer();
 
   const [signalsResult, membersResult, loggedSignalsResult] = await Promise.all([
-    gatherSignalsResult(familyId),
+    gatherSignalsResult(familyId, ctx.active.family.timezone || 'UTC'),
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
     settle(supabase.from('family_stress_signals').select('*').eq('family_id', familyId)
       .order('occurred_on', { ascending: false }).limit(12)),

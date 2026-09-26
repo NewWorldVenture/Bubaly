@@ -441,23 +441,27 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
 
   // 0260: the ledger is written by the server, not by the session that acted.
   //
-  // The error used to be dropped on the floor — the ONLY one of the six
-  // trust_audit_logs writers that did, on the highest-privilege action in the
-  // product. `serverWriter` falls back to the CALLER'S client when service
-  // credentials are missing, and this table has no member INSERT policy, so in
-  // that configuration every emergency activation silently went unrecorded and
-  // a ledger that had stopped working looked exactly like a family that had
-  // never declared an emergency. The session is already open and must stay open
-  // — an emergency is not blocked because an audit row failed — so this is loud
-  // rather than fatal.
-  const { error: ledgerError } = await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
+  // This row is the ONLY record of who turned emergency mode on and why, and
+  // emergency elevation outranks every deny, policy and risk tier — it is the
+  // most powerful state the trust engine has. The insert resolves with
+  // { data, error } rather than throwing, and the result was discarded, so a
+  // refused write left the family with a live elevation and nothing saying who
+  // started it. dashboard/trust renders these rows and api/privacy/export cites
+  // them, so the absence is visible exactly where someone goes to ask.
+  //
+  // Non-fatal, deliberately, and for the same reason as lib/trust/server.ts: the
+  // emergency_sessions insert above already succeeded, so the elevation IS live.
+  // Returning an error here would tell a parent mid-emergency that it failed,
+  // and the likely next move — activate it again — is worse than a missing log
+  // line. So it must not fail; it must not be silent either.
+  const { error: auditError } = await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
     family_id: ctx.active.familyId, actor_kind: 'member', actor_id: ctx.active.member.id,
     domain: 'emergency', capability: 'automate', decision: 'emergency_override',
     reason: `Emergency mode activated (${kind})${input.reason ? `: ${input.reason}` : ''}`,
   });
-  if (ledgerError) {
+  if (auditError) {
     console.error('[trust] emergency mode was activated but not recorded',
-      { familyId: ctx.active.familyId, kind, domains }, ledgerError);
+      { familyId: ctx.active.familyId, kind, activatedBy: ctx.active.member.id }, auditError);
   }
   revalidatePath('/dashboard/trust');
   return { ok: true };

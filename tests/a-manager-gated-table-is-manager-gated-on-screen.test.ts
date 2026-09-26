@@ -55,12 +55,12 @@ const ROOT = path.resolve(__dirname, '..');
  */
 const MANAGER_ONLY_WRITES = [
   'allowance_rules', 'assistant_links', 'behavior_logs', 'bills', 'budgets', 'child_logins',
-  'child_wallets', 'currency_transactions', 'documents', 'economy_rewards',
-  'family_ai_settings', 'family_automation_rules', 'family_credentials',
+  'child_wallets', 'concierge_calls', 'currency_transactions', 'documents', 'economy_rewards',
+  'family_ai_settings', 'family_automation_rules', 'family_automation_runs', 'family_credentials',
   'family_currencies', 'family_facts', 'family_insurance_policies',
   'family_members', 'family_places', 'family_wallets', 'financial_accounts',
   'front_desk_settings', 'guardian_routing_rules', 'health_providers',
-  'health_visits', 'household_info', 'immunizations', 'insurance_policies',
+  'health_visits', 'home_assets', 'household_info', 'immunizations', 'insurance_policies',
   'invest_holdings', 'invites', 'medical_profiles', 'medication_schedules',
   'medications', 'opportunities', 'renewals', 'rewards', 'rides',
   'savings_goals', 'transactions', 'trip_items', 'trips', 'wallet_buckets',

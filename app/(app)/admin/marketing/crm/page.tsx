@@ -11,6 +11,7 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { saveContactAction, deleteContactAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'CRM · Contacts', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -76,7 +77,7 @@ export default async function CrmPage() {
           <select name="lifecycle_stage" defaultValue="lead" className={inputCls}>
             {LIFECYCLE_STAGES.map((s) => <option key={s} value={s}>{LIFECYCLE_LABELS[s]}</option>)}
           </select>
-          <button type="submit" className={btnCls}>{t('adminMarketingCrm.addContact')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingCrm.addContact')}</SubmitButton>
         </form>
       </Card>
 
@@ -112,7 +113,7 @@ export default async function CrmPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteContactAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('crm.delete')}</button>
+                        <SubmitButton className="text-xs text-muted hover:text-rose-400">{t('crm.delete')}</SubmitButton>
                       </form>
                     </td>
                   </tr>

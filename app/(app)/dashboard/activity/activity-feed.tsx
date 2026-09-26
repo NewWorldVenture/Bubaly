@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { relativeTime, type ActivityItem, type ActivityKind } from '@/lib/activity/feed';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { relativeTime as relativeTimeIn, type ActivityItem, type ActivityKind } from '@/lib/activity/feed';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Member = { id: string; display_name: string; color: string | null };
 
@@ -60,6 +60,9 @@ export function ActivityFeed({
   members: Member[];
 }) {
   const t = useTranslations();
+  // The "30m ago" chip follows the reader.
+  const locale = useLocale();
+  const relativeTime = (iso: string) => relativeTimeIn(iso, new Date(), locale.code);
   const [filterKind, setFilterKind] = useState<ActivityKind | 'all'>('all');
   const [filterMember, setFilterMember] = useState<string>('all');
   const [showSummary, setShowSummary] = useState(false);

@@ -25,7 +25,8 @@ const db = (errors: unknown[]) => {
 const actions = () => import('@/app/(app)/dashboard/money-timeline/actions');
 
 beforeEach(() => {
-  requireUserContext.mockResolvedValue({ active: { familyId: 'fam-1' } });
+  // `family.timezone`: main's money timeline reads the family's day (merge, Audit C1-S9-89).
+  requireUserContext.mockResolvedValue({ active: { familyId: 'fam-1', family: { timezone: 'UTC' } } });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });

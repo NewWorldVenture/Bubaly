@@ -16,19 +16,29 @@ import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
-/** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
-function formatWhen(startsAt: Date, allDay: boolean): string {
+/**
+ * Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM".
+ *
+ * Every part of it followed something other than the family: the date and clock
+ * took the BROWSER's locale (`toLocaleDateString(undefined, …)`, I18N-002) and
+ * "Today", "Tomorrow" and the joining " at " were English literals. Now the
+ * formatter and the translator both come from the component.
+ */
+function formatWhen(startsAt: Date, allDay: boolean, fmt: Format, t: Translator): string {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const day = new Date(startsAt); day.setHours(0, 0, 0, 0);
   const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
-  const dayLabel = diffDays === 0 ? 'Today'
-    : diffDays === 1 ? 'Tomorrow'
-    : startsAt.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const dayLabel = diffDays === 0 ? t('calendar.today')
+    : diffDays === 1 ? t('quickCapture.tomorrow')
+    : fmt.fmtDate(startsAt, 'EEEE, MMM d');
   if (allDay) return dayLabel;
-  const time = startsAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${dayLabel} at ${time}`;
+  return t('quickCapture.dayAtTime', { day: dayLabel, time: fmt.fmtTime(startsAt) });
 }
+
+type Translator = (key: string, params?: Record<string, string | number>) => string;
 
 type CaptureType = 'task' | 'note' | 'event' | 'shopping';
 
@@ -41,6 +51,8 @@ const TYPES: { key: CaptureType; label: string; icon: typeof Plus; placeholder: 
 
 export function QuickCapture() {
   const tr = useTranslations();
+  // The "when" preview follows the reader, not the browser (I18N-002).
+  const fmt = useFormat();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -178,8 +190,8 @@ export function QuickCapture() {
     const { title, dueDate } = parseDueDate(text);
     if (!dueDate) return null;
     const [y, m, d] = dueDate.split('-').map(Number);
-    return { title, when: formatWhen(new Date(y, m - 1, d), true) };
-  }, [type, text]);
+    return { title, when: formatWhen(new Date(y, m - 1, d), true, fmt, tr) };
+  }, [type, text, fmt, tr]);
 
   // Live item-count preview for shopping — "milk, eggs and bread" → 3 items.
   const shoppingItems = useMemo(() => {
@@ -297,7 +309,7 @@ export function QuickCapture() {
             eventPreview?.matched ? (
               <p className="flex items-center gap-1.5 text-xs font-medium text-brand-text">
                 <CalendarClock className="h-3.5 w-3.5" />
-                {formatWhen(eventPreview.startsAt, eventPreview.allDay)}
+                {formatWhen(eventPreview.startsAt, eventPreview.allDay, fmt, tr)}
                 {eventPreview.title && eventPreview.title !== text.trim() && (
                   <span className="text-muted">· “{eventPreview.title}”</span>
                 )}

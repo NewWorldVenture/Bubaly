@@ -202,7 +202,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                       </span>
                     )}
                     {!partial && it.due_on && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                         <Clock className="h-2.5 w-2.5" /> due {it.due_on}
                       </span>
                     )}

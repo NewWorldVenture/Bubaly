@@ -9,7 +9,7 @@ import { at } from './helpers/source-order';
  * policy and says, at the point of creation, "never add a permissive policy
  * here". `0297_sensitive_tables_respect_role.sql` added four anyway, on the
  * stated premise that "every policy was is_family_member" — there were none.
- * `0318_social_tokens_service_role_only.sql` drops them again.
+ * `0361_social_tokens_service_role_only.sql` drops them again.
  *
  * A comment is what failed the first time. This is the mechanical version of
  * it: any later migration that creates a policy on the token store fails here,
@@ -35,7 +35,7 @@ describe('the social OAuth token store is reachable only by the service role', (
   });
 
   it('0318 drops all four policies 0297 added', () => {
-    const sql = readFileSync(`${MIGRATIONS}/0318_social_tokens_service_role_only.sql`, 'utf8');
+    const sql = readFileSync(`${MIGRATIONS}/0361_social_tokens_service_role_only.sql`, 'utf8');
     for (const verb of ['select', 'insert', 'update', 'delete']) {
       expect(sql).toContain(`drop policy if exists social_account_tokens_${verb} on public.social_account_tokens;`);
     }

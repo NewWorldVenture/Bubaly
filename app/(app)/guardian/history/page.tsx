@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { CallHistory } from '@/components/guardian/call-history';
+import { ErrorState } from '@/components/ui/states';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
-import { PartialReadBanner } from '@/components/ui/partial-read-banner';
-import { describeReadError } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Communication History · AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -27,26 +27,20 @@ export default async function HistoryPage({
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
-  // This is the AI Call Guardian's log — the record of what was intercepted on
-  // behalf of, often, an elderly relative. The error was dropped, so a refused
-  // read rendered an empty list under the heading "0 total": a family checking
-  // whether anything had happened was told, in a number, that nothing had. That
-  // is the exact inversion `components/ui/partial-read-banner.tsx` was written
-  // about — a zero meaning "we could not check" must never read as an
-  // all-clear — and on a surveillance log it is the most dangerous direction.
-  //
-  // So the count is not merely accompanied by a banner, it is WITHHELD: a
-  // banner beside "0 total" would still be asserting the zero. Audit C1-S9-27.
-  const { data: communications, count, error: historyError } = await (db.from('guardian_communications') as ReturnType<typeof supabase.from>)
+  // settleAll with one query rather than settle(): the Guardian tables are reached
+  // through a cast (`withGuardianTables`), and settle's single-value generic
+  // infers `unknown` from that builder while settleAll's tuple mapping keeps the
+  // response shape. Same guarantee either way — a transport rejection arrives as
+  // { data: null, error } instead of taking the page to the error boundary.
+  const [{ data: communications, count, error }] = await settleAll([(db.from('guardian_communications') as ReturnType<typeof supabase.from>)
     .select(
       'id, comm_type, direction, from_number, to_number, from_name, body, summary, sentiment, trust_level_at_time, routing_mode_used, ai_decision_reason, scam_detected, scam_type, scam_confidence, call_duration_secs, call_recording_url, status, started_at, ended_at',
       { count: 'exact' },
     )
     .eq('family_id', familyId)
     .order('started_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+    .range(offset, offset + pageSize - 1)]);
 
-  const readFailures = historyError ? [`guardian_communications: ${describeReadError(historyError)}`] : [];
   const totalPages = Math.ceil((count ?? 0) / pageSize);
 
   return (
@@ -60,15 +54,19 @@ export default async function HistoryPage({
         </div>
         <div>
           <h1 className="text-xl font-bold leading-tight">{t('guardianHistory.communicationHistory')}</h1>
-          {readFailures.length === 0 ? <p className="text-sm text-muted">{count ?? 0} total</p> : null}
+          {/* No "0 total" on a failed read: the count is the claim. */}
+          <p className="text-sm text-muted">{error ? '—' : `${count ?? 0} total`}</p>
         </div>
       </div>
 
-      <PartialReadBanner title={t('shared.someInformationCouldNotBeLoaded')} failures={readFailures} />
-
+      {/* A failed read used to render CallHistory's "No communications match your
+          filters" over a log that may be full of blocked scam calls — and invite
+          the reader to clear a filter that was never the problem. */}
+      {error ? <ErrorState message={t('guardianHistory.couldnTLoadTheCommunicationHistory')} /> : (
       <CallHistory
         communications={(communications ?? []) as unknown as Parameters<typeof CallHistory>[0]['communications']}
       />
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">

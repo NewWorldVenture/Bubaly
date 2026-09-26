@@ -2,6 +2,11 @@
 // conversation-tab filtering, last-message previews, unread detection, and
 // compact list timestamps. No Supabase/React so it stays unit-testable.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type ConvTab = 'all' | 'direct' | 'group' | 'announcement';
 
 export function convMatchesTab(kind: string, tab: ConvTab): boolean {
@@ -36,7 +41,6 @@ export function isUnread(m: { read_by?: string[] | null; sender_id: string | nul
   return m.sender_id !== selfId && !(m.read_by ?? []).includes(selfId);
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -44,14 +48,22 @@ function startOfDay(d: Date): number {
 
 /** Compact conversation-list timestamp: time today, "Yesterday", weekday
  *  within a week, else M/D/YY. */
-export function shortTime(iso: string, now: Date = new Date()): string {
+export function shortTime(
+  iso: string,
+  now: Date = new Date(),
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
+  const fmt = createFormat(locale);
   const days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
-  if (days <= 0) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return WEEKDAYS[d.getDay()];
-  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+  if (days <= 0) return fmt.fmtTime(d);
+  if (days === 1) return t ? t('completedByBubaly.yesterday') : 'Yesterday';
+  // This used to index a seven-entry English array. Intl knows the short weekday in
+  // all eleven locales, so the array is gone rather than left sitting unused.
+  if (days < 7) return fmt.fmtDate(d, 'EEE');
+  return fmt.fmtDate(d, 'M/d/yy');
 }
 
 /** Reduce a batch of messages (any order) to the latest one per conversation

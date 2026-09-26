@@ -45,13 +45,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/cron-dispatch.mjs
+          # .nvmrc decides the Node version for every job in this repository, so
+          # this sparse checkout has to fetch it alongside the script it runs.
+          sparse-checkout: |
+            scripts/cron-dispatch.mjs
+            .nvmrc
           sparse-checkout-cone-mode: false
           fetch-depth: 1
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       - name: Validate configuration and dispatch due routes
         env:

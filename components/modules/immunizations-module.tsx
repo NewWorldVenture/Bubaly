@@ -148,8 +148,8 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
                   {canEdit && (
                     <div className="flex shrink-0 gap-1">
-                      <button onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                      <button aria-label={t('a11y.edit')} onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button aria-label={t('a11y.delete')} onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
                 </div>

@@ -450,7 +450,9 @@ describe('smaller answer versus different answer (C1-S9-40)', () => {
   it('the copy exists in every base catalogue', () => {
     for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
-      for (const key of ['insight.behaviorDataIsTemporarilyUnavailable', 'gift.giftDataIsTemporarilyUnavailable']) {
+      // main carries the behaviour copy as insight.behaviorDataUnavailable
+      // (merged in Audit C1-S9-89); the route names that key.
+      for (const key of ['insight.behaviorDataUnavailable', 'gift.giftDataIsTemporarilyUnavailable']) {
         expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
       }
     }
@@ -520,16 +522,21 @@ describe('an empty answer states an absence the route confirmed (C1-S9-41)', () 
     // anyone — it hit the constraint. The person affected is someone already
     // subscribed, and most pointedly someone previously unsubscribed trying to
     // come back, who gets an error instead of being reactivated.
-    expect(blogSubscribe).toContain('error: existingError');
-    expect(bodyOf(blogSubscribe, 'if (existingError)', '{ status: 503 }')).toContain('console.error');
-    expect(at(blogSubscribe, 'if (existingError)')).toBeLessThan(at(blogSubscribe, 'if (existing) {'));
+    //
+    // main's anti-enumeration rewrite (merged in Audit C1-S9-89) answers every
+    // failure with the same 500 sentence, so the lookup is pinned to that rather
+    // than to a distinct 503 that would itself be a signal.
+    expect(blogSubscribe).toContain('error: lookupError');
+    expect(bodyOf(blogSubscribe, 'if (lookupError)', '{ status: 500 }')).toContain('console.error');
+    expect(bodyOf(blogSubscribe, 'if (lookupError)', '{ status: 500 }')).toContain("t('subscribe.couldNotSubscribeRightNow')");
+    expect(at(blogSubscribe, 'if (lookupError)')).toBeLessThan(at(blogSubscribe, 'if (existing) {'));
   });
 
   it('the copy exists in every base catalogue', () => {
     const keys = [
       'sync.calendarSettingsAreTemporarilyUnavailable',
       'suggest.recipeDataIsTemporarilyUnavailable',
-      'subscribe.subscriptionIsTemporarilyUnavailable',
+      'subscribe.couldNotSubscribeRightNow',
     ];
     for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;

@@ -127,7 +127,25 @@ describe('objects in the public buckets cannot be guessed', () => {
     expect(p.split('/')).toHaveLength(3);
   });
 
-  it('falls back to a plausible extension when the file has none', () => {
-    expect(familyMediaPath('fam-1', 'inventory', 'receipt')).toMatch(/\.jpg$/);
+  it('never turns a non-extension into one, and invents no extension of its own', () => {
+    // Two audits of this helper met in one tree and disagreed about ONE input: a
+    // file that arrives with no extension at all. This case asked for a
+    // plausible `.jpg`; tests/family-media-paths-are-not-guessable.test.ts asks
+    // for no extension. They cannot both be satisfied, so the question is which
+    // is right — and it is the second. An extension is a CLAIM about content,
+    // read by <img>, by a download and by the operating system. For a file whose
+    // type nobody knows, `.jpg` is a claim nobody made: it mislabels a HEIC, a
+    // PDF or a video as a photo, and hides that the type was never known. The
+    // object is still served by its stored content-type either way.
+    //
+    // What this case was written to catch is unchanged and pinned below: the
+    // `'receipt'.split('.').pop() === 'receipt'` defect, where a name with no dot
+    // in it became the extension. A real extension still rides along, and a
+    // caller that genuinely knows the type can still ask for one.
+    const bare = familyMediaPath('fam-1', 'inventory', 'receipt');
+    expect(bare).not.toMatch(/\.receipt$/);
+    expect(bare).toMatch(/^fam-1\/inventory\/[0-9a-f-]{32,}$/);
+    expect(familyMediaPath('fam-1', 'inventory', 'receipt.pdf')).toMatch(/\.pdf$/);
+    expect(unguessableObjectName('receipt', 'jpg')).toMatch(/\.jpg$/);
   });
 });

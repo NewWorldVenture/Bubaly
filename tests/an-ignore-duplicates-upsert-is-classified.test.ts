@@ -57,7 +57,10 @@ describe('every ignoreDuplicates upsert knows what it actually wrote (C1-S9-70)'
   it('the playbook reports what it inserted, not what it offered', () => {
     const src = readFileSync('app/(app)/dashboard/playbook/playbook-actions.ts', 'utf8');
     expect(src).toContain("ignoreDuplicates: true })\n    .select('id');");
-    expect(src).toContain('return { ok: true, added: inserted?.length ?? 0 };');
+    // main (merged in Audit C1-S9-89) goes further: a missing representation
+    // is "could not count", not zero, so the count is only ever the real one.
+    expect(src).toContain('return { ok: true, added: inserted.length };');
+    expect(src).toContain('if (!inserted) {');
     expect(src).not.toContain('added: rows.length');
   });
 });

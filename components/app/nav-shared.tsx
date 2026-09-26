@@ -145,7 +145,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
           aria-expanded={open}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-current/70 transition hover:bg-black/10 dark:hover:bg-white/10"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg opacity-70 transition hover:bg-black/10 dark:hover:bg-white/10"
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', open ? 'rotate-180' : '')} />
         </button>

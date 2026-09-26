@@ -54,16 +54,20 @@ describe('billing sync after Stripe has changed (C1-S9-62)', () => {
 });
 
 describe('newsletter consent (C1-S9-62)', () => {
-  it('re-subscribing a row that vanished falls through to a fresh insert', () => {
+  it('re-subscribing a row that vanished is refused, so the retry takes the insert', () => {
+    // main's anti-enumeration rewrite (merged in Audit C1-S9-89) answers every
+    // accepted submission with one body and does exactly ONE write, so a
+    // vanished row can no longer fall through to a second write in the same
+    // request. Zero rows is refused with the same 500 as any failed write; the
+    // next submission finds no row and inserts.
     const b = block(subscribe, 'if (existing) {');
-    expect(b).toContain("if (!wroteNoRows(reactivated)) return NextResponse.json({ ok: true, already: false });");
-    // Zero rows must NOT return inside the block — it has to reach the insert.
-    expect(code(b).match(/return NextResponse\.json\(\{ ok: true/g)).toHaveLength(2);
-    expect(at(subscribe, "from('blog_subscribers')\n    .insert(")).toBeGreaterThan(at(subscribe, 'if (existing) {') + b.length);
+    expect(b).toContain('.select(\'id\');');
+    expect(block(b, 'if (wroteNoRows(patched)) {')).toContain("t('subscribe.couldNotSubscribeRightNow') }, { status: 500 }");
+    expect(code(b)).not.toMatch(/return NextResponse\.json\(\{ ok: true/);
   });
 
   it('unsubscribing stays ungated on rows — gone is unsubscribed', () => {
-    const w = unsubscribe.slice(at(unsubscribe, 'const { error: writeError }'));
+    const w = unsubscribe.slice(at(unsubscribe, 'const { error: updateError }'));
     expect(w.slice(0, 220)).not.toContain('.select(');
     expect(unsubscribe).toContain('a person with no row is not on the list');
   });
@@ -96,13 +100,16 @@ describe('concierge calls count only what moved (C1-S9-62)', () => {
 });
 
 describe('best-effort writes keep their error (C1-S9-62)', () => {
-  it('blog like/save toggles log a failed delete, and stay ungated on rows', () => {
-    for (const [src, binding] of [[like, 'unlikeError'], [save, 'unsaveError']] as const) {
-      expect(src, binding).toContain(`const { error: ${binding} }`);
-      expect(src, binding).toContain(`if (${binding}) console.error(`);
-      const w = src.slice(at(src, `const { error: ${binding} }`));
-      expect(w.split('\n')[0], binding).not.toContain('.select(');
-    }
+  it('blog like/save toggles keep a failed delete\'s error, and stay ungated on rows', () => {
+    expect(like).toContain('const { error: unlikeError }');
+    expect(like).toContain('if (unlikeError) console.error(');
+    expect(like.slice(at(like, 'const { error: unlikeError }')).split('\n')[0]).not.toContain('.select(');
+    // main's save (merged in Audit C1-S9-89) goes further than a log: the
+    // response reports `saved`, so a failed unsave answers 500 rather than
+    // claiming a state it did not reach.
+    expect(save).toContain('const { error: deleteError }');
+    expect(block(save, 'if (deleteError) {')).toContain('{ status: 500 }');
+    expect(save.slice(at(save, 'const { error: deleteError }')).split('\n')[0]).not.toContain('.select(');
   });
 
   it('weekend feed bookkeeping logs its error', () => {
@@ -514,6 +521,10 @@ describe('the last lib/ groups (C1-S9-69)', () => {
   const githubSync = read('lib/feedback/github-sync.ts');
   const notify = read('lib/feedback/notify.ts');
   const ingest = read('lib/library/ingest.ts');
+  // lib/chores/server.ts left this group in the merge with main (Audit
+  // C1-S9-89): main replaced the absolute write-back this pinned with the
+  // `kid_progress_revert_completion` RPC, which subtracts under the award's row
+  // lock. Its error is still logged, pinned below.
   const chores = read('lib/chores/server.ts');
   const cc = read('lib/contact-center/server.ts');
 
@@ -539,7 +550,6 @@ describe('the last lib/ groups (C1-S9-69)', () => {
   it('log-only writes never raise', () => {
     for (const [src, needle] of [
       [ingest, 'if (describeError || wroteNoRows(described)) {'],
-      [chores, "if (error || wroteNoRows(restored)) console.error("],
       [cc, "if (statusError || wroteNoRows(failedRow)) console.error("],
       [cc, "if (error || wroteNoRows(stamped)) console.error("],
     ] as const) {
@@ -549,6 +559,10 @@ describe('the last lib/ groups (C1-S9-69)', () => {
       const scope = needle.endsWith('{') ? block(src, needle) : src.slice(at(src, needle)).split('\n')[0];
       expect(code(scope), needle).not.toMatch(/\breturn\b|\bthrow\b/);
     }
+  });
+
+  it('the chore award rollback logs a refused revert', () => {
+    expect(chores).toContain("if (error) console.error('[chore rewards] progress rollback failed', error);");
   });
 
   it('deliberate ones carry their reasons', () => {

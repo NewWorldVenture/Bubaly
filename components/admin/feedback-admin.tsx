@@ -23,18 +23,21 @@ import {
 } from '@/app/(app)/admin/feedback/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+const fmtIn = (locale: LocaleCode) => (iso: string) => {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
   ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
+  const locale = useLocale();
+  const fmt = fmtIn(locale.code);
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<AdminFeedbackFilter>({ status: 'all', category: 'all' });
@@ -215,6 +218,8 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
   idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
+  const locale = useLocale();
+  const fmt = fmtIn(locale.code);
   const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
   const [note, setNote] = useState(idea.admin_note ?? '');

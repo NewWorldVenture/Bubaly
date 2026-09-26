@@ -23,7 +23,7 @@ set client_min_messages = warning;
 do $probe$
 declare
   famA uuid := '00000000-0000-4000-8000-00000000fa01';
-  famB uuid := '00000000-0000-4000-8000-00000000fb01';
+  famB uuid := '00000000-0000-4000-8000-000000005c01';
   uA uuid := '00000000-0000-4000-8000-00000000fa0a';
   uB uuid := '00000000-0000-4000-8000-00000000fb0b';
   midA uuid; midB uuid;

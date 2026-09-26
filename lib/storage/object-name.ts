@@ -19,7 +19,19 @@
 // randomUUID is 122 random bits. The fallback covers browsers that do not expose
 // it — it is unavailable on insecure origins — and still mixes in randomness
 // rather than leaning on the clock alone.
-export function unguessableObjectName(fileName: string, fallbackExt = 'jpg'): string {
+//
+// The REAL extension is kept, because it is what makes the object serve as what
+// it is: the public URL is handed straight to <img>, to a download, or to an OS
+// that decides from the suffix. So the name is unguessable AND still typed.
+//
+// What it does not do is invent one. An extension is a claim about content, and
+// for a file that arrived without one nobody has made that claim — naming an
+// unknown upload `<uuid>.jpg` mislabels a HEIC, a PDF or a video for everything
+// downstream, and hides the fact that the type was never known. An object with
+// no suffix is served by its stored content-type and is honest about the rest.
+// A caller that DOES know the type (a camera capture, a generated thumbnail) can
+// say so with `fallbackExt`.
+export function unguessableObjectName(fileName: string, fallbackExt = ''): string {
   // `'receipt'.split('.').pop()` is 'receipt', not '', so the usual
   // `|| 'jpg'` never fires and an extensionless upload becomes `<uuid>.receipt`.
   // The original call sites all had this. Require a real dot with something
@@ -30,5 +42,5 @@ export function unguessableObjectName(fileName: string, fallbackExt = 'jpg'): st
   const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-  return `${unique}.${ext}`;
+  return ext ? `${unique}.${ext}` : unique;
 }

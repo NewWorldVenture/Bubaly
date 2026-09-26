@@ -53,13 +53,36 @@ describe('averageWellbeing', () => {
   });
 });
 
+// `groupByDay` keys by the READER's local day: it reads
+// `getFullYear/getMonth/getDate`, the same shape as `localDayKey` in
+// lib/time/local-day.ts, and its only caller — components/modules/care-module.tsx:91,
+// a client component whose runtime IS the reader — renders the key back through
+// `new Date(`${key}T00:00:00`)` (local midnight) at line 144. Local is the
+// contract, and the module honours it.
+//
+// The fixtures were what was wrong. They were fixed UTC instants
+// ('2026-06-21T18:00:00Z') asserted against the literal '2026-06-21'. 18:00Z is
+// the 21st only on a host at or west of Greenwich; in Asia/Tokyo (UTC+9) it is
+// already 03:00 on the 22nd, and in Etc/GMT+12 the 08:00Z and 18:00Z entries
+// land on two different local days instead of sharing one bucket. That literal
+// was asserting the CI host's offset, not the code's contract.
+//
+// Built from LOCAL parts, 00:30 and 23:30 on 21 June are the 21st in every zone,
+// so the literals below now state the contract itself. They also straddle local
+// midnight, so a Greenwich-keyed implementation (`toISOString().slice(0, 10)`)
+// splits them apart on any host with a non-zero offset, east or west.
 describe('groupByDay', () => {
+  const localIso = (y: number, m: number, d: number, h: number, min: number) =>
+    new Date(y, m - 1, d, h, min, 0, 0).toISOString();
+
   it('buckets by day, newest day first', () => {
     const groups = groupByDay([
-      e({ id: 'a', occurred_at: '2026-06-21T08:00:00Z' }),
-      e({ id: 'b', occurred_at: '2026-06-20T09:00:00Z' }),
-      e({ id: 'c', occurred_at: '2026-06-21T18:00:00Z' }),
+      e({ id: 'a', occurred_at: localIso(2026, 6, 21, 0, 30) }),
+      e({ id: 'b', occurred_at: localIso(2026, 6, 20, 9, 0) }),
+      e({ id: 'c', occurred_at: localIso(2026, 6, 21, 23, 30) }),
     ]);
+    // Two days went by, so there are exactly two buckets, newest first.
+    expect(groups.map(([day]) => day)).toEqual(['2026-06-21', '2026-06-20']);
     expect(groups[0][0]).toBe('2026-06-21');
     expect(groups[0][1].map((x) => x.id)).toEqual(['c', 'a']);
     expect(groups[1][0]).toBe('2026-06-20');

@@ -8,8 +8,7 @@ import { SectionCard, ScoreRing } from '@/components/family/shell';
 import { resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { CompleteSetupForm } from '@/components/onboarding/complete-setup';
 import { getTranslations } from '@/lib/i18n/server';
-import { PartialReadBanner } from '@/components/ui/partial-read-banner';
-import { describeReadError } from '@/lib/supabase/settle';
+import { ErrorState } from '@/components/ui/states';
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getTranslations())('completeSetupCopy.title') };
@@ -54,14 +53,16 @@ export default async function CompleteSetupPage() {
   // form is the destructive part, and a form pre-filled with fabricated
   // defaults is worse than no form: it invites exactly the submission that
   // causes the loss. When the prefill cannot be read, the form is withheld and
-  // the reason is shown. Audit C1-S9-22.
+  // the reason is shown. Audit C1-S9-22. The reason is main's translated
+  // ErrorState, not an English `table: postgres reason` line (merge with main,
+  // Audit C1-S9-89); the Postgres detail goes to the server log.
   let initial = { adults: 1, children: 0, childAges: [] as number[], goals: [] as string[], referralSource: '' };
   const { data: fo, error: foError } = await admin
     .from('family_onboarding')
     .select('household_adults, household_children, child_ages, goals, referral_source')
     .eq('family_id', familyId)
     .maybeSingle();
-  const readFailures = foError ? [`family_onboarding: ${describeReadError(foError)}`] : [];
+  if (foError) console.error('[dashboard/setup] family_onboarding read failed', foError);
   if (fo) {
     initial = {
       adults: fo.household_adults ?? 1,
@@ -127,8 +128,8 @@ export default async function CompleteSetupPage() {
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
             <span>{t('dashboardSetup.savedToYourExistingFamily')} <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
           </div>
-          {readFailures.length > 0
-            ? <PartialReadBanner title={t('shared.someInformationCouldNotBeLoaded')} failures={readFailures} />
+          {foError
+            ? <ErrorState message={t('dashboardSetup.couldNotLoadYourAnswers')} />
             : <CompleteSetupForm familyId={familyId} initial={initial} />}
         </SectionCard>
       </div>

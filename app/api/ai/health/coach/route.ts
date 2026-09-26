@@ -50,41 +50,42 @@ export async function POST(req: Request) {
 
   // Ground the answer in this family's own health data.
   //
-  // `settleAll`, not `Promise.all`: a Supabase query REJECTS rather than
-  // resolving when the request never completed (DNS, TLS, a timeout), and this
-  // batch sits OUTSIDE the try below — so an unreachable database threw out of
-  // the handler instead of reaching the 503 this route already knows how to
-  // send.
+  // `memberId` arrives in the request body. Every read below therefore filters
+  // on family_id as well: RLS admits EVERY family the caller belongs to
+  // (`is_family_member(family_id)`), not the one this request is about, so a
+  // parent in two households could name a member of the other one and be
+  // answered about them. The medications read already scoped itself, which is
+  // what made the gap dangerous rather than merely wrong — three of the four
+  // reads crossed and the fourth did not, so the coach described that person's
+  // blood type, allergies, conditions and last ten symptoms while reporting
+  // "Active medications: none on file". A confident wrong answer about
+  // medication is worse on a health surface than a refusal.
   const [
-    { data: member },
+    { data: member, error: memberError },
     { data: profile, error: profileError },
     { data: meds, error: medsError },
     { data: symptoms, error: symptomsError },
   ] = await settleAll([
-    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId
       ? supabase.from('medications').select('name, dosage, instructions').eq('family_id', familyId).eq('member_id', memberId).eq('is_active', true).limit(20)
       : supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('is_active', true).limit(20),
     memberId
-      ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).order('started_at', { ascending: false }).limit(10)
+      ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).eq('family_id', familyId).order('started_at', { ascending: false }).limit(10)
       : Promise.resolve({ data: null, error: null }),
   ]);
 
-  // These three errors were discarded, and on this surface a discarded read
-  // error does not degrade the answer — it changes it. The system prompt below
-  // instructs the model to "Consider any allergies and current medications in
-  // your suggestions (flag possible interactions...)", and the context it reads
-  // that from is built from exactly these rows. A failed `medical_profiles`
-  // read renders as no allergies line at all and a failed `medications` read
-  // renders the literal sentence "Active medications: none on file", so a
-  // person on an anticoagulant with a penicillin allergy was given self-care
-  // advice written as though they had neither — with nothing in the response to
-  // say the safety context was missing. Refusing is the only honest answer:
-  // ungrounded health guidance is worse than none.
-  if (profileError || medsError || symptomsError) {
-    console.error('[ai-health-coach] health grounding read failed', profileError ?? medsError ?? symptomsError);
-    return NextResponse.json({ error: t('healthDashboard.loadError') }, { status: 503 });
+  // settleAll rather than Promise.all: a transport rejection would otherwise
+  // reject the batch and the grounding check below would never run at all.
+  //
+  // A refused read is not an empty medical record. Coaching over one silently
+  // drops the allergy, the condition or the medication the answer needed to
+  // account for, and nothing on the page says the grounding was incomplete.
+  const groundingError = memberError ?? profileError ?? medsError ?? symptomsError;
+  if (groundingError) {
+    console.error('[health-coach] grounding read failed; refusing to answer', { familyId, memberId }, groundingError);
+    return NextResponse.json({ error: t('coach.healthDataUnavailable') }, { status: 503 });
   }
 
   const personLine = member?.display_name ? `Person: ${member.display_name}${member.birthday ? ` (DOB ${member.birthday})` : ''}` : 'Person: (not specified)';

@@ -14,11 +14,17 @@ import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(ap
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import { useConfirm } from '@/components/ui/confirm';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -63,7 +69,7 @@ export function CalendarSyncPanel() {
   }
 
   async function remove(feed: CalendarFeed) {
-    if (!confirm(`Remove "${feed.name}" and its imported events?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: feed.name }), body: t('calendarSync.removeFeedBody') }))) return;
     const res = await removeCalendarFeed(feed.id);
     if (!res.ok) { toastError(res.error); return; }
     success(t('calendarSyncPanel.calendarRemoved'));
@@ -110,7 +116,7 @@ export function CalendarSyncPanel() {
                     <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error}</p>
                   ) : feed.last_synced_at ? (
                     <p className="text-[10px] text-success mt-0.5">
-                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {new Date(feed.last_synced_at).toLocaleDateString()}
+                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {fmtDate(feed.last_synced_at, 'P')}
                     </p>
                   ) : (
                     <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>
@@ -121,7 +127,7 @@ export function CalendarSyncPanel() {
                     <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
                     {isSyncing ? 'Syncing…' : 'Sync'}
                   </Button>
-                  <button onClick={() => remove(feed)} className="rounded p-1.5 text-muted hover:text-danger transition">
+                  <button aria-label={t('a11y.delete')} onClick={() => remove(feed)} className="rounded p-1.5 text-muted hover:text-danger transition">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

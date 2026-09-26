@@ -73,7 +73,8 @@ const fd = (entries: Record<string, string>) => {
 };
 const actions = () => import('@/app/(app)/missions/actions');
 const as = (role: string) => requireUserContext.mockResolvedValue({
-  active: { familyId: 'fam-1', role, member: { id: 'mem-1' } }, user: { id: 'user-1' },
+  // `family.timezone`: main's missions actions read the family's day (merge, Audit C1-S9-89).
+  active: { familyId: 'fam-1', role, member: { id: 'mem-1' }, family: { timezone: 'UTC' } }, user: { id: 'user-1' },
 });
 
 beforeEach(() => {

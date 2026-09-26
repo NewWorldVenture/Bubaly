@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { FEATURE_CATALOG } from '../lib/constants/feature-catalog';
+
+/** Every href the catalog knows. A gate on anything else allows everybody. */
+const CATALOG_HREFS = new Set(FEATURE_CATALOG.map((f) => f.href).filter((h): h is string => !!h));
 
 /**
  * The AI endpoints behind feature-gated pages.
@@ -147,6 +151,21 @@ describe('every endpoint behind a gated page carries the gate', () => {
     const source = stripComments(read(route));
     expect(source).toContain('refuseUnlessEntitled(');
     for (const href of hrefs) expect(source).toContain(`'${href}'`);
+
+    // The line being TYPED is not the line REFUSING anybody, and the difference
+    // is not academic. `resolveFeatureEntitlement` returns `{ allowed: true }`
+    // for an href it cannot find — deliberately, so routes predating the catalog
+    // keep working — so a gate whose key is absent from FEATURE_CATALOG admits
+    // everyone while reading perfectly. Three rows of this very table were in
+    // that state: weekend/discover, vacations/ai and vacations/weather all named
+    // hrefs the catalog did not contain, and this case was green on all three.
+    // It would have stayed green with the catalog emptied.
+    for (const href of hrefs) {
+      expect(
+        CATALOG_HREFS.has(href),
+        `${route} gates on "${href}", which is not in FEATURE_CATALOG — resolveFeatureEntitlement will allow every family`,
+      ).toBe(true);
+    }
   });
 
   it('refuses before the model is reached in each of them', () => {

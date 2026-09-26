@@ -51,11 +51,16 @@ const RING = /\bring-2\b|\bring-brand\b|\bring-offset/;
 
 describe('the focus ring can turn off (C2-B01)', () => {
   it('.focus-ring paints no ring on its own', () => {
+    // Re-pointed on the merge with main (Audit C1-S9-89): main's C2-B01 fix
+    // declares NO bare `.focus-ring` rule at all, and
+    // tests/the-focus-ring-only-shows-on-focus.test.ts forbids one that
+    // suppresses the native outline on an unfocused element — which the
+    // `outline-none` this used to require did. The property is unchanged: an
+    // unconditional rule must not carry the ring. That is the assertion that
+    // would have caught the original defect (`ring-2 ring-brand/60 ring-offset-2`).
     const body = rule('.focus-ring');
-    expect(body, '.focus-ring rule missing from app/globals.css').not.toBeNull();
-    // This is the assertion that would have caught the original defect: the
-    // unconditional rule carried `ring-2 ring-brand/60 ring-offset-2`.
-    expect(body).not.toMatch(RING);
+    if (body !== null) expect(body).not.toMatch(RING);
+    expect(rule('.focus-ring:focus-visible'), 'the ring must be scoped to :focus-visible').not.toBeNull();
   });
 
   it('.focus-ring:focus-visible is what paints it', () => {

@@ -10,11 +10,11 @@ import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, StatPill, Progress, type FieldDef } from './shared';
-import { BUDGET_CATEGORIES, dollars, lookup } from '@/lib/vacations/meta';
+import { BUDGET_CATEGORIES, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { fmtDate } from '@/lib/utils/format';
 import type { Tables, VacBudgetCategory } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Budget = Tables<'vacation_budgets'>;
 type Expense = Tables<'vacation_expenses'>;
@@ -30,6 +30,9 @@ const expenseFields: FieldDef[] = [
 
 export function TripBudget({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 

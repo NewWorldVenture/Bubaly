@@ -6,7 +6,7 @@
 -- are asserted below against a real Postgres.
 do $$
 declare
-  fam    uuid := 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  fam    uuid := 'ddddaaaa-dddd-4ddd-8ddd-dddddddddddd';
   mine   uuid; theirs uuid; stale uuid;
   src    text;
   n      int;

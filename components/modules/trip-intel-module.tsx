@@ -34,6 +34,8 @@ import {
   saveDeparturePlanAction, refreshDeparturePlanAction, deleteDeparturePlanAction,
 } from '@/app/(app)/dashboard/trip-intel/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 export type UpcomingEvent = {
   id: string; title: string; location: string; startsAt: string;
@@ -56,12 +58,8 @@ export type SavedDeparturePlan = {
 const HOME_KEY = 'bubaly.trip.home';
 const INTERESTS_KEY = 'bubaly.trip.interests';
 
-function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
+const fmtDateTimeIn = (f: Format) => (iso: string) => f.fmtDate(iso, "EEE, MMM d 'at' h:mm a");
+const fmtTimeIn = (f: Format) => (iso: string) => f.fmtDate(iso, 'h:mm a');
 
 /** Derive a weather delay + human summary from a forecast for a target date. */
 function weatherForDate(forecast: Forecast | null, targetISO: string): { delay: number; summary: string | null } {
@@ -83,6 +81,8 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
   tablesMissing: boolean;
 }) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmtDateTime = fmtDateTimeIn(useFormat());
   const [researchEvent, setResearchEvent] = useState<UpcomingEvent | null>(null);
   const [departureEvent, setDepartureEvent] = useState<UpcomingEvent | null>(null);
 
@@ -364,6 +364,8 @@ function RecsView({ recs }: { recs: TripRecommendations }) {
 
 function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -386,7 +388,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
           <p className="truncate text-sm font-semibold">{plan.title}</p>
           <p className="truncate text-xs text-muted">
             {plan.destination}{plan.members.length ? ` · ${plan.members.join(', ')}` : ''}
-            {plan.startDate ? ` · ${new Date(plan.startDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}
+            {plan.startDate ? ` · ${fmtDate(plan.startDate, 'MMM d')}` : ''}
           </p>
         </button>
         <button onClick={remove} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition" aria-label={tr('tripIntel.remove')}>
@@ -407,6 +409,10 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
 
 function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onClose: () => void; canSave: boolean }) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmt = useFormat();
+  const fmtDateTime = fmtDateTimeIn(fmt);
+  const fmtTime = fmtTimeIn(fmt);
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [home, setHome] = useState('');
@@ -558,6 +564,8 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
 
 function DepartureCard({ plan }: { plan: SavedDeparturePlan }) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmtTime = fmtTimeIn(useFormat());
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [refreshing, setRefreshing] = useState(false);

@@ -51,6 +51,19 @@ export const GATED_SURFACES = {
   // profile nudge, the trust-center status pills and the footer's social row.
   // They are imported at build time, long before a request has a locale, so
   // each one holds catalogue KEYS and its component resolves them.
+  // Guardian's safety vocabulary: the trust tiers, the six call-routing modes
+  // and their descriptions, and the fourteen scam types. Five client components
+  // render these maps, and a Dutch or Spanish family used to get a fully
+  // translated page with the REASON THEIR CALL WAS BLOCKED in English. Only
+  // these three files are listed, not `lib/guardian`: the module's other copy is
+  // written by Twilio webhooks and by a cron into rows a family reads later, and
+  // neither has a reader's locale — that is blocked on I18N-001, and gating a
+  // dirty surface teaches everyone to ignore the gate.
+  'guardian-copy': [
+    'lib/guardian/trust.ts',
+    'lib/guardian/pipeline.ts',
+    'lib/guardian/scam.ts',
+  ],
   'marketing-lib-copy': [
     'lib/marketing/consent-ui.ts',
     'lib/marketing/landing.ts',

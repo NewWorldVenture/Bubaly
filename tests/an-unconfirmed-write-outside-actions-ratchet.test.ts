@@ -71,7 +71,9 @@ const BASELINE = new Map<string, number>([
   ['lib/social/account-tokens.ts', 4],
   ['lib/stripe/treasury.ts', 1],
   ['lib/stripe/webhook.ts', 1],
-  ['lib/twin/project-server.ts', 1],
+  // 2 since the merge with main (Audit C1-S9-89): main added the edge prune
+  // beside the node prune; both are deliberate and annotated.
+  ['lib/twin/project-server.ts', 2],
   ['lib/wallet/server.ts', 1],
 ]);
 
@@ -143,7 +145,8 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
   });
 
   it('the baseline total matches what finalaudit.md records', () => {
+    // 51 since the merge with main (Audit C1-S9-89): the twin edge prune.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(50);
+    expect(total).toBe(51);
   });
 });

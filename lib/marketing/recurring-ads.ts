@@ -185,8 +185,68 @@ export type RecurringAdWindow = {
 };
 
 export type RunDecision =
-  | { run: true; at: Date; nextAfter: Date }
+  /**
+   * `nextAfter` is the run the claim should leave armed, or null when there is
+   * none left to arm — see nextRunAfterClaim.
+   */
+  | { run: true; at: Date; nextAfter: Date | null }
   | { run: false; reason: 'paused' | 'not_due' | 'window_closed' | 'occurrence_cap' | 'no_schedule' };
+
+/**
+ * Is `at` past this campaign's end date?
+ *
+ * The one statement of the window rule. Every caller that asks it — the cron's
+ * decideRun, the admin "Post now" and "Resume" actions, the admin list's
+ * "Finished" badge — asks it here, because four hand-copied versions of it is
+ * how "Post now" came to check the occurrence cap and not the end date.
+ *
+ * Inclusive: a run AT the end instant is inside the window. Written as
+ * `!(at <= endsAt)` rather than `at > endsAt` so an end date that will not
+ * parse counts as closed: NaN loses every comparison, and the obvious form
+ * would wave an unreadable window through as though none had been set.
+ */
+export function windowClosed(endsAt: Date | null | undefined, at: Date): boolean {
+  return endsAt != null && !(at.getTime() <= endsAt.getTime());
+}
+
+/** `candidate` when it falls inside the window, else null. */
+export function withinWindow(candidate: Date | null, endsAt: Date | null | undefined): Date | null {
+  return candidate && !windowClosed(endsAt, candidate) ? candidate : null;
+}
+
+/**
+ * Which of the two stopping conditions has this campaign reached, if either.
+ * Both halves in one answer, so no caller can check one and forget the other.
+ */
+export function stoppingCondition(
+  window: Pick<RecurringAdWindow, 'endsAt' | 'maxOccurrences' | 'occurrences'>,
+  now: Date,
+): 'occurrence_cap' | 'window_closed' | null {
+  if (window.maxOccurrences != null && window.occurrences >= window.maxOccurrences) return 'occurrence_cap';
+  if (windowClosed(window.endsAt, now)) return 'window_closed';
+  return null;
+}
+
+/**
+ * The run to leave armed after claiming the occurrence due at `now`: the
+ * schedule's next slot, or null when that slot cannot happen — this claim used
+ * the last occurrence the cap allows, or the slot falls past the end date, or
+ * the schedule has no slot left at all.
+ *
+ * Null rather than the raw slot because next_run_at is also what the admin list
+ * shows as "Next post": arming a slot the stopping rule will refuse advertises
+ * a post that is never coming. Advances from NOW, not from the missed slot, so
+ * an outage costs the posts it covered instead of queueing them up.
+ */
+export function nextRunAfterClaim(
+  schedule: RecurringAdSchedule,
+  window: RecurringAdWindow,
+  now: Date,
+): Date | null {
+  const following = nextRunAt(schedule, now, window.startsAt);
+  if (!following) return null;
+  return stoppingCondition({ ...window, occurrences: window.occurrences + 1 }, following) ? null : following;
+}
 
 /**
  * Should this ad post right now, and when is the one after that?
@@ -204,18 +264,13 @@ export function decideRun(
   active: boolean,
 ): RunDecision {
   if (!active) return { run: false, reason: 'paused' };
-  if (window.maxOccurrences != null && window.occurrences >= window.maxOccurrences) {
-    return { run: false, reason: 'occurrence_cap' };
-  }
-  if (window.endsAt && now.getTime() > window.endsAt.getTime()) return { run: false, reason: 'window_closed' };
+  const stopped = stoppingCondition(window, now);
+  if (stopped) return { run: false, reason: stopped };
   if (!nextRun) return { run: false, reason: 'no_schedule' };
   if (nextRun.getTime() > now.getTime()) return { run: false, reason: 'not_due' };
-  if (window.endsAt && nextRun.getTime() > window.endsAt.getTime()) return { run: false, reason: 'window_closed' };
+  if (windowClosed(window.endsAt, nextRun)) return { run: false, reason: 'window_closed' };
 
-  // Advance from NOW, not from the missed slot. An outage must cost the posts
-  // it covered, never queue them up to land together afterwards.
-  const following = nextRunAt(schedule, now, window.startsAt);
-  return { run: true, at: nextRun, nextAfter: following ?? now };
+  return { run: true, at: nextRun, nextAfter: nextRunAfterClaim(schedule, window, now) };
 }
 
 /**

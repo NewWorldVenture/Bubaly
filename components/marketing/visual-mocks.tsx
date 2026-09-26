@@ -673,9 +673,9 @@ async function WebAppScreen() {
 
 async function DeviceArtwork({ device }: { device: DeviceName }) {
   const t = await getTranslations();
-  if (device === 'iPhone' || device === t('visualMocks.android')) {
+  if (device === 'iPhone' || device === 'Android') {
     return (
-      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === t('visualMocks.android') && 'rounded-[13px]')}>
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
         {device === 'iPhone' ? <ScheduleScreen /> : <TasksScreen />}
         <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
       </div>
@@ -690,7 +690,7 @@ async function DeviceArtwork({ device }: { device: DeviceName }) {
     );
   }
 
-  if (device === t('visualMocks.webApp')) {
+  if (device === 'Web App') {
     return (
       <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
         <div className="h-[92px] rounded-lg border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-[104px]">

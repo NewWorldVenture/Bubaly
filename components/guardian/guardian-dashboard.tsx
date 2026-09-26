@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS } from '@/lib/guardian/pipeline';
 import { formatPhone } from '@/lib/guardian/phone';
 import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationAction, generateGuardianSuggestionsAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Communication = {
   id: string;
@@ -59,11 +60,14 @@ type Props = {
   suggestions: Suggestion[];
   escalations: Escalation[];
   memberProfiles: MemberProfile[];
+  // `null` means the count could not be read — NOT zero. The page renders a
+  // PartialReadBanner saying which read failed, and the tile shows an em dash
+  // rather than a number nobody counted. "0 scams stopped" is a safety claim.
   stats: {
-    totalCalls: number;
-    blockedToday: number;
-    scamsBlocked: number;
-    screened: number;
+    totalCalls: number | null;
+    blockedToday: number | null;
+    scamsBlocked: number | null;
+    screened: number | null;
   };
   isTwilioConfigured: boolean;
 };
@@ -88,6 +92,9 @@ const CONTEXT_OPTIONS = [
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
@@ -153,7 +160,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {unacknowledgedEscalations.length > 0 && (
         <div className="space-y-2">
           {unacknowledgedEscalations.map((esc) => (
-            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/8 p-4">
+            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-red-400">
@@ -161,7 +168,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                 </p>
                 <p className="text-sm text-muted mt-0.5">{esc.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  From {formatPhone(esc.caller_number)} · {new Date(esc.escalated_at).toLocaleTimeString()}
+                  From {formatPhone(esc.caller_number)} · {fmtDate(esc.escalated_at, 'pp')}
                 </p>
               </div>
               <button
@@ -183,7 +190,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <s.icon className={cn('mb-2 h-5 w-5', s.color)} />
-            <p className="text-2xl font-bold">{s.value}</p>
+            <p className="text-2xl font-bold">{s.value ?? '—'}</p>
             <p className="text-xs text-muted mt-0.5">{s.label}</p>
           </div>
         ))}
@@ -249,7 +256,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                   <p className="text-xs text-muted mt-0.5 line-clamp-2">{s.reasoning}</p>
                   {s.proposed_trust_level && (
                     <span className={cn('mt-1 inline-block text-xs font-semibold', TRUST_COLORS[s.proposed_trust_level])}>
-                      → {TRUST_LABELS[s.proposed_trust_level]}
+                      → {t(TRUST_LABEL_KEYS[s.proposed_trust_level])}
                     </span>
                   )}
                 </div>
@@ -295,10 +302,14 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
 }
 
 function CommRow({ comm }: { comm: Communication }) {
+  const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const icon = COMM_ICONS[comm.comm_type] ?? '📱';
   const time = new Date(comm.started_at);
   const isToday = new Date().toDateString() === time.toDateString();
-  const timeStr = isToday ? time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : time.toLocaleDateString();
+  const timeStr = isToday ? fmtDate(time, 'hh:mm a') : fmtDate(time, 'P');
 
   return (
     <div className="flex items-start gap-3 px-4 py-3 hover:bg-surface/60 transition">
@@ -316,11 +327,11 @@ function CommRow({ comm }: { comm: Communication }) {
             </span>
           )}
           {comm.scam_detected && (
-            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">SCAM</span>
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">{t('guardian.scamBadge')}</span>
           )}
         </div>
         <p className="text-xs text-muted mt-0.5 line-clamp-1">
-          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? ROUTING_MODE_LABELS[comm.routing_mode_used] : 'Handled')}
+          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? t(ROUTING_MODE_LABEL_KEYS[comm.routing_mode_used]) : t('guardian.handled'))}
         </p>
       </div>
       <div className="shrink-0 text-right">

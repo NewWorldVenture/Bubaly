@@ -25,18 +25,19 @@ import type { Tables } from '@/lib/database.types';
 import {
   refreshPlaybookAction, acceptSuggestionAction, dismissSuggestionAction,
 } from '@/app/(app)/dashboard/playbook/playbook-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'family_playbook_suggestions'>;
 
 /** Confidence → a calm label + tint (no vanity numbers front and center). */
 function confidenceMeta(n: number): { label: string; tint: string } {
-  if (n >= 85) return { label: 'Very likely', tint: 'bg-emerald-500/12 text-emerald-500' };
-  if (n >= 65) return { label: 'Likely', tint: 'bg-brand/12 text-brand-text' };
-  return { label: 'Worth a look', tint: 'bg-amber-500/12 text-amber-500' };
+  if (n >= 85) return { label: 'Very likely', tint: 'bg-emerald-500/10 text-emerald-500' };
+  if (n >= 65) return { label: 'Likely', tint: 'bg-brand/10 text-brand-text' };
+  return { label: 'Worth a look', tint: 'bg-amber-500/10 text-amber-500' };
 }
 
 export function PlaybookModule() {
+  const locale = useLocale();
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -101,7 +102,7 @@ export function PlaybookModule() {
         <StatTile icon={BookHeart} label={t('playbook.savedToPlaybook')} value={savedCount} />
         <Link
           href="/dashboard/knowledge"
-          className="group flex items-center justify-between rounded-2xl border border-border bg-card p-4 transition hover:border-brand/40"
+          className="group flex items-center justify-between rounded-2xl border border-border bg-surface/40 p-4 transition hover:border-brand/40"
         >
           <div>
             <p className="text-xs text-muted">{t('playbook.knowledgeBase')}</p>
@@ -140,7 +141,7 @@ export function PlaybookModule() {
               <li
                 key={s.id}
                 id={`suggestion-${s.id}`}
-                className="scroll-mt-24 rounded-2xl border border-border bg-card p-4 transition hover:border-border/80"
+                className="scroll-mt-24 rounded-2xl border border-border bg-surface/40 p-4 transition hover:border-border/80"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -163,7 +164,7 @@ export function PlaybookModule() {
                           <>
                             {expired ? 'Expired: ' : 'Stops being true: '}
                             <time dateTime={s.expires_at ?? undefined}>
-                              {expiry.toLocaleString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}
+                              {expiry.toLocaleString(locale.code, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}
                             </time>
                           </>
                         )}
@@ -197,7 +198,7 @@ export function PlaybookModule() {
 
 function StatTile({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
       <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand-text">
         <Icon className="h-5 w-5" />
       </div>

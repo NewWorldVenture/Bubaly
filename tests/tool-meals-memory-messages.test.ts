@@ -28,8 +28,17 @@ function makeDb(respond: (call: Call) => Reply) {
     const b: Record<string, unknown> = {};
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
+    // PostgREST's `.range()` is inclusive at both ends, and a page that starts
+    // past the last row comes back EMPTY — which is the only signal that tells a
+    // paged read it has reached the end. A fake that ignored the window would
+    // hand `readAll` the same page forever, so model it.
+    let window: { from: number; to: number } | null = null;
+    const paged = (reply: Reply): Reply => (window && Array.isArray(reply.data)
+      ? { ...reply, data: reply.data.slice(window.from, window.to + 1) }
+      : reply);
     Object.assign(b, {
       select: chain, order: chain, limit: chain, or: chain,
+      range: (from: number, to: number) => { window = { from, to }; return b; },
       eq: filter, is: filter, in: filter,
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
@@ -39,7 +48,7 @@ function makeDb(respond: (call: Call) => Reply) {
       delete: () => { call.kind = 'delete'; return b; },
       single: () => Promise.resolve(respond(call)),
       maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      then: (resolve: (value: Reply) => void) => resolve(paged(respond(call))),
     });
     return b;
   };
@@ -193,6 +202,12 @@ describe('groceries.addFromMealPlan', () => {
           return { data: [{ id: 'meal-1', name: 'Tacos', ingredients: [{ name: 'tortillas', qty: '8' }, { name: 'onion', qty: '1' }] }], error: null };
         case 'pantry_items':
           return { data: [{ name: 'Onions', quantity: 3 }], error: null };
+        // A household with nothing recorded answers with NO ROWS. The `default`
+        // below hands back a null body, which is not what a select does and is
+        // exactly the shape the dietary read now refuses rather than reading as
+        // "no allergies".
+        case 'family_facts':
+          return { data: [], error: null };
         case 'grocery_lists':
           return { data: { id: 'list-1' }, error: null };
         case 'grocery_items':

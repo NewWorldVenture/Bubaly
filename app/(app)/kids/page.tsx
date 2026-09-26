@@ -7,7 +7,8 @@ import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'My Bubaly' };
@@ -16,6 +17,12 @@ export const dynamic = 'force-dynamic';
 export default async function KidsPage() {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtTime } = await getFormat(tz);
   const me = ctx.active.member;
   const familyId = ctx.active.familyId;
   const supabase = await createServer();

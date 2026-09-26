@@ -24,9 +24,10 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { DOMAIN_LABELS } from '@/lib/trust/engine';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import type { TrustActivity, TrustToolCall } from '@/lib/trust/activity';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 /** The policy columns this tab needs to show a dial beside the rules for the same domain. */
 export type ActivityPolicy = { domain: string; enabled: boolean };
@@ -55,11 +56,11 @@ const ACTOR_KEYS: Record<string, string> = {
   system: 'trustActivity.actorAutomatic',
 };
 
-function fmtWhen(iso: string): string {
+const fmtWhenIn = (locale: LocaleCode) => (iso: string): string => {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
+  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
 
 export function TrustActivityTab({
   activity,
@@ -71,6 +72,8 @@ export function TrustActivityTab({
   error: string | null;
   policies: ActivityPolicy[];
 }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
 
@@ -215,6 +218,8 @@ function Section({
 }
 
 function ToolCallRow({ call }: { call: TrustToolCall }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const stateKey = STATE_KEYS[call.state] ?? STATE_KEYS.reserved;
   return (

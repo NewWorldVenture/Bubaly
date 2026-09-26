@@ -85,7 +85,9 @@ describe('clearing a child login lockout is not best-effort (C1-S9-16)', () => {
     // a hard failure would have been true. Running it first makes the outcome
     // all-or-nothing.
     const reset = between(childLogin, 'export async function resetChildPinAction', 'return { ok: true };');
-    expect(at(reset, "from('child_login_throttle')")).toBeLessThan(at(reset, 'updateUserById(row.user_id'));
+    // main (merged in Audit C1-S9-89) re-reads the member and hands
+    // `member.user_id` to the admin call, after checking it matches the row.
+    expect(at(reset, "from('child_login_throttle')")).toBeLessThan(at(reset, 'updateUserById(member.user_id'));
   });
 
   it('the create path clears the stale lockout before anything is created', () => {
@@ -1390,7 +1392,9 @@ describe('writes that were hidden as the first statement in a block (C1-S9-61)',
     // The old code returned `byEmail[0].id` whatever its owner. Now only an
     // unowned lead this call actually claimed, or one this user already owns.
     const body = actionBody(profileActions, 'async function resolveContactId');
-    const branch = between(body, 'if (byEmail?.[0]?.id) {', "from('crm_contacts').insert(");
+    // main (merged in Audit C1-S9-89) checks the lookup's error and list
+    // first, so the branch reads `byEmail[0]` without optional chaining.
+    const branch = between(body, 'if (byEmail[0]?.id) {', "from('crm_contacts').insert(");
     const returns = branch.match(/return byEmail\[0\]\.id;/g) ?? [];
     expect(returns, 'exactly the claimed path and the already-ours path').toHaveLength(2);
     expect(branch).toContain('byEmail[0].owner_id === userId');
@@ -1399,14 +1403,16 @@ describe('writes that were hidden as the first statement in a block (C1-S9-61)',
   it('a departure event deleted from the calendar is re-created, not pointed at', () => {
     const body = tripIntel.slice(at(tripIntel, 'if (opts.existingId) {'));
     const block = ifBlock(tripIntel, 'if (opts.existingId) {');
-    expect(block).toContain('if (!wroteNoRows(updated)) return opts.existingId;');
+    // main (merged in Audit C1-S9-89) returns a result object so a refused
+    // update is distinguishable from "no event"; the confirmation is kept.
+    expect(block).toContain('if (!wroteNoRows(updated)) return { ok: true, id: opts.existingId };');
     // And the update must ASK. Without `.select('id')`, `updated` is null on
     // every call, `wroteNoRows` is always true, and each save would fall
     // through and create another event — duplication, the C1-S9-58 shape.
     expect(block).toContain(".eq('id', opts.existingId).eq('family_id', opts.familyId).select('id');");
     // Zero rows must reach the insert below rather than return: the block may
     // not end in an unconditional `return opts.existingId`.
-    expect(stripComments(block)).not.toMatch(/\n\s*return opts\.existingId;/);
+    expect(stripComments(block)).not.toMatch(/\n\s*return \{ ok: true, id: opts\.existingId \};/);
     expect(at(body, "from('calendar_events').insert(")).toBeGreaterThan(block.length);
   });
 

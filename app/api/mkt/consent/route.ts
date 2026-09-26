@@ -7,14 +7,46 @@ import {
 } from '@/lib/marketing/consent';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
 // Public first-party consent write path for the cookie banner / preference
-// center. The visitor supplies their anonymous id and a map of category →
-// boolean; each is appended as an immutable, timestamped, versioned decision.
-// Returns the resolved current state. Service-role — only writes consent rows
-// keyed by the anonymous id.
+// center. The visitor sends a map of category → boolean; each is appended as an
+// immutable, timestamped, versioned decision against THE VISITOR THIS BROWSER
+// IS, and the resolved current state comes back. Service-role — mkt_consent_events
+// has RLS on and no policies, so this route is the only door to the table.
+//
+// Whose ledger is read or written comes from the `bubaly_vid` cookie the request
+// already carries, never from a parameter the caller chooses (SEC-006). Both
+// handlers used to take the id from the caller — GET from the query string, POST
+// from the body — so a request could name any visitor and get that visitor's
+// choices back; POST could also append decisions to someone else's ledger, and a
+// POST of `{ necessary: true }` read their full state while appending only an
+// inert row.
+//
+// What this does NOT add, stated plainly: the id is a random bearer value, and
+// the cookie is the same bytes. Anyone who already holds a visitor's id can
+// present it as a cookie. What the binding removes is a caller CHOOSING a record
+// other than the one its own browser carries, and the id travelling in a URL
+// (access logs, history), which the query-string GET invited.
+//
+// A request that still names an id (older cached clients send it in the body)
+// is accepted only when that id IS the cookie; naming anyone else is refused
+// rather than silently re-targeted, so a mismatch is visible, not absorbed.
+const VISITOR_COOKIE = 'bubaly_vid';
+const MAX_VISITOR_ID = 200;
+
+function carriedVisitorId(req: NextRequest): string {
+  return req.cookies.get(VISITOR_COOKIE)?.value?.trim().slice(0, MAX_VISITOR_ID) ?? '';
+}
+
+/** True when the caller named a visitor id and it is not the one it carries. */
+function namesAnotherVisitor(named: unknown, carried: string): boolean {
+  if (named === undefined || named === null) return false;
+  return typeof named !== 'string' || named.trim().slice(0, MAX_VISITOR_ID) !== carried;
+}
+
 type ConsentBody = {
   anonymousId?: string;
   consents?: Record<string, boolean>;
@@ -24,7 +56,7 @@ type ConsentBody = {
 
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
-  const limited = rateLimit(`consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  const limited = await enforceRequestRateLimit(createServiceClient(), `consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
     { error: t('consent.tooManyConsentUpdatesPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
@@ -32,10 +64,14 @@ export async function POST(req: NextRequest) {
 
   const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Bad payload' }, { status: 400 });
-  const body = boundedBody.value as ConsentBody;
+  const value = boundedBody.value;
+  const body = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as ConsentBody;
 
-  const anonymousId = typeof body.anonymousId === 'string' ? body.anonymousId.trim().slice(0, 200) : '';
-  if (!anonymousId) return NextResponse.json({ error: t('consent.anonymousidRequired') }, { status: 400 });
+  const anonymousId = carriedVisitorId(req);
+  if (!anonymousId) return NextResponse.json({ error: t('consent.visitorCookieRequired') }, { status: 400 });
+  if (namesAnotherVisitor(body.anonymousId, anonymousId)) {
+    return NextResponse.json({ error: t('consent.notThisVisitor') }, { status: 403 });
+  }
 
   if (!isValidConsentMap(body.consents)) {
     return NextResponse.json({ error: t('consent.invalidConsentMap') }, { status: 400 });
@@ -66,17 +102,23 @@ export async function POST(req: NextRequest) {
 }
 
 // Read the current consent state (for hydrating the banner/preference center).
+// Nothing in the app calls this today — the banner hydrates from its local cache
+// and reconciles from the POST's answer — and it reads the carried cookie only.
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
-  const limited = rateLimit(`consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
+  const limited = await enforceRequestRateLimit(createServiceClient(), `consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
     { error: t('consent.tooManyConsentRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
-  const anonymousId = new URL(req.url).searchParams.get('anonymousId')?.trim().slice(0, 200) ?? '';
-  if (!anonymousId) return NextResponse.json({ error: t('consent.anonymousidRequired') }, { status: 400 });
-  const gpc = new URL(req.url).searchParams.get('gpc') === '1';
+  const params = new URL(req.url).searchParams;
+  const anonymousId = carriedVisitorId(req);
+  if (!anonymousId) return NextResponse.json({ error: t('consent.visitorCookieRequired') }, { status: 400 });
+  if (namesAnotherVisitor(params.get('anonymousId'), anonymousId)) {
+    return NextResponse.json({ error: t('consent.notThisVisitor') }, { status: 403 });
+  }
+  const gpc = params.get('gpc') === '1';
   const supabase = createServiceClient();
   try {
     const state = await getConsentState(supabase, anonymousId, { gpc });

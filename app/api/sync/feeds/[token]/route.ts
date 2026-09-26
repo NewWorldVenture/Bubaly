@@ -57,7 +57,7 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows, error: rowsError } = await readAll((from, to) => supabase
+  const { rows, error: eventsError } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
@@ -67,23 +67,22 @@ export async function GET(
     .order('id')
     .range(from, to), { max: 2000 });
 
-  // An iCalendar feed is not a list — it is the subscriber's COPY. Apple
-  // Calendar, Outlook and Google reconcile their local store against this body,
-  // so an event missing from it is an event DELETED from the person's device.
+  // A short feed is not a short calendar — it is a DELETION instruction.
   //
-  // readAll reports a truncated or failed read as an error while `rows` still
-  // holds the partial set, and this route destructured only `rows` — so a
-  // transient database failure, or a calendar busier than the 2,000 ceiling,
-  // published a short feed at HTTP 200 and quietly removed the remainder from
-  // every device subscribed to it.
+  // An ICS subscription is authoritative for the calendar it names: Apple
+  // Calendar, Outlook and Google reconcile their local copy against whatever the
+  // feed returns, so an event absent from a 200 is an event the client removes.
+  // Answering with the rows gathered before a failed page would therefore empty
+  // a family's subscribed calendar on every device that polls it, silently, and
+  // the next successful poll would put them back — an appointment that vanishes
+  // and reappears is worse than one that never loaded.
   //
-  // 5xx is the correct answer and is strictly better than a partial 200: every
-  // calendar client treats a failed fetch by KEEPING what it already has and
-  // retrying later. Audit C4-S4-06.
-  if (rowsError) {
-    console.error('[sync-feed] event read failed or truncated; refusing to publish a partial calendar', {
-      calendarId: calendar.id, error: rowsError,
-    });
+  // 503 with Retry-After is the honest answer: every subscriber keeps the copy
+  // it has. The cron on the other side of this seam
+  // (app/api/cron/calendar-feeds) already checks this same read's error; this
+  // route was the one that did not.
+  if (eventsError) {
+    console.error('[sync-feed] event read failed; refusing to publish a short feed', { calendarId: calendar.id, error: eventsError });
     return new NextResponse('Calendar temporarily unavailable', {
       status: 503,
       headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
@@ -116,7 +115,21 @@ export async function GET(
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': `inline; filename="${calendar.id}.ics"`,
-      'Cache-Control': 'public, max-age=900, s-maxage=900',
+      // A shared cache must not hold a family's calendar for longer than it
+      // takes to take the feed away. `lib/sync/feed-token.ts` calls this token
+      // "revocable (rotate the column to revoke)", and the route above says
+      // "Revoke by rotating feed_token or setting feed_enabled = false" — but
+      // an `s-maxage` of 900 meant Vercel's edge, and any proxy between, kept
+      // serving the calendar for a quarter of an hour after the revocation. A
+      // family that revokes because the URL leaked is told it is gone while it
+      // is still being served.
+      //
+      // `max-age` stays at 900: that is the SUBSCRIBER's own copy, and they are
+      // the one who held the token. `s-maxage` drops to 60, which still absorbs
+      // a client polling in a loop — the ICS itself asks for a 60-MINUTE
+      // refresh interval, so nothing legitimate re-fetches inside a minute —
+      // while cutting the revocation window from 15 minutes to one.
+      'Cache-Control': 'public, max-age=900, s-maxage=60',
     },
   });
 }

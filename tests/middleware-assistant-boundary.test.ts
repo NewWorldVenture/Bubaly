@@ -25,6 +25,7 @@ const FAMILY = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
 const PATHS = ['/api/assistant', '/api/assistant/alexa'] as const;
 let linkExists = false;
+let rateAllowed = true;
 let reads: URL[];
 
 beforeEach(() => {
@@ -36,11 +37,36 @@ beforeEach(() => {
   mocks.answer.mockResolvedValue({ speech: 'Synthetic authorized answer', intent: 'help', outcome: 'answered' });
   mocks.record.mockResolvedValue(undefined);
   mocks.verifyAlexa.mockResolvedValue({ ok: true });
-  linkExists = false; reads = [];
+  linkExists = false; rateAllowed = true; reads = [];
   const client = createClient('https://assistant-db-fixture.invalid', 'synthetic-service-key', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (raw, init = {}) => {
       const url = new URL(String(raw)); reads.push(url);
+      // TWO calls are legitimate on these routes and nothing else is, so each
+      // is matched by SHAPE rather than the second merely being tolerated.
+      //
+      // The rate-limit RPC is the durable half of the pair, and it can only
+      // ever run AFTER the link resolves — which is the property this file is
+      // about, and which every pre-auth case below still pins by asserting
+      // `reads` is empty or holds the lookup alone. A durable limiter at the
+      // top would write through the service role for a request that had proved
+      // nothing; that is the defect this branch shipped once already.
+      //
+      // Answering it here rather than letting it fail also matters: rateLimitDb
+      // fails OPEN on these routes, so a mock that threw would be indis-
+      // tinguishable from a limiter that allowed the request, and this case
+      // would pass whether or not the call was ever made.
+      if (url.pathname === '/rest/v1/rpc/rate_limit_hit') {
+        expect(init.method).toBe('POST');
+        const body = JSON.parse(String(init.body)) as { p_key: string; p_limit: number; p_window_seconds: number };
+        // Keyed on the PRINCIPAL, not the IP: an IP is something a caller can
+        // spread across hosts, and a resolved link id is not.
+        expect(body.p_key).toMatch(/^assistant(-alexa)?:/);
+        expect(body.p_key.endsWith(`:${USER}`)).toBe(true);
+        expect(body.p_limit).toBeGreaterThan(0);
+        expect(body.p_window_seconds).toBe(60);
+        return Response.json([{ allowed: rateAllowed, retry_after: rateAllowed ? 0 : 42 }]);
+      }
       expect(url.pathname).toBe('/rest/v1/assistant_links');
       expect(init.method ?? 'GET').toBe('GET');
       expect(url.searchParams.get('token_hash')).toBe(`eq.${hashAssistantToken(TOKEN)}`);
@@ -91,7 +117,15 @@ describe('exact assistant middleware authorization boundary', () => {
   it.each(PATHS)('uses the actual resolved token scope in %s without a cookie', async path => {
     linkExists = true;
     expect((await deliver(path, TOKEN)).status).toBe(200);
-    expect(reads).toHaveLength(1);
+    // Two now, and the ORDER is the assertion: the link is resolved first and
+    // the durable rate limit is charged second. It used to be one, before these
+    // routes had a durable limiter at all — a module-scope Map is per-lambda
+    // and the caller sets the lambda count by sending in parallel, so the
+    // expensive half of this route (answerAssistant reads the family and calls
+    // a model) was bounded by nothing that survives a cold start.
+    // tests/no-route-gates-on-a-per-instance-limit.test.ts is what requires the
+    // pair; this line is what pins where the second one goes.
+    expect(reads.map(r => r.pathname)).toEqual(['/rest/v1/assistant_links', '/rest/v1/rpc/rate_limit_hit']);
     expect(mocks.answer).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ family_id: FAMILY, user_id: USER }), expect.anything());
     expect(mocks.record).toHaveBeenCalledOnce();
   });
@@ -121,6 +155,24 @@ describe('exact assistant middleware authorization boundary', () => {
     expect(mocks.answer).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();
   });
+  it.each(PATHS)('refuses %s once the durable limit is spent, without answering', async path => {
+    // The durable half has to actually gate, or it is a round trip that only
+    // looks like a limit. Both routes refuse, and neither reaches the model.
+    linkExists = true; rateAllowed = false;
+    const response = await deliver(path, TOKEN);
+    expect(mocks.answer).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    if (path === '/api/assistant') {
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).toBe('42');
+    } else {
+      // Spoken, not a 429: a non-200 makes the device say "there was a problem
+      // with the requested skill's response", which tells the person nothing.
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ response: { outputSpeech: { text: expect.stringContaining('Too many') } } });
+    }
+  });
+
   it('leaves the token endpoint alone: it has no signature to check', async () => {
     mocks.verifyAlexa.mockResolvedValue({ ok: false, reason: 'missing_signature' });
     expect((await deliver('/api/assistant', TOKEN)).status).toBe(401);

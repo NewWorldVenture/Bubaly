@@ -20,12 +20,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  sortByRecent, hoursSinceLastContact, isContactOverdue, averageWellbeing,
+  sortByRecent, lastContact, isContactOverdue, averageWellbeing,
   groupByDay, entriesInLastDays, CARE_LOG_TYPE_LABELS,
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -52,7 +53,9 @@ function toLocalInput(iso: string): string {
 const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
 
 export function CareModule() {
+  const locale = useLocale();
   const tr = useTranslations();
+  const { fmtTimeAgo } = useFormat();
   const { familyId, userId, members, selfMember, role } = useApp();
   // 0329: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
   // exists so the whole family can log a check-in — but editing and deleting
@@ -88,7 +91,6 @@ export function CareModule() {
     [recipientEntries],
   );
 
-  const hrsSince = hoursSinceLastContact(entryLikes, now);
   const overdue = isContactOverdue(entryLikes, now, 24);
   const avgWellbeing = averageWellbeing(entryLikes);
   const weekCount = entriesInLastDays(entryLikes, now, 7);
@@ -147,9 +149,15 @@ export function CareModule() {
     success(tr('careModule.entryDeleted'));
   }
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-  const sinceLabel = hrsSince == null ? 'No contact logged' : hrsSince < 1 ? 'Just now' : hrsSince < 24 ? `${hrsSince}h ago` : `${Math.floor(hrsSince / 24)}d ago`;
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
+  // An inline ladder built from English literals — the fifth in this codebase, and
+  // invisible to the hardcoded-locale scan because it held no locale to find. The
+  // shared helper reads the timestamp rather than the derived hour count, so
+  // "45m ago" is now possible where this rounded everything under an hour to one
+  // label.
+  const last = lastContact(entryLikes);
+  const sinceLabel = last ? fmtTimeAgo(last.occurred_at, { now }) : tr('care.noContactLogged');
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load care log'} />;

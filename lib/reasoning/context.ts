@@ -228,7 +228,7 @@ export async function loadFamilyGraph(supabase: DB, familyId: string): Promise<G
  * stays free of `server-only` code — that keeps the pure core (and its tests)
  * importable in a plain Node/vitest environment.
  */
-export async function loadFamilyContext(supabase: DB, familyId: string, now: Date = new Date()): Promise<FamilyContext> {
+export async function loadFamilyContext(supabase: DB, familyId: string, tz: string, now: Date = new Date()): Promise<FamilyContext> {
   // Deliberately Promise.all: neither element is a Supabase read. A dynamic
   // import that fails and a graph that cannot load have no meaningful degraded
   // value here — an empty FamilyContext would make every AI surface answer
@@ -237,7 +237,12 @@ export async function loadFamilyContext(supabase: DB, familyId: string, now: Dat
     loadFamilyGraph(supabase, familyId),
     import('@/lib/operating-index/server'),
   ]);
-  const snapshot = await buildSnapshot(supabase, familyId, now);
+  // `tz` is the family's IANA zone, threaded straight through: the snapshot
+  // bounds DATE columns (bills.due_date, documents.expires_at, goals.target_date)
+  // with a day key, and a day key is only meaningful in a zone. Every caller of
+  // this function is a page with `ctx.active.family.timezone` in hand, so it is
+  // passed rather than re-read from the database.
+  const snapshot = await buildSnapshot(supabase, familyId, tz, now);
   return assembleFamilyContext({ familyId, graph, snapshot, now });
 }
 

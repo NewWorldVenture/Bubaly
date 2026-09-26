@@ -12,7 +12,7 @@ import Page from '@/app/(app)/display/page';
 const state = vi.hoisted(() => ({ db: null as unknown, timezone: 'UTC' as unknown, failServer: false }));
 vi.mock('@/lib/supabase/auth', () => ({ requireFeature: async () => ({ user: { id: 'user-1' }, active: { familyId: 'family-1', family: { name: 'Fixture family', timezone: state.timezone } } }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => { if (state.failServer) throw new Error('Fixture offline'); return state.db; } }));
-vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' }, source: 'default' }) }));
 vi.mock('next/navigation', () => ({ unstable_rethrow: () => {} }));
 vi.mock('@/components/display/auto-refresh', () => ({ AutoRefresh: () => null }));
 vi.mock('@/components/display/display-shell-client', () => ({ DisplayShellClient: () => null }));

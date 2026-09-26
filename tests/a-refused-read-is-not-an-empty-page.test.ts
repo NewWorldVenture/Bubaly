@@ -51,6 +51,12 @@ const PAGES = [
 ] as const;
 
 describe('a refused read is declared, not rendered as empty (C1-S9-19)', () => {
+  // These four first adopted PartialReadBanner beside the data. main then made
+  // each FAIL CLOSED — a translated ErrorState in place of the list, never
+  // beside it — which is the stronger form of the same rule, and the merge
+  // (Audit C1-S9-89) took it. The pins follow: the error is still captured,
+  // the page still says so in the family's language, and the empty list can no
+  // longer render at all on a refused read.
   it.each(PAGES)('$file captures the error for $why', ({ file, table }) => {
     const src = readFileSync(file, 'utf8');
     // The destructure must take `error`, not just `data`. Dropping it is the
@@ -58,26 +64,31 @@ describe('a refused read is declared, not rendered as empty (C1-S9-19)', () => {
     // Other fields may sit between `data` and `error` (guardian/history also
     // destructures `count`), so this requires both in one destructure rather
     // than pinning their adjacency.
-    expect(src).toMatch(/const \{ data: \w+[^}]*, error: \w+Error \}/);
-    expect(src).toContain(`${table}: \${describeReadError(`);
+    expect(src).toMatch(/const \[?\{ data: \w+[^}]*, error(?:: \w+Error)? \}/);
+    expect(src).toContain(`from('${table}')`);
   });
 
-  it.each(PAGES)('$file renders the banner before the data it qualifies', ({ file }) => {
+  it.each(PAGES)('$file renders the error INSTEAD of the data it qualifies', ({ file }) => {
     const src = readFileSync(file, 'utf8');
-    expect(src).toContain('<PartialReadBanner');
-    expect(src).toContain('failures={readFailures}');
-    // The banner must be computed from the read, and appear in the tree — a
-    // `readFailures` that is built and never rendered is the same silence.
-    expect(at(src, 'const readFailures')).toBeLessThan(at(src, '<PartialReadBanner'));
+    expect(src).toContain('<ErrorState message={t(');
+    // Either an early return on the bound error, or a ternary whose error arm
+    // is the ErrorState — both leave no path where the empty list renders.
+    expect(src).toMatch(
+      /if \(\w*[eE]rror\) \{[\s\S]{0,200}?return <ErrorState|\{\w*[eE]rror \? <ErrorState message=\{t\(/,
+    );
+    expect(src).not.toContain('<PartialReadBanner');
   });
 
-  it.each(PAGES)('$file titles the banner through the translator', ({ file }) => {
-    // These are family-facing pages, translated throughout. The six pages that
-    // adopted this banner first are admin screens and pass an English literal;
-    // copying that here would have put untranslated copy in front of families
-    // in eleven locales.
+  it.each(PAGES)('$file words the failure through the translator', ({ file }) => {
+    // Family-facing pages, translated throughout: an English literal here would
+    // put untranslated copy in front of families in eleven locales.
     const src = readFileSync(file, 'utf8');
-    expect(src).toContain("title={t('shared.someInformationCouldNotBeLoaded')}");
+    const key = src.match(/<ErrorState message=\{t\('([^']+)'\)\}/);
+    expect(key, `${file} hands ErrorState a literal`).not.toBeNull();
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(catalogue[key![1]], `${locale} is missing ${key![1]}`).toBeTruthy();
+    }
   });
 
   it('the shared title exists in every base catalogue', () => {
@@ -119,7 +130,7 @@ describe('a destructive path is not opened by a false empty (C1-S9-27)', () => {
   it('the guardian log withholds its count rather than asserting zero', () => {
     // A banner beside "0 total" would still be asserting the zero.
     const page = readFileSync('app/(app)/guardian/history/page.tsx', 'utf8');
-    expect(page).toMatch(/readFailures\.length === 0 \? <p[^>]*>\{count \?\? 0\} total/);
+    expect(page).toContain("{error ? '—' : `${count ?? 0} total`}");
   });
 });
 
@@ -363,8 +374,11 @@ describe('a different answer fails visibly (C1-S9-45)', () => {
 });
 
 describe('a smaller answer is logged, not escalated (C1-S9-45)', () => {
+  // app/(app)/referrals/page.tsx left this list in the merge with main (Audit
+  // C1-S9-89): main made its referred-by read fail closed, on the reasoning
+  // that `alreadyReferred: false` is a claim about the family — it re-offers the
+  // code box to a family that was referred. That is pinned below instead.
   it.each([
-    ['app/(app)/referrals/page.tsx', 'wasReferredError'],
     ['app/reviews/new/page.tsx', 'settingsError'],
   ])('%s degrades without failing the page', (file, binding) => {
     // A hidden "you were referred" note and hidden external review links change
@@ -374,6 +388,12 @@ describe('a smaller answer is logged, not escalated (C1-S9-45)', () => {
     expect(source).toContain(`error: ${binding}`);
     expect(source).toContain('console.warn');
     expect(bodyOf(source, `if (${binding})`, '\n  }')).not.toContain('return');
+  });
+
+  it('app/(app)/referrals/page.tsx fails closed on the referred-by read', () => {
+    const source = readFileSync('app/(app)/referrals/page.tsx', 'utf8');
+    expect(source).toContain('error: wasReferredError');
+    expect(bodyOf(source, 'if (wasReferredError)', '\n  }')).toContain('throw new Error(');
   });
 });
 

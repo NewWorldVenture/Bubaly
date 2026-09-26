@@ -23,7 +23,8 @@ import {
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Homework = Tables<'homework_assignments'>;
 
@@ -46,7 +47,9 @@ function toLocalInput(iso: string | null): string {
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
+  const locale = useLocale();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   void role;
@@ -120,7 +123,7 @@ export function HomeworkModule() {
   }
 
   async function remove(h: Homework) {
-    if (!confirm(`Delete "${h.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: h.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { data: removed, error: err } = await sb.from('homework_assignments').delete().eq('id', h.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
@@ -130,7 +133,7 @@ export function HomeworkModule() {
 
   const fmtDue = (iso: string | null) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleString(locale.code, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
   if (loading) return <SkeletonList count={5} />;

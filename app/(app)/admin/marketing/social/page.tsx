@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSocialPost } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Social', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function SocialPage() {
             <textarea name="content" required rows={4} placeholder={t('adminMarketingSocial.postCopy')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
             <input name="link" placeholder={t('adminMarketingSocial.linkOptional')} className={inputCls} />
             <input name="scheduled_at" type="datetime-local" className={inputCls} />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSocial.addPost')}</button>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSocial.addPost')}</SubmitButton>
           </form>
         </Card>
       </div>

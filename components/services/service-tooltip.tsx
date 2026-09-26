@@ -90,7 +90,7 @@ export function ServiceTooltip({ label, description, children }: {
           }}
           className={cn(
             'popover-surface pointer-events-none w-72 max-w-[80vw] p-3 text-left',
-            'animate-in fade-in zoom-in-95 duration-100',
+            'animate-fade-in',
           )}
         >
           <p className="text-xs font-bold text-fg">{label}</p>

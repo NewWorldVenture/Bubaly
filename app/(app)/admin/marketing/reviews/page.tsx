@@ -9,6 +9,7 @@ import { ratingStats, DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
 import { ReviewRow } from './review-row';
 import { saveReputationSettingsAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Reviews', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -112,7 +113,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
           <label className="space-y-1 sm:col-span-2"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.thankYouCriticalReviewers')}</span><input name="thank_you_low" defaultValue={set?.thank_you_low ?? DEFAULT_REPUTATION.thank_you_low} className={inputCls} /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.minRatingToInvitePublicReview')}</span><input type="number" min="1" max="5" name="min_public_rating" defaultValue={set?.min_public_rating ?? 4} className={inputCls} /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingReviews.autoApproveAtAboveBlankManual')}</span><input type="number" min="1" max="5" name="auto_approve_min" defaultValue={set?.auto_approve_min ?? ''} className={inputCls} /></label>
-          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingReviews.saveSettings')}</button></div>
+          <div className="sm:col-span-2"><SubmitButton className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingReviews.saveSettings')}</SubmitButton></div>
         </form>
       </Card>
     </div>

@@ -63,7 +63,13 @@ describe('a state change the user is told about is confirmed (C1-S9-23)', () => 
     // pin an unrelated statement.
     const updates = fn.match(/from\('trust_policies'\)\s*\n?\s*\.update\(/g) ?? [];
     expect(updates, 'the direct write and the 23505 retry').toHaveLength(2);
-    expect(fn.match(/\?\.length\) return \{ ok: false/g) ?? [], 'each confirmed').toHaveLength(2);
+    // main's rewrite (merged in Audit C1-S9-89) makes the direct write update
+    // on the FILTER and insert when it matched nothing, so a zero-row result
+    // there is routed to the insert rather than reported. The 23505 retry has no
+    // such fallback left, so its zero rows must be a refusal.
+    expect(fn, 'the direct write: zero rows means insert').toContain('if ((updated ?? []).length === 0) {');
+    expect(fn.match(/\?\.length\) return \{ ok: false/g) ?? [], 'the retry confirmed').toHaveLength(1);
+    expect(fn).toContain("if (!retried?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };");
   });
 });
 
@@ -91,10 +97,11 @@ describe('a form that overwrites is not prefilled with invented defaults (C1-S9-
     // overwrites the real household profile — and propagates it to the CRM.
     const page = read('app/(app)/dashboard/setup/page.tsx');
     expect(page).toMatch(/const \{ data: fo, error: foError \}/);
-    expect(page).toContain('readFailures.length > 0');
-    expect(page).toContain('<PartialReadBanner');
-    // The form must be the ALTERNATIVE to the banner, not rendered beside it.
-    expect(page).toMatch(/readFailures\.length > 0[\s\S]{0,200}?: <CompleteSetupForm/);
+    // main's translated ErrorState, not an English `table: reason` banner
+    // (merge with main, Audit C1-S9-89).
+    expect(page).toContain("<ErrorState message={t('dashboardSetup.couldNotLoadYourAnswers')} />");
+    // The form must be the ALTERNATIVE to the error, not rendered beside it.
+    expect(page).toMatch(/\{foError\s*\? <ErrorState[\s\S]{0,200}?: <CompleteSetupForm/);
     // The premise: the action still has no read to merge with.
     expect(read('app/onboarding/actions.ts')).toContain("onConflict: 'family_id'");
   });

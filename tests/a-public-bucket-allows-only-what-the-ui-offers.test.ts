@@ -27,7 +27,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATION = 'supabase/migrations/0330_a_public_bucket_serves_what_you_put_in_it.sql';
+const MIGRATION = 'supabase/migrations/0370_a_public_bucket_serves_what_you_put_in_it.sql';
 
 function walk(...dirs: string[]): string[] {
   const out: string[] = [];
