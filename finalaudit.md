@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T14:50:00Z
+- Last Updated: 2026-09-26T18:10:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26896,6 +26896,41 @@ fails 7 ways before and passes after (53/53 probes), with controls that the
 child still reads the calendar and the owner still writes and updates
 mappings on their own account; onboarding-calendar, sync-policy and briefing
 suites pass (207/207).
+
+## C1-K-31 · HIGH · The social permission matrix was enforced only by the app
+
+`lib/social/roles.ts` said so itself: the matrix is "for most permissions, the
+ONLY enforcement". The social tables kept the plain `is_family_member` RLS from
+0034, and `social_has_permission` guarded one policy
+(`social_publish_jobs_insert`). A child's default social role is `read_only`.
+Measured on the replayed schema, straight against the API, that child
+disconnected the family's connected social account, switched off
+`require_approval`, rewrote and deleted a post, created a post, and erased usage
+records; a teen (`content_creator`) also switched off approval. 7 breaches.
+
+`0330_social_writes_need_the_social_permission.sql` gives each write the
+permission its server action already checks. `connect_accounts` covers
+accounts, `manage_settings` settings, `upload_media` the media library and
+`generate_ai` AI generations. Inserting or deleting posts, variants, targets,
+assets, schedules and calendar items needs `create_drafts`, `publish_posts` or
+`schedule_posts`, matching `createPostAction`'s per-intent check and rollback;
+updating them needs publish or schedule, because `runPublishNow` and the
+schedule path are the only updaters. Publish jobs and results need publish or
+schedule. Usage events are insert-only; comments can only be resolved
+(`view_feed`). Provider and service data (analytics, feed items, messages,
+provider errors) and `social_audit_logs` get no member writes; the audit log's
+only writer is the SECURITY DEFINER `social_write_audit` trigger, so members can
+no longer forge entries either. `docs/audit/audit-trail-append-only-check.sql`
+now asserts that. Reads, the service-role paths, the family news reader and
+`social_access_permissions` are unchanged.
+
+`docs/audit/social-write-permission-check.sql` passes after (54/54 probes),
+with controls that a content creator can still draft and a parent (`admin`)
+can still change settings and move a post to publishing. The 495 social unit
+tests pass unchanged. Still open, recorded rather than changed: a content
+creator can still insert a post with any `approval_status`, and approval has no
+server action yet (`approve_posts` exists only in the matrix). That belongs
+with the approval flow when it is built.
 
 ## Swept clean · the API routes this file never named
 

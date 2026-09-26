@@ -5,10 +5,10 @@
 // to) the household MemberRole. The matrix below is the single source of truth
 // used by the UI to hide controls and by server actions to reject calls.
 //
-// It is also, for most permissions, the ONLY enforcement: the social tables get
-// plain is_family_member RLS in migration 0034 (public.social_has_permission is
-// consulted by exactly one policy, social_publish_jobs_insert). An earlier note
-// here credited migration 0024 with enforcing this; 0024 is weather_locations.
+// The database enforces the same matrix: public.social_has_permission mirrors
+// ROLE_PERMISSIONS (0322), and since 0330 every social table's write policies
+// require the permission its server action checks. Keep the two in step;
+// tests/social-permission-matrix-matches-the-database.test.ts compares them.
 
 export type SocialRole =
   | 'owner'

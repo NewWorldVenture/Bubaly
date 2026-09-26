@@ -3,7 +3,8 @@
 -- social_audit_logs, vacation_audit_logs and sync_change_logs let any member
 -- UPDATE and DELETE. 0321 makes them append-only for members: SELECT and INSERT
 -- stay (the app writes some trails from members' own sessions), UPDATE and
--- DELETE go. Judged on row counts: a refused UPDATE/DELETE raises nothing.
+-- DELETE go. 0330 then drops member INSERT on social_audit_logs, whose only
+-- writer is the social_write_audit trigger. Judged on row counts: a refused UPDATE/DELETE raises nothing.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -34,7 +35,13 @@ begin
   -- Controls: the trail is readable, and still appendable.
   select count(*) into n from public.social_audit_logs where family_id = fam;
   if n <> 1 then raise warning 'CONTROL FAILED: the teen cannot read social_audit_logs (%)', n; failures := failures + 1; end if;
-  insert into public.social_audit_logs (family_id, action) values (fam, 'teen.appended');
+  -- 0330: social_audit_logs is written by the SECURITY DEFINER social_write_audit
+  -- trigger, never by a member directly, so a member cannot forge an entry.
+  begin
+    insert into public.social_audit_logs (family_id, action) values (fam, 'teen.appended');
+    raise warning 'BREACH: a teen forged a social_audit_logs entry'; failures := failures + 1;
+  exception when insufficient_privilege then null;
+  end;
 
   -- The finding.
   update public.social_audit_logs set action = 'nothing happened' where id = socialRow;
