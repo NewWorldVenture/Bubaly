@@ -476,6 +476,7 @@
   "actions.thatRecipeSourceIsUnavailable": "Diese Rezeptquelle ist nicht verfügbar.",
   "actions.thatReminderCouldNotBe": "Diese Erinnerung konnte nicht gefunden werden.",
   "actions.thatRewardIsNotAvailable": "Diese Belohnung ist nicht verfügbar.",
+  "actions.notEnoughPointsForThisReward": "Für diese Belohnung reichen die Punkte noch nicht.",
   "actions.thatRewardIsOutOf": "Diese Belohnung ist nicht mehr vorrätig.",
   "actions.thatSavingsGoalCouldNot": "Dieses Sparziel konnte nicht gefunden werden.",
   "actions.thatSuggestionDoesNotProposeAPolicy": "Dieser Vorschlag schlägt keine Richtlinie vor.",

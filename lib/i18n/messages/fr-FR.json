@@ -476,6 +476,7 @@
   "actions.thatRecipeSourceIsUnavailable": "Cette source de recettes est indisponible.",
   "actions.thatReminderCouldNotBe": "Ce rappel est introuvable.",
   "actions.thatRewardIsNotAvailable": "Cette récompense n’est pas disponible.",
+  "actions.notEnoughPointsForThisReward": "Il n'y a pas encore assez de points pour cette récompense.",
   "actions.thatRewardIsOutOf": "Cette récompense est épuisée.",
   "actions.thatSavingsGoalCouldNot": "Cet objectif d’épargne est introuvable.",
   "actions.thatSuggestionDoesNotProposeAPolicy": "Cette suggestion ne propose aucune règle.",

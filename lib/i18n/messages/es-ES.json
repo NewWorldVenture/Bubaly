@@ -476,6 +476,7 @@
   "actions.thatRecipeSourceIsUnavailable": "Esa fuente de recetas no está disponible.",
   "actions.thatReminderCouldNotBe": "No se ha podido encontrar ese recordatorio.",
   "actions.thatRewardIsNotAvailable": "Esa recompensa no está disponible.",
+  "actions.notEnoughPointsForThisReward": "Todavía no hay puntos suficientes para esta recompensa.",
   "actions.thatRewardIsOutOf": "Esa recompensa está agotada.",
   "actions.thatSavingsGoalCouldNot": "No se ha podido encontrar ese objetivo de ahorro.",
   "actions.thatSuggestionDoesNotProposeAPolicy": "Esa sugerencia no propone ninguna política.",

@@ -475,6 +475,7 @@
   "actions.thatRecipeSourceIsUnavailable": "That recipe source is unavailable.",
   "actions.thatReminderCouldNotBe": "That reminder could not be found.",
   "actions.thatRewardIsNotAvailable": "That reward is not available.",
+  "actions.notEnoughPointsForThisReward": "There aren't enough points for this reward yet.",
   "actions.thatRewardIsOutOf": "That reward is out of stock.",
   "actions.thatSavingsGoalCouldNot": "That savings goal could not be found.",
   "actions.thatSuggestionDoesNotProposeAPolicy": "That suggestion does not propose a policy.",

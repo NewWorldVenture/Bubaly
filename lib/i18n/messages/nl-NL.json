@@ -476,6 +476,7 @@
   "actions.thatRecipeSourceIsUnavailable": "Die receptbron is niet beschikbaar.",
   "actions.thatReminderCouldNotBe": "Die herinnering is niet gevonden.",
   "actions.thatRewardIsNotAvailable": "Die beloning is niet beschikbaar.",
+  "actions.notEnoughPointsForThisReward": "Er zijn nog niet genoeg punten voor deze beloning.",
   "actions.thatRewardIsOutOf": "Die beloning is niet meer voorradig.",
   "actions.thatSavingsGoalCouldNot": "Dat spaardoel is niet gevonden.",
   "actions.thatSuggestionDoesNotProposeAPolicy": "Die suggestie stelt geen regel voor.",
