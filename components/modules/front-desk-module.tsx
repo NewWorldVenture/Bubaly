@@ -561,7 +561,7 @@ function CallDetail({ call, familyId, userId, onClose }: {
     // Postgres rejected the row and this button never once saved a reminder.
     const result = await createReminderAction({
       title: text.slice(0, 200),
-      notes: `From call with ${callerLabel}`,
+      notes: tr('frontDesk.fromCallWith', { caller: callerLabel }),
       kind: 'task',
       priority: call.priority === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,

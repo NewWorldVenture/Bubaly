@@ -199,7 +199,9 @@ describe('Focus context and UI wiring', () => {
     expect(source).toContain('if (!savingRef.current) setIndex((i) => i + 1);');
     expect(source).toContain('if (!active.current) return;');
     expect(source).toContain('disabled={saving}');
-    expect(source).toContain('Skipped tasks remain open.');
+    // The summary says skipped tasks stay open, in every language (I18N-003).
+    expect(source).toContain("tr('focusModule.reviewSummary'");
+    expect(JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8'))['focusModule.reviewSummary']).toContain('Skipped tasks remain open.');
     const timer = source.slice(source.indexOf('function FocusTimer()'));
     expect(timer).not.toContain('runFocusAction');
     expect(timer).not.toContain('setIndex');

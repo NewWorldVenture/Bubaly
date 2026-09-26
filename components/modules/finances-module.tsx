@@ -161,10 +161,10 @@ export function FinancesModule() {
 
   // Money tip — real: biggest category this month.
   const tip = useMemo(() => {
-    if (spendByCat.length === 0) return 'Add a few transactions to unlock spending insights.';
+    if (spendByCat.length === 0) return tr('financesModule.tipAddTransactions');
     const top = spendByCat.find((r) => r.category !== 'Other') ?? spendByCat[0];
-    return `Your biggest category this month is ${top.category} at ${usd(top.total)}. Set a budget to stay on track.`;
-  }, [spendByCat]);
+    return tr('financesModule.tipBiggestCategory', { category: top.category, amount: usd(top.total) });
+  }, [spendByCat, tr]);
 
   const loading = la || lt || lb || lbi || lg;
   const readError = accountsError || txnsError || budgetsError || billsError || goalsError;

@@ -365,8 +365,8 @@ export function FreeTierSidebar({ onLocked }: { onLocked: (item: NavItem) => voi
   }, [keys, save]);
 
   const pinAll = useCallback((hrefs: string[]) => {
-    void save(addNavKeys(keys, hrefs, ALL_SERVICES_KEYS), `Pinned ${hrefs.length} services to your sidebar.`);
-  }, [keys, save]);
+    void save(addNavKeys(keys, hrefs, ALL_SERVICES_KEYS), hrefs.length === 1 ? t('freeTierSidebar.pinnedOne') : t('freeTierSidebar.pinnedMany', { n: hrefs.length }));
+  }, [keys, save, t]);
 
   const unpinAll = useCallback((hrefs: string[]) => {
     void save(removeNavKeys(keys, hrefs), 'Unpinned those services.');

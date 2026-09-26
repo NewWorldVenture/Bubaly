@@ -112,8 +112,8 @@ export function AssistantModule() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-    return [{ id: 'init', role: 'assistant' as const, content: `${g}, ${firstName}! I can help you plan your week, schedule events, add chores, build your grocery list, set reminders, and more — just ask.` }];
+    const content = h < 12 ? t('assistantModule.introMorning', { name: firstName }) : h < 18 ? t('assistantModule.introAfternoon', { name: firstName }) : t('assistantModule.introEvening', { name: firstName });
+    return [{ id: 'init', role: 'assistant' as const, content }];
   };
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -198,7 +198,7 @@ export function AssistantModule() {
     setUpcoming(upcomingRes.data ?? []);
     setActivity(todayEvts.slice(0, 3).map((e, i) => ({
       icon: CalendarDays,
-      text: `${e.title} added to calendar`,
+      text: t('assistantModule.addedToCalendar', { title: e.title }),
       time: fmtRelative(e.created_at),
       color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
     })));
@@ -641,7 +641,7 @@ export function AssistantModule() {
           />
         )}
       />
-      <p className="sr-only" aria-live="polite">{planCount > 0 ? `${planCount} results available in the plan pane` : ''}</p>
+      <p className="sr-only" aria-live="polite">{planCount === 1 ? t('assistantModule.planResultsOne') : planCount > 1 ? t('assistantModule.planResultsMany', { n: planCount }) : ''}</p>
     </div>
   );
 }

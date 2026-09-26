@@ -134,7 +134,7 @@ export function QuickPost({ className }: { className?: string }) {
     }
     setPosting(false);
     const secs = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : null;
-    success(secs != null && secs <= 60 ? `Posted in ${secs}s ⚡` : 'Posted to the family marketplace');
+    success(secs != null && secs <= 60 ? t('quickPost.postedInSeconds', { s: secs }) : t('quickPost.postedToMarketplace'));
     reset({ cleanup: false });
   }
 

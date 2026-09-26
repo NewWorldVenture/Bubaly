@@ -152,22 +152,22 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   // Suggestions derived from real family data — never fabricated.
   const suggestions: { icon: typeof Calendar; text: string; cta: string }[] = [];
   if ((openChores ?? 0) > 0) {
-    suggestions.push({ icon: CheckCircle2, text: `You have ${openChores} open ${openChores === 1 ? 'task' : 'tasks'} to wrap up.`, cta: 'View tasks' });
+    suggestions.push({ icon: CheckCircle2, text: openChores === 1 ? tr('familyDashboard.openTasksOne') : tr('familyDashboard.openTasksMany', { n: openChores ?? 0 }), cta: tr('familyDashboard.viewTasks') });
   }
   if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
-    suggestions.push({ icon: ShoppingCart, text: 'Your week has meals planned but the grocery list is empty.', cta: 'Build list' });
+    suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.mealsNoGroceries'), cta: tr('familyDashboard.buildList') });
   }
   if ((upcomingEvents?.length ?? 0) > 0) {
-    suggestions.push({ icon: Calendar, text: `${upcomingEvents!.length} ${upcomingEvents!.length === 1 ? 'event is' : 'events are'} coming up in the next two weeks.`, cta: 'View calendar' });
+    suggestions.push({ icon: Calendar, text: upcomingEvents!.length === 1 ? tr('familyDashboard.upcomingEventsOne') : tr('familyDashboard.upcomingEventsMany', { n: upcomingEvents!.length }), cta: tr('familyDashboard.viewCalendar') });
   }
   if (birthdayCount > 0) {
-    suggestions.push({ icon: Cake, text: `${birthdayCount} ${birthdayCount === 1 ? 'birthday is' : 'birthdays are'} coming up this week.`, cta: 'View members' });
+    suggestions.push({ icon: Cake, text: birthdayCount === 1 ? tr('familyDashboard.birthdaysOne') : tr('familyDashboard.birthdaysMany', { n: birthdayCount }), cta: tr('familyDashboard.viewMembers') });
   }
   if ((overdueReminders?.length ?? 0) > 0) {
-    suggestions.push({ icon: Bell, text: `${overdueReminders!.length} ${overdueReminders!.length === 1 ? 'reminder is' : 'reminders are'} overdue.`, cta: 'Check reminders' });
+    suggestions.push({ icon: Bell, text: overdueReminders!.length === 1 ? tr('familyDashboard.overdueRemindersOne') : tr('familyDashboard.overdueRemindersMany', { n: overdueReminders!.length }), cta: tr('familyDashboard.checkReminders') });
   }
   if ((unreadMessages ?? 0) > 0) {
-    suggestions.push({ icon: MessageCircle, text: `You have ${unreadMessages} unread ${(unreadMessages ?? 0) === 1 ? 'message' : 'messages'} from your family.`, cta: 'Open messages' });
+    suggestions.push({ icon: MessageCircle, text: unreadMessages === 1 ? tr('familyDashboard.unreadMessagesOne') : tr('familyDashboard.unreadMessagesMany', { n: unreadMessages ?? 0 }), cta: tr('familyDashboard.openMessages') });
   }
 
   // Week meal map — just show meal_type per slot (no join needed)
@@ -458,7 +458,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{choreTitle}</p>
                       <p className={cn('text-xs', isToday ? 'font-semibold text-orange-400' : 'text-muted')}>
-                        {isToday ? 'Due Today' : daysUntil != null ? `Due in ${daysUntil} days` : 'No due date'}
+                        {isToday ? tr('familyDashboard.dueToday') : daysUntil != null ? (daysUntil === 1 ? tr('familyDashboard.dueInOneDay') : tr('familyDashboard.dueInDays', { n: daysUntil })) : tr('familyDashboard.noDueDate')}
                       </p>
                     </div>
                     {member && (

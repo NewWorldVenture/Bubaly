@@ -28,7 +28,7 @@ export function HandleItButton({ request, label = 'Let Bubaly handle it', classN
     const result = await submitAIRequest({ text: request });
     setBusy(false);
     if (!result.ok) {
-      toastError(result.status === 429 && result.retryAfter ? `${result.error} Try again in ${result.retryAfter}s.` : result.error);
+      toastError(result.status === 429 && result.retryAfter ? t('concierge.errorTryAgainIn', { error: result.error, s: result.retryAfter }) : result.error);
       return;
     }
     const data = result.data;

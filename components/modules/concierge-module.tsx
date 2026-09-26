@@ -387,7 +387,7 @@ export function ConciergeModule() {
                   { emoji: '🌲', text: 'Camping or hiking weekend' },
                   { emoji: '💑', text: 'Surprise date night ideas' },
                 ].map((tip, i) => (
-                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: `I'd love to help with that! Tell me more about "${tip.text}" — what's your timeline and budget?` }]); setInput(tip.text); }}
+                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: tr('conciergeModule.tellMeMore', { tip: tip.text }) }]); setInput(tip.text); }}
                     className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface/60 transition">
                     <span className="text-base">{tip.emoji}</span>
                     <span className="text-muted">{tip.text}</span>
@@ -430,7 +430,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     try {
       const res = await planAcceptedAction(plan.id, prev, status);
       if (res.ok && res.summary) {
-        success(res.mode === 'auto' ? res.summary : `Queued for approval — check the Autopilot panel`);
+        success(res.mode === 'auto' ? res.summary : t('conciergeModule.queuedForApproval'));
       }
     } catch { /* the loop is best-effort; the status change already saved */ }
   }

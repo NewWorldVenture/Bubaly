@@ -289,7 +289,7 @@ export function FamilyModule() {
           )}
           {activeMembers.length > 12 && (
             <button onClick={() => setShowAllMembers((v) => !v)} className="mt-3 w-full text-center text-sm font-semibold text-brand-text hover:underline">
-              {showAllMembers ? 'Show fewer' : `View all ${activeMembers.length} members`}
+              {showAllMembers ? t('familyModule.showFewer') : t('familyModule.viewAllMembers', { n: activeMembers.length })}
             </button>
           )}
           {canManage && (

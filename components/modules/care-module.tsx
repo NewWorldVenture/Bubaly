@@ -272,7 +272,7 @@ export function CareModule() {
       )}
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit care entry' : `Log care${recipientId ? ` · ${memberName(recipientId)}` : ''}`}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? tr('care.editCareEntry') : recipientId ? tr('care.logCareFor', { name: memberName(recipientId) ?? '' }) : tr('care.logCare')}>
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('care.type')}>

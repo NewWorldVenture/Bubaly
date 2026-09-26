@@ -16,7 +16,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, DeclutterZoneKind } from '@/lib/database.types';
 import {
-  ZONE_KINDS, SCORE_LABELS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
+  ZONE_KINDS, SCORE_LABEL_KEYS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
 import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
@@ -184,7 +184,7 @@ export function DeclutterModule() {
         <div className={cn('rounded-2xl border p-5', summary.avgScore !== null && summary.avgScore >= 3.5 ? 'border-rose-500/30 bg-rose-500/10' : summary.avgScore !== null && summary.avgScore <= 1.5 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-brand-text" /> {tr('declutter.homeRightNow')}</div>
           <p className="mt-2 text-lg font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.worst ? `Worst spot: ${summary.worst.name} (${SCORE_LABELS[summary.worst.clutter_score]})` : 'Add the spots that get messy'}</p>
+          <p className="mt-1 text-xs text-muted">{summary.worst ? tr('declutter.worstSpot', { name: summary.worst.name, score: tr(SCORE_LABEL_KEYS[summary.worst.clutter_score]) }) : tr('declutter.addMessySpots')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-brand-text" /> {tr('declutter.thisWeek')}</div>
@@ -232,7 +232,7 @@ export function DeclutterModule() {
                           <div className="flex gap-0.5" aria-label={tr('declutter.clutterScoreOfFive', { score: z.clutter_score })}>
                             {[1, 2, 3, 4, 5].map((n) => <span key={n} className={cn('h-2 w-5 rounded-sm', n <= z.clutter_score ? (z.clutter_score >= 4 ? 'bg-rose-400/80' : z.clutter_score === 3 ? 'bg-amber-400/80' : 'bg-emerald-400/80') : 'bg-border')} />)}
                           </div>
-                          <span className="text-xs text-muted">{SCORE_LABELS[z.clutter_score]}</span>
+                          <span className="text-xs text-muted">{tr(SCORE_LABEL_KEYS[z.clutter_score])}</span>
                           {z.is_active && (
                             <span className="ml-auto flex items-center gap-0.5">
                               <button onClick={() => bumpScore(z, -1)} aria-label={tr('declutter.lessCluttered')} className="rounded p-0.5 text-muted hover:text-fg"><ChevronDown className="h-4 w-4" /></button>
@@ -278,7 +278,10 @@ export function DeclutterModule() {
           {open.length === 0 ? (
             <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
               <p className="text-sm font-semibold text-brand-text">{tr('declutter.nothingPlanned')}</p>
-              <p className="mt-1 text-sm text-muted">{activeZones.length ? `“Plan this week” turns your ${activeZones.length} zone${activeZones.length === 1 ? '' : 's'} into ${plan.length || 'a few'} short mission${plan.length === 1 ? '' : 's'}, worst spots first, shared across the family.` : 'Add a zone first, then let the planner spread missions across the week.'}</p>
+              <p className="mt-1 text-sm text-muted">{activeZones.length ? tr('declutter.planTurnsZonesInto', {
+                zones: activeZones.length === 1 ? tr('declutter.oneZone') : tr('declutter.nZones', { n: activeZones.length }),
+                missions: plan.length === 0 ? tr('declutter.aFewShortMissions') : plan.length === 1 ? tr('declutter.oneShortMission') : tr('declutter.nShortMissions', { n: plan.length }),
+              }) : tr('declutter.addZoneFirst')}</p>
               {plan.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-xs text-muted sm:grid-cols-2">
                   {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {p.template.title} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
@@ -367,7 +370,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{tr('declutter.howBadIsItRightNow')}</p>
           <div className="flex gap-2" role="radiogroup" aria-label={tr('declutter.clutterScore')}>
-            {[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={cn('flex-1 rounded-xl border px-2 py-2 text-xs coarse:min-h-11', score === n ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{n}<br />{SCORE_LABELS[n]}</button>)}
+            {[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={cn('flex-1 rounded-xl border px-2 py-2 text-xs coarse:min-h-11', score === n ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{n}<br />{tr(SCORE_LABEL_KEYS[n])}</button>)}
           </div>
         </div>
         <Field label={tr('declutter.whatDoneLooksLike')}>{(id) => <Input id={id} name="target_state" defaultValue={zone?.target_state ?? ''} placeholder={tr('declutter.onlyTheFruitBowlAndCoffee')} />}</Field>

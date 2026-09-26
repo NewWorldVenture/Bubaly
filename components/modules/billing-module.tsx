@@ -1029,7 +1029,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   <div className={cn('h-full rounded-full transition-all', budgetPct > 100 ? 'bg-rose-500' : 'bg-emerald-500')} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
                 </div>
                 <p className={cn('mt-2 text-xs font-medium', budgetPct > 100 ? 'text-rose-400' : 'text-emerald-400')}>
-                  {budgetPct > 100 ? `Over budget by ${fmtCurrency(expenses - totalMonthlyBudget)}` : "You're on track! 🎉"}
+                  {budgetPct > 100 ? tr('billing.overBudgetBy', { amount: fmtCurrency(expenses - totalMonthlyBudget) }) : tr('billing.onTrack')}
                 </p>
               </>
             ) : (
@@ -1179,12 +1179,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <p className="text-sm font-bold">{tr('billing.moneyTip')}</p>
             <p className="text-xs text-muted">
               {lastMonthExpenses === 0
-                ? 'Log a full month of spending to unlock personalized insights.'
+                ? tr('billing.logFullMonth')
                 : spendDeltaPct < 0
-                  ? `You've spent ${Math.abs(spendDeltaPct)}% less this month compared to last month. Great job! 🎉`
+                  ? tr('billing.spentLessPct', { pct: Math.abs(spendDeltaPct) })
                   : spendDeltaPct > 0
-                    ? `You're spending ${spendDeltaPct}% more this month than last. Tap for ways to trim it.`
-                    : 'Your spending is right in line with last month.'}
+                    ? tr('billing.spendingMorePct', { pct: spendDeltaPct })
+                    : tr('billing.spendingInLine')}
             </p>
           </div>
         </div>
@@ -1261,7 +1261,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   <div className={cn('h-full rounded-full transition-all', over ? 'bg-red-500' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
                 </div>
                 <p className={cn('mt-1.5 text-xs', over ? 'text-red-400' : 'text-muted')}>
-                  {over ? `Over budget by ${fmtCurrency(Math.abs(remaining))}` : `${fmtCurrency(remaining)} remaining`}
+                  {over ? tr('billing.overBudgetBy', { amount: fmtCurrency(Math.abs(remaining)) }) : tr('billing.amountRemaining', { amount: fmtCurrency(remaining) })}
                 </p>
               </div>
             );

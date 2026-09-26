@@ -69,6 +69,10 @@ export const MISSION_STATUSES: { value: DeclutterMissionStatus; label: string }[
 export const zoneKindMeta = (k: DeclutterZoneKind) => ZONE_KINDS.find((x) => x.value === k) ?? ZONE_KINDS[ZONE_KINDS.length - 1];
 
 export const SCORE_LABELS: Record<number, string> = { 1: 'Tidy', 2: 'Lived-in', 3: 'Cluttered', 4: 'Overflowing', 5: 'Avalanche' };
+/** What a person reads for each score; SCORE_LABELS stays the English identifier. */
+export const SCORE_LABEL_KEYS: Record<number, string> = {
+  1: 'declutterScore.tidy', 2: 'declutterScore.livedIn', 3: 'declutterScore.cluttered', 4: 'declutterScore.overflowing', 5: 'declutterScore.avalanche',
+};
 
 export type ZoneLike = { id: string; name: string; room: string | null; kind: DeclutterZoneKind; clutter_score: number; last_reset_at: string | null; is_active: boolean };
 export type MissionLike = { id: string; zone_id: string | null; title: string; minutes: number; assignee_id: string | null; status: DeclutterMissionStatus; scheduled_for: string | null; completed_at: string | null; items_removed: number; points: number };

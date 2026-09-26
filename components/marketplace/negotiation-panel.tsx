@@ -166,10 +166,10 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
       if (!res.ok) { onError(res.error); return; }
       setCountering(false);
       onDone(
-        res.data?.status === 'agreed' ? `Deal! Agreed at ${money(thread.currentAmountCents)} — check your orders.`
-        : action === 'withdraw' ? 'Offer withdrawn.'
-        : action === 'decline' ? 'Offer declined.'
-        : 'Counter sent.');
+        res.data?.status === 'agreed' ? tr('negotiationPanel.dealAgreed', { amount: money(thread.currentAmountCents) })
+        : action === 'withdraw' ? tr('negotiationPanel.offerWithdrawn')
+        : action === 'decline' ? tr('negotiationPanel.offerDeclined')
+        : tr('negotiationPanel.counterSent'));
     });
   }
 

@@ -155,7 +155,7 @@ export function AuctionPanel({
               <input
                 type="number" inputMode="decimal" min={minNext / 100} step="0.01"
                 value={maxInput} onChange={(e) => setMaxInput(e.target.value)}
-                placeholder={`Max bid (min ${money(minNext)})`}
+                placeholder={tr('auctionPanel.maxBidMin', { min: money(minNext) })}
                 className="h-11 w-full rounded-xl border border-border bg-bg pl-7 pr-3 text-sm outline-none focus:border-brand"
               />
             </div>
@@ -185,9 +185,9 @@ export function AuctionPanel({
       )}
       {status === 'ended' && (
         <p className="mt-4 rounded-xl border border-border bg-surface/50 p-3 text-sm font-semibold">
-          {a.bidCount === 0 ? 'Ended with no bids.'
-            : resMet ? `Sold for ${money(a.currentBidCents)}.`
-            : `Ended at ${money(a.currentBidCents)} — reserve not met.`}
+          {a.bidCount === 0 ? tr('auctionPanel.endedNoBids')
+            : resMet ? tr('auctionPanel.soldFor', { amount: money(a.currentBidCents) })
+            : tr('auctionPanel.endedReserveNotMet', { amount: money(a.currentBidCents) })}
         </p>
       )}
 

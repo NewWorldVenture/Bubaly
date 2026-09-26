@@ -97,9 +97,9 @@ export function RunControls({
         return;
       }
       setEditing(null);
-      success(res.data.requeuedSteps > 1
-        ? `Saved — Bubaly will redo that step and the ${res.data.requeuedSteps - 1} after it.`
-        : 'Saved — Bubaly will redo that step.');
+      success(res.data.requeuedSteps > 2 ? t('runControls.savedRedoStepAndNextMany', { n: res.data.requeuedSteps - 1 })
+        : res.data.requeuedSteps === 2 ? t('runControls.savedRedoStepAndNextOne')
+        : t('runControls.savedRedoStep'));
       router.refresh();
     });
   };

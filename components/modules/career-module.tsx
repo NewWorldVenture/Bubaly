@@ -220,7 +220,7 @@ export function CareerModule() {
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-brand-text" /> {tr('career.conversion')}</div>
               <p className="mt-2 text-2xl font-bold">{stats.responseRate !== null ? `${stats.responseRate}%` : '—'}<span className="text-sm font-normal text-muted"> {tr('career.getAReply')}</span></p>
-              <p className="mt-1 text-xs text-muted">{stats.interviewRate !== null ? `${stats.interviewRate}% reach interview` : 'Apply to see rates'}{stats.avgDaysToResponse !== null ? ` · ~${stats.avgDaysToResponse}d to hear back` : ''}</p>
+              <p className="mt-1 text-xs text-muted">{stats.interviewRate !== null ? tr('careerModule.pctReachInterview', { pct: stats.interviewRate }) : tr('careerModule.applyToSeeRates')}{stats.avgDaysToResponse !== null ? ` · ${tr('careerModule.daysToHearBack', { d: stats.avgDaysToResponse })}` : ''}</p>
             </div>
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-brand-text" /> {tr('career.money')}</div>
