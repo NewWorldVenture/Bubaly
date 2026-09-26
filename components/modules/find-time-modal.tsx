@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useId } from 'react';
 import { Sparkles, Clock, CalendarCheck, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -37,6 +37,7 @@ const WINDOWS = [
 export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
 
@@ -139,8 +140,8 @@ export function FindTimeModal({
 
         {/* Who */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</label>
-          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+          <span id={`${a11yId}-f1`} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
             {members.map((m) => {
               const on = selectedMembers.includes(m.id);
               return (
@@ -160,8 +161,8 @@ export function FindTimeModal({
 
         {/* Duration */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</label>
-          <div className="flex flex-wrap gap-1.5">
+          <span id={`${a11yId}-f2`} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f2`} className="flex flex-wrap gap-1.5">
             {DURATIONS.map((d) => (
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
                 className={cn('rounded-full border px-3 py-1 text-xs font-medium transition',
@@ -174,8 +175,8 @@ export function FindTimeModal({
 
         {/* Window */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</label>
-          <div className="flex flex-wrap gap-1.5">
+          <span id={`${a11yId}-f3`} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f3`} className="flex flex-wrap gap-1.5">
             {WINDOWS.map((w) => (
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
                 className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',

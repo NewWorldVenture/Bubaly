@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useId } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
@@ -146,13 +146,13 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   )}
                 </p>
               </div>
-              <button
+              <button aria-label={tr('iconAction.details')} aria-expanded={expanded === rule.id}
                 onClick={() => setExpanded(expanded === rule.id ? null : rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-surface transition"
               >
                 {expanded === rule.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
-              <button
+              <button aria-label={tr('iconAction.active')} role="switch" aria-checked={rule.is_active}
                 onClick={() => handleToggle(rule.id, rule.is_active)}
                 className="text-muted hover:text-fg transition"
               >
@@ -161,7 +161,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   : <ToggleLeft className="h-5 w-5" />
                 }
               </button>
-              <button
+              <button aria-label={tr('iconAction.delete')}
                 onClick={() => handleDelete(rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"
               >
@@ -226,6 +226,7 @@ type NewRuleForm = {
 };
 
 function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; onClose: () => void }) {
+  const a11yId = useId();
   const tr = useTranslations();
   // The markup below declares `aria-modal="true"`. This is what makes that true:
   // focus enters the dialog, Tab cycles inside it, Escape closes, and focus
@@ -282,8 +283,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm min-h-[50px]"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</label>
-            <div className="flex flex-wrap gap-1.5">
+            <span id={`${a11yId}-f1`} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex flex-wrap gap-1.5">
               {TRUST_LEVELS.map((t) => (
                 <button key={t} type="button" onClick={() => toggleTrust(t)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
@@ -296,19 +297,19 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeStart')}</label>
-              <input type="time" value={form.time_start} onChange={e => setForm(p => ({ ...p, time_start: e.target.value }))}
+              <label htmlFor={`${a11yId}-f2`} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeStart')}</label>
+              <input id={`${a11yId}-f2`} type="time" value={form.time_start} onChange={e => setForm(p => ({ ...p, time_start: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeEnd')}</label>
-              <input type="time" value={form.time_end} onChange={e => setForm(p => ({ ...p, time_end: e.target.value }))}
+              <label htmlFor={`${a11yId}-f3`} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeEnd')}</label>
+              <input id={`${a11yId}-f3`} type="time" value={form.time_end} onChange={e => setForm(p => ({ ...p, time_end: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</label>
-            <div className="flex gap-1.5">
+            <span id={`${a11yId}-f4`} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f4`} className="flex gap-1.5">
               {DAYS.map((d, i) => (
                 <button key={d} type="button" onClick={() => toggleDay(i)}
                   className={cn('flex-1 rounded-lg border py-2 text-xs font-medium transition',
@@ -318,8 +319,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</label>
-            <div className="flex flex-wrap gap-1.5">
+            <span id={`${a11yId}-f5`} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f5`} className="flex flex-wrap gap-1.5">
               {CONTEXTS.map((c) => (
                 <button key={c.value} type="button" onClick={() => toggleCtx(c.value)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
@@ -335,8 +336,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm font-mono"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</label>
-            <div className="grid grid-cols-2 gap-1.5">
+            <span id={`${a11yId}-f6`} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f6`} className="grid grid-cols-2 gap-1.5">
               {ROUTING_MODES.map((mode) => (
                 <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))}
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
@@ -348,8 +349,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.priorityLowerHigherPriority')}</label>
-            <input type="number" min="1" max="999" value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
+            <label htmlFor={`${a11yId}-f7`} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.priorityLowerHigherPriority')}</label>
+            <input id={`${a11yId}-f7`} type="number" min="1" max="999" value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
               className="h-10 w-32 rounded-lg border border-border bg-elevated px-3 text-sm" />
           </div>
         </div>

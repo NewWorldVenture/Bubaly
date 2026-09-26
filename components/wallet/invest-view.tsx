@@ -68,9 +68,9 @@ export function InvestView(props: {
               <div key={o.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-bg/40 p-2.5">
                 <p className="text-sm">{o.childName} wants to <strong>{o.side}</strong> {o.shares} {o.assetEmoji} {o.assetName} <span className="text-muted">({formatCents(o.amountCents)})</span></p>
                 <div className="flex flex-shrink-0 items-center gap-1.5">
-                  <button type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: true }), 'Approved')}
+                  <button aria-label={tr('iconAction.approve')} type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: true }), 'Approved')}
                     className="inline-flex items-center gap-1 rounded-lg bg-success/15 px-2.5 py-1.5 text-xs font-medium text-success hover:bg-success/25"><Check className="h-3.5 w-3.5" /></button>
-                  <button type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: false }), 'Rejected')}
+                  <button aria-label={tr('iconAction.decline')} type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: false }), 'Rejected')}
                     className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-danger"><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>

@@ -131,7 +131,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         {tiles.map((f, i) => editing ? (
           <div key={f.key} className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center">
             <button onClick={() => remove(i)} aria-label={`Remove ${f.label}`} className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow"><X className="h-3 w-3" /></button>
-            <button onClick={() => setPicker({ mode: 'replace', index: i })} className="grid h-9 w-9 place-items-center rounded-xl bg-elevated"><FeatureIcon icon={f.icon} className="h-4 w-4" /></button>
+            <button aria-label={t('iconAction.replaceShortcut')} onClick={() => setPicker({ mode: 'replace', index: i })} className="grid h-9 w-9 place-items-center rounded-xl bg-elevated"><FeatureIcon icon={f.icon} className="h-4 w-4" /></button>
             <span className="text-[11px] font-semibold">{f.label}</span>
             <div className="absolute bottom-1 right-1 flex flex-col">
               <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={t('quickActions.moveUp')} className="text-muted hover:text-fg disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>

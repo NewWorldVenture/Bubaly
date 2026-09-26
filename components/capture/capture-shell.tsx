@@ -242,7 +242,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
             <h1 className="text-2xl font-bold">{t('captureShell.capture')}</h1>
             <p className="text-sm text-muted">{t('captureShell.speakTypeOrSnapAiRoutes')}</p>
           </div>
-          <button type="button" disabled={routing || undoing} onClick={() => { if (isCurrent() && !lifetime.current.pending) { nextIntent(); router.back(); } }}
+          <button aria-label={t('iconAction.close')} type="button" disabled={routing || undoing} onClick={() => { if (isCurrent() && !lifetime.current.pending) { nextIntent(); router.back(); } }}
             className="grid h-9 w-9 place-items-center rounded-full bg-elevated text-muted hover:text-fg">
             <X className="h-5 w-5" />
           </button>

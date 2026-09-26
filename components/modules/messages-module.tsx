@@ -877,11 +877,11 @@ export function MessagesModule() {
                                 {emoji}
                               </button>
                             ))}
-                            <button onClick={() => setReplyTo(msg)}
+                            <button aria-label={tr('iconAction.reply')} onClick={() => setReplyTo(msg)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                            <button aria-label={tr('iconAction.moreOptions')} aria-haspopup="menu" onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>

@@ -1218,7 +1218,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                 {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
               </p>
-              <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+              <button aria-label={tr('iconAction.delete')} onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -1254,7 +1254,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className={cn('text-sm font-bold', over ? 'text-red-400' : 'text-muted')}>
                       {fmtCurrency(b.spent)} / {fmtCurrency(b.amount)}
                     </span>
-                    <button onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                    <button aria-label={tr('iconAction.delete')} onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1307,7 +1307,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                <button aria-label={tr('iconAction.delete')} onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -1341,7 +1341,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted">{pct.toFixed(0)}{tr('billing.saved')}</p>
                     </div>
                   </div>
-                  <button onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                  <button aria-label={tr('iconAction.delete')} onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -1578,7 +1578,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted capitalize">{a.type}{a.last_four ? ` ···${a.last_four}` : ''}</p>
                     </div>
                     <p className="text-sm font-bold shrink-0">{fmtCurrency(a.balance ?? 0)}</p>
-                    <button onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
+                    <button aria-label={tr('iconAction.delete')} onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

@@ -62,7 +62,7 @@ export function RewardRow({ reward }: { reward: Reward }) {
       </div>
       <div className="flex shrink-0 items-center gap-2 text-xs">
         <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /> {t('adminMarketingLoyaltyRewardEditor.edit')}</button>
-        <button onClick={() => start(async () => { await deleteRewardAction(reward.id); })} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>
+        <button aria-label={t('iconAction.delete')} onClick={() => start(async () => { await deleteRewardAction(reward.id); })} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger">{pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>
       </div>
     </div>
   );

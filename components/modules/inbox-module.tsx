@@ -207,7 +207,7 @@ export function InboxModule() {
                 placeholder={tr('inbox.searchMessagesContacts')}
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+                <button aria-label={tr('iconAction.clearSearch')} onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
                   <X className="h-4 w-4" />
                 </button>
               )}

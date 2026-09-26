@@ -819,9 +819,9 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
-                      <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
-                      <button onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                      <button aria-label={tr('iconAction.moveUp')} onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
+                      <button aria-label={tr('iconAction.moveDown')} onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
+                      <button aria-label={tr('iconAction.delete')} onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                   <div className="space-y-2">

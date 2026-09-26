@@ -6,7 +6,7 @@
 // actions that revalidate the public /feedback board instantly.
 
 import Link from 'next/link';
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition, useId } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
   ArrowBigUp, MessageSquare, Search, Github, RefreshCw, Bell, Check, ExternalLink,
@@ -215,6 +215,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
   idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
   const [note, setNote] = useState(idea.admin_note ?? '');
@@ -307,15 +308,15 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {/* Status + roadmap note */}
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
+              <label htmlFor={`${a11yId}-f1`} className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
+              <select id={`${a11yId}-f1`} value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
                 className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand">
                 {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.publicRoadmapNoteShownToMembers')}</label>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000}
+              <label htmlFor={`${a11yId}-f2`} className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.publicRoadmapNoteShownToMembers')}</label>
+              <textarea id={`${a11yId}-f2`} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000}
                 placeholder={t('feedbackAdmin.eGGreatIdeaWereBuilding')}
                 className="w-full resize-y rounded-lg border border-border bg-bg p-2 text-sm outline-none focus:border-brand" />
             </div>

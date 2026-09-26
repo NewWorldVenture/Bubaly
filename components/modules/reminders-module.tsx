@@ -310,7 +310,7 @@ export function RemindersModule() {
             <p className="flex items-center gap-2 text-sm font-bold">
               <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.commonReminders')}
             </p>
-            <button onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
+            <button aria-label={tr('iconAction.close')} onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {AI_SUGGESTIONS.map((s) => {

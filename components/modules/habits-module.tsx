@@ -3,7 +3,7 @@
 // Habit Tracker — build personal & family routines with streaks, a heatmap,
 // one-tap check-ins, and an AI coach. 100% Supabase-wired via the `habits` and
 // `habit_logs` tables (family-scoped RLS); streak math lives in lib/habits.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react';
 import {
   Flame, Plus, Trash2, Check, Sparkles, X, Pencil, Trophy, Target, CalendarCheck, Archive,
   Minus,
@@ -422,6 +422,7 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
   blocked: boolean; busy: boolean; canWrite: () => boolean;
   readError: string | null; onRetry: () => Promise<void>;
 }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const t = useTranslations();
   const { error: toastError } = useToast();
@@ -496,8 +497,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
         </Field>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('habits.color')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={`${a11yId}-f1`} className="mb-1.5 block text-sm font-medium">{t('habits.color')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex flex-wrap gap-2">
             {COLORS.map((c) => (
               <button key={c.id} type="button" onClick={() => setColor(c.id)}
                 className={cn('h-7 w-7 rounded-full transition hover:scale-110', c.dot,
@@ -507,8 +508,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('habits.cadence')}</label>
-          <div className="flex gap-2">
+          <span id={`${a11yId}-f2`} className="mb-1.5 block text-sm font-medium">{t('habits.cadence')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f2`} className="flex gap-2">
             {(['daily', 'weekly'] as const).map((cd) => (
               <button key={cd} type="button" onClick={() => setCadence(cd)}
                 className={cn('flex-1 rounded-xl border-2 px-3 py-2 text-sm font-medium capitalize transition',
@@ -529,8 +530,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
               {(id) => <Input id={id} type="number" min={1} max={30} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
             </Field>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">{t('habits.daysOptionalLeaveBlankForEvery')}</label>
-            <div className="flex gap-1.5">
+            <span id={`${a11yId}-f3`} className="mb-1.5 block text-sm font-medium">{t('habits.daysOptionalLeaveBlankForEvery')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f3`} className="flex gap-1.5">
               {WEEKDAYS.map((d, i) => (
                 <button key={i} type="button" onClick={() => toggleWeekday(i)}
                   className={cn('h-9 w-9 rounded-full text-sm font-medium transition',

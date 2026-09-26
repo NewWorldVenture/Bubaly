@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition, useId } from 'react';
 import { ChevronUp, MessageCircle, Send, Loader2, Sparkles, Filter, Shield, Lightbulb, Bug, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
@@ -30,6 +30,7 @@ const SORTS: { id: FeedbackSort; label: string }[] = [
 
 // ── Share-your-idea form (inline card) ───────────────────────────────────────
 function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea: IdeaRow) => void }) {
+  const a11yId = useId();
   const t = useTranslations();
   const { success, error } = useToast();
   const [kind, setKind] = useState<FeedbackKind>('idea');
@@ -70,8 +71,8 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
     <form onSubmit={submit} className="space-y-4">
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</label>
-        <div className="grid grid-cols-2 gap-2">
+        <span id={`${a11yId}-f1`} className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</span>
+        <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-2 gap-2">
           {(['idea', 'bug'] as FeedbackKind[]).map((k) => {
             const active = kind === k;
             const Icon = k === 'bug' ? Bug : Lightbulb;
@@ -90,43 +91,45 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
         </div>
       </div>
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.title')}</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
+        <label htmlFor={`${a11yId}-f2`} className={label}>{t('feedbackFeedbackBoard.title')}</label>
+        <input id={`${a11yId}-f2`} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
           placeholder={isBug ? 'A short summary of what’s broken' : 'A quick, memorable summary'} className={field} />
       </div>
       <div>
-        <label className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
-        <input value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
+        <label htmlFor={`${a11yId}-f3`} className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
+        <input id={`${a11yId}-f3`} value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
           placeholder={isBug ? 'When I tap X, Y happens instead of…' : 'Today, I struggle with…'} className={field} />
       </div>
       <div>
-        <label className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
+        <label htmlFor={`${a11yId}-f4`} className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
+        <textarea id={`${a11yId}-f4`} value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
           placeholder={isBug ? 'Device, what you expected, anything else that helps us fix it.' : 'Describe how it might work — even a rough sketch helps.'} className={cn(field, 'resize-y')} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.category')}</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
+          <label htmlFor={`${a11yId}-f5`} className={label}>{t('feedbackFeedbackBoard.category')}</label>
+          <select id={`${a11yId}-f5`} value={category} onChange={(e) => setCategory(e.target.value)} className={field}>
             {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_META[c].emoji} {CATEGORY_META[c].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.impact')}</label>
-          <select value={impact} onChange={(e) => setImpact(e.target.value)} className={field}>
+          <label htmlFor={`${a11yId}-f6`} className={label}>{t('feedbackFeedbackBoard.impact')}</label>
+          <select id={`${a11yId}-f6`} value={impact} onChange={(e) => setImpact(e.target.value)} className={field}>
             {IMPACT_ORDER.map((i) => <option key={i} value={i}>{IMPACT_META[i].label}</option>)}
           </select>
         </div>
         <div>
-          <label className={label}>{t('feedbackFeedbackBoard.forYouOrOthers')}</label>
-          <select value={audience} onChange={(e) => setAudience(e.target.value)} className={field}>
+          <label htmlFor={`${a11yId}-f7`} className={label}>{t('feedbackFeedbackBoard.forYouOrOthers')}</label>
+          <select id={`${a11yId}-f7`} value={audience} onChange={(e) => setAudience(e.target.value)} className={field}>
             {AUDIENCE_ORDER.map((a) => <option key={a} value={a}>{AUDIENCE_META[a].label}</option>)}
           </select>
         </div>
       </div>
       <div>
-        <label className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</label>
-        <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
+        <span id={`${a11yId}-attachment`} className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</span>
+        <div role="group" aria-labelledby={`${a11yId}-attachment`}>
+          <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3 pt-1">
         <span className="text-xs text-muted">{t('feedbackFeedbackBoard.allFieldsOptionalExceptATitle')}</span>

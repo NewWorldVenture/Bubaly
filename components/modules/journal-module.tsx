@@ -3,7 +3,7 @@
 // Personal Journal — private reflection + growth. Dated entries with a mood, an
 // AI/evergreen reflection prompt, and hands-free Voice Capture in the composer.
 // 100% Supabase-wired via `journal_entries`, scoped to the signed-in member.
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useId } from 'react';
 import {
   BookHeart, Plus, Trash2, Pencil, X, Sparkles, Mic, MicOff, Quote,
 } from 'lucide-react';
@@ -93,8 +93,8 @@ export function JournalModule() {
                     </div>
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
-                    <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('iconAction.edit')} onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('iconAction.delete')} onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (
@@ -160,6 +160,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
   familyId: string; userId: string; memberId: string | null;
   onClose: () => void; onSaved: () => void;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -208,8 +209,8 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
         )}
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('journal.howAreYouFeeling')}</label>
-          <div className="flex gap-2">
+          <span id={`${a11yId}-f1`} className="mb-1.5 block text-sm font-medium">{t('journal.howAreYouFeeling')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex gap-2">
             {MOODS.map((m) => (
               <button key={m.id} type="button" onClick={() => setMood(mood === m.id ? null : m.id)}
                 className={cn('flex flex-1 flex-col items-center gap-1 rounded-xl border-2 py-2 text-xs transition',
@@ -226,7 +227,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium">{t('journal.yourEntry')}</label>
+            <label htmlFor={`${a11yId}-entry`} className="text-sm font-medium">{t('journal.yourEntry')}</label>
             {speech.supported && (
               <button type="button" onClick={toggleMic}
                 className={cn('flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition',
@@ -235,7 +236,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
               </button>
             )}
           </div>
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)}
+          <Textarea id={`${a11yId}-entry`} value={body} onChange={(e) => setBody(e.target.value)}
             placeholder={t('journal.letItOutWriteFreelyNo')} className="min-h-[200px]" autoFocus />
           {speech.listening && <p className="mt-1 text-xs text-rose-500">Listening… {speech.transcript}</p>}
           {speech.error && <p className="mt-1 text-xs text-danger">{speech.error}</p>}

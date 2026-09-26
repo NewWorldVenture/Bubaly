@@ -75,7 +75,7 @@ export function WalletActivation({ canActivate }: { canActivate: boolean }) {
       {canActivate ? (
         <div className="space-y-3">
           <label className="flex cursor-pointer items-start gap-2 text-sm">
-            <button type="button" onClick={() => setAgreed((v) => !v)}
+            <button role="checkbox" aria-checked={agreed} type="button" onClick={() => setAgreed((v) => !v)}
               className={`mt-0.5 grid h-5 w-5 flex-shrink-0 place-items-center rounded-md border-2 transition ${agreed ? 'border-brand bg-brand text-white' : 'border-border'}`}>
               {agreed && <Check className="h-3 w-3" />}
             </button>

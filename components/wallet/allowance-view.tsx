@@ -3,7 +3,7 @@
 // Allowance management — per-child recurring allowance rules (amount + cadence,
 // pause/resume). A Basic+ feature; Free families see an upgrade prompt. The cron
 // (/api/cron/wallet-allowance) pays them into the ledger automatically.
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarClock, Pause, Play, Pencil, Lock, X, Zap } from 'lucide-react';
 import Link from 'next/link';
@@ -122,6 +122,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
 }
 
 function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => void }) {
+  const a11yId = useId();
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -147,8 +148,8 @@ function AllowanceModal({ row, onClose }: { row: AllowanceRow; onClose: () => vo
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('allowance.amountUsd')}>{(id) => <Input id={id} type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10.00" autoFocus />}</Field>
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('allowance.howOften')}</label>
-          <div className="flex gap-2">
+          <span id={`${a11yId}-f1`} className="mb-1.5 block text-sm font-medium">{t('allowance.howOften')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex gap-2">
             {(['weekly', 'biweekly', 'monthly'] as const).map((c) => (
               <button key={c} type="button" onClick={() => setCadence(c)}
                 className={cn('flex-1 rounded-xl border-2 px-3 py-2 text-sm font-medium capitalize transition',

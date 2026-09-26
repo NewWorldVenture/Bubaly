@@ -11,7 +11,7 @@
 // • Saved departures show a live countdown + status and a one-tap Refresh that
 //   re-checks traffic/weather and keeps the calendar in sync.
 // 100% Supabase-wired via server actions; routing/weather/geocoding are keyless.
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MapPin, Plane, Car, Sparkles, Clock, RefreshCw, Trash2, Calendar, Loader2,
@@ -176,6 +176,7 @@ export function TripIntelModule({ upcoming, memberOptions, tripPlans, departureP
 function ResearchModal({ event, memberOptions, onClose, canSave }: {
   event: UpcomingEvent; memberOptions: MemberOption[]; onClose: () => void; canSave: boolean;
 }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -255,8 +256,8 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
         {!recs && (
           <>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whoAposSGoing')}</label>
-              <div className="flex flex-wrap gap-1.5">
+              <span id={`${a11yId}-f1`} className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whoAposSGoing')}</span>
+              <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex flex-wrap gap-1.5">
                 {memberOptions.map((m) => {
                   const on = selectedMembers.includes(m.name);
                   return (
@@ -270,8 +271,8 @@ function ResearchModal({ event, memberOptions, onClose, canSave }: {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whatDoYouLikeFoodHistory')}</label>
-              <textarea value={interests} onChange={(e) => setInterests(e.target.value)} rows={2}
+              <label htmlFor={`${a11yId}-f2`} className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.whatDoYouLikeFoodHistory')}</label>
+              <textarea id={`${a11yId}-f2`} value={interests} onChange={(e) => setInterests(e.target.value)} rows={2}
                 placeholder={tr('tripIntel.eGGreatSeafoodWalkableHistory')}
                 className="w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring" />
             </div>
@@ -406,6 +407,7 @@ function TripPlanCard({ plan }: { plan: SavedTripPlan }) {
 // ─── Departure Modal ──────────────────────────────────────────────────────────
 
 function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onClose: () => void; canSave: boolean }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -494,8 +496,8 @@ function DepartureModal({ event, onClose, canSave }: { event: UpcomingEvent; onC
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.startingFromHomeAddressOrCity')}</label>
-          <input value={home} onChange={(e) => setHome(e.target.value)} placeholder={tr('tripIntel.eG123MainStAtlanta')}
+          <label htmlFor={`${a11yId}-f3`} className="mb-1.5 block text-xs font-medium text-muted">{tr('tripIntel.startingFromHomeAddressOrCity')}</label>
+          <input id={`${a11yId}-f3`} value={home} onChange={(e) => setHome(e.target.value)} placeholder={tr('tripIntel.eG123MainStAtlanta')}
             className="h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm focus-ring" />
         </div>
 

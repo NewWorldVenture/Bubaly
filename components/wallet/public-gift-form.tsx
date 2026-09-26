@@ -2,7 +2,7 @@
 
 // Public gift form (no auth) — a relative picks an amount, adds a note, and
 // submits a pending gift the family approves later. Friendly + frictionless.
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { Gift, Check, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
@@ -12,6 +12,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 export function PublicGiftForm({ token, suggestedCents, childName }: {
   token: string; suggestedCents: number[]; childName: string;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const [amount, setAmount] = useState<number | null>(suggestedCents[0] ?? null);
   const [custom, setCustom] = useState('');
@@ -74,8 +75,8 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
   return (
     <form onSubmit={submit} className="w-full space-y-4 rounded-2xl border border-border bg-surface/40 p-5">
       <div>
-        <label className="mb-1.5 block text-sm font-medium">{t('publicGift.chooseAnAmount')}</label>
-        <div className="grid grid-cols-3 gap-2">
+        <span id={`${a11yId}-f1`} className="mb-1.5 block text-sm font-medium">{t('publicGift.chooseAnAmount')}</span>
+        <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-3 gap-2">
           {suggestedCents.map((c) => (
             <button key={c} type="button" onClick={() => { setAmount(c); setCustom(''); }}
               className={cn('rounded-xl border-2 py-3 text-sm font-bold transition',
@@ -110,14 +111,14 @@ export function PublicGiftForm({ token, suggestedCents, childName }: {
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <label className="text-sm font-medium">{t('publicGift.addAMessageOptional')}</label>
+          <label htmlFor={`${a11yId}-message`} className="text-sm font-medium">{t('publicGift.addAMessageOptional')}</label>
           <button type="button" onClick={getIdeas} disabled={assisting}
             className="inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline disabled:opacity-60">
             {assisting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
             {t('publicGift.helpMeWriteSomething')}
           </button>
         </div>
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Write a note for ${childName}…`}
+        <textarea id={`${a11yId}-message`} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Write a note for ${childName}…`}
           className="min-h-[70px] w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm" />
         {ideas.length > 0 && (
           <div className="mt-2 space-y-1.5">

@@ -48,7 +48,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
                     <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
                     <td className="px-3 py-2 text-muted">{r.mileage != null ? `${r.mileage.toLocaleString()} mi` : '—'}</td>
                     <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
-                    <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await deleteAutoServiceAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
+                    <td className="px-3 py-2 text-right"><button aria-label={t('iconAction.delete')} onClick={() => start(async () => { await deleteAutoServiceAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
               </tbody>

@@ -42,3 +42,31 @@ export type VoteSummary = { totalBallots: number; voters: number };
 export function summarizeBallots(ballots: { member_id: string }[]): VoteSummary {
   return { totalBallots: ballots.length, voters: new Set(ballots.map((b) => b.member_id)).size };
 }
+
+/**
+ * The meals planner's vote card: for each option, how many members said YES,
+ * as a share of the members who said yes to anything, and which option the
+ * viewer said yes to.
+ *
+ * The card used to count every ballot on an option as support. Ballots are
+ * shared with /dashboard/recipes/vote, where a member rates each option
+ * yes/maybe/no, so a 👎 cast there raised that meal's bar here. Counting only
+ * `yes` over distinct members gives exactly the old numbers on the planner's
+ * own ballots (one `yes` per member) and stops a "no" reading as a vote for.
+ */
+export function yesShares(
+  optionIds: string[],
+  ballots: (Ballot & { member_id: string })[],
+  selfId: string | null,
+): { yes: Map<string, number>; voters: number; mine: string | null } {
+  const yes = new Map(optionIds.map((id) => [id, 0]));
+  const voters = new Set<string>();
+  let mine: string | null = null;
+  for (const b of ballots) {
+    if (b.choice !== 'yes' || !yes.has(b.option_id)) continue;
+    yes.set(b.option_id, (yes.get(b.option_id) ?? 0) + 1);
+    voters.add(b.member_id);
+    if (mine === null && b.member_id === selfId) mine = b.option_id;
+  }
+  return { yes, voters: voters.size, mine };
+}

@@ -125,7 +125,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
         <div className="mb-5 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text"><Sparkles className="h-3.5 w-3.5" /> {tr('walletDashboard.moneyCoach')}</span>
-            <button onClick={() => setCoach(null)} className="text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
+            <button aria-label={tr('iconAction.close')} onClick={() => setCoach(null)} className="text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
           </div>
           {coach.headline && <p className="text-sm font-semibold leading-relaxed">{coach.headline}</p>}
           {coach.insights.length > 0 && (

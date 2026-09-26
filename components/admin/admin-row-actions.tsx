@@ -30,7 +30,7 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
 
   return (
     <div className="relative">
-      <button
+      <button aria-label={t('iconAction.moreOptions')} aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
         className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated focus-ring disabled:opacity-50"

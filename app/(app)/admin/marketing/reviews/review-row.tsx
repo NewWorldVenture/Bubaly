@@ -49,7 +49,7 @@ export function ReviewRow({ review }: { review: Review }) {
         {review.status !== 'rejected' && <button onClick={() => moderate('rejected')} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reject')}</button>}
         <button onClick={() => setReplyOpen((o) => !o)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Reply className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reply')}</button>
         {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
-        <button onClick={() => start(async () => { await deleteReviewAction(review.id); })} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+        <button aria-label={t('iconAction.delete')} onClick={() => start(async () => { await deleteReviewAction(review.id); })} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
 
       {replyOpen && (

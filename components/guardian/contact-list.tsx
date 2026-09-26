@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useId } from 'react';
 import { Plus, Search, Pencil, Trash2, Phone, Mail, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -191,7 +191,9 @@ function ContactRow({
   onDelete: () => void;
   onTrustChange: (t: TrustLevel) => void;
 }) {
+  const tr = useTranslations();
   const [showTrustPicker, setShowTrustPicker] = useState(false);
+  const name = c.name ?? tr('contactList.unknownContact');
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface/60 transition">
@@ -201,7 +203,7 @@ function ContactRow({
       </div>
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{c.name ?? 'Unknown'}</p>
+        <p className="text-sm font-medium truncate">{name}</p>
         <div className="flex gap-2 mt-0.5">
           {c.phone && <span className="text-xs text-muted flex items-center gap-1"><Phone className="h-3 w-3" />{formatPhone(c.phone)}</span>}
           {c.email && <span className="text-xs text-muted flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}
@@ -240,8 +242,11 @@ function ContactRow({
         )}
       </div>
       {/* Actions */}
-      <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
-      <button onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
+      {/* Icon-only, so each says what it does and to whom (MAIN-F-D11): a
+          screen reader otherwise announced two unnamed buttons per row, one of
+          which deletes the contact. */}
+      <button type="button" onClick={onEdit} aria-label={tr('contactList.editContact', { name })} title={tr('contactList.editContact', { name })} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" aria-hidden="true" /></button>
+      <button type="button" onClick={onDelete} aria-label={tr('contactList.removeContact', { name })} title={tr('contactList.removeContact', { name })} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
     </div>
   );
 }
@@ -259,6 +264,7 @@ function ContactModal({
   onSave: (form: { name: string; phone: string; email: string; notes: string; trust_level: TrustLevel; member_id: string }) => void;
   onClose: () => void;
 }) {
+  const a11yId = useId();
   const tr = useTranslations();
   // The markup below declares `aria-modal="true"`. This is what makes that true:
   // focus enters the dialog, Tab cycles inside it, Escape closes, and focus
@@ -293,8 +299,8 @@ function ContactModal({
           <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder={tr('contactList.phoneEG15551234567')} type="tel" inputMode="tel" autoComplete="tel" className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
           <input value={form.email} onChange={e => set('email', e.target.value)} placeholder={tr('contactList.emailOptional')} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{tr('contactList.trustLevel')}</label>
-            <div className="grid grid-cols-2 gap-1.5">
+            <span id={`${a11yId}-f1`} className="mb-1 block text-xs font-medium text-muted">{tr('contactList.trustLevel')}</span>
+            <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-2 gap-1.5">
               {TRUST_LEVELS.map((lvl) => (
                 <button
                   key={lvl}

@@ -54,20 +54,20 @@ export default async function SocialSettingsPage() {
         <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialSettings.workspaceSettings')}</h2>
         <form action={updateSettingsAction} className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultTimezone')}</label>
-            <input name="default_timezone" defaultValue={settings?.default_timezone ?? 'UTC'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="settings-f1" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultTimezone')}</label>
+            <input id="settings-f1" name="default_timezone" defaultValue={settings?.default_timezone ?? 'UTC'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.aiTone')}</label>
-            <input name="ai_tone" defaultValue={settings?.ai_tone ?? 'friendly'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="settings-f2" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.aiTone')}</label>
+            <input id="settings-f2" name="ai_tone" defaultValue={settings?.ai_tone ?? 'friendly'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.signatureAppendedOnSupportedPlatforms')}</label>
-            <input name="signature" defaultValue={settings?.signature ?? ''} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="settings-f3" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.signatureAppendedOnSupportedPlatforms')}</label>
+            <input id="settings-f3" name="signature" defaultValue={settings?.signature ?? ''} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultPlatforms')}</label>
-            <div className="flex flex-wrap gap-2">
+            <span id="settings-f4" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultPlatforms')}</span>
+            <div role="group" aria-labelledby="settings-f4" className="flex flex-wrap gap-2">
               {PLATFORMS.map((p) => (
                 <label key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">
                   <input type="checkbox" name="default_platforms" value={p} defaultChecked={defaultPlatforms.has(p)} />

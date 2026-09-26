@@ -27,6 +27,7 @@ import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib
 import type { Tables, MealType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { formatMealDay, mealWeek } from '@/lib/meals/week';
+import { yesShares } from '@/lib/recipes/voting';
 import type { Ingredient, PlanSlot } from '@/lib/services/meals';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
 
@@ -674,9 +675,12 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
   onVote: (optionId: string) => void;
 }) {
   const tr = useTranslations();
-  const tally = (optId: string) => data.ballots.filter((b) => b.option_id === optId).length;
-  const total = data.ballots.length || 1;
-  const myPick = data.ballots.find((b) => b.member_id === selfId)?.option_id ?? null;
+  // Only a `yes` is support: these ballots are shared with the recipes vote
+  // page, where a member can also say maybe or no to an option (MAIN-F-J08).
+  const shares = yesShares(data.options.map((o) => o.id), data.ballots, selfId);
+  const tally = (optId: string) => shares.yes.get(optId) ?? 0;
+  const total = shares.voters || 1;
+  const myPick = shares.mine;
   return (
     <div className="sidebar-card">
       <p className="text-sm font-semibold">{tr('meals.familyVote')}</p>

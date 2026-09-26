@@ -1,7 +1,7 @@
 'use client';
 
 // Multi-store shopping lists built on existing grocery_lists + grocery_items tables
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useId } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
   ShoppingCart, Pencil, Archive, Loader2, Copy, ExternalLink, PackageCheck,
@@ -210,7 +210,7 @@ export function ShoppingModule() {
       <div className="flex w-full flex-col lg:w-56 xl:w-64 flex-shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">{t('shopping.myLists')}</h2>
-          <button onClick={() => setNewListOpen(true)}
+          <button aria-label={t('iconAction.newList')} onClick={() => setNewListOpen(true)}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand-text hover:bg-brand/25 transition">
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -277,7 +277,7 @@ export function ShoppingModule() {
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
-                  {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+                  {search && <button aria-label={t('iconAction.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>
               </div>
             </div>
@@ -453,6 +453,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string;
   onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -493,8 +494,8 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title={t('shopping.newShoppingList')}>
       <form onSubmit={create} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</label>
-          <div className="grid grid-cols-4 gap-2">
+          <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-4 gap-2">
             {STORE_PRESETS.map((p) => (
               <button key={p.name} type="button" onClick={() => selectPreset(p)}
                 className={cn('flex flex-col items-center gap-1 rounded-xl border p-2 text-xs transition',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useId } from 'react';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -246,7 +246,7 @@ export function RecipesModule() {
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('recipes.searchRecipes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button aria-label={tr('iconAction.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> {tr('recipes.vote')}</a>
@@ -328,7 +328,7 @@ export function RecipesModule() {
                     )}
                   </div>
                   {/* Favorite */}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(recipe.is_favorite)} onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60">
                     <Heart className={cn('h-4 w-4', recipe.is_favorite && 'fill-red-400 text-red-400')} />
                   </button>
@@ -372,15 +372,15 @@ export function RecipesModule() {
                   {viewing.description && <p className="mt-1 text-sm text-muted">{viewing.description}</p>}
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => toggleFavorite(viewing)}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(viewing.is_favorite)} onClick={() => toggleFavorite(viewing)}
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
-                  <button onClick={() => { setEditing(viewing); setViewing(null); }}
+                  <button aria-label={tr('iconAction.edit')} onClick={() => { setEditing(viewing); setViewing(null); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
+                  <button aria-label={tr('iconAction.delete')} onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -569,6 +569,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   recipe: Recipe | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -677,16 +678,16 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Ingredients */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.ingredients')}</label>
+            <span id={`${a11yId}-ingredients`} className="text-sm font-medium">{tr('recipes.ingredients')}</span>
             <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">{tr('recipes.addIngredient')}</button>
           </div>
-          <div className="space-y-2">
+          <div role="group" aria-labelledby={`${a11yId}-ingredients`} className="space-y-2">
             {ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
                 <Input value={ing.unit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} placeholder="cups" className="w-20 flex-shrink-0" />
                 <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder={tr('recipes.ingredientName')} className="flex-1" />
-                <button type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                <button aria-label={tr('iconAction.remove')} type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -695,10 +696,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Instructions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.instructions')}</label>
+            <span id={`${a11yId}-instructions`} className="text-sm font-medium">{tr('recipes.instructions')}</span>
             <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">{tr('recipes.addStep')}</button>
           </div>
-          <div className="space-y-2">
+          <div role="group" aria-labelledby={`${a11yId}-instructions`} className="space-y-2">
             {instructions.map((step, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-fg">
@@ -706,7 +707,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
                   placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
-                <button type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
+                <button aria-label={tr('iconAction.remove')} type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -714,8 +715,8 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         {/* Allergy flags */}
         <div>
-          <label className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex flex-wrap gap-2">
             {ALLERGY_FLAGS.map((f) => (
               <button key={f} type="button" onClick={() => toggleFlag(f)}
                 className={cn('rounded-lg border px-2.5 py-1 text-xs font-medium transition',
