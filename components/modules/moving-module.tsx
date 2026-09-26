@@ -29,7 +29,13 @@ type Box = Tables<'move_boxes'>;
 
 const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const fmtLong = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?.label ?? s;
+// Move statuses render from the catalogue (I18N-002); MOVE_STATUSES in lib/
+// stays the English source for non-screen uses.
+const MOVE_STATUS_KEYS: Record<MoveStatus, string> = {
+  planning: 'moving.statusPlanning', packing: 'moving.statusPacking', moving_day: 'moving.statusMovingDay',
+  settling: 'moving.statusSettling', done: 'moving.statusDone', cancelled: 'moving.statusCancelled',
+};
+const statusLabel = (tr: (key: string) => string, s: MoveStatus) => (MOVE_STATUS_KEYS[s] ? tr(MOVE_STATUS_KEYS[s]) : s);
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
 export function MovingModule() {
@@ -135,7 +141,7 @@ export function MovingWorkspace() {
     if (!move) return;
     const { error } = await createClient().from('moves').update({ status }).eq('id', move.id);
     if (error) return toastError(describeDbError(error));
-    success(`Move marked ${statusLabel(status).toLowerCase()}`);
+    success(tr('moving.moveStatusIs', { status: statusLabel(tr, status) }));
   }
 
   async function deleteMove(m: Move) {
@@ -235,9 +241,9 @@ export function MovingWorkspace() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold">{move.title}</h2>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(move.status)}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(tr, move.status)}</span>
                   {suggested && suggested !== move.status && move.status !== 'done' && move.status !== 'cancelled' && (
-                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(suggested).toLowerCase()} →</button>
+                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(tr, suggested)} →</button>
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted"><CalendarClock className="mr-1 inline h-3.5 w-3.5" />{fmtLong(move.move_date)} · {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label}</p>
@@ -419,7 +425,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.kindOfMove')}>{(id) => <Select id={id} name="move_kind" defaultValue={move?.move_kind ?? 'local'}>{MOVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</Select>}</Field>
-          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{statusLabel(tr, s.value)}</option>)}</Select>}</Field>
         </div>
         <div className="flex flex-wrap gap-2">
           <Toggle label={tr('moving.kidsInSchoolChildcare')} value={kids} onChange={setKids} />

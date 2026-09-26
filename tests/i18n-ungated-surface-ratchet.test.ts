@@ -68,7 +68,9 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // Then to 2,800 with the care log: its type labels (chips, entries, picker)
 // now come from the catalogue rather than an English constant in lib/.
-const CEILING = 2800;
+//
+// Then to 2,799 with the moving module's status labels, the same shape.
+const CEILING = 2799;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
