@@ -41,9 +41,17 @@ async function cleanupSubmission(
   submissionId: string,
   paths: string[],
 ): Promise<void> {
-  const { error } = await supabase.from('chore_submissions').delete()
-    .eq('id', submissionId).eq('family_id', familyId);
-  if (error) console.error('[chore proof] submission cleanup failed', error);
+  // A rollback of a row this path inserted moments ago, so zero rows deleted is
+  // a failure to remove it, not an absence — an orphan submission that shows
+  // as pending review. Logged, not raised: the caller is already failing.
+  // Audit C1-S9-61.
+  const { data: removed, error } = await supabase.from('chore_submissions').delete()
+    .eq('id', submissionId).eq('family_id', familyId).select('id');
+  if (error || wroteNoRows(removed)) {
+    console.error('[chore proof] submission cleanup failed — an orphan submission may remain', {
+      submissionId, familyId, error: error?.message ?? 'no rows deleted',
+    });
+  }
   await cleanupProofMedia(supabase, paths);
 }
 
@@ -52,7 +60,7 @@ async function restoreAssignmentState(
   familyId: string,
   assignment: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabase.from('chore_assignments').update({
+  const { data: restored, error } = await supabase.from('chore_assignments').update({
     status: assignment.status,
     ai_score: assignment.ai_score,
     submitted_at: assignment.submitted_at,
@@ -61,8 +69,15 @@ async function restoreAssignmentState(
     approved_by: assignment.approved_by,
     points_awarded: assignment.points_awarded,
     cash_awarded_cents: assignment.cash_awarded_cents,
-  } as never).eq('id', assignment.id as string).eq('family_id', familyId);
-  if (error) console.error('[chore state] assignment rollback failed', error);
+  } as never).eq('id', assignment.id as string).eq('family_id', familyId).select('id');
+  // Restoring a row read moments ago, so zero rows is a failed restore: the
+  // assignment keeps the half-applied state this rollback exists to undo.
+  // Logged, not raised, as above. Audit C1-S9-61.
+  if (error || wroteNoRows(restored)) {
+    console.error('[chore state] assignment rollback failed', {
+      assignmentId: assignment.id, familyId, error: error?.message ?? 'no rows updated',
+    });
+  }
 }
 
 async function setSubmissionStatus(

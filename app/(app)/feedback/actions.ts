@@ -71,6 +71,10 @@ export async function toggleVoteAction(ideaId: string): Promise<Result & { voted
   if (readErr) return actionFailure('check the vote', t('feedback.couldNotCheckTheVote'), readErr);
 
   if (existing) {
+    // Deliberately NOT confirmed. Zero rows means the vote is already gone — a
+    // double click, or a second tab — which is the state being asked for, and
+    // the count returned below is re-read from the database either way.
+    // Audit C1-S9-61.
     const { error } = await supabase.from('feedback_votes').delete().eq('id', existing.id);
     if (error) return actionFailure('remove the vote', t('feedback.couldNotRemoveTheVote'), error);
   } else {

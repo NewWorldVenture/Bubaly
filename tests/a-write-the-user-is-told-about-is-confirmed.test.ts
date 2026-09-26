@@ -4,11 +4,13 @@ import { at, between, bodyOf } from './helpers/source-order';
 
 /** Line comments only — so an assertion cannot match the prose explaining it. */
 function stripComments(source: string): string {
-  // `[^\S\n]*`, not `\s*`: `\s` matches newlines, so `^\s*` greedily ate the
-  // line break between consecutive comment lines and collapsed them. Harmless
-  // for `toContain`, but it silently shifted every offset `at()` returns — and
-  // the same bug in the audit scanners misreported every file:line they
-  // published (C1-S9-52).
+  // `[^\S\n]*`, not `\s*`: `\s` matches newlines, so `^\s*` starting at a
+  // blank or whitespace-only line directly above a comment ate that line's
+  // break on the way to the `//`. Harmless for `toContain`, but it silently
+  // shifted every offset `at()` returns — and the same bug in the audit
+  // scanners misreported every file:line they published (C1-S9-52; mechanism
+  // stated precisely under C1-S9-61, where a fixture built on the looser
+  // description could not fail).
   return source.replace(/^[^\S\n]*\/\/.*$/gm, '');
 }
 
@@ -1362,5 +1364,73 @@ describe('toggles and dismissals ask what they changed (C1-S9-60)', () => {
         expect(cat[key], `${locale} ${key}`).toBeTruthy();
       }
     }
+  });
+});
+
+/**
+ * Audit C1-S9-61 — six writes the ratchet could not see.
+ *
+ * Each was the FIRST statement inside a block, and the scanner's statement
+ * began at the last `;` — before the `if` — so a `.select(` anywhere in the
+ * surrounding if/else counted it as confirmed. C1-S9-60 recorded the server
+ * actions as burned down to their deliberate members; that was true only of the
+ * writes the scanner could see.
+ */
+const platformActions = readFileSync('app/(app)/admin/marketing/platform/actions.ts', 'utf8');
+const profileActions = readFileSync('app/(app)/dashboard/settings/profile-actions.ts', 'utf8');
+
+describe('writes that were hidden as the first statement in a block (C1-S9-61)', () => {
+  it('claiming a CRM lead never overwrites an owner, and is confirmed', () => {
+    const body = actionBody(profileActions, 'async function resolveContactId');
+    expect(body).toContain(".update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id')");
+    expect(body).toContain('if (!wroteNoRows(claimed)) return byEmail[0].id;');
+  });
+
+  it("a lead owned by SOMEONE ELSE is not returned as this user's", () => {
+    // The old code returned `byEmail[0].id` whatever its owner. Now only an
+    // unowned lead this call actually claimed, or one this user already owns.
+    const body = actionBody(profileActions, 'async function resolveContactId');
+    const branch = body.slice(at(body, 'if (byEmail?.[0]?.id) {'), at(body, "from('crm_contacts').insert("));
+    const returns = branch.match(/return byEmail\[0\]\.id;/g) ?? [];
+    expect(returns, 'exactly the claimed path and the already-ours path').toHaveLength(2);
+    expect(branch).toContain('byEmail[0].owner_id === userId');
+  });
+
+  it('a departure event deleted from the calendar is re-created, not pointed at', () => {
+    const body = tripIntel.slice(at(tripIntel, 'if (opts.existingId) {'));
+    const block = ifBlock(tripIntel, 'if (opts.existingId) {');
+    expect(block).toContain('if (!wroteNoRows(updated)) return opts.existingId;');
+    // And the update must ASK. Without `.select('id')`, `updated` is null on
+    // every call, `wroteNoRows` is always true, and each save would fall
+    // through and create another event — duplication, the C1-S9-58 shape.
+    expect(block).toContain(".eq('id', opts.existingId).eq('family_id', opts.familyId).select('id');");
+    // Zero rows must reach the insert below rather than return: the block may
+    // not end in an unconditional `return opts.existingId`.
+    expect(stripComments(block)).not.toMatch(/\n\s*return opts\.existingId;/);
+    expect(at(body, "from('calendar_events').insert(")).toBeGreaterThan(block.length);
+  });
+
+  it('both chore rollbacks log a restore or cleanup that matched nothing', () => {
+    for (const [binding, log] of [
+      ['removed', "'[chore proof] submission cleanup failed — an orphan submission may remain'"],
+      ['restored', "'[chore state] assignment rollback failed'"],
+    ] as const) {
+      const block = stripComments(ifBlock(missionsFile, `error || wroteNoRows(${binding})`));
+      expect(block, binding).toContain(log);
+      expect(block, binding).not.toMatch(/\breturn\b|\bthrow\b/);
+    }
+  });
+
+  it('clearing the previous default template stays ungated on rows', () => {
+    const clear = platformActions.slice(at(platformActions, "const { error: clearDefaultError }"));
+    expect(clear.slice(0, 260)).not.toContain('.select(');
+    expect(platformActions).toContain('when none was, zero rows is exactly right');
+  });
+
+  it('removing a vote stays ungated on rows', () => {
+    const body = actionBody(feedbackActions, 'export async function toggleVoteAction');
+    const remove = body.slice(at(body, "from('feedback_votes').delete()"));
+    expect(remove.slice(0, 120)).not.toContain('.select(');
+    expect(body).toContain('the vote is already gone');
   });
 });

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { USE_SERVER_FILES, perFile, unconfirmedWritesIn } from './helpers/unconfirmed-writes';
 
 /**
  * Audit C1-S9-50 — ratchet for the unconfirmed-write class.
@@ -30,89 +30,13 @@ import { describe, expect, it } from 'vitest';
  * below and are part of the counts — the ratchet bounds the class, it does not
  * claim every remaining instance is a defect.
  */
-// `[^\S\n]*`, not `\s*`, and a block strip that keeps its newlines: `\s` matches
-// the line break, so the original collapsed consecutive comment lines into one.
-// Harmless for a count, but it moved every offset — which is exactly how the
-// audit scanners came to publish wrong file:line numbers (C1-S9-52). Fixed here
-// so the positions this scan reports can be trusted.
-const strip = (s: string) => s
-  .replace(/^[^\S\n]*\/\/.*$/gm, '')
-  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-  // TRAILING comments too — the fifth defect in this sweep's instruments
-  // (C1-S9-60). Only whole-line comments were stripped, so
-  //   .eq('family_id', id) // RLS also enforces this; explicit for clarity
-  //   .select('id');
-  // ended the statement at the semicolon INSIDE the comment, before the
-  // `.select`, and a confirmed write was counted as unconfirmed. The same cut
-  // can fall before a `.eq(`, making a filtered write look unfiltered and
-  // hiding it from the count entirely — the worse direction. Checked when this
-  // went in: across every 'use server' file, the only change was the one false
-  // positive. `(?<=[ \t])` because a URL's `//` follows a colon, never a space.
-  .replace(/(?<=[ \t])\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+// The scanner lives in `tests/helpers/unconfirmed-writes.ts` since C1-S9-61,
+// shared with the sibling ratchet over everything that is NOT a server action,
+// so the two cannot drift. Its header lists the five defects it has had.
+const unconfirmedPositions = () => USE_SERVER_FILES().flatMap(unconfirmedWritesIn);
+const unconfirmedPerFile = () => perFile(unconfirmedPositions());
 
-function statementAt(src: string, start: number): string {
-  let depth = 0, i = start;
-  for (; i < src.length; i++) {
-    const c = src[i];
-    if (c === '(' || c === '[' || c === '{') depth++;
-    else if (c === ')' || c === ']' || c === '}') depth--;
-    else if (c === ';' && depth <= 0) break;
-  }
-  return src.slice(start, i + 1);
-}
-
-/** Every counted write, as file + 1-based line. `strip` preserves line numbers. */
-function unconfirmedPositions(): Array<{ file: string; line: number }> {
-  const files = execSync("grep -rl \"^'use server'\" app lib --include='*.ts' --include='*.tsx'", { encoding: 'utf8' })
-    .trim().split('\n').filter(Boolean).sort();
-  const out: Array<{ file: string; line: number }> = [];
-  for (const f of files) {
-    const src = strip(readFileSync(f, 'utf8'));
-    const re = /\.(update|delete)\(/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(src))) {
-      const before = src.slice(0, m.index);
-      const stmtStart = Math.max(before.lastIndexOf(';'), before.lastIndexOf('\n\n')) + 1;
-      const stmt = statementAt(src, stmtStart);
-      if (!/\.from\(/.test(stmt)) continue;
-      if (/\.select\(/.test(stmt)) continue;
-      if (/count:\s*'exact'/.test(stmt)) continue;
-      if (!/\.eq\(|\.in\(|\.match\(|\.neq\(|\.is\(/.test(stmt)) continue;
-      out.push({ file: f, line: before.split('\n').length });
-    }
-  }
-  return out;
-}
-
-function unconfirmedPerFile(): Map<string, number> {
-  const files = execSync("grep -rl \"^'use server'\" app lib --include='*.ts' --include='*.tsx'", { encoding: 'utf8' })
-    .trim().split('\n').filter(Boolean).sort();
-  const counts = new Map<string, number>();
-  for (const f of files) {
-    const src = strip(readFileSync(f, 'utf8'));
-    const re = /\.(update|delete)\(/g;
-    let m: RegExpExecArray | null, n = 0;
-    while ((m = re.exec(src))) {
-      const before = src.slice(0, m.index);
-      const stmtStart = Math.max(before.lastIndexOf(';'), before.lastIndexOf('\n\n')) + 1;
-      const stmt = statementAt(src, stmtStart);
-      if (!/\.from\(/.test(stmt)) continue;      // not a database write
-      if (/\.select\(/.test(stmt)) continue;      // confirmed by representation
-      // Confirmed by COUNT instead. `Prefer: count=exact` is answered whether or
-      // not a representation was asked for, so a write carrying it CAN tell zero
-      // rows from one — `moveAssignmentAction` does, via `if (!count)`. Counting
-      // it as unconfirmed was the scan being wrong about the code, which is the
-      // direction this sweep keeps finding first. Audit C1-S9-59.
-      if (/count:\s*'exact'/.test(stmt)) continue;
-      if (!/\.eq\(|\.in\(|\.match\(|\.neq\(|\.is\(/.test(stmt)) continue; // unfiltered
-      n++;
-    }
-    if (n) counts.set(f, n);
-  }
-  return counts;
-}
-
-// Known unconfirmed writes as of C1-S9-60. ONLY REMOVE or DECREASE entries as
+// Known unconfirmed writes as of C1-S9-61. ONLY REMOVE or DECREASE entries as
 // they are fixed — never add, never increase.
 //
 // Burn-down since the ratchet went in: 82 across 39 files (C1-S9-50) → 74/37
@@ -125,19 +49,38 @@ function unconfirmedPerFile(): Map<string, number> {
 // step edited this baseline DOWN, and the stale-entry case below is what forced
 // the edit rather than leaving fixed files sitting here quietly.
 //
-// **Every entry left is deliberate.** Ten writes where zero rows is the ordinary
+// **And then UP by four, at C1-S9-61 — the one time this list has grown, and
+// not because the code did.** The scanner was widened for a sibling ratchet and
+// three of its defects surfaced on the way, two of which hid writes here:
+//   - A write built across statements (`let q = …update(…)`, `q = q.eq(…)`,
+//     `await q`) had no filter in its declaring statement and was skipped. Two
+//     `admin_notifications` mark-reads.
+//   - A write that is the FIRST statement in a block began, for the scanner, at
+//     the last `;` — before the `if` — so a `.select(` anywhere in the
+//     surrounding if/else confirmed it. Six writes, four of them real defects,
+//     fixed in the same pass (a CRM claim that could overwrite an owner, a
+//     departure event re-pointed at after deletion, two chore rollbacks).
+// The four that are deliberate are counted, each with its reason beside it.
+// 10/6 → 14/10. C1-S9-60's "every remaining write is deliberate" was true only
+// of the writes the scanner could see.
+//
+// **Every entry left is deliberate.** Fourteen writes where zero rows is the ordinary
 // outcome or the thing asked for (a reset of something never customised, a
 // throttle row that does not exist until a first failure, an annotation on a row
 // that is being kept on purpose). The last case below holds them to that: each
 // must carry its reason beside the code, so this list can no longer grow a
 // member that is merely unfixed.
 const BASELINE = new Map<string, number>([
+  ['app/(app)/admin/feedback/actions.ts', 1],
   ['app/(app)/admin/marketing/content/actions.ts', 2],
+  ['app/(app)/admin/marketing/platform/actions.ts', 1],
+  ['app/(app)/admin/notifications-actions.ts', 1],
   ['app/(app)/admin/services/actions.ts', 1],
   ['app/(app)/dashboard/customize-actions.ts', 2],
   ['app/(app)/dashboard/library/actions.ts', 2],
   ['app/(app)/dashboard/social-feed/actions.ts', 1],
   ['app/(app)/family/child-login-actions.ts', 2],
+  ['app/(app)/feedback/actions.ts', 1],
 ]);
 
 describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
@@ -150,6 +93,20 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
       if (n > allowed) grew.push(`${file}: ${n} > ${allowed}`);
     }
     expect(grew, 'a write that reports success it cannot see was added').toEqual([]);
+  });
+
+  it('no file has FEWER than its baseline — a fix must prune it (C1-S9-61)', () => {
+    // The stale-entry case below only fires when a file empties. A file going
+    // from two to one stayed at two here, so the baseline drifted above the code
+    // and the slack could be spent on a new write without anything going red.
+    // Found when a probe counted 120 against a baseline of 121 and every case
+    // still passed.
+    const shrank: string[] = [];
+    for (const [file, allowed] of BASELINE) {
+      const n = found.get(file) ?? 0;
+      if (n > 0 && n < allowed) shrank.push(`${file}: ${n} < ${allowed}`);
+    }
+    expect(shrank, 'lower these entries to match the code').toEqual([]);
   });
 
   it('no NEW file joins the class', () => {
@@ -184,6 +141,6 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
     // If this number moves without finalaudit.md moving with it, one of the two
     // is wrong — and the register is the thing other workers read.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(10);
+    expect(total).toBe(14);
   });
 });

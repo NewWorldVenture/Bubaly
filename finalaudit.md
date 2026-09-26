@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-201 finding IDs from four workers and two parallel sessions; none of it was
+202 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 211 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 212 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34250,6 +34250,12 @@ the register.
 
 ### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-60 — the write class burned down to its deliberate members, and a fifth instrument defect
 
+> **Superseded in part by `C1-S9-61`.** The "every remaining write is
+> deliberate" claim below held only for the writes the scanner could see. Six
+> were hidden as the first statement in a block, four of them real defects.
+> Fixed there, and the ratchet is now 14 across 10. The entry is left as
+> written.
+
 **The sweep's end state first, because it is the claim to check.** The
 C1-S9-50 ratchet now counts **10 unconfirmed writes across 6 files**, from 102
 when `C1-S9-46` rebuilt the scan. **Every one of the ten is deliberate**, and the
@@ -34371,6 +34377,104 @@ writes still cannot tell zero rows from one, by design — but it is now fully
 
 ---
 
+### `[CLAUDE-1][HIGH][INSTRUMENTS]` C1-S9-61 — widening the write scan found four defects in it, and the last pass's "done" was not
+
+**Correcting the previous entry first, because it is the headline.** `C1-S9-60`
+recorded the server-action write class as *"burned down to its deliberate
+members"*. That was true only of the writes the scanner could see. Six more were
+hidden in `'use server'` files, **four of them real defects**, and they are fixed
+below. The ratchet went **up** as a result, 10 → 14, which is the one time it
+has grown, and it grew because the instrument's sight improved, not because the
+code regressed.
+
+**How it was found.** The C1-S9-50 ratchet only ever scanned `'use server'`
+files, so the next axis was the same class everywhere else. Widening the scan
+meant moving it into a shared, fixture-tested module
+(`tests/helpers/unconfirmed-writes.ts`, `tests/unconfirmed-writes-scanner.test.ts`),
+and putting each rule under a fixture it alone decides surfaced four more
+defects. **Two of them hid writes.**
+
+| # | Defect | Direction | Found by |
+|---|---|---|---|
+| 6 | A write built across statements (`let q = …update(…)`; `q = q.eq(…)`; `await q`) was skipped: the declaring statement has no filter, and the ones that filter and run it have no `.from(` | **hid writes** | a range-filter check, incidentally |
+| 7 | **The first statement in a block** began, for the scanner, at the last `;` — *before* the `if` — so the whole `if … else …` became one "statement", and a `.select(` anywhere in it (an `else` branch's insert, a later read) counted the write as confirmed | **hid writes** | a mutation that survived |
+| 8 | Writes through the guardian routes' `gFrom(t)` wrapper (31 call sites) needed a literal `.from(`; they were visible only when defect 7's over-long statement happened to swallow a real one | **hid writes**, masked by #7 | checking the one site the #7 fix *stopped* counting |
+| 9 | Range filters (`.lt`, `.gte`, …) were read as "unfiltered" | would hide; hid nothing at the time | widening the filter list |
+
+Plus two defects in the **new** code, caught by its fixtures before anything was
+baselined on it: a builder slice that ended right after `await q` (so
+`await q.select(…)` read as unconfirmed), and `=\s*(?!await\b)`, which
+**backtracks** — `\s*` matches nothing, the lookahead sees `" await"` — so a
+plain `const r = await db.from(…)…` was taken for a builder and dropped. That
+one had already hidden `lib/services/purchases/private-result.ts:158`.
+
+**Defect 7 was the one that mattered.** Measured by diffing every position
+before and after: **23 writes became visible that had never been counted — 6 in
+server actions, 17 elsewhere — and nothing previously counted was lost.**
+
+**The six in server actions:**
+
+- **Fixed — a CRM lead claim that could overwrite an owner.**
+  `resolveContactId` read a lead with no owner and then wrote
+  `owner_id = userId` filtered on `id` alone. A lead claimed in between was
+  overwritten. Worse, when the lead *had* an owner it returned that lead's id
+  anyway, tying the account to someone else's record. Now the write repeats the
+  read's condition (`.is('owner_id', null)`) and is confirmed. A lead is
+  returned only if this call claimed it or this user already owns it;
+  otherwise the user gets their own.
+- **Fixed — a departure event pointed at after deletion.** If the family deleted
+  the "head out" event from the calendar, re-saving the plan matched nothing and
+  returned the dead event's id, so the plan said the leave-by time was on their
+  calendar. Zero rows now falls through and re-creates it. **The guard for this
+  needed tightening:** a mutation dropping the `.select('id')` survived it, and
+  that mutation is serious: `updated` would be null on every call, so every save
+  would create *another* event.
+- **Fixed — two chore rollbacks** (`cleanupSubmission`, `restoreAssignmentState`)
+  confirmed for the log, as the dispute rollbacks were under `C1-S9-60`.
+- **Deliberate — clearing the previous default template** (none may exist) and
+  **removing a vote** (already gone is the requested state; the count is
+  re-read). Reasons beside the code.
+
+**The other two that surfaced in server actions** were builder-style
+`admin_notifications` mark-reads (zero rows = nothing unread, or nothing left
+to mark). Deliberate, reasons beside the code.
+
+**Two ratchet weaknesses, fixed in both ratchets.** A count that dropped
+*within* a file was never forced down; only a file emptying was. A probe counted
+120 against a baseline of 121 with every case green, so the slack could have
+been spent on a new write unseen. Both ratchets now require exact per-file
+counts.
+
+**The new ratchet.** `tests/an-unconfirmed-write-outside-actions-ratchet.test.ts`
+baselines **137 unconfirmed writes across 74 files** in API routes and `lib/`,
+as a starting inventory, **not a list of defects**. Crons sweeping rows that
+may not exist, and lease reclaims meant to lose a race, will stay, with their
+reasons written beside them, as the server-action set's did. That is the next
+burn-down.
+
+**Precision correction to `C1-S9-52`.** Its mechanism was recorded as `^\s*`
+"collapsing consecutive comment lines". A single pass never does that: `^`
+cannot match at a newline, so two comment lines are never joined. What it eats
+is a **blank or whitespace-only line directly above a comment**. The fix was
+right and the measured offsets stand. But the scanner fixture written from the
+loose description could not fail, and reverting the fix left it green. It was
+rewritten on the real trigger and now does fail. The comment in the
+write-confirmation test is corrected to match.
+
+**Status:** FIXED. Scanner: 25 fixture cases, each rule mutation-proven by
+reverting it (nine rule mutations, all killed after the C1-S9-52 fixture was
+corrected). Six new write guards, ten mutations including three over-tightenings,
+all killed after one tightening. Both ratchets exact, mutation-proven in both
+directions.
+
+**The count, stated plainly: this sweep's instruments have now had nine defects
+across three sweeps** — `C1-S9-37`, `C1-S9-44`, `C1-S9-46`, `C1-S9-52`,
+`C1-S9-60`, and the four here — **and three of the four found in this pass hid
+writes rather than inventing them.** A clean count from a scanner is a claim
+about the scanner first.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34440,9 +34544,10 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,190 passing / 17,193 across 1,352
-files.** (Re-run after `C1-S9-60`; was 17,164 / 17,167 after `C1-S9-59`, and
-17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
+Status: ✅ PASS — `npx vitest run`: **17,227 passing / 17,230 across 1,354
+files.** (Re-run after `C1-S9-61`, which added the scanner's fixture suite and
+the second write ratchet; was 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
+after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed
 and this count re-run rather than carried over. The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the

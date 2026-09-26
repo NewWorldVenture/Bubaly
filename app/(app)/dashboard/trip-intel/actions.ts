@@ -115,9 +115,15 @@ async function upsertHeadOutEvent(
     category: 'general' as const,
   };
   if (opts.existingId) {
-    const { error } = await supabase.from('calendar_events').update(fields).eq('id', opts.existingId).eq('family_id', opts.familyId);
+    // If the family deleted the departure event from the calendar itself, this
+    // matched nothing and still returned `existingId` — so the plan went on
+    // pointing at an event that no longer exists and said the leave-by time was
+    // on their calendar. Zero rows now falls through to create it again, which
+    // is what the family asked for by saving the plan. Audit C1-S9-61.
+    const { data: updated, error } = await supabase.from('calendar_events')
+      .update(fields).eq('id', opts.existingId).eq('family_id', opts.familyId).select('id');
     if (error) return null;
-    return opts.existingId;
+    if (!wroteNoRows(updated)) return opts.existingId;
   }
   const { data, error } = await supabase
     .from('calendar_events').insert({ ...fields, family_id: opts.familyId, created_by: opts.userId }).select('id').maybeSingle();

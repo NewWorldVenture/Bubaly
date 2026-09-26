@@ -8,6 +8,7 @@ import {
   normalizeAnswer, type ProfileField, type KnownProfile,
 } from '@/lib/marketing/progressive-profile';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = SupabaseClient<Database>;
 
@@ -24,8 +25,20 @@ async function resolveContactId(admin: Admin, userId: string, email: string | nu
   if (e) {
     const { data: byEmail } = await admin.from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(e)).limit(1);
     if (byEmail?.[0]?.id) {
-      if (byEmail[0].owner_id == null) await admin.from('crm_contacts').update({ owner_id: userId }).eq('id', byEmail[0].id);
-      return byEmail[0].id;
+      if (byEmail[0].owner_id == null) {
+        // The read above saw no owner; the WRITE now says so too. Without
+        // `.is('owner_id', null)` a lead claimed in between — the same person in
+        // a second tab, or a CRM import — was overwritten, and the account was
+        // tied to a record whose owner had just changed under it. Zero rows
+        // claimed means it is no longer ours to take, so fall through and
+        // create this user their own lead rather than return one they may not
+        // hold. Audit C1-S9-61.
+        const { data: claimed } = await admin.from('crm_contacts')
+          .update({ owner_id: userId }).eq('id', byEmail[0].id).is('owner_id', null).select('id');
+        if (!wroteNoRows(claimed)) return byEmail[0].id;
+      } else if (byEmail[0].owner_id === userId) {
+        return byEmail[0].id;
+      }
     }
   }
   const { data: created } = await admin.from('crm_contacts').insert({
