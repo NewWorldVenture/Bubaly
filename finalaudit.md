@@ -36354,6 +36354,15 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Twenty-third run, on `88cc1916` (run 36263500304): 1,293 passed, 3 failed, 0 flaky
+in 9.2m**, covering:
+- `C1-S9-83`: the memory undo, the weather default order, and member edits;
+- `C1-S9-84`: the raw-message toasts, including `bills-view` under
+  `finance-read-states`' harness, which maps `lib/supabase/errors`.
+
+Only the known `phone-auth-http` cases fail. `C1-S9-85` and `-86`
+(committed) were held until it reported.
+
 **Twenty-second run, on `d8305eeb` (run 36262274028): 1,293 passed, 3 failed, 0 flaky
 in 10.6m**, covering:
 - `C1-S9-81`: eight modules, and the subscriptions render mocks;
