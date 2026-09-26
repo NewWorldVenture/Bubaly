@@ -289,3 +289,83 @@ describe('a wallet hold release and a referral rollback (C1-S9-64)', () => {
     }
   });
 });
+
+/**
+ * Audit C1-S9-65 — lib/services. The memory cases are proved behaviourally in
+ * service-memory and ai-memory-traits-write-boundary; these cover the rest.
+ */
+const approvals = read('lib/services/approvals/index.ts');
+const groceries = read('lib/services/groceries/index.ts');
+const homeSvc = read('lib/services/home/index.ts');
+const inventory = read('lib/services/inventory/index.ts');
+const notesSvc = read('lib/services/notes/index.ts');
+const meals = read('lib/services/meals/index.ts');
+const tasks = read('lib/services/tasks/index.ts');
+const trips = read('lib/services/trips/index.ts');
+const privateResult = read('lib/services/purchases/private-result.ts');
+
+describe('services report a write that matched nothing (C1-S9-65)', () => {
+  it('an inventory move that matched no item fails before the history row is written', () => {
+    const b = block(inventory, 'if (wroteNoRows(moved)) {');
+    expect(b).toContain("return fail('Could not update where the item is.'");
+    // The history row is `inventory_moves`; the bail must come before it. (The
+    // first version anchored on `const { data, error } = await scope.db`, which
+    // first occurs thousands of characters EARLIER in the file.)
+    const after = inventory.slice(at(inventory, 'if (wroteNoRows(moved)) {'));
+    expect(after).toContain(".from('inventory_moves')\n    .insert(");
+  });
+
+  it('a note delete that removed nothing fails', () => {
+    expect(block(notesSvc, 'if (!error && wroteNoRows(deleted)) {')).toContain("return fail('Could not delete that note.'");
+  });
+
+  it('the itinerary shift counts only items that moved', () => {
+    expect(trips).toContain('if (!wroteNoRows(shiftedRow)) shifted += 1;');
+    expect(code(trips)).not.toMatch(/^\s*shifted \+= 1;/m);
+  });
+});
+
+describe('services log what they cannot undo (C1-S9-65)', () => {
+  const logOnly: Array<[string, string, string]> = [
+    ['approvals stamp', approvals, 'if (error || wroteNoRows(stamped)) {'],
+    ['home asset', homeSvc, 'if (assetError || wroteNoRows(assetTouched)) {'],
+    ['home contractor', homeSvc, 'if (contractorError || wroteNoRows(contractorTouched)) {'],
+    ['tasks rollback', tasks, 'if (rollbackError || wroteNoRows(rolledBack)) {'],
+    ['trips budget restore', trips, 'if (error || wroteNoRows(restored)) {'],
+    ['groceries double put-away', groceries, 'if (!clearError && wroteNoRows(cleared)) {'],
+  ];
+  for (const [name, src, needle] of logOnly) {
+    it(name, () => {
+      const b = code(block(src, needle));
+      expect(b, name).toContain('console.error(');
+      expect(b, name).not.toMatch(/\breturn\b|\bthrow\b/);
+    });
+  }
+
+  it('rollbacks of rows this call created compare counts exactly', () => {
+    expect(meals).toContain('else if ((removed?.length ?? 0) !== createdMealIds.length) {');
+    expect(trips).toContain('else if ((removed?.length ?? 0) !== ids.length) {');
+  });
+
+  it('a retry that delivered is not failed by a stamp that matched nothing', () => {
+    const w = privateResult.slice(at(privateResult, "if (wroteNoRows(stamped.data))"));
+    expect(w.split('\n')[0]).toContain('console.error(');
+    expect(privateResult).toContain('if (stamped.error) throw stamped.error;');
+  });
+});
+
+describe('services that stay ungated on rows say why (C1-S9-65)', () => {
+  it('the legacy concierge run close and dismiss', () => {
+    expect(approvals).toContain('not every approval has such a row');
+    // BOTH sites, counted. Checking "the first occurrence" let a mutation of the
+    // first site pass, because the needle then matched the second, unmutated one.
+    expect(code(approvals).match(/\.filter\('metadata->>approval_id', 'eq', row\.id\);/g) ?? []).toHaveLength(2);
+    expect(code(approvals)).not.toMatch(/\.filter\('metadata->>approval_id', 'eq', row\.id\)\s*\.select\(/);
+  });
+
+  it('the meal-plan rollback clear, which a readback confirms', () => {
+    expect(meals).toContain('`readTargetRows()` below RE-READS');
+    const w = meals.slice(at(meals, "const { error } = await scope.db.from('meal_plans').delete()"));
+    expect(w.slice(0, w.indexOf(';'))).not.toContain('.select(');
+  });
+});

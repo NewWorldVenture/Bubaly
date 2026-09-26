@@ -39,7 +39,7 @@ import { createHash } from 'node:crypto';
 import type { Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
 import { getAISettings } from '../ai-settings';
@@ -650,14 +650,22 @@ export async function resetMemberTraits(scope: ServiceScope, memberId: string): 
   if (!(TRAIT_METADATA_KEY in metadata)) return ok({ cleared: false });
   delete metadata[TRAIT_METADATA_KEY];
 
-  const { error } = await scope.db
+  // Answers `{ cleared: true }` below, and a reset is a privacy control: a
+  // family member asked for what Bubaly inferred about them to be forgotten.
+  // Matching no row left it all in place behind that answer. Audit C1-S9-65.
+  const { data: reset, error } = await scope.db
     .from('family_digital_twin_profiles')
     .update({ metadata: metadata as never, updated_by: scope.userId })
     .eq('family_id', scope.familyId)
-    .eq('member_id', memberId);
+    .eq('member_id', memberId)
+    .select('member_id');
   if (error) {
     console.error('[service:memory] twin trait reset failed', error);
     return fail(describeDbError(error, 'Could not reset that.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(reset)) {
+    console.error('[service:memory] twin trait reset matched no row', { familyId: scope.familyId, memberId });
+    return fail('Could not reset that.', { code: SERVICE_CODES.db });
   }
 
   await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: 'Reset what Bubaly learned about a family member', href: '/dashboard/settings#ai', memberId });
@@ -738,17 +746,22 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(describeDbError(insertError, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
 
-  const { error: updateError } = await scope.db
+  const { data: accepted, error: updateError } = await scope.db
     .from('family_playbook_suggestions')
     .update({ status: 'accepted', fact_id: fact.id })
     .eq('family_id', scope.familyId)
-    .eq('id', suggestionId);
-  if (updateError) {
-    // The fact exists; leaving the card open would let it be confirmed twice.
-    console.error('[service:memory] suggestion accept failed', updateError);
-    const { error: undoError } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', fact.id);
-    if (undoError) console.error('[service:memory] confirm rollback failed', undoError);
-    return fail(describeDbError(updateError, 'Could not confirm that memory.'), { code: SERVICE_CODES.db });
+    .eq('id', suggestionId)
+    .select('id');
+  // The fact exists; leaving the card open would let it be confirmed twice —
+  // and an accept that matched no row leaves it open exactly as an error does,
+  // so it takes the same path: undo the fact, report the failure. Before, only
+  // the error did, and a no-op accept left a card that would write the same
+  // fact again. Audit C1-S9-65.
+  if (updateError || wroteNoRows(accepted)) {
+    console.error('[service:memory] suggestion accept failed', updateError ?? { suggestionId, error: 'no rows updated' });
+    const { data: undone, error: undoError } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', fact.id).select('id');
+    if (undoError || wroteNoRows(undone)) console.error('[service:memory] confirm rollback failed', undoError ?? { factId: fact.id, error: 'no rows deleted' });
+    return fail(updateError ? describeDbError(updateError, 'Could not confirm that memory.') : 'Could not confirm that memory.', { code: SERVICE_CODES.db });
   }
 
   await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
@@ -799,10 +812,17 @@ export async function forgetFact(
     return fail('Only a parent or adult can forget a memory about someone else.', { code: SERVICE_CODES.denied });
   }
 
-  const { error } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', id);
+  // "Forgot …" is recorded next, and forgetting is a privacy control. The read
+  // above proved the fact was there, so zero rows is a delete that did not
+  // happen — a policy refusal answers with no error and no rows. Audit C1-S9-65.
+  const { data: forgotten, error } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', id).select('id');
   if (error) {
     console.error('[service:memory] fact delete failed', error);
     return fail(describeDbError(error, 'Could not forget that.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(forgotten)) {
+    console.error('[service:memory] fact delete matched no row', { familyId: scope.familyId, factId: id });
+    return fail('Could not forget that.', { code: SERVICE_CODES.db });
   }
   await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Forgot ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ kind: 'fact', label: fact.label });

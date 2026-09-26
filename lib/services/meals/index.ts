@@ -30,7 +30,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { Json, MealType, Tables } from '@/lib/database.types';
 import { normalizeAllergies } from '@/lib/meals/pantry-chef';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { getMembers } from '../family';
@@ -391,8 +391,14 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   const createdMealIds: string[] = [];
   const removeCreatedMeals = async () => {
     if (!createdMealIds.length) return;
-    const { error } = await scope.db.from('meals').delete().eq('family_id', scope.familyId).in('id', createdMealIds);
+    // Every id here was created by THIS call, so an exact count is right:
+    // fewer removed is a partial rollback that leaves orphan meals in the
+    // family's recipe list. Logged, not raised. Audit C1-S9-65.
+    const { data: removed, error } = await scope.db.from('meals').delete().eq('family_id', scope.familyId).in('id', createdMealIds).select('id');
     if (error) console.error('[service:meals] rollback of created meals failed', error);
+    else if ((removed?.length ?? 0) !== createdMealIds.length) {
+      console.error('[service:meals] rollback of created meals was partial', { removed: removed?.length ?? 0, created: createdMealIds.length });
+    }
   };
 
   const resolved = await resolveEntries(scope, valid.data, createdMealIds);
@@ -441,6 +447,9 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   }));
   const restore = async (removeInserted: boolean): Promise<boolean> => {
     if (removeInserted) {
+      // Rows deliberately not checked here: `readTargetRows()` below RE-READS
+      // the plan and compares ids, which confirms this delete more strictly
+      // than a row count would. Audit C1-S9-65.
       const { error } = await scope.db.from('meal_plans').delete()
         .eq('family_id', scope.familyId).in('id', rows.map((row) => row.id));
       if (error) { console.error('[service:meals] rollback clear failed', error); return false; }

@@ -27,7 +27,7 @@ import {
   applySubstitutions, collectDietaryConstraints, type Substitution,
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
@@ -950,11 +950,23 @@ export async function recordShoppingTrip(
 
     // Immediately, and scoped to this row: whatever happens to the rest of the
     // trip, this quantity is now in the pantry and must not be added twice.
-    const { error: clearError } = await scope.db
+    const { data: cleared, error: clearError } = await scope.db
       .from('grocery_items')
       .delete()
       .eq('family_id', scope.familyId)
-      .eq('id', item.id);
+      .eq('id', item.id)
+      .select('id');
+    // Zero rows means the line was already gone by the time this ran — and the
+    // likeliest reason is a second put-away racing this one, in which case the
+    // pantry increment above has now happened TWICE for one purchase. It cannot
+    // be undone from here; claiming the line before incrementing would prevent
+    // it, and that reordering is recorded as a design gap rather than made in a
+    // write sweep. What this does is stop it being silent. Audit C1-S9-65.
+    if (!clearError && wroteNoRows(cleared)) {
+      console.error('[service:groceries] bought line was already cleared; a concurrent put-away may have added it twice', {
+        familyId: scope.familyId, itemId: item.id, name: item.name,
+      });
+    }
     if (clearError) {
       console.error('[service:groceries] bought line clear failed', clearError);
       clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });

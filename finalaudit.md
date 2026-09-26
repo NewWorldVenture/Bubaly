@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-205 finding IDs from four workers and two parallel sessions; none of it was
+206 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 215 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 216 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34659,6 +34659,80 @@ rollback), all killed. **Ratchet: 119 → 114 across 63 files.**
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVICES]` C1-S9-65 — lib/services: two privacy controls that answered "done" over a no-op, and a fifth fake that could not fail
+
+**Nineteen writes** in the service layer, the shared code that server actions,
+routes, crons and the assistant all call.
+
+**Two privacy controls (fixed).** `forgetFact` ("forget that memory") and
+`resetMemberTraits` ("reset what Bubaly learned about this person") are how a
+family member removes something the product holds about them. Both read the row
+first, both then wrote without asking what they changed, and both answered
+success. `resetMemberTraits` returned `{ cleared: true }`. A policy refusal
+answers with no error and no rows, so either could tell a person their data was
+gone while it stayed. Both now fail on zero rows, **proved behaviourally** with
+new cases in the existing suites.
+
+**A duplication, the `C1-S9-59` Autopilot shape (fixed).** `confirmFact` writes
+the fact, then marks the suggestion card accepted. Its own comment: *"The fact
+exists; leaving the card open would let it be confirmed twice."* An **error**
+took the undo-the-fact path; an accept that **matched nothing** left the card
+open exactly the same way and did not. It now takes the same path, proved
+behaviourally.
+
+**Different answers (3, fixed).** An inventory move that matched no item still
+wrote its move-history row, so history and item disagreed, and the item wins
+every "where is it?" that follows. A note delete that removed nothing answered
+`ok`. The itinerary shift counted `shifted` for items that matched nothing, the
+fourth counter of this shape after `parked`, `armed` and `returned`.
+
+**Confirmed for the log (9).** The approval execution stamp (the file said
+"make the failure observable" but only an error reached the log), both home
+follow-ups, the trips and meals rollbacks (exact counts, since these ids were
+created by the same call), the trips budget restore, the task and memory rollbacks, and the
+purchase-answer retry stamp (the answer is delivered by then).
+
+**A race made visible, not fixed — recorded as a design gap.** Groceries'
+put-away increments the pantry and *then* clears the bought line. Zero rows on
+the clear means the line was already gone, and the likeliest cause is a second
+put-away racing this one, so **the pantry was incremented twice for one
+purchase**. It cannot be undone from there. The fix is to claim the line
+*before* incrementing, which is a reordering of a money-adjacent flow and not a
+write-sweep change. It is now logged instead of silent. **OPEN** as a design
+item.
+
+**Deliberate (3).** The two legacy concierge automation-run closes (not every
+approval has such a row) and the meal-plan rollback clear. That last one is
+confirmed by a **readback**: `restore` re-reads the plan and compares ids, which
+is stricter than a row count.
+
+**The fifth fake that encoded the defect.** `service-memory` and
+`ai-memory-traits-write-boundary` answered every update and delete with
+`{ data: null, error: null }`, a shape a real client cannot give once
+`.select()` is asked. Five cases went red on the fix, each **because the fake
+was modelling the old call site**, not the client. Repaired to return the row,
+with new cases for `[]`. With `shopping-handoff-write-boundary`'s failing-delete
+chain, which had no `.select()` at all and threw a `TypeError` where the client
+resolves, that makes **six fakes across this sweep**. The pattern holds: *a fake
+built against a defective call site encodes the defect, and stays green until
+the call site is corrected.*
+
+**Two guard slips of my own, both the same hazard.** The inventory ordering
+guard anchored on `const { data, error } = await scope.db`, which first occurs
+thousands of characters *earlier*. A mutation of the first concierge-close site
+survived because `at()` then matched the second, unmutated site. Both now count
+or slice explicitly. **A duplicate-import slip** (the insertion helper checked
+for `wroteNoRows`, not for an existing import of the module) was caught before
+commit and swept across every touched file.
+
+**Status:** FIXED, except the groceries race, which is OPEN as a design item.
+Guard: 13 source cases + 3 new behavioural cases (and 5 existing ones repaired),
+14 mutations (six
+over-tightening), all killed after the S10 guard was corrected. **Ratchet:
+114 → 98 across 55 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34728,8 +34802,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,266 passing / 17,269 across 1,355
-files.** (Re-run after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,282 passing / 17,285 across 1,355
+files.** (Re-run after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

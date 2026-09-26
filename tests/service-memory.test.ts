@@ -405,6 +405,9 @@ describe('confirmFact', () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'family_playbook_suggestions' && call.kind === 'select') return { data: SUGGESTION(), error: null };
       if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9', notes: `${AI_MEMORY_MARKER} — Mentioned in a conversation` }), error: null };
+      // The accept asks `.select()` (C1-S9-65), and a real client answers a
+      // matched update with the row — `data: null` is a shape it cannot give.
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'update') return { data: [{ id: 'sug-1' }], error: null };
       return { data: null, error: null };
     });
     const res = await confirmFact(scopeWith(db), 'sug-1');
@@ -468,14 +471,42 @@ describe('confirmFact', () => {
   });
 });
 
+describe('confirmFact when the accept matches nothing (C1-S9-65)', () => {
+  it('undoes the fact and fails, exactly as it does when the accept errors', async () => {
+    // Before, only an ERROR took this path; a no-op accept left the card open
+    // to be confirmed — and the same fact written — a second time.
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'select') return { data: SUGGESTION(), error: null };
+      if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'update') return { data: [], error: null };
+      if (call.table === 'family_facts' && call.kind === 'delete') return { data: [{ id: 'fact-9' }], error: null };
+      return { data: null, error: null };
+    });
+    const res = await confirmFact(scopeWith(db), 'sug-1');
+    expect(res.ok).toBe(false);
+    const undo = calls.find((c) => c.table === 'family_facts' && c.kind === 'delete');
+    expect(undo?.filters).toMatchObject({ family_id: 'fam-1', id: 'fact-9' });
+  });
+});
+
 describe('forgetFact', () => {
   it('deletes a fact, family-scoped', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'select' ? { data: FACT(), error: null } : { data: null, error: null }));
+    // The delete returns the removed row, as a real client does once it is
+    // asked `.select()` (C1-S9-65).
+    const { db, calls } = makeDb((call) => (call.kind === 'select' ? { data: FACT(), error: null } : { data: [{ id: 'fact-1' }], error: null }));
     const res = await forgetFact(scopeWith(db), 'fact-1');
     expect(res).toMatchObject({ ok: true, data: { kind: 'fact', label: "Doesn't eat" } });
     const del = calls.find((c) => c.kind === 'delete');
     expect(del?.table).toBe('family_facts');
     expect(del?.filters).toEqual({ family_id: 'fam-1', id: 'fact-1' });
+  });
+
+  it('does not report a fact forgotten when the delete removed nothing (C1-S9-65)', async () => {
+    // A policy refusal answers with no error and no rows. Forgetting is a
+    // privacy control, so "forgot" over a fact that remains is the wrong answer.
+    const { db } = makeDb((call) => (call.kind === 'select' ? { data: FACT(), error: null } : { data: [], error: null }));
+    const res = await forgetFact(scopeWith(db), 'fact-1');
+    expect(res.ok).toBe(false);
   });
 
   it('lets a teen forget only facts about themselves', async () => {
@@ -664,6 +695,7 @@ describe('a deadline survives the whole memory lifecycle (0268)', () => {
         return { data: SUGGESTION({ expires_at: '2026-09-06T00:00:00.000Z' }), error: null };
       }
       if (call.table === 'family_facts' && call.kind === 'insert') return { data: FACT({ id: 'fact-9' }), error: null };
+      if (call.table === 'family_playbook_suggestions' && call.kind === 'update') return { data: [{ id: 'sug-1' }], error: null };
       return { data: null, error: null };
     });
     const res = await confirmFact(scopeWith(db), 'sug-1');

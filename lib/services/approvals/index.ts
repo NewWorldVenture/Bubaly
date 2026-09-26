@@ -70,7 +70,7 @@ import { makeKey } from '@/lib/services/idempotency';
 import { notify } from '@/lib/services/notifications';
 import { scopeForSystem, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
@@ -281,14 +281,19 @@ async function flipStatus(
 }
 
 async function stampExecution(scope: ServiceScope, approvalId: string, result: string): Promise<void> {
-  const { error } = await scope.db
+  const { data: stamped, error } = await scope.db
     .from('approval_requests')
     .update({ executed_at: new Date(scopeNow(scope).getTime()).toISOString(), execution_result: result.slice(0, 2000) })
     .eq('id', approvalId)
-    .eq('family_id', scope.familyId);
+    .eq('family_id', scope.familyId)
+    .select('id');
   // The action already ran; if this stamp is lost the request looks
-  // un-executed, so make the failure observable rather than silent.
-  if (error) console.error('[service:approvals] execution-result stamp failed', { approvalId, error });
+  // un-executed, so make the failure observable rather than silent — and a
+  // stamp that matched no row is lost just as surely as one that errored.
+  // Audit C1-S9-65.
+  if (error || wroteNoRows(stamped)) {
+    console.error('[service:approvals] execution-result stamp failed', { approvalId, error: error ?? 'no rows updated' });
+  }
 }
 
 // ─── Run linkage ────────────────────────────────────────────────────────────
@@ -558,7 +563,9 @@ async function runConciergePlan(
 
   // The concierge loop queued a legacy `pending` automation row beside this
   // approval; closing it here is what stops the Autopilot panel showing the
-  // plan as waiting after a parent has already said yes.
+  // plan as waiting after a parent has already said yes. Rows deliberately not
+  // checked: not every approval has such a row, and zero is the ordinary case
+  // for those. Audit C1-S9-65.
   const { error: runError } = await scope.db
     .from('family_automation_runs')
     .update({
@@ -574,6 +581,8 @@ async function runConciergePlan(
 }
 
 async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promise<void> {
+  // As above: zero rows is an approval with no legacy run beside it.
+  // Audit C1-S9-65.
   const { error } = await scope.db
     .from('family_automation_runs')
     .update({ status: 'dismissed' })
