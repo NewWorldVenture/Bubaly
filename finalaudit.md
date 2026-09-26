@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-219 finding IDs from four workers and two parallel sessions; none of it was
+220 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 229 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 230 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35595,6 +35595,52 @@ Components ratchet: 183 → 182.
 live server and Supabase, so it runs in CI, not locally; its steps do not move
 plan status.
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-79 — accepting a contractor's quote, in the wrong order and without looking
+
+**Projects, the largest file in the components ratchet (10 writes, none of
+them confirmed).** Nine are the ordinary shape. The tenth is a three-step chain
+with a different answer: accepting a contractor's quote. It used to run these
+steps, reading no rows at any of them:
+1. **decline** any other accepted quote;
+2. **accept** this one;
+3. **link** the project to the contractor and move it to `scheduled`.
+
+An acceptance that matched nothing (refused, or the quote gone) therefore left
+**every quote declined**, the project linked to a contractor whose quote was
+never accepted, and *"Accepted … at $…"* on screen. A failed link toasted its
+error **and** the success message together.
+
+**Fixed as one chain that stops where it fails:**
+- **Accept first, confirmed.** Nothing is declined until the acceptance is
+  known to have landed.
+- **Then decline the others, confirmed by exact count.** A partial demotion
+  stops the chain.
+- **Then link, confirmed.** "Accepted" is said only after the link lands, and
+  never after a failed one.
+
+The other nine writes (status, delete, purchased toggle, material and quote
+saves and deletes) get the standard confirmation and
+`errors.thatChangeWasNotSaved`.
+
+**The read-check learned a stricter read.** `a-client-write-reads-what-it-changed`
+required `wroteNoRows(binding)`. The demotion is read against an exact count
+instead, which is stricter than "none", and the guard now accepts either form.
+
+**Three more exact-statement guards went red on an improvement (the
+sixteenth to eighteenth).** They are in `projects-module-write-boundary`:
+two pinned the exact `const { error } =`, and one pinned
+`if (linkError) toastError(…)`, **which was the defect itself**, since that
+line fell through to "Accepted". All three are re-pointed at their properties:
+the error is still bound and surfaced, and the link failure now returns. The
+first full run was red on these three and was re-run after the fix, not
+carried over.
+
+**6 mutations, all red.** They include restoring the old order (decline before
+accept), a link failure still saying "Accepted", and the count check removed.
+Components ratchet: 182/64 → **172/63**.
+
+**Status:** FIXED.
+
 ---
 
 ## What this pass did NOT establish
@@ -35666,8 +35712,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,433 passing / 17,436 across 1,370
-files.** (Re-run after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,437 passing / 17,440 across 1,370
+files.** (Re-run after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

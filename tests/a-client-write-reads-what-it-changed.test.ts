@@ -21,6 +21,7 @@ const FIXED = [
   'components/modules/devices-module.tsx',
   'components/modules/reminders-module.tsx',
   'components/modules/concierge-module.tsx',
+  'components/modules/projects-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -29,9 +30,11 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     const bindings = [...src.matchAll(/const \{ data: (\w+), error(?:: \w+)? \} = [\s\S]{0,400}?\.select\('id'\)/g)].map((m) => m[1]);
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
-      expect(src, `${b} is requested but never read`).toContain(`wroteNoRows(${b})`);
+      // Read as "none", or — stricter — against an exact expected count.
+      const read = src.includes(`wroteNoRows(${b})`) ? `wroteNoRows(${b})` : `(${b}?.length ?? 0) !==`;
+      expect(src, `${b} is requested but never read`).toContain(read);
       // …and read AFTER it is bound, not in some earlier function.
-      expect(at(src, `data: ${b}, error`)).toBeLessThan(at(src, `wroteNoRows(${b})`));
+      expect(at(src, `data: ${b}, error`)).toBeLessThan(at(src, read));
     }
   });
 
@@ -56,6 +59,24 @@ describe('a plan acceptance that never landed does not run the loop (C1-S9-77)',
     const fn = between(src, 'export async function planAcceptedAction(', 'export async function executeQueuedRunAction(');
     expect(fn).toContain("select('id, title, description, location, planned_for, budget_cents, status')");
     expect(at(fn, 'if (plan.status !== nextStatus)')).toBeLessThan(at(fn, 'const { decision, approvalId } = await evaluateTrust('));
+  });
+});
+
+describe('accepting a quote is one chain that stops where it fails (C1-S9-79)', () => {
+  const src = readFileSync('components/modules/projects-module.tsx', 'utf8');
+  const fn = between(src, 'async function setQuoteStatus(q: Quote, status: ProjectQuoteStatus) {', 'async function deleteQuote(q: Quote) {');
+
+  it('the acceptance is set and confirmed before any other quote is declined', () => {
+    expect(at(fn, 'if (wroteNoRows(set))')).toBeLessThan(at(fn, "update({ status: 'declined' })"));
+  });
+
+  it('the demotion is confirmed by count before the project is linked', () => {
+    expect(at(fn, '(demoted?.length ?? 0) !== others.length')).toBeLessThan(at(fn, ".from('home_projects').update("));
+  });
+
+  it('success is said only after the link lands, and never after a failed one', () => {
+    expect(fn).toContain('if (linkError) return toastError(');
+    expect(at(fn, 'if (wroteNoRows(linked))')).toBeLessThan(at(fn, 'success(`Accepted'));
   });
 });
 

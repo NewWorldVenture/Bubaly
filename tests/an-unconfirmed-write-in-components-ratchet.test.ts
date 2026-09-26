@@ -21,7 +21,8 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // Burn-down: 198 across 70 files (C1-S9-77 baseline) → 183/64 (C1-S9-77:
 // family membership, health, visits, immunizations, care, devices, and the
 // reminder completion that could schedule a recurrence twice) → 182/64 (the
-// concierge plan status move that licensed materialising the plan).
+// concierge plan status move that licensed materialising the plan) → 172/63
+// (projects: the quote acceptance chain, C1-S9-79).
 const BASELINE = new Map<string, number>([
   ['components/family/check-in-view.tsx', 1],
   ['components/family/driving-safety-view.tsx', 1],
@@ -61,7 +62,6 @@ const BASELINE = new Map<string, number>([
   ['components/modules/pets-module.tsx', 2],
   ['components/modules/photos-module.tsx', 3],
   ['components/modules/planning-module.tsx', 2],
-  ['components/modules/projects-module.tsx', 10],
   ['components/modules/recipes-module.tsx', 4],
   ['components/modules/relationship-module.tsx', 6],
   ['components/modules/reminders-module.tsx', 2],
@@ -124,6 +124,6 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(182);
+    expect(total).toBe(172);
   });
 });
