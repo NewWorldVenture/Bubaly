@@ -10,8 +10,17 @@ vi.mock('@/lib/supabase/auth', () => {
   return { requireUserContext: async () => ctx, requireFeature: async () => ctx };
 });
 vi.mock('@/lib/i18n/server', async () => {
-  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+  const { SOURCE_MESSAGES, translate, getMessages } = await import('@/lib/i18n/messages');
+  const { DEFAULT_LOCALE, localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
+    // Home renders money and times through `await getFormat()`, which reads the
+    // request's locale from here. A mock that stubs only getTranslations leaves
+    // getLocaleContext undefined and the page throws on render.
+    getLocaleContext: async () => ({
+      locale: localeOrDefault(DEFAULT_LOCALE), source: 'default', messages: getMessages(DEFAULT_LOCALE),
+    }),
+  };
 });
 vi.mock('@/lib/home/completed', () => ({ loadCompletedByBubaly: async () => ({ ok: true, data: [] }) }));
 vi.mock('@/lib/services/approvals', () => ({ listPending: async () => ({ ok: true, data: [] }) }));

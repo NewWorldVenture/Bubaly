@@ -42,7 +42,13 @@ describe('projects-module writes fail visibly', () => {
     expect(b).toContain('if (linkError) toastError(describeDbError(linkError))');
   });
   it('deleting a project is confirmed and the suggester never inserts an empty batch', () => {
-    expect(bodies('deleteProject')[0]).toMatch(/if \(!confirm\(/);
+    // The property, not the spelling: the handler asks BEFORE it writes, so
+    // nothing may be awaited ahead of the question. This guard used to pin
+    // `if (!confirm(` and went red when the ask moved to the shared, localised
+    // primitive — a change that made it stricter, not weaker.
+    const del = bodies('deleteProject')[0];
+    expect(del).toContain('askConfirm(');
+    expect(del.indexOf('await ')).toBe(del.indexOf('await askConfirm('));
     expect(bodies('suggestMaterials')[0]).toMatch(/if \(!fresh\.length\) return toastError\(/);
   });
 });

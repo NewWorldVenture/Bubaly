@@ -8,51 +8,65 @@ test.beforeEach(async ({ page }) => {
   if (await rejectCookies.isVisible()) await rejectCookies.click();
 });
 
-// A first visit, so no service worker. `beforeEach` loads the homepage in this
-// same context, which registers public/sw.js; it claims open clients and
-// serves /_next/static scripts cache-first. A page it controls fetches those
-// scripts through the worker, where page.route never sees them, so the hold
-// below caught nothing and `heldScripts` stayed 0 whenever the worker won the
-// race — failing on iPad and Pixel in CI, and not on every run.
-test.describe('before client code loads', () => {
-  test.use({ serviceWorkers: 'block' });
-
-  test('the mobile menu becomes usable when its client code is ready', async ({ context }) => {
-    const slowPage = await context.newPage();
-    await slowPage.setViewportSize({ width: 390, height: 844 });
-    let releaseScripts!: () => void;
-    const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
-    let heldScripts = 0;
-    await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
-      heldScripts += 1;
-      await scriptsReady;
-      await route.continue();
-    });
-
-    try {
-      await slowPage.goto('/', { waitUntil: 'commit' });
-      const toggle = slowPage.getByRole('button', { name: 'Toggle menu' });
-      const navigation = slowPage.getByRole('navigation', { name: 'Mobile navigation' });
-      await expect(toggle).toBeVisible();
-      await expect.poll(() => heldScripts).toBeGreaterThan(0);
-      await expect(toggle).toBeDisabled();
-      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      await expect(navigation).toBeHidden();
-
-      releaseScripts();
-      await expect(toggle).toBeEnabled({ timeout: 15_000 });
-      await toggle.focus();
-      await expect(toggle).toBeFocused();
-      await slowPage.keyboard.press('Enter');
-      await expect(navigation).toBeVisible();
-      await slowPage.keyboard.press('Escape');
-      await expect(navigation).toBeHidden();
-      await expect(toggle).toBeFocused();
-    } finally {
-      releaseScripts();
-      await slowPage.close();
-    }
+// The slow page gets a context of its OWN, and that is the whole of this note.
+//
+// It used to be `context.newPage()`, sharing the context — and therefore the
+// HTTP cache — with the page `beforeEach` has already loaded `/` on. A script
+// served from that warm cache never reaches the network layer, so the route
+// below is never invoked and `heldScripts` stays 0:
+//
+//   [pixel] the mobile menu becomes usable when its client code is ready
+//   expect(received).toBeGreaterThan(expected)   Expected: > 0   Received: 0
+//
+// which reads as "the page shipped no JavaScript" and is really "the hold never
+// engaged". It has failed this way on `main` too, on [ipad], so it is not one
+// branch's problem; it is a warm cache deciding whether the test tests anything.
+//
+// A fresh context is cold, so every `/_next/static/*.js` request goes through
+// the route. Nothing else changes: the scripts are still held, and every
+// assertion below is the one that was there before.
+test('the mobile menu becomes usable when its client code is ready', async ({ browser, baseURL }, testInfo) => {
+  // The project's own `use` is carried over — userAgent, deviceScaleFactor,
+  // isMobile and the rest — because `context.newPage()` used to inherit them
+  // and a fresh context does not. The viewport is then overridden exactly as
+  // `setViewportSize` used to, so the only difference from before is the cold
+  // cache.
+  const slowContext = await browser.newContext({
+    ...testInfo.project.use, baseURL, viewport: { width: 390, height: 844 },
   });
+  const slowPage = await slowContext.newPage();
+  let releaseScripts!: () => void;
+  const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
+  let heldScripts = 0;
+  await slowPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+    heldScripts += 1;
+    await scriptsReady;
+    await route.continue();
+  });
+
+  try {
+    await slowPage.goto('/', { waitUntil: 'commit' });
+    const toggle = slowPage.getByRole('button', { name: 'Toggle menu' });
+    const navigation = slowPage.getByRole('navigation', { name: 'Mobile navigation' });
+    await expect(toggle).toBeVisible();
+    await expect.poll(() => heldScripts).toBeGreaterThan(0);
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(navigation).toBeHidden();
+
+    releaseScripts();
+    await expect(toggle).toBeEnabled({ timeout: 15_000 });
+    await toggle.focus();
+    await expect(toggle).toBeFocused();
+    await slowPage.keyboard.press('Enter');
+    await expect(navigation).toBeVisible();
+    await slowPage.keyboard.press('Escape');
+    await expect(navigation).toBeHidden();
+    await expect(toggle).toBeFocused();
+  } finally {
+    releaseScripts();
+    await slowContext.close();
+  }
 });
 
 test('Get started reaches the welcome page before sign-in', async ({ page }) => {

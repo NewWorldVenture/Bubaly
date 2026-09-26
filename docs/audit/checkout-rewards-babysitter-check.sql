@@ -1,5 +1,5 @@
 -- Checkout tracking, the wallet-terms record, chore rewards and babysitters are
--- not a child's (or any member's) to write — 0328.
+-- not a child's (or any member's) to write — 0354.
 --
 -- As the CHILD: raising their own XP, awarding themselves a badge, changing a
 -- sitter's phone, deleting a payment receipt, filing a wallet-terms acceptance
@@ -19,7 +19,7 @@ declare
   mKid uuid; sitter uuid; receipt uuid; disclosure uuid; chk uuid;
   n int; failures int := 0;
 begin
-  delete from public.checkout_sessions where session_id like 'cs_probe_0328_%';
+  delete from public.checkout_sessions where session_id like 'cs_probe_0354_%';
   delete from public.families where id = fam;
   insert into auth.users (id, email) values
     (uPar, 'reward-parent@example.com'), (uKid, 'reward-kid@example.com')
@@ -34,7 +34,7 @@ begin
   insert into public.compliance_disclosures (family_id, kind, version, accepted_by)
     values (fam, 'wallet_terms', 'v1', uPar) returning id into disclosure;
   insert into public.checkout_sessions (session_id, family_id, email, status)
-    values ('cs_probe_0328_real', fam, 'reward-parent@example.com', 'pending') returning id into chk;
+    values ('cs_probe_0354_real', fam, 'reward-parent@example.com', 'pending') returning id into chk;
 
   -- ── as the CHILD ─────────────────────────────────────────────────────────
   perform set_config('request.jwt.claim.sub', uKid::text, true);
@@ -76,7 +76,7 @@ begin
 
   begin
     insert into public.checkout_sessions (session_id, family_id, email, name, status)
-      values ('cs_probe_0328_forged', fam, 'stranger@example.com', 'Click here', 'pending');
+      values ('cs_probe_0354_forged', fam, 'stranger@example.com', 'Click here', 'pending');
     raise warning 'BREACH: a child filed a pending checkout the cron would email'; failures := failures + 1;
   exception when insufficient_privilege then null;
   end;
@@ -109,13 +109,13 @@ begin
   if n <> 0 then raise warning 'BREACH: a family member rewrote a tracked checkout (rows: %)', n; failures := failures + 1; end if;
   begin
     insert into public.checkout_sessions (session_id, family_id, email, status)
-      values ('cs_probe_0328_parent', fam, 'stranger@example.com', 'pending');
+      values ('cs_probe_0354_parent', fam, 'stranger@example.com', 'pending');
     raise warning 'BREACH: a family member filed a pending checkout'; failures := failures + 1;
   exception when insufficient_privilege then null;
   end;
   reset role;
 
-  delete from public.checkout_sessions where session_id like 'cs_probe_0328_%';
+  delete from public.checkout_sessions where session_id like 'cs_probe_0354_%';
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uKid);
 

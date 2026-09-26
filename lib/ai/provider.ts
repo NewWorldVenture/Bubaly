@@ -7,6 +7,7 @@ import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import { describeActionError } from '@/lib/supabase/errors';
+import { withBackoff } from '@/lib/ai/retry';
 
 export type AITool = {
   name: string;
@@ -516,21 +517,86 @@ function isOpenAIModel(model: string | null | undefined): model is string {
 }
 
 /**
+ * A provider that retries `complete()` and nothing else (BH-01).
+ *
+ * `lib/ai/retry.ts` is 141 lines of full-jitter, abort-aware backoff with an
+ * explicit non-retry list, and it had ONE consumer. The 47 `provider.complete(…)`
+ * sites had no retry anywhere in the chain — not in `fetchExternal`, not inside
+ * `OpenAIProvider` — so a 429, the commonest provider failure and one that clears
+ * in milliseconds, reached the family as "The AI engine is busy right now (rate
+ * limit). Wait a few seconds and try again": the application asking a person to
+ * do by hand what the module was written to do.
+ *
+ * It is a DELEGATE rather than a Proxy, and it wraps at the three construction
+ * sites rather than at the call sites, so no caller changes. What is NOT wrapped
+ * is the point, and a Proxy would have hidden it:
+ *
+ *   complete()            WRAPPED. Side-effect-free by construction: it returns
+ *                         `toolCalls`, it never executes them, so a retried
+ *                         attempt cannot repeat anything the first one did.
+ *
+ *   structuredCompletion  NOT wrapped. lib/ai/structured.ts:110 already calls it
+ *                         inside withBackoff, itself inside a two-pass repair
+ *                         loop. Wrapping here would nest to 3 x 3 x 2 = eighteen
+ *                         paid calls for one planner decision.
+ *
+ *   runTools              NOT wrapped. They EXECUTE tools, and the retryable
+ *   runToolsStream        failures are exactly the ones where attempt one may
+ *                         already have created the calendar event. runToolsStream
+ *                         also carries the §29 invariant that it never throws once
+ *                         a tool has run; a retry wrapper around a generator would
+ *                         be a second way to violate it.
+ *
+ * Measured in passing and worth stating: `OPENAI_TIMEOUT_MS` is 60s and the AI
+ * routes declare `maxDuration = 60`, so a first attempt that TIMES OUT has
+ * already spent the platform budget. That is not a reason to withhold the retry
+ * — a 429 returns in milliseconds — but it is a reason never to raise `attempts`
+ * expecting more resilience from a hanging provider.
+ */
+class RetryingProvider implements AIProvider {
+  constructor(private readonly inner: AIProvider) {}
+
+  get id(): string { return this.inner.id; }
+  get model(): string { return this.inner.model; }
+
+  complete(input: AICompleteInput): Promise<AICompletion> {
+    return withBackoff(() => this.inner.complete(input), { signal: input.signal ?? null });
+  }
+
+  // Deliberately un-retried — see the class header. Written out rather than
+  // spread or proxied so that removing a line is a visible decision.
+  structuredCompletion(input: AIStructuredInput): Promise<AIStructuredCompletion> {
+    return this.inner.structuredCompletion(input);
+  }
+  runTools(input: RunToolsInput): Promise<ToolRunResult> {
+    return this.inner.runTools(input);
+  }
+  runToolsStream(input: RunToolsInput): AsyncGenerator<StreamEvent> {
+    return this.inner.runToolsStream(input);
+  }
+}
+
+/** Wrap a provider so `complete()` retries. The one place that decision lives. */
+export function withCompleteRetry(inner: AIProvider): AIProvider {
+  return new RetryingProvider(inner);
+}
+
+/**
  * Build a provider from config. OpenAI-only: the `provider` field is ignored and
  * any stored non-OpenAI model is replaced with the default OpenAI model so a
  * previously-saved Claude model can never break a call.
  */
 export function providerFromConfig(cfg: AIProviderConfig): AIProvider {
   const model = isOpenAIModel(cfg.model) ? cfg.model : DEFAULT_OPENAI_MODEL;
-  return new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? '');
+  return withCompleteRetry(new OpenAIProvider(model, cfg.openaiKey ?? process.env.OPENAI_API_KEY ?? ''));
 }
 
 /** Env-only provider (no DB available). Always OpenAI. */
 export function getProvider(): AIProvider {
-  return new OpenAIProvider(
+  return withCompleteRetry(new OpenAIProvider(
     isOpenAIModel(process.env.AI_MODEL) ? process.env.AI_MODEL : DEFAULT_OPENAI_MODEL,
     process.env.OPENAI_API_KEY ?? '',
-  );
+  ));
 }
 
 /**

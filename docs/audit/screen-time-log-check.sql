@@ -1,4 +1,4 @@
--- A screen-time log is not the child's to erase (0340).
+-- A screen-time log is not the child's to erase (0366).
 --
 -- As the CHILD: deleting their 5-hour entry, or editing it down to 20
 -- minutes, must be refused. Controls: the child still logs time; the PARENT
@@ -31,7 +31,7 @@ begin
   delete from public.screen_time_entries where id = big;
   get diagnostics n = row_count;
   if n <> 0 then raise warning 'BREACH: a child deleted their screen-time entry (rows: %)', n; failures := failures + 1; end if;
-  insert into public.screen_time_entries (family_id, member_id, minutes) values (fam, mKid, 30) returning id into mine;
+  insert into public.screen_time_entries (family_id, member_id, minutes, logged_by) values (fam, mKid, 30, uKid) returning id into mine;
   get diagnostics n = row_count;
   if n <> 1 then raise warning 'CONTROL FAILED: a child could not log time (rows: %)', n; failures := failures + 1; end if;
   reset role;

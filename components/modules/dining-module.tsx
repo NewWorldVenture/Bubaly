@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export type DiningRow = {
   id: string; name: string; kind: string; cuisine: string | null; category: string | null;
@@ -20,9 +21,11 @@ export type DiningRow = {
 
 const priceLabel = (n: number | null) => (n && n > 0 ? '$'.repeat(Math.min(4, n)) : '');
 const usd = (cents: number | null) => (cents == null ? '' : `$${(cents / 100).toFixed(2)}`);
-const fmtDay = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+const fmtDayIn = (locale: LocaleCode) => (d: string | null) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
 export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]; visits: DiningRow[] }) {
+  const locale = useLocale();
+  const fmtDay = fmtDayIn(locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

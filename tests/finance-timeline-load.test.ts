@@ -5,11 +5,11 @@ import { loadMoneyTimeline, loadMoneyTimelineInput, planCommitments } from '@/li
 
 // A chainable query stub: every builder method returns the chain and the chain
 // is thenable, resolving to the supplied PostgREST-shaped `{ data, error }`.
-// Mirrors the loader's calls (`from(t).select().eq().in().gte().lte().order().limit()`).
+// Mirrors the loader's calls (`from(t).select().eq().in().gte().lte().lt().order().limit()`).
 type Reply = { data: unknown; error: unknown };
 function chain(result: Reply) {
   const c: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit']) c[m] = () => c;
+  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'gt', 'lte', 'lt', 'order', 'limit']) c[m] = () => c;
   // `.range()` slices, so a paged read reaches an empty page and stops. Without
   // that a stub returning all rows to every call would page to its ceiling.
   c.range = (from: number, to: number) => ({
@@ -28,6 +28,13 @@ function fakeSupabase(results: Record<string, Reply>, seen: string[] = []): Supa
 }
 
 const NOW = new Date('2026-01-05T00:00:00Z'); // a Monday
+// The zone is named on every call, because the loader now resolves its day keys
+// in the FAMILY's zone and "unbound" is not a zone. These cases pin it to 'UTC',
+// where the instant above is already 2026-01-05, so the literals below are about
+// the mapping rather than about the calendar. What the mapping does in a zone
+// that disagrees with Greenwich is
+// tests/the-money-forecast-is-the-familys-week.test.ts.
+const TZ = 'UTC';
 
 describe('planCommitments (row → forecast mapping)', () => {
   it('maps cents to dollars and places each plan on the date its money is needed', () => {
@@ -61,7 +68,7 @@ describe('planCommitments (row → forecast mapping)', () => {
         { title: 'Someday deck', status: 'idea', budget_cents: 900000, target_start: null, target_end: null },
         { title: 'Undated plan', status: 'planning', budget_cents: 10000, target_start: null, target_end: null },
       ],
-    }, NOW);
+    }, TZ, NOW);
 
     expect(plans).toEqual([
       // Real cost on the real cadence from next_charge; a canceled one is not live.
@@ -93,7 +100,7 @@ describe('loadMoneyTimelineInput read boundary', () => {
 
     // Design: a forecast missing a table's commitments is a reassuring-but-wrong
     // balance, so the loader never degrades to "no commitments" on a real error.
-    await expect(loadMoneyTimelineInput(supabase, 'fam-1', NOW)).rejects.toEqual(readError);
+    await expect(loadMoneyTimelineInput(supabase, 'fam-1', TZ, NOW)).rejects.toEqual(readError);
     expect(err).toHaveBeenCalledWith('[finance/timeline] money timeline read failed', { table: 'subscriptions_tracked', error: readError });
   });
 
@@ -105,7 +112,7 @@ describe('loadMoneyTimelineInput read boundary', () => {
       home_projects: { data: [{ title: 'Kitchen tap', status: 'scheduled', budget_cents: 30000, target_start: '2026-01-20', target_end: null }], error: null },
     });
 
-    const input = await loadMoneyTimelineInput(supabase, 'fam-1', NOW);
+    const input = await loadMoneyTimelineInput(supabase, 'fam-1', TZ, NOW);
     expect(input.startingBalance).toBe(4000);
     expect(input.plans).toEqual([{ label: 'Kitchen tap', amount: 300, date: '2026-01-20', source: 'project', category: 'home' }]);
     expect(err).not.toHaveBeenCalled();
@@ -120,7 +127,7 @@ describe('loadMoneyTimelineInput read boundary', () => {
       vacation_expenses: { data: [{ vacation_id: 'v1', amount_cents: 20000 }], error: null },
     }, seen);
 
-    const timeline = await loadMoneyTimeline(supabase, 'fam-1', NOW);
+    const timeline = await loadMoneyTimeline(supabase, 'fam-1', TZ, NOW);
     expect(seen).toEqual(expect.arrayContaining([
       'bills', 'savings_goals', 'financial_accounts', 'calendar_events',
       'subscriptions_tracked', 'vacations', 'vacation_budgets', 'vacation_expenses', 'moves', 'home_projects',
@@ -138,7 +145,7 @@ describe('loadMoneyTimelineInput read boundary', () => {
   it('passes a scenario through to the brain without re-reading', async () => {
     const seen: string[] = [];
     const supabase = fakeSupabase({ financial_accounts: { data: [{ balance: 1000, type: null }], error: null } }, seen);
-    const timeline = await loadMoneyTimeline(supabase, 'fam-1', NOW, { scenario: { label: 'Laptop', amount: 900, date: '2026-01-21' } });
+    const timeline = await loadMoneyTimeline(supabase, 'fam-1', TZ, NOW, { scenario: { label: 'Laptop', amount: 900, date: '2026-01-21' } });
     expect(timeline.scenarioOutflow).toBe(900);
     expect(timeline.lowestBalance).toBe(100);
     expect(seen.filter((t) => t === 'bills')).toHaveLength(1);

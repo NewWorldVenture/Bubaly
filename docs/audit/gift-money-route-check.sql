@@ -2,7 +2,7 @@
 --
 -- wallet_approve_gift credits a pending gift_payments row's child_wallet_id with
 -- its amount_cents, as stored; pay_handles and gift_links bind public payment
--- routes to a child's wallet. All three were member FOR ALL. 0324 makes them
+-- routes to a child's wallet. All three were member FOR ALL. 0350 makes them
 -- members-read, managers-write.
 --
 -- As SIBLING A: repointing B's pending gift or Pay-ID at A's own wallet, raising

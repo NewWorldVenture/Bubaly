@@ -101,7 +101,8 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
     // should not depend on a query plan. Newest first, id as the final
     // tiebreak, so the answer is the same on every read.
     supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true)
-      .order('priority', { ascending: false }).order('updated_at', { ascending: false }).order('id'),
+      .order('priority', { ascending: false }).order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false }).order('id'),
     supabase.from('permission_grants').select('member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('to_member_id, domains, starts_at, expires_at, revoked_at')
       .eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso),

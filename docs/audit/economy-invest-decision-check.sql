@@ -18,9 +18,9 @@ set client_min_messages = warning;
 
 do $probe$
 declare
-  fam uuid := '00000000-0000-4000-8000-00000000ec01';
-  parent_uid uuid := '00000000-0000-4000-8000-00000000eca1';
-  child_uid  uuid := '00000000-0000-4000-8000-00000000eca2';
+  fam uuid := '00000000-0000-4000-8000-0000000e1c01';
+  parent_uid uuid := '00000000-0000-4000-8000-0000000e1ca1';
+  child_uid  uuid := '00000000-0000-4000-8000-0000000e1ca2';
   child_mid uuid;
   currency uuid;
   wallet uuid;

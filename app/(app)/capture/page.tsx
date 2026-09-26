@@ -27,7 +27,11 @@ export default async function CapturePage({
   await requireUserContext();
   const shared = searchParams ? await searchParams : {};
   // Server-load the member's saved shortcut layout (Supabase) so it's right on
-  // first paint and follows them across devices.
-  const initialShortcuts = await loadCaptureShortcuts();
+  // first paint and follows them across devices. A read that FAILED is NOT an
+  // empty layout: pass `null` — the component's "no answer yet" value — so it
+  // takes its cache-then-retry path and refuses to save a guessed layout over
+  // the real one, instead of being handed a confident "they saved nothing".
+  const shortcutsRead = await loadCaptureShortcuts();
+  const initialShortcuts = shortcutsRead.ok ? shortcutsRead.keys : null;
   return <CaptureShell initialShortcuts={initialShortcuts} initialText={sharedCaptureText(shared)} />;
 }

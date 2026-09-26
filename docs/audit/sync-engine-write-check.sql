@@ -3,7 +3,7 @@
 -- The engine (service role, the account owner's OAuth token) deletes the
 -- provider event behind any deleted internal event that has a mapping, patches
 -- it for a changed one, inserts for an unmapped one, and serves any
--- feed_enabled calendar publicly by feed_token. 0329: engine tables are
+-- feed_enabled calendar publicly by feed_token. 0355: engine tables are
 -- member-read-only; mappings are writable only for an account the caller owns.
 --
 -- As the CHILD: inserting a deleted internal event on the parent's calendar,

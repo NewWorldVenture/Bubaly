@@ -8,6 +8,7 @@
 // from packed to unpacked so "where is the kettle?" has an answer on day one.
 
 import type { MoveBoxStatus, MoveKind, MoveStatus, MoveTaskCategory, MoveTaskStatus } from '@/lib/database.types';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export type TaskTemplate = {
   key: string;
@@ -223,4 +224,16 @@ export function findInBoxes<T extends BoxLike>(boxes: T[], moveId: string, query
   return boxes.filter((b) => b.move_id === moveId && (b.label.toLowerCase().includes(q) || b.contents.some((c) => c.toLowerCase().includes(q)) || (b.to_room ?? '').toLowerCase().includes(q)));
 }
 
-export const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—' : `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+export const money = (cents: number | null | undefined, locale: LocaleCode = DEFAULT_LOCALE) =>
+  cents === null || cents === undefined
+    ? '—'
+    : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);

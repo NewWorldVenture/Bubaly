@@ -21,7 +21,8 @@ import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
 import { planAcceptedAction } from '@/app/(app)/dashboard/concierge/actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Plan = Tables<'concierge_plans'>;
 
@@ -46,20 +47,24 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: 'bg-red-500/15 text-red-400 border border-red-500/30',
 };
 
-function fmtDate(d: string | null) {
+const fmtDateIn = (locale: LocaleCode) => (d: string | null) => {
   if (!d) return null;
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+  return new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
-function fmtCents(cents: number | null) {
+function centsIn(locale: LocaleCode, cents: number | null) {
   if (!cents) return null;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 
 // ─── Main Module ──────────────────────────────────────────────────────────────
 export function ConciergeModule() {
   const tr = useTranslations();
   const t = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { familyId, userId, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
   const [activeKind, setActiveKind] = useState<string | null>(null);
@@ -223,7 +228,7 @@ export function ConciergeModule() {
                   rows={2}
                   className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
                 />
-                <button onClick={() => void sendMessage()} disabled={!input.trim() || sending}
+                <button aria-label={tr('a11y.send')} onClick={() => void sendMessage()} disabled={!input.trim() || sending}
                   className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl transition',
                     input.trim() && !sending ? 'bg-brand text-white hover:bg-brand/90' : 'bg-surface text-muted')}>
                   <Send className="h-4 w-4" />
@@ -288,7 +293,7 @@ export function ConciergeModule() {
                         <button key={plan.id} onClick={() => setSelectedPlan(plan)}
                           className="w-full flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-left transition hover:bg-surface/60">
                           <div className={cn('grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl', cfg.color)}>
-                            <cfg.icon className="h-4.5 w-4.5" />
+                            <cfg.icon className="h-[1.125rem] w-[1.125rem]" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold">{plan.title}</div>
@@ -411,6 +416,10 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
   const t = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
   const cfg = KIND_CONFIG[plan.kind] ?? KIND_CONFIG.general;
@@ -441,7 +450,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
           <cfg.icon className="h-3.5 w-3.5" />
         </div>
         <p className="flex-1 truncate text-sm font-bold">{plan.title}</p>
-        <button onClick={() => onDelete(plan)} className="text-muted hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+        <button aria-label={t('a11y.delete')} onClick={() => onDelete(plan)} className="text-muted hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
 
       <div className="space-y-3">

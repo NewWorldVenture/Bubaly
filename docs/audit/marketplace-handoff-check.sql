@@ -1,4 +1,4 @@
--- A marketplace pickup is arranged by the two parties (0346).
+-- A marketplace pickup is arranged by the two parties (0372).
 --
 -- Order between BUYER B and SELLER S. As SIBLING X: confirming the pickup
 -- (and setting a code), cancelling it, and proposing a new one must be

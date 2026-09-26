@@ -33,9 +33,9 @@ export function ScreenTimeModule() {
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   // A daily limit is a parental control: only a manager sets one (the database
-  // enforces the same since 0325). Logging time stays open to everyone.
+  // enforces the same since 0351). Logging time stays open to everyone.
   // Limits, and the usage log they are checked against, are a manager's to
-  // change: a child may log time but not erase it (0325, 0340).
+  // change: a child may log time but not erase it (0351, 0366).
   const canSetLimits = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);

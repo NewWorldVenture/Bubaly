@@ -1,4 +1,4 @@
--- A behavior log is not the child's to erase (0351).
+-- A behavior log is not the child's to erase (0377).
 --
 -- As the CHILD: deleting a challenging entry about themselves, or editing it
 -- into a positive one, must be refused. Controls: the child still logs; the

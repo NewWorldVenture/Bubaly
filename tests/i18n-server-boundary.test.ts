@@ -149,6 +149,44 @@ describe('lib/i18n/server never reaches the browser', () => {
     ).toEqual([]);
   });
 
+  // The MIRROR of the case above, and a gap this file had. It checks that the server
+  // i18n module never reaches the browser; nothing checked that the CLIENT one never
+  // reaches the server. components/i18n/locale-provider.tsx declares 'use client' and
+  // exports useTranslations/useLocale, which are React hooks: a server component that
+  // imports one cannot run it.
+  //
+  // Two async server components did exactly that for a moment during the locale
+  // conversion — components/dashboard/{family,personal}-dashboard.tsx — and the only
+  // reason it surfaced is that react-hooks/rules-of-hooks refuses a hook in an ASYNC
+  // function. A non-async server component would have passed tsc, passed lint and
+  // shipped, failing at render.
+  it('no server module imports a locale HOOK from the client provider', () => {
+    const provider = resolve(ROOT, 'components/i18n/locale-provider.tsx');
+    expect(sources.has(provider), 'the provider is in the graph').toBe(true);
+
+    // The COMPONENT may be imported from a server module and must be: app/layout.tsx
+    // renders <LocaleProvider> and components/i18n/scoped-locale-provider.tsx wraps
+    // it. That is the whole point of a client boundary. Only the HOOKS are the defect,
+    // so the rule is about the specifiers, not about the edge — a first version
+    // flagged both layouts and would have had to be either deleted or allowlisted.
+    const HOOKS = ['useTranslations', 'useLocale', 'useLocaleSource'];
+    const offenders: string[] = [];
+    for (const file of importers.get(provider) ?? new Set<string>()) {
+      if (isClientModule(file)) continue;
+      const text = readFileSync(file, 'utf8');
+      for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*'@\/components\/i18n\/locale-provider'/g)) {
+        const named = m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0]);
+        const hooks = named.filter((n) => HOOKS.includes(n));
+        if (hooks.length) offenders.push(`${relative(ROOT, file)}: ${hooks.join(', ')}`);
+      }
+    }
+    expect(
+      offenders.sort(),
+      'a hook cannot run in a server component — use getTranslations() or '
+        + 'getLocaleContext() from @/lib/i18n/server instead',
+    ).toEqual([]);
+  });
+
   it("does not read a 'use server' file as client just because a client imports it", () => {
     // `account/actions.ts` is imported by the client component that renders the
     // Close Account button. It is still server code, and it reads the request's

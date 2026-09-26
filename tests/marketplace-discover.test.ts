@@ -92,16 +92,28 @@ describe('aiPicks', () => {
 });
 
 describe('relativeTime', () => {
-  it('buckets into just now / min / hr / days', () => {
-    expect(relativeTime(hoursAgo(0), NOW)).toBe('just now');
-    expect(relativeTime(new Date(NOW.getTime() - 30_000).toISOString(), NOW)).toBe('just now');
-    expect(relativeTime(new Date(NOW.getTime() - 5 * 60_000).toISOString(), NOW)).toBe('5 min ago');
-    expect(relativeTime(hoursAgo(3), NOW)).toBe('3 hr ago');
-    expect(relativeTime(daysAgo(1), NOW)).toBe('1 day ago');
-    expect(relativeTime(daysAgo(4), NOW)).toBe('4 days ago');
+  // The English wording changed here, deliberately. This module had its own
+  // ladder saying "5 min ago" / "3 hr ago" / "2 days ago" where nine other
+  // surfaces said "5m ago" / "3h ago" / "2d ago". Unifying on one implementation
+  // means unifying on one wording, and the compact form is the one the rest of the
+  // app already showed.
+  it('buckets into now / m / h / d', () => {
+    expect(relativeTime(hoursAgo(0), NOW)).toBe('now');
+    expect(relativeTime(new Date(NOW.getTime() - 30_000).toISOString(), NOW)).toBe('now');
+    expect(relativeTime(new Date(NOW.getTime() - 5 * 60_000).toISOString(), NOW)).toBe('5m ago');
+    expect(relativeTime(hoursAgo(3), NOW)).toBe('3h ago');
+    expect(relativeTime(daysAgo(1), NOW)).toBe('1d ago');
+    expect(relativeTime(daysAgo(4), NOW)).toBe('4d ago');
   });
-  it('clamps future times to "just now"', () => {
-    expect(relativeTime(new Date(NOW.getTime() + 60_000).toISOString(), NOW)).toBe('just now');
+  // A phone's clock and Postgres disagree by a few seconds all the time, and a
+  // marketplace row reading "in 1 minute" is a bug report. Kept exactly as it was.
+  it('clamps future times to the sub-minute label', () => {
+    expect(relativeTime(new Date(NOW.getTime() + 60_000).toISOString(), NOW)).toBe('now');
+  });
+  it('follows the reader', () => {
+    expect(relativeTime(hoursAgo(3), NOW, 'de-DE')).toBe('vor 3 Std.');
+    expect(relativeTime(daysAgo(4), NOW, 'es-ES')).toBe('hace 4 d');
+    expect(relativeTime(hoursAgo(0), NOW, 'it-IT')).toBe('ora');
   });
 });
 

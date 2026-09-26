@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
  * Joining the insights network shares the family's (anonymised) data. The
  * intelligence module offered the consent toggles to every member, and the
  * table was member-writable, so a child could opt the household in — and a
- * minor's toggle is not consent. 0327 makes the table manager-write
+ * minor's toggle is not consent. 0353 makes the table manager-write
  * (docs/audit/consent-and-commission-check.sql); this pins the toggles to
  * managers, shown read-only to everyone else.
  */

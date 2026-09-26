@@ -138,7 +138,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
                     <input type="checkbox" checked={it.packed} onChange={() => toggle(it)} className="h-4 w-4 rounded border-border" />
                     <span className={it.packed ? 'flex-1 text-muted line-through' : 'flex-1'}>{it.name}{it.quantity > 1 ? ` ×${it.quantity}` : ''}</span>
                     {it.ai_suggested && <Sparkles className="h-3 w-3 text-brand-text/60" />}
-                    <button onClick={() => remove(it.id)} className="hidden text-muted hover:text-danger group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={tr('a11y.delete')} onClick={() => remove(it.id)} className="hidden text-muted hover:text-danger group-hover:block"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
               </ul>

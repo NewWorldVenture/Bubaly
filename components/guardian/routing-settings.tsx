@@ -3,29 +3,16 @@
 import { useState } from 'react';
 import { Shield, Phone, Zap, Volume2, BellOff, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { ROUTING_MODE_LABELS, ROUTING_MODE_DESCRIPTIONS, type RoutingMode } from '@/lib/guardian/pipeline';
-import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, ROUTING_MODE_DESCRIPTION_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import {
+  EDITABLE_TRUST_LEVELS, TRUST_TO_FIELD, initialRoutingForm, routingUpdate,
+  type RoutingProfile, type RoutingProfileSource,
+} from '@/lib/guardian/routing-form';
 import { upsertMemberProfileAction } from '@/app/(app)/guardian/actions';
+import { ErrorState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { useTranslations } from '@/components/i18n/locale-provider';
-
-type Profile = {
-  id: string;
-  member_id: string;
-  ai_persona_name: string;
-  ai_greeting_template: string | null;
-  voicemail_greeting: string | null;
-  current_context: string;
-  guardian_phone: string | null;
-  default_mode_immediate: RoutingMode;
-  default_mode_close: RoutingMode;
-  default_mode_trusted: RoutingMode;
-  default_mode_known: RoutingMode;
-  default_mode_unknown: RoutingMode;
-  default_mode_suspected_spam: RoutingMode;
-  default_mode_blocked: RoutingMode;
-  context_overrides: Record<string, RoutingMode>;
-};
 
 type Member = { id: string; display_name: string };
 
@@ -52,16 +39,6 @@ const ALL_MODES: RoutingMode[] = [
   'voicemail_first', 'silent_handling', 'blocked',
 ];
 
-const TRUST_TO_FIELD: Record<TrustLevel, keyof Profile> = {
-  immediate_family: 'default_mode_immediate',
-  close_family: 'default_mode_close',
-  trusted_friend: 'default_mode_trusted',
-  known_contact: 'default_mode_known',
-  unknown: 'default_mode_unknown',
-  suspected_spam: 'default_mode_suspected_spam',
-  blocked: 'default_mode_blocked',
-};
-
 const CONTEXT_OPTIONS = [
   { value: 'driving', label: 'Driving', icon: '🚗' },
   { value: 'meeting', label: 'In a Meeting', icon: '💼' },
@@ -70,37 +47,31 @@ const CONTEXT_OPTIONS = [
   { value: 'do_not_disturb', label: 'Do Not Disturb', icon: '🔕' },
 ];
 
-export function RoutingSettings({ profile, member }: { profile: Profile | null; member: Member }) {
+/**
+ * The routing form, or an error instead of it.
+ *
+ * The status check is deliberately OUTSIDE the component that holds the form
+ * state. A failed profile read used to arrive as `profile === null`, which is
+ * also how "this member has no profile row yet" arrives, so the form seeded
+ * itself from the factory defaults and Save upserted them over the family's real
+ * call routing — persona, both greetings, the context overrides and every
+ * routing mode, unrecoverable from the UI. There is no safe form to render for a
+ * read that failed, because every field the user would see is a value the server
+ * never sent.
+ */
+export function RoutingSettings({ profile, member }: { profile: RoutingProfileSource; member: Member }) {
+  const tr = useTranslations();
+  const initial = initialRoutingForm(profile, member.id);
+  if (!initial) return <ErrorState message={tr('guardianSettings.couldnTLoadYourGuardianSettings')} />;
+  return <RoutingForm initial={initial} member={member} />;
+}
+
+function RoutingForm({ initial, member }: { initial: RoutingProfile; member: Member }) {
   const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'routing' | 'persona' | 'context'>('routing');
-
-  const defaults: Profile = {
-    id: '',
-    member_id: member.id,
-    ai_persona_name: 'Bubaly',
-    ai_greeting_template: '',
-    voicemail_greeting: '',
-    current_context: 'normal',
-    guardian_phone: null,
-    default_mode_immediate: 'immediate_ring',
-    default_mode_close: 'immediate_ring',
-    default_mode_trusted: 'immediate_ring',
-    default_mode_known: 'ai_handle_first',
-    default_mode_unknown: 'ai_handle_first',
-    default_mode_suspected_spam: 'silent_handling',
-    default_mode_blocked: 'blocked',
-    context_overrides: {
-      driving: 'voicemail_first',
-      meeting: 'ai_handle_first',
-      sleeping: 'silent_handling',
-      vacation: 'ai_handle_first',
-      do_not_disturb: 'silent_handling',
-    },
-  };
-
-  const [form, setForm] = useState<Profile>(profile ?? defaults);
+  const [form, setForm] = useState<RoutingProfile>(initial);
 
   function setMode(trust: TrustLevel, mode: RoutingMode) {
     const field = TRUST_TO_FIELD[trust];
@@ -113,16 +84,11 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
 
   async function save() {
     setSaving(true);
-    const res = await upsertMemberProfileAction({
-      member_id: member.id,
-      ai_persona_name: form.ai_persona_name,
-      ai_greeting_template: form.ai_greeting_template || undefined,
-      voicemail_greeting: form.voicemail_greeting || undefined,
-      default_mode_unknown: form.default_mode_unknown,
-      default_mode_known: form.default_mode_known,
-      default_mode_suspected_spam: form.default_mode_suspected_spam,
-      context_overrides: form.context_overrides,
-    });
+    // routingUpdate sends every field this form can edit. Listing them here by
+    // hand is what left three of the six routing rows unsaved: they rendered,
+    // they responded, they reported "Settings saved", and the value never left
+    // the browser.
+    const res = await upsertMemberProfileAction(routingUpdate(form, member.id));
     setSaving(false);
     if (res.ok) toastSuccess(tr('routingSettings.settingsSaved'));
     else toastError(res.error);
@@ -150,14 +116,14 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
       {activeTab === 'routing' && (
         <div className="space-y-3">
           <p className="text-sm text-muted">{tr('routingSettings.chooseHowBubalyHandlesCallsFrom')}</p>
-          {(TRUST_LEVELS.filter(t => t !== 'blocked') as TrustLevel[]).map((trust) => {
+          {EDITABLE_TRUST_LEVELS.map((trust) => {
             const field = TRUST_TO_FIELD[trust];
-            const currentMode = form[field] as RoutingMode;
+            const currentMode = form[field];
             return (
               <div key={trust} className="rounded-2xl border border-border bg-surface/40 p-4 space-y-2">
                 <p className="text-sm font-semibold flex items-center gap-1.5">
                   <span>{TRUST_ICONS[trust]}</span>
-                  {TRUST_LABELS[trust]}
+                  {tr(TRUST_LABEL_KEYS[trust])}
                 </p>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {ALL_MODES.map((mode) => (
@@ -172,11 +138,11 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
                       )}
                     >
                       {ROUTING_ICONS[mode]}
-                      {ROUTING_MODE_LABELS[mode]}
+                      {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted">{ROUTING_MODE_DESCRIPTIONS[currentMode]}</p>
+                <p className="text-[11px] text-muted">{tr(ROUTING_MODE_DESCRIPTION_KEYS[currentMode])}</p>
               </div>
             );
           })}
@@ -246,7 +212,7 @@ export function RoutingSettings({ profile, member }: { profile: Profile | null; 
                       )}
                     >
                       {ROUTING_ICONS[mode]}
-                      {ROUTING_MODE_LABELS[mode]}
+                      {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                     </button>
                   ))}
                 </div>

@@ -23,6 +23,7 @@ import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router'
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables, Insertable } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
@@ -50,17 +51,6 @@ const EXAMPLES = [
 ];
 
 /** Short relative time like "just now", "3m ago", "2h ago", "Jul 4". */
-function ago(iso: string): string {
-  const d = new Date(iso).getTime();
-  const s = Math.round((Date.now() - d) / 1000);
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-  const days = Math.round(s / 86400);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 export function VoiceModule() {
   const { familyId, userId } = useApp();
   return <VoiceCaptureSession key={JSON.stringify([familyId, userId])} />;
@@ -68,6 +58,10 @@ export function VoiceModule() {
 
 function VoiceCaptureSession() {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader. Its tail called
+  // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
+  const { fmtTimeAgo } = useFormat();
+  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7 });
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
@@ -285,7 +279,7 @@ function VoiceCaptureSession() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
                     <p className="text-xs text-muted">
-                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
+                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {fmtTimeAgo7(c.created_at)}
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} disabled={running || Boolean(uncertainHref)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}

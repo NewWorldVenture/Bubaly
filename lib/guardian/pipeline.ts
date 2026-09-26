@@ -16,22 +16,23 @@ export type RoutingMode =
   | 'silent_handling'
   | 'blocked';
 
-export const ROUTING_MODE_LABELS: Record<RoutingMode, string> = {
-  immediate_ring: 'Ring Immediately',
-  immediate_ai_summary: 'Ring + AI Summary',
-  ai_handle_first: 'AI Screens First',
-  voicemail_first: 'Voicemail First',
-  silent_handling: 'Silent — AI Handles',
-  blocked: 'Blocked',
+/** Catalogue KEYS, not copy — resolved by the component that has a reader. */
+export const ROUTING_MODE_LABEL_KEYS: Record<RoutingMode, string> = {
+  immediate_ring: 'guardian.routeImmediateRing',
+  immediate_ai_summary: 'guardian.routeImmediateAiSummary',
+  ai_handle_first: 'guardian.routeAiHandleFirst',
+  voicemail_first: 'guardian.routeVoicemailFirst',
+  silent_handling: 'guardian.routeSilentHandling',
+  blocked: 'guardian.routeBlocked',
 };
 
-export const ROUTING_MODE_DESCRIPTIONS: Record<RoutingMode, string> = {
-  immediate_ring: 'Call rings through directly, no screening.',
-  immediate_ai_summary: 'Rings through with live AI transcript alongside.',
-  ai_handle_first: 'Bubaly AI screens the caller; connects or summarizes.',
-  voicemail_first: 'Goes to voicemail; AI transcribes and summarizes.',
-  silent_handling: 'Bubaly handles the call entirely; you get a summary later.',
-  blocked: 'Call is declined immediately.',
+export const ROUTING_MODE_DESCRIPTION_KEYS: Record<RoutingMode, string> = {
+  immediate_ring: 'guardian.routeImmediateRingDescription',
+  immediate_ai_summary: 'guardian.routeImmediateAiSummaryDescription',
+  ai_handle_first: 'guardian.routeAiHandleFirstDescription',
+  voicemail_first: 'guardian.routeVoicemailFirstDescription',
+  silent_handling: 'guardian.routeSilentHandlingDescription',
+  blocked: 'guardian.routeBlockedDescription',
 };
 
 export type PipelineInput = {
@@ -91,7 +92,7 @@ const CONTEXTS = ['normal', 'driving', 'meeting', 'sleeping', 'vacation', 'do_no
 const validId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
 const nullableString = (value: unknown): value is string | null => value === null || typeof value === 'string';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-const routing = (value: unknown): value is RoutingMode => typeof value === 'string' && Object.hasOwn(ROUTING_MODE_LABELS, value);
+const routing = (value: unknown): value is RoutingMode => typeof value === 'string' && Object.hasOwn(ROUTING_MODE_LABEL_KEYS, value);
 const trust = (value: unknown): value is TrustLevel => typeof value === 'string' && TRUST_LEVELS.includes(value as TrustLevel);
 const nullableArray = (value: unknown, valid: (item: unknown) => boolean): boolean => value === null || Array.isArray(value) && value.every(valid);
 const clockTime = (value: unknown): boolean => value === null || typeof value === 'string'

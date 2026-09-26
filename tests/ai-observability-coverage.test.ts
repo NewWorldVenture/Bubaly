@@ -368,7 +368,13 @@ describe('what is deliberately NOT adopted', () => {
       'app/(app)/admin/ai/actions.ts',
     ];
     for (const file of floor) expect([...SILENT], `${file} is part of the floor`).toContain(file);
-    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('return new OpenAIProvider(');
+    // `new OpenAIProvider(`, not `return new OpenAIProvider(`. The property this
+    // defends is that routing.ts BUILDS a provider and never CALLS one — and the
+    // next line is what actually asserts the second half. The `return ` prefix
+    // was pinning the expression's exact shape, which BH-01 changed to
+    // `return withCompleteRetry(new OpenAIProvider(…))`: still builds one, still
+    // never calls one, so the property survived and only the proxy for it broke.
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('new OpenAIProvider(');
     expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
     // The ceiling can never go below this, so a future tranche that claims to
     // have finished §33 has to reckon with these three by name.

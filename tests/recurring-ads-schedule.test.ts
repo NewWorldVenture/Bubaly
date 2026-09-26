@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextRunAt, decideRun, variantForOccurrence, describeSchedule,
+  windowClosed, withinWindow, stoppingCondition, nextRunAfterClaim,
   zonedLocalToInstant, localPartsAt, daysInMonth, isValidTimezone,
   DEFAULT_SCHEDULE, CADENCES,
   type RecurringAdSchedule,
@@ -170,7 +171,7 @@ describe('a schedule can never look backwards', () => {
     );
     expect(decision.run).toBe(true);
     // Exactly one post now, and the NEXT one is tomorrow — not the six others.
-    if (decision.run) expect(decision.nextAfter.toISOString()).toBe('2026-01-09T10:00:00.000Z');
+    if (decision.run) expect(decision.nextAfter?.toISOString()).toBe('2026-01-09T10:00:00.000Z');
   });
 });
 
@@ -215,6 +216,70 @@ describe('why an ad is not posting is an answer, not silence', () => {
     const longAgo = new Date('2020-01-01T00:00:00Z');
     expect(decideRun(s, { startsAt, occurrences: 5, maxOccurrences: 5 }, longAgo, now, true))
       .toEqual({ run: false, reason: 'occurrence_cap' });
+  });
+});
+
+describe('the stopping rule is stated once, and every caller gets the same answer', () => {
+  // decideRun (the cron), the admin "Post now" and "Resume" actions and the
+  // admin list's "Finished" badge all ask these. Four hand-copied versions of
+  // the window check is how "Post now" came to honour the cap and not the end
+  // date, so the rule is pinned here, at its one definition.
+  const s = schedule({ cadence: 'daily', timesOfDay: [600], timezone: 'UTC' });
+  const startsAt = new Date('2026-01-01T00:00:00Z');
+  const endsAt = new Date('2026-01-05T12:00:00Z');
+
+  it('counts the end instant itself as inside the window', () => {
+    expect(windowClosed(endsAt, new Date(endsAt.getTime()))).toBe(false);
+    expect(windowClosed(endsAt, new Date(endsAt.getTime() + 1))).toBe(true);
+    expect(windowClosed(null, new Date('2099-01-01T00:00:00Z'))).toBe(false);
+    expect(withinWindow(endsAt, endsAt)).toBe(endsAt);
+    expect(withinWindow(new Date(endsAt.getTime() + 1), endsAt)).toBeNull();
+    expect(withinWindow(null, endsAt)).toBeNull();
+  });
+
+  it('treats an end date that will not parse as closed, not as absent', () => {
+    // `now > NaN` is false: the obvious comparison waves it through.
+    const unreadable = new Date('not-a-date');
+    expect(windowClosed(unreadable, startsAt)).toBe(true);
+    expect(stoppingCondition({ endsAt: unreadable, occurrences: 0 }, startsAt)).toBe('window_closed');
+  });
+
+  it('names both halves, the cap first', () => {
+    const now = new Date('2026-01-06T00:00:00Z');
+    expect(stoppingCondition({ endsAt, maxOccurrences: 3, occurrences: 3 }, now)).toBe('occurrence_cap');
+    expect(stoppingCondition({ endsAt, maxOccurrences: 9, occurrences: 3 }, now)).toBe('window_closed');
+    expect(stoppingCondition({ endsAt, maxOccurrences: 9, occurrences: 3 }, startsAt)).toBeNull();
+  });
+
+  it('refuses an unreadable end date on the cron path too, as Post now does', () => {
+    // The two halves used to disagree here: the action failed closed and
+    // decideRun waved the row through to publish.
+    const due = new Date('2026-01-02T10:00:00Z');
+    const now = new Date('2026-01-02T10:05:00Z');
+    expect(decideRun(s, { startsAt, occurrences: 1, endsAt: new Date('garbage') }, due, now, true))
+      .toEqual({ run: false, reason: 'window_closed' });
+  });
+
+  it('re-arms the next slot while it is still inside the window', () => {
+    const now = new Date('2026-01-03T10:05:00Z');
+    expect(nextRunAfterClaim(s, { startsAt, endsAt, occurrences: 1 }, now)?.toISOString())
+      .toBe('2026-01-04T10:00:00.000Z');
+  });
+
+  it('arms nothing after the last slot inside the window', () => {
+    // The next daily slot is 6 Jan 10:00; the window shut at 5 Jan 12:00. The
+    // raw slot is what the admin list used to show as a "Next post".
+    const now = new Date('2026-01-05T10:05:00Z');
+    expect(nextRunAfterClaim(s, { startsAt, endsAt, occurrences: 4 }, now)).toBeNull();
+    const decision = decideRun(s, { startsAt, endsAt, occurrences: 4 }, new Date('2026-01-05T10:00:00Z'), now, true);
+    expect(decision).toMatchObject({ run: true, nextAfter: null });
+  });
+
+  it('arms nothing after the claim that uses the last occurrence the cap allows', () => {
+    const now = new Date('2026-01-03T10:05:00Z');
+    expect(nextRunAfterClaim(s, { startsAt, maxOccurrences: 3, occurrences: 2 }, now)).toBeNull();
+    expect(nextRunAfterClaim(s, { startsAt, maxOccurrences: 3, occurrences: 1 }, now)?.toISOString())
+      .toBe('2026-01-04T10:00:00.000Z');
   });
 });
 

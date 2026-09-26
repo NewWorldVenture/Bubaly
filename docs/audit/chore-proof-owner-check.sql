@@ -1,4 +1,4 @@
--- Chore proof is the submitter's (0349).
+-- Chore proof is the submitter's (0375).
 --
 -- Child B's proof waits for review. As SIBLING A: swapping B's photos and
 -- note, filing a submission in B's name, and deleting B's must be refused.
@@ -8,10 +8,10 @@ set client_min_messages = warning;
 
 do $probe$
 declare
-  fam  uuid := '00000000-0000-4000-8000-00000000ef01';
-  uPar uuid := '00000000-0000-4000-8000-00000000ef0a';
-  uA uuid := '00000000-0000-4000-8000-00000000ef0b';
-  uB uuid := '00000000-0000-4000-8000-00000000ef0c';
+  fam  uuid := '00000000-0000-4000-8000-0000000e2f01';
+  uPar uuid := '00000000-0000-4000-8000-0000000e2f0a';
+  uA uuid := '00000000-0000-4000-8000-0000000e2f0b';
+  uB uuid := '00000000-0000-4000-8000-0000000e2f0c';
   mA uuid; mB uuid; chore uuid; asgA uuid; asgB uuid; subB uuid;
   n int; failures int := 0;
 begin

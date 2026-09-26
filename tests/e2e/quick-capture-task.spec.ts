@@ -14,7 +14,10 @@ const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // QuickCapture's preview formats through useFormat, which the loader reaches
+  // from quick-capture.tsx, and useFormat builds the real formatters.
+  'components/i18n/use-format.ts', 'lib/utils/format.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
@@ -144,6 +147,13 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
       '@/components/capture/capture-shortcuts': { CaptureShortcuts: () => null },
       '@/components/ui/avatar': { Avatar: () => null }, '@/components/ai/ai-insight': { AiInsight: () => null },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
+      // The real lib/utils/format.ts runs here; date-fns is the one npm module it
+      // imports and the in-page loader has no bundler. Every pattern this fixture
+      // formats ('EEEE, MMM d', 'h:mm a') is mapped to Intl inside that module, so
+      // only these entry points can be reached.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
     };
     const modules = {};
     function load(id) {

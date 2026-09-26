@@ -6,10 +6,10 @@ import { ContactCenterModule } from '@/components/modules/contact-center-module'
 import ContactCenterPage, { type InboxRow } from '@/app/(app)/dashboard/contact-center/page';
 import type { SmsReplyStatus } from '@/lib/contact-center/sms-reply-status';
 
-const state = vi.hoisted(() => ({ messages: {} as Record<string, string>, rows: [] as unknown[], readError: false,
+const state = vi.hoisted(() => ({ messages: {} as Record<string, string>, locale: 'en-US' as string, rows: [] as unknown[], readError: false,
   context: vi.fn(), statuses: vi.fn(), columns: '', calls: [] as string[] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => state.messages[key] ?? key }));
+vi.mock('@/components/i18n/locale-provider', async () => { const { localeOrDefault } = await import('@/lib/i18n/locales'); return { useTranslations: () => (key: string) => state.messages[key] ?? key, useLocale: () => localeOrDefault(state.locale) }; });
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => state.messages[key] ?? key }));
 vi.mock('@/lib/supabase/auth', () => ({ requirePlanLevel: state.context }));
 vi.mock('@/lib/contact-center/sms-reply-status', () => ({ readSmsReplyStatuses: state.statuses }));
@@ -37,7 +37,7 @@ function messages(): InboxRow[] {
     from_addr: '+15555550101', to_addr: '+15555550202', subject: null, body: `Fixture reply ${i}`, ai_summary: null,
     ai_intent: null, status: 'read', occurred_at: '2026-09-12T12:00:00.000Z' }));
 }
-function catalogue(locale = 'en-US') { state.messages = JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')); }
+function catalogue(locale = 'en-US') { state.locale = locale; state.messages = JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')); }
 function render(rows: InboxRow[], values: Record<string, SmsReplyStatus> = {}) {
   return renderToStaticMarkup(React.createElement(ContactCenterModule, { messages: rows, smsReplyStatuses: values, channel: null,
     suggestedLocal: 'ours', twilioReady: false, canManage: false }));

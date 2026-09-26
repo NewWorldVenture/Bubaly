@@ -1,7 +1,7 @@
 -- Can one family member disconnect, rewrite or forge another's calendar sync?
 --
 -- sync_accounts and sync_audit_logs shipped with "family member access" FOR
--- ALL. 0320 keeps both readable to the family, makes sync_accounts writable only
+-- ALL. 0346 keeps both readable to the family, makes sync_accounts writable only
 -- by the member it belongs to, and makes the audit log read-only to members
 -- (every writer is the service role).
 --

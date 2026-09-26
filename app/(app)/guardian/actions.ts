@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { isManager } from '@/lib/constants/roles';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
+import { guardianProfilePayload, type GuardianProfileWrite } from '@/lib/guardian/routing-form';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -16,7 +17,7 @@ type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: strin
 // Guardian settings govern a child's call/message SAFETY screening, and children
 // have real logins. Only a family manager (parent/adult) may change safety
 // config. These actions check that first; the database checks it too since 0215
-// (routing rules) and 0319 (contacts, member profiles, suggestions), where
+// (routing rules) and 0345 (contacts, member profiles, suggestions), where
 // can_manage_family is the same parent/adult test as isManager. The
 // failure-only shape is assignable to every ActionResult<T>.
 async function guardianForbidden(): Promise<{ ok: false; error: string }> {
@@ -189,17 +190,15 @@ export async function updateContactTrustAction(
 
 // ── Member Profile ───────────────────────────────────────────────────────────
 
-export async function upsertMemberProfileAction(input: {
-  member_id: string;
-  ai_persona_name?: string;
-  ai_greeting_template?: string;
-  voicemail_greeting?: string;
-  current_context?: string;
-  default_mode_unknown?: RoutingMode;
-  default_mode_known?: RoutingMode;
-  default_mode_suspected_spam?: RoutingMode;
-  context_overrides?: Record<string, RoutingMode>;
-}): Promise<ActionResult> {
+// The writable set and the payload builder live in lib/guardian/routing-form.ts
+// so the form and this action cannot disagree about which columns exist. They
+// did: the settings form renders an editable row for six trust tiers, this
+// action accepted three, and nothing anywhere wrote default_mode_immediate,
+// default_mode_close or default_mode_trusted — the three the pipeline routes
+// immediate family, close family and trusted friends through.
+export async function upsertMemberProfileAction(
+  input: GuardianProfileWrite,
+): Promise<ActionResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
@@ -207,18 +206,7 @@ export async function upsertMemberProfileAction(input: {
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
 
-  const payload: Record<string, unknown> = {
-    family_id: familyId,
-    member_id: input.member_id,
-  };
-  if (input.ai_persona_name !== undefined) payload.ai_persona_name = input.ai_persona_name;
-  if (input.ai_greeting_template !== undefined) payload.ai_greeting_template = input.ai_greeting_template;
-  if (input.voicemail_greeting !== undefined) payload.voicemail_greeting = input.voicemail_greeting;
-  if (input.current_context !== undefined) payload.current_context = input.current_context;
-  if (input.default_mode_unknown !== undefined) payload.default_mode_unknown = input.default_mode_unknown;
-  if (input.default_mode_known !== undefined) payload.default_mode_known = input.default_mode_known;
-  if (input.default_mode_suspected_spam !== undefined) payload.default_mode_suspected_spam = input.default_mode_suspected_spam;
-  if (input.context_overrides !== undefined) payload.context_overrides = input.context_overrides;
+  const payload = guardianProfilePayload(input, familyId);
 
   const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
     .upsert(payload, { onConflict: 'family_id,member_id' });

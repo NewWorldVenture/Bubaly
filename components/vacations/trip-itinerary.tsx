@@ -11,11 +11,11 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
-import { ITEM_KINDS, DAY_PARTS, dollars, lookup } from '@/lib/vacations/meta';
+import { ITEM_KINDS, DAY_PARTS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type Day = Tables<'vacation_itinerary_days'>;
@@ -25,6 +25,9 @@ const blankItem = (day_id: string, day_part: string) => ({ id: '', day_id, day_p
 
 export function TripItinerary({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -148,7 +151,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                     <div key={part.value} className="rounded-xl border border-border/60 bg-elevated/30 p-2">
                       <div className="mb-1.5 flex items-center justify-between">
                         <p className="text-xs font-semibold text-muted">{part.emoji} {part.label}</p>
-                        <button onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand-text"><Plus className="h-3.5 w-3.5" /></button>
+                        <button aria-label={t('a11y.add')} onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand-text"><Plus className="h-3.5 w-3.5" /></button>
                       </div>
                       <ul className="space-y-1.5">
                         {list.map((it) => (
@@ -156,8 +159,8 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                             <div className="flex items-start justify-between gap-1">
                               <span className="flex-1">{lookup(ITEM_KINDS, it.kind).emoji} {it.title}</span>
                               <span className="hidden shrink-0 gap-0.5 group-hover:flex">
-                                <button onClick={() => editItem(it)} className="text-muted hover:text-fg"><Pencil className="h-3 w-3" /></button>
-                                <button onClick={() => removeItem(it.id)} className="text-muted hover:text-danger"><Trash2 className="h-3 w-3" /></button>
+                                <button aria-label={t('a11y.edit')} onClick={() => editItem(it)} className="text-muted hover:text-fg"><Pencil className="h-3 w-3" /></button>
+                                <button aria-label={t('a11y.delete')} onClick={() => removeItem(it.id)} className="text-muted hover:text-danger"><Trash2 className="h-3 w-3" /></button>
                               </span>
                             </div>
                             {(it.start_time || it.location || it.cost_cents != null) && (

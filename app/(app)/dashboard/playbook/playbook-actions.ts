@@ -9,7 +9,8 @@
 // dismissing hides it. All reads/writes go through the RLS-scoped server client.
 
 import { confirmFact } from '@/lib/services/memory';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { translate } from '@/lib/i18n/messages';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -43,6 +44,9 @@ function travelSeason(date: string): string {
  * signatures insert as 'suggested', existing ones are left untouched.
  */
 export async function refreshPlaybookAction(): Promise<Result> {
+  // A server action carries the request's locale, the same as a page does. Its
+  // catalogue comes with it — `getTranslations()` would resolve the locale again.
+  const { locale, messages } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const sb = await createServer();
@@ -55,14 +59,25 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // These signals are COUNTS over the whole window, so a capped read does not
   // shorten a list, it reports the wrong number. `.limit(N)` above 1,000 never
   // applied — PostgREST caps a response at db-max-rows regardless.
-  const { rows: plans } = await readAll((from, to) => sb.from('meal_plans')
+  const { rows: plans, error: plansError } = await readAll((from, to) => sb.from('meal_plans')
     .select('meal_id').eq('family_id', familyId).gte('plan_date', since.slice(0, 10))
     .order('id').range(from, to), { max: 2000 });
+  // A read that FAILED is not a family with no meal plans, and `readAll`'s
+  // ceiling error means these rows are a PREFIX. Either way the counts below
+  // would be wrong, so learn nothing rather than learn from a fragment.
+  if (plansError) {
+    console.error('[dashboard/playbook] meal plan read failed', plansError);
+    return { ok: false, error: plansError.message };
+  }
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
   if (mealCounts.size) {
-    const { data: meals } = await sb.from('meals')
+    const { data: meals, error: mealsError } = await sb.from('meals')
       .select('id,name').eq('family_id', familyId).in('id', [...mealCounts.keys()]);
+    if (mealsError) {
+      console.error('[dashboard/playbook] meal name read failed', mealsError);
+      return { ok: false, error: mealsError.message };
+    }
     for (const m of meals ?? []) {
       const count = mealCounts.get(m.id) ?? 0;
       if (m.name) signals.push({ type: 'meal', name: m.name, count });
@@ -70,9 +85,13 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 2) Grocery staples — items added to the list again and again.
-  const { rows: groceries } = await readAll((from, to) => sb.from('grocery_items')
+  const { rows: groceries, error: groceriesError } = await readAll((from, to) => sb.from('grocery_items')
     .select('name').eq('family_id', familyId).gte('created_at', since)
     .order('id').range(from, to), { max: 4000 });
+  if (groceriesError) {
+    console.error('[dashboard/playbook] grocery read failed', groceriesError);
+    return { ok: false, error: groceriesError.message };
+  }
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
     const key = (g.name ?? '').trim().toLowerCase();
@@ -83,17 +102,28 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const { name, count } of groceryCounts.values()) signals.push({ type: 'grocery', name, count });
 
   // 3) Explicit family favorites (already curated by the family).
-  const { data: favs } = await sb.from('family_favorites')
+  const { data: favs, error: favsError } = await sb.from('family_favorites')
     .select('kind,name,member_id,rating').eq('family_id', familyId).limit(500);
+  if (favsError) {
+    console.error('[dashboard/playbook] favorites read failed', favsError);
+    return { ok: false, error: favsError.message };
+  }
   for (const f of favs ?? []) {
     if (f.name) signals.push({ type: 'favorite', kind: f.kind ?? 'thing', name: f.name, memberId: f.member_id, rating: f.rating });
   }
 
   // 4) Annual traditions — same-titled events recurring across multiple years.
   // Three years of events for one household — already 1,906 on seeded data.
-  const { rows: events } = await readAll((from, to) => sb.from('calendar_events')
+  const { rows: events, error: eventsError } = await readAll((from, to) => sb.from('calendar_events')
     .select('title,starts_at,recurrence').eq('family_id', familyId).gte('starts_at', since3y)
     .order('id').range(from, to), { max: 4000 });
+  // A tradition is proved by events spread across YEARS, so a prefix of the
+  // calendar silently demotes a real one to `years < 2` and the family is told
+  // it has none. Fail closed instead of publishing that verdict.
+  if (eventsError) {
+    console.error('[dashboard/playbook] calendar read failed', eventsError);
+    return { ok: false, error: eventsError.message };
+  }
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
     const key = (e.title ?? '').trim().toLowerCase();
@@ -108,13 +138,17 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const t of byTitle.values()) {
     const years = t.yearly ? Math.max(2, t.years.size) : t.years.size;
     if (years < 2) continue;
-    const when = new Date(t.earliest).toLocaleDateString('en-US', MONTH_FMT);
+    const when = new Date(t.earliest).toLocaleDateString(locale.code, MONTH_FMT);
     signals.push({ type: 'tradition', title: t.title, when, years });
   }
 
   // 5) Travel style — recurring trip kind + season across the family's vacations.
-  const { data: trips } = await sb.from('vacations')
+  const { data: trips, error: tripsError } = await sb.from('vacations')
     .select('kind,start_date').eq('family_id', familyId).limit(500);
+  if (tripsError) {
+    console.error('[dashboard/playbook] vacation read failed', tripsError);
+    return { ok: false, error: tripsError.message };
+  }
   const styleCounts = new Map<string, number>();
   const bump = (style: string) => styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
   for (const v of trips ?? []) {
@@ -141,10 +175,36 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }));
 
   // ignoreDuplicates: never overwrite an existing suggestion (esp. accepted/dismissed).
-  const { error } = await sb.from('family_playbook_suggestions')
-    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true });
+  //
+  // …and `added` is therefore the DATABASE's number, not `rows.length`. `rows` is
+  // the CANDIDATE list. `learnPlaybook` is deterministic over signatures that are
+  // stable functions of the household (lib/playbook/learn.ts), so every refresh
+  // after the first regenerates the same signatures and `ON CONFLICT DO NOTHING`
+  // skips every one of them — an accepted or dismissed card keeps its row for
+  // good (confirmFact/forgetFact only change `status`, and `clearAiMemory` only
+  // deletes `ai_memory:%` signatures), and nothing expires them. Reporting the
+  // candidate count told a family who had already worked their inbox down "Found
+  // 6 things Bubaly noticed" over the "Nothing to review right now" empty state,
+  // on every press, for good — and made the one honest branch ("No new patterns
+  // yet", playbook-module.tsx) unreachable while the family had any pattern at all.
+  //
+  // `.select('id')` is what appends `Prefer: return=representation`
+  // (lib/supabase/errors.ts), and RETURNING on `ON CONFLICT DO NOTHING` yields
+  // ONLY the rows actually inserted — so its length is the number we can stand by.
+  const { data: inserted, error } = await sb.from('family_playbook_suggestions')
+    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true })
+    .select('id');
   if (error) return { ok: false, error: error.message };
-  return { ok: true, added: rows.length };
+  // We asked for the representation and did not get one, so there is no honest
+  // count to report. Guessing either way — 0, or the candidate count — is the
+  // same defect with a friendlier face, so say we could not tell. The rows DID
+  // land, and the page is not refreshed on `ok: false`, so the copy tells the
+  // family the one thing that shows them: reload.
+  if (!inserted) {
+    console.error('[dashboard/playbook] suggestion upsert returned no representation');
+    return { ok: false, error: translate(messages, 'playbookActions.couldNotCountNewInsights') };
+  }
+  return { ok: true, added: inserted.length };
 }
 
 /**

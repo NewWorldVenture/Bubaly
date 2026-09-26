@@ -23,7 +23,9 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Pet = Tables<'pets'>;
@@ -41,11 +43,13 @@ const URGENCY_STYLE: Record<CareUrgency, string> = {
   ok: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function PetsModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -344,13 +348,17 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
+    if (!(await askConfirm({ title: t('pets.deleteRecordQ'), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('pet_care_records').delete().eq('id', id);
     if (error) toastError(describeDbError(error));
   }

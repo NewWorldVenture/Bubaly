@@ -115,7 +115,7 @@ export function DecisionsModule() {
                 onClick={() => setSelectedId(d.id)}
                 className={cn(
                   'flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition',
-                  selected?.id === d.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/5',
+                  selected?.id === d.id ? 'border-brand bg-brand/10' : 'border-border hover:bg-muted/5',
                 )}
               >
                 <span className="truncate">{d.question}</span>
@@ -128,7 +128,7 @@ export function DecisionsModule() {
           <div className="space-y-4 lg:col-span-2">
             {selected && (
               <>
-                <div className="rounded-xl border border-border bg-card p-4">
+                <div className="rounded-xl border border-border bg-surface/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-base font-semibold">{selected.question}</h2>
@@ -167,7 +167,7 @@ export function DecisionsModule() {
                         return (
                           <div key={r.id} className={cn(
                             'rounded-xl border p-4',
-                            isWinner ? 'border-amber-400/50 bg-amber-400/5' : r.feasible ? 'border-border bg-card' : 'border-rose-500/30 bg-rose-500/5',
+                            isWinner ? 'border-amber-400/50 bg-amber-400/5' : r.feasible ? 'border-border bg-surface/40' : 'border-rose-500/30 bg-rose-500/5',
                           )}>
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export function DecisionsModule() {
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-semibold tabular-nums">{r.score}</span>
                                 <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted/10">
-                                  <div className={cn('h-full rounded-full', r.feasible ? 'bg-primary' : 'bg-rose-400')} style={{ width: `${r.score}%` }} />
+                                  <div className={cn('h-full rounded-full', r.feasible ? 'bg-brand' : 'bg-rose-400')} style={{ width: `${r.score}%` }} />
                                 </div>
                               </div>
                             </div>

@@ -30,6 +30,7 @@ import { handleInboxMessageAction } from '@/app/(app)/dashboard/inbox/actions';
 import type { InboxHandledBy, InboxReason, InboxSource, UnifiedInboxItem } from '@/lib/inbox/unify';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 /** Which of the three reads failed, so the queue can say so instead of implying "nothing arrived". */
 export type InboxQueueUnavailable = {
@@ -61,22 +62,17 @@ const HANDLED_LABEL: Record<InboxHandledBy, string> = {
   family: 'inboxQueue.done',
 };
 
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const diffMs = Date.now() - d.getTime();
-  const diffH = diffMs / 3_600_000;
-  if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m`;
-  if (diffH < 24) return `${Math.round(diffH)}h`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 export function InboxQueue({ items, unavailable, needsYou }: {
   items: UnifiedInboxItem[];
   unavailable: InboxQueueUnavailable;
   needsYou: number;
 }) {
   const t = useTranslations();
+  // One time-ago, and it follows the reader. The ladder this replaced ended in a
+  // bare toLocaleDateString(undefined, …), which follows the BROWSER's locale
+  // rather than the family's Bubaly choice.
+  const { fmtTimeAgo } = useFormat();
+  const fmtTime = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 1 });
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);

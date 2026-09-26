@@ -192,8 +192,19 @@ export function ContactsModule() {
                     onClick={() => setSelected(isSelected ? null : contact)}
                     className={cn(
                       'flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition last:border-0',
-                      isSelected ? 'bg-brand/8' : 'hover:bg-elevated/30',
+                      isSelected ? 'bg-brand/10' : 'hover:bg-elevated/30',
                     )}>
+                    {/* The row's onClick stays for the mouse. The control is this
+                        button, not role="button" on the row: the row holds a call
+                        button and a mailto link, and role="button" has
+                        presentational children — assistive technology may drop the
+                        semantics of both. It carries aria-expanded because the row
+                        toggles the detail panel rather than navigating, and
+                        stopPropagation because without it the row's handler would
+                        fire second and toggle straight back. */}
+                    <button type="button" aria-expanded={isSelected}
+                      onClick={(e) => { e.stopPropagation(); setSelected(isSelected ? null : contact); }}
+                      className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left">
                     {/* Avatar */}
                     <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-fg"
                       style={{ background: avatarColor(contact.name) }}>
@@ -214,6 +225,7 @@ export function ContactsModule() {
                         {contact.organization && <span>· {contact.organization}</span>}
                       </div>
                     </div>
+                    </button>
 
                     {/* Category badge */}
                     <Badge tone={cat.badge as 'neutral'}>{t(cat.labelKey)}</Badge>

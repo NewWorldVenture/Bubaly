@@ -1,5 +1,5 @@
 -- A marketplace review needs a completed exchange the reviewer was party to;
--- members do not create or delete orders (0333).
+-- members do not create or delete orders (0359).
 --
 -- As TEEN A: filing a 'completed' order, rating sibling C on an order A was
 -- not part of, rating the seller on an order that is not completed, and
@@ -10,11 +10,11 @@ set client_min_messages = warning;
 
 do $probe$
 declare
-  fam  uuid := '00000000-0000-4000-8000-00000000ee01';
-  uPar uuid := '00000000-0000-4000-8000-00000000ee0a';
-  uA uuid := '00000000-0000-4000-8000-00000000ee0b';
-  uB uuid := '00000000-0000-4000-8000-00000000ee0c';
-  uC uuid := '00000000-0000-4000-8000-00000000ee0d';
+  fam  uuid := '00000000-0000-4000-8000-0000000e3e01';
+  uPar uuid := '00000000-0000-4000-8000-0000000e3e0a';
+  uA uuid := '00000000-0000-4000-8000-0000000e3e0b';
+  uB uuid := '00000000-0000-4000-8000-0000000e3e0c';
+  uC uuid := '00000000-0000-4000-8000-0000000e3e0d';
   mA uuid; mB uuid; mC uuid; listing uuid; done uuid; open uuid; other uuid; rev uuid;
   n int; failures int := 0;
 begin

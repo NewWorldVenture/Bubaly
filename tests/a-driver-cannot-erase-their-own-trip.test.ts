@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
  * The driving-safety log is what a parent reviews: max speed, hard brakes,
  * phone use. The view offered delete to every member and the table was
  * member-writable, so a teen could erase the trip where they hit 90 mph.
- * 0339 makes editing and deleting a trip a manager's
+ * 0365 makes editing and deleting a trip a manager's
  * (docs/audit/driving-record-check.sql); this pins the delete control to
  * managers in the UI, and a refused delete to an error rather than "Deleted".
  */

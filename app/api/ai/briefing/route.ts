@@ -235,7 +235,7 @@ GROCERIES STILL NEEDED (${(groceryItems ?? []).length} items):
 ${(groceryItems ?? []).map(g => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- None'}
 
 UPCOMING REMINDERS:
-${(reminders ?? []).map(r => `- ${r.remind_at?.slice(0, 10) ?? 'soon'}: ${r.title}${r.notes ? ': ' + r.notes : ''}`).join('\n') || '- None'}
+${(reminders ?? []).map(r => `- ${r.remind_at ? dayKeyInTz(new Date(r.remind_at), tz) : 'soon'}: ${r.title}${r.notes ? ': ' + r.notes : ''}`).join('\n') || '- None'}
 
 MEAL PLANS THIS WEEK:
 ${(mealPlans ?? []).map(m => {

@@ -8,6 +8,7 @@ import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
 
 type DB = SupabaseClient<Database>;
@@ -122,18 +123,23 @@ export type CreditResult = {
   duplicate?: boolean;
 };
 
-// `childSpendableCents` used to live here. It summed the SPEND bucket's ledger
-// in TypeScript and its doc comment said "this is what a card authorization is
-// checked against in real time" — which was not true of it, and had not been
-// since 0155. The live check is `wallet_reserve_card_auth`, which sums in SQL
-// under `for update` on the bucket, so it reads every row and serialises
-// concurrent authorizations. This one had no callers anywhere in the repository.
+// `childSpendableCents` used to live here, exported. It summed the SPEND
+// bucket's ledger in TypeScript and its doc comment said "this is what a card
+// authorization is checked against in real time" — which was not true of it, and
+// had not been since 0155. The live check is `reserveCardAuth` below, whose
+// `wallet_reserve_card_auth` RPC sums in SQL under `for update` on the bucket,
+// so it reads every row and serialises concurrent authorizations. A TypeScript
+// sum taken outside that lock cannot give the same answer. This one had no
+// callers anywhere in the repository.
 //
 // It was removed rather than fixed because leaving it was the hazard: an
 // unbounded `select` is answered with at most `db-max-rows` (1,000), so a child
 // past a thousand ledger rows would have been given a balance summed over an
 // arbitrary subset — and the comment invited the next author to wire it into
 // exactly the decision that must not use it.
+//
+// Use `bucketBalanceCents` (below) for DISPLAY, and `reserveCardAuth` for a
+// decision that spends.
 
 /**
  * Atomically reserve a hold for a card authorization. Under a per-child lock the
@@ -303,8 +309,21 @@ export async function bucketBalanceCents(supabase: DB, params: {
     .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
   if (bucketError) return { bucketId: null, available: 0, error: walletFailure(bucketError, 'Could not load the wallet bucket.') };
   if (!bucket?.id) return { bucketId: null, available: 0, error: 'The wallet bucket is unavailable.' };
-  const { data: txns, error: transactionError } = await supabase.from('wallet_transactions')
-    .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  // Paged, not a bare select. PostgREST caps a response at `db-max-rows` (1,000
+  // by default) whatever the client asked for, so an unbounded read of a busy
+  // ledger silently ends after the first page and this `reduce` totals a
+  // FRACTION of it — reporting a balance that is not the child's balance.
+  //
+  // `tests/no-limit-above-the-row-cap.test.ts` was written for exactly this and
+  // could not see it: it looks for `.limit(n)` where n exceeds the cap, and this
+  // read had no `.limit()` at all. Its own header even names the consequence —
+  // "wallet balances totalled from part of the ledger".
+  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+    (from, to) => supabase.from('wallet_transactions')
+      .select('direction, amount_cents, status')
+      .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
+      .order('id').range(from, to),
+  );
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
   const available = (txns ?? []).reduce(
     (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,
@@ -319,6 +338,19 @@ export type DebitResult = { ok: boolean; error?: string; txnId?: string };
  * written as `requires_parent_approval` (held — does not yet reduce the balance)
  * and returned so a parent_approvals row can point at it; otherwise it posts
  * `completed` immediately. The single place spend leaves a wallet.
+ *
+ * The decision and the write are ONE statement, under the spend bucket's row
+ * lock, in `wallet_debit_spend_bucket` (0342). This used to read the balance
+ * here and insert after it — two round trips with nothing held in between, so
+ * two concurrent $8 spends against $10 both passed the check and both posted,
+ * leaving an immutable ledger at -$6.00 (Q-01). A balance read outside the lock
+ * is a memory by the time the insert is sent; `bucketBalanceCents` above stays
+ * for DISPLAY and is not what decides this.
+ *
+ * The RPC totals `completed` + `processing`, so a live card hold is no longer
+ * invisible to an in-app spend, and writes the `wallet_audit_logs` row in the
+ * same transaction as the debit — which is why there is no `logWalletAudit`
+ * call here any more.
  */
 export async function debitSpendBucket(supabase: DB, params: {
   familyId: string; childWalletId: string; amountCents: number; type: WalletTxnType;
@@ -329,26 +361,30 @@ export async function debitSpendBucket(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
-  const { bucketId, available, error: balanceError } = await bucketBalanceCents(supabase, { familyId: params.familyId, childWalletId: params.childWalletId, kind: 'spend' });
-  if (balanceError) return { ok: false, error: balanceError };
-  if (!params.requiresApproval && amount > available) {
-    return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
-  }
-
-  const { data, error } = await supabase.from('wallet_transactions').insert({
-    family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucketId,
-    type: params.type, status: params.requiresApproval ? 'requires_parent_approval' : 'completed',
-    direction: 'debit', amount_cents: amount, description: params.description,
-    related_type: params.relatedType ?? null, related_id: params.relatedId ?? null,
-    created_by: params.createdBy, approved_by: params.requiresApproval ? null : (params.approvedBy ?? params.createdBy),
-    metadata: (params.metadata ?? {}) as Database['public']['Tables']['wallet_transactions']['Insert']['metadata'],
-  }).select('id').single();
+  const { data, error } = await supabase.rpc('wallet_debit_spend_bucket', {
+    p_family_id: params.familyId,
+    p_child_wallet_id: params.childWalletId,
+    p_amount: amount,
+    p_type: params.type,
+    p_description: params.description,
+    p_actor_id: params.createdBy,
+    p_requires_approval: params.requiresApproval ?? false,
+    p_approved_by: params.approvedBy ?? null,
+    p_related_type: params.relatedType ?? null,
+    p_related_id: params.relatedId ?? null,
+    p_metadata: (params.metadata ?? {}) as Json,
+  });
   if (error) return { ok: false, error: walletFailure(error, 'Could not post that wallet debit.') };
 
-  await logWalletAudit(supabase, {
-    family_id: params.familyId, actor_user_id: params.createdBy, action: `debit_${params.type}`,
-    entity_type: 'child_wallets', entity_id: params.childWalletId,
-    detail: `${params.description} (${amount}c)${params.requiresApproval ? ' — pending approval' : ''}`,
-  }, `wallet debit (${params.type})`);
-  return { ok: true, txnId: data.id };
+  const result = walletRpcResult(data);
+  if (!result.ok) {
+    // Kept word for word rather than handed to walletRpcReason, because this is
+    // the sentence the Spend screen has always shown and the one the wallet
+    // action prints for the same refusal.
+    if (result.reason === 'insufficient_funds') {
+      return { ok: false, error: `Only ${((result.available ?? 0) / 100).toFixed(2)} available in Spend.` };
+    }
+    return { ok: false, error: walletRpcReason(result, 'Could not post that wallet debit.') };
+  }
+  return { ok: true, txnId: result.transaction_id };
 }

@@ -18,23 +18,30 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, HomeProjectKind, HomeProjectPriority, HomeProjectStatus, ProjectQuoteStatus } from '@/lib/database.types';
 import {
   PROJECT_KINDS, PROJECT_STATUSES, PRIORITIES, QUOTE_STATUSES, BOARD, kindMeta, statusLabel, columnFor, suggestScope, materialsTotals, materialLineCents,
-  compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
+  compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money as moneyIn, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -75,7 +82,7 @@ export function ProjectsModule() {
   }
 
   async function deleteProject(p: Project) {
-    if (!confirm(`Delete “${p.title}” with its materials and quotes?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('projects.deleteProjectBody') }))) return;
     const { error } = await createClient().from('home_projects').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setOpenId(null);
@@ -289,7 +296,12 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<'materials' | 'quotes'>(project.is_diy ? 'materials' : 'quotes');
   const [materialForm, setMaterialForm] = useState<{ open: boolean; material: Material | null }>({ open: false, material: null });
@@ -311,6 +323,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   }
 
   async function deleteMaterial(m: Material) {
+    if (!(await askConfirm({ title: tr('projects.deleteMaterialQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('project_materials').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     success(tr('projectsModule.materialRemoved'));
@@ -349,6 +362,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   }
 
   async function deleteQuote(q: Quote) {
+    if (!(await askConfirm({ title: tr('projects.deleteQuoteQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('project_quotes').delete().eq('id', q.id);
     if (error) return toastError(describeDbError(error));
     success(tr('projectsModule.quoteRemoved'));

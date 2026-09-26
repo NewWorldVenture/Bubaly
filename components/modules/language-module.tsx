@@ -19,16 +19,21 @@ import type { Tables, CefrLevel, LanguageSessionKind } from '@/lib/database.type
 import {
   CEFR, SESSION_KINDS, LANGUAGES, GRADES, cefrMeta, kindMeta, languageMeta, starterDeck, sm2, dueCards, deckStats, weekProgress, streak, levelEstimate, suggestToday, languageSummary, isoDate, type Grade,
 } from '@/lib/language/practice';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Goal = Tables<'language_goals'>;
 type Session = Tables<'language_sessions'>;
 type Card = Tables<'vocab_cards'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 
 export function LanguageModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -107,6 +112,7 @@ export function LanguageModule() {
   }
 
   async function deleteCard(c: Card) {
+    if (!(await askConfirm({ title: tr('language.deleteCardQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('vocab_cards').delete().eq('id', c.id);
     if (error) return toastError(describeDbError(error));
     success(tr('languageModule.cardRemoved'));
@@ -139,7 +145,7 @@ export function LanguageModule() {
   }
 
   async function deleteGoal(g: Goal) {
-    if (!confirm(`Delete ${nameOf(g.member_id)}’s ${g.language_label} goal with every card and session?`)) return;
+    if (!(await askConfirm({ title: tr('language.deleteGoalQ', { name: nameOf(g.member_id), language: g.language_label }), body: tr('language.deleteGoalBody') }))) return;
     const { error } = await createClient().from('language_goals').delete().eq('id', g.id);
     if (error) return toastError(describeDbError(error));
     setGoalId('');

@@ -3,9 +3,9 @@
 import { BedDouble } from 'lucide-react';
 import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
-import { LODGING_KINDS, dollars, lookup } from '@/lib/vacations/meta';
+import { LODGING_KINDS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Lodging = Tables<'vacation_lodging'>;
 
@@ -26,6 +26,9 @@ const fields: FieldDef[] = [
 
 export function TripLodging({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   return (
     <TripCrudSection<Lodging>
       table="vacation_lodging" vacationId={vacationId} title={t('tripLodging.lodging')} icon={BedDouble}

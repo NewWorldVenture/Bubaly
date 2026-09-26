@@ -2,6 +2,8 @@
 // The timeline is derived at read time from milestones, past trips, and
 // captioned/favorite photos, then grouped into months newest-first.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export type MemoryKind = 'milestone' | 'trip' | 'photo';
 
 export type MemoryItem = {
@@ -23,7 +25,10 @@ function monthKey(date: string): string | null {
 }
 
 /** Group memories into months, newest month first, newest item first. */
-export function groupByMonth(items: MemoryItem[]): MemoryMonth[] {
+export function groupByMonth(items: MemoryItem[], locale: LocaleCode = DEFAULT_LOCALE): MemoryMonth[] {
+  // "July 2026" for the reader — and the ORDER matters as much as the words:
+  // several locales put the year first.
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
   const byKey = new Map<string, MemoryItem[]>();
   for (const it of items) {
     const k = monthKey(it.date);
@@ -36,7 +41,7 @@ export function groupByMonth(items: MemoryItem[]): MemoryMonth[] {
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .map(([key, list]) => ({
       key,
-      label: new Date(`${key}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      label: monthLabel.format(new Date(`${key}-01T00:00:00`)),
       items: list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     }));
 }

@@ -23,11 +23,13 @@
 // the RPC stays in place but nothing calls it.
 import 'server-only';
 import type { PantryLocation, Tables } from '@/lib/database.types';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import {
   applySubstitutions, collectDietaryConstraints, type Substitution,
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
@@ -40,6 +42,19 @@ export type GroceryItem = Tables<'grocery_items'>;
 
 /** The name a list is created under when the family has none. Matches 0002's column default. */
 export const DEFAULT_GROCERY_LIST_NAME = 'Groceries';
+
+/**
+ * How many `family_facts` rows the dietary read will walk before it calls the
+ * result a prefix and fails closed.
+ *
+ * Generous against what the memory service itself models — "a household has
+ * dozens of facts, not thousands" (lib/services/memory/index.ts) — and still a
+ * number, because the alternative is reading an unbounded table and hoping.
+ * Past it the read reports an error rather than a prefix, and the fail-closed
+ * branch refuses to shop; a family that genuinely holds this many facts gets a
+ * refusal it can report, not a shopping list missing an allergen.
+ */
+const DIETARY_FACT_CEILING = 5_000;
 
 /**
  * "Not archived", asked of BOTH columns that answer it.
@@ -92,10 +107,16 @@ export function categorizeGroceryItem(name: string): string | null {
   return best?.category ?? null;
 }
 
-/** Normalised form used for duplicate detection: case, plural 's' and spacing are not differences. */
-export function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ').replace(/s$/, '');
-}
+/**
+ * Normalised form used for duplicate detection: case, plural 's' and spacing
+ * are not differences.
+ *
+ * The rule itself now lives in `lib/groceries/normalize-name.ts` — this file is
+ * `server-only`, and the competitor importer's resolver has to compare grocery
+ * names under the SAME rule without inheriting that. Re-exported from here so
+ * every caller that already imports it from the service keeps working.
+ */
+export { normalizeName };
 
 export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceResult<{ id: string; created: boolean }>> {
   const { data: existing, error: lookupError } = await scope.db
@@ -497,16 +518,39 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // FAIL CLOSED. A read that errors here is not "no allergies"; putting peanut
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
+  //
+  // A SHORT read is not "no allergies" either, and that is the harder half.
+  // PostgREST answers an unbounded `select()` with at most `db-max-rows` (1,000
+  // on a default project) and reports nothing — no error for the guard below to
+  // catch. A household whose `family_facts` has outgrown one page would then be
+  // shopped for against a PREFIX of its own allergies, and the allergy row that
+  // fell off the end reads exactly like an allergy the family never recorded.
+  // So page to a real ceiling: `readAll` turns "there are more than `max`" into
+  // an error, which the fail-closed branch already renders. `medical_profiles`
+  // is one row per member and cannot reach the cap, so it stays as it is.
+  // The price is one extra round trip for every household, however small:
+  // `readAll` stops only on an EMPTY page, because a short one is also what the
+  // cap looks like.
   const [profilesRes, factsRes] = await settleAll([
     scope.db.from('medical_profiles').select('allergies').eq('family_id', scope.familyId),
-    scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
-      .in('category', ['medical', 'preference', 'important']),
+    readAllAsQuery<{ category: string | null; label: string | null; value: string | null }>((from, to) =>
+      scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
+        .in('category', ['medical', 'preference', 'important'])
+        // Ordered because an unordered paged read can repeat or skip rows —
+        // and because without it, WHICH rows a truncated read returned was
+        // unspecified: the same household could get the allergy on Monday and
+        // miss it on Tuesday after an unrelated row was touched.
+        .order('id').range(from, to), { max: DIETARY_FACT_CEILING }),
   ]);
   const constraintError = profilesRes.error ?? factsRes.error;
   if (constraintError) {
     console.error('[service:groceries] dietary constraint read failed', constraintError);
+    // `describeActionError`, not `describeDbError`: an error it cannot classify
+    // (readAll's "reached the caller's max… raise the max", a raw Postgres
+    // string) is logged above and the family is told the sentence below —
+    // `describeDbError` would hand the raw diagnostic to the page instead.
     return fail(
-      describeDbError(constraintError, 'Could not check the family’s allergies, so nothing was added to the list.'),
+      describeActionError(constraintError, 'Could not check the family’s allergies, so nothing was added to the list.'),
       { code: SERVICE_CODES.db },
     );
   }

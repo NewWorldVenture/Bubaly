@@ -5,13 +5,17 @@
 import { useState } from 'react';
 import { Gift, Check, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { submitGiftPledgeAction } from '@/app/gift/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export function PublicGiftForm({ token, suggestedCents, childName }: {
   token: string; suggestedCents: number[]; childName: string;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const [amount, setAmount] = useState<number | null>(suggestedCents[0] ?? null);
   const [custom, setCustom] = useState('');

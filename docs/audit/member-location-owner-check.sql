@@ -1,13 +1,13 @@
 -- Can one member report another member's location or safety?
 --
 -- member_locations, location_events and safety_check_ins let any member write
--- any member's rows. 0326 scopes writes to "your own member row, or a manager";
+-- any member's rows. 0352 scopes writes to "your own member row, or a manager";
 -- reads are unchanged (family members).
 --
 -- As TEEN A against CHILD B: moving B, switching B's sharing off, writing B's
 -- arrival, checking B in, and deleting B's "need help" must all be refused
 -- (UPDATE/DELETE match zero rows; INSERT raises). Controls: A reports A's own
--- location and check-in; A still reads B's; the PARENT can update B's row.
+-- location and check-in; A still reads B's; the PARENT reads B's row but, since 0335, cannot rewrite it.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -77,9 +77,14 @@ begin
   perform set_config('request.jwt.claim.sub', uPar::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', uPar, 'role', 'authenticated')::text, true);
   set local role authenticated;
+  -- 0335 (main) goes further than 0352 for member_locations: a position is
+  -- only ever its own member's to write, a manager's included ("identity, not
+  -- role"). So the parent reads B's row but cannot rewrite it.
+  select count(*) into n from public.member_locations where member_id = mB;
+  if n <> 1 then raise warning 'CONTROL FAILED: a parent could not read a child''s location row (%)', n; failures := failures + 1; end if;
   update public.member_locations set is_sharing = true where member_id = mB;
   get diagnostics n = row_count;
-  if n <> 1 then raise warning 'CONTROL FAILED: a parent could not manage a child''s location row (rows: %)', n; failures := failures + 1; end if;
+  if n <> 0 then raise warning 'BREACH: a parent rewrote a child''s position (rows: %)', n; failures := failures + 1; end if;
   reset role;
 
   delete from public.families where id = fam;

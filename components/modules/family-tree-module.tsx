@@ -237,10 +237,10 @@ export function FamilyTreeModule() {
                           {n.birth_place && <p className="mt-0.5 text-xs text-muted">{n.birth_place}</p>}
                         </div>
                         <div className="flex shrink-0 gap-1">
-                          <button onClick={() => startEdit(raw)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
+                          <button aria-label={t('a11y.edit')} onClick={() => startEdit(raw)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
-                          <button onClick={() => remove(n.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
+                          <button aria-label={t('a11y.delete')} onClick={() => remove(n.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -359,7 +359,7 @@ function TreeBranch({
     <div style={{ marginLeft: depth * 24 }}>
       <div className="group flex items-center gap-2 rounded-xl px-3 py-2 transition hover:bg-surface/40">
         {hasChildren ? (
-          <button onClick={() => onToggle(node.id)} className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-elevated">
+          <button aria-label={t('a11y.expand')} onClick={() => onToggle(node.id)} className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-elevated">
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (

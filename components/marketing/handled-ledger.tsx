@@ -42,13 +42,13 @@ export async function HandledLedger() {
     aggregates.push({ key: 'handled', icon: Sparkles, text: handledLine });
   }
   if (meetsHandledFloor(stats.handled30d)) {
-    aggregates.push({ key: 'handled30d', icon: Clock, text: t('handledProof.aggregate30d', { count: formatHandled(stats.handled30d) }) });
+    aggregates.push({ key: 'handled30d', icon: Clock, text: t('handledProof.aggregate30d', { count: formatHandled(stats.handled30d, locale.code) }) });
   }
   if (meetsHandledFloor(stats.tasksCompleted)) {
-    aggregates.push({ key: 'chores', icon: ListChecks, text: t('handledProof.choresAggregate', { count: formatHandled(stats.tasksCompleted) }) });
+    aggregates.push({ key: 'chores', icon: ListChecks, text: t('handledProof.choresAggregate', { count: formatHandled(stats.tasksCompleted, locale.code) }) });
   }
   if (stats.families > 0) {
-    aggregates.push({ key: 'families', icon: Heart, text: familiesNote(t, stats.families) });
+    aggregates.push({ key: 'families', icon: Heart, text: familiesNote(t, stats.families, locale.code) });
   }
 
   return (

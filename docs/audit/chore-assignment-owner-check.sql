@@ -1,4 +1,4 @@
--- A chore, and its points, stay with the child who did it (0348).
+-- A chore, and its points, stay with the child who did it (0374).
 --
 -- Sibling B has an APPROVED assignment worth 50 points; child A has an open
 -- one. As A: re-pointing B's approved assignment at A, deleting it, and

@@ -74,6 +74,18 @@ const MISSING_TABLE = { code: 'PGRST205', message: "Could not find the table 'pu
 // A real read failure: the table is there, the database is not answering.
 const READ_FAILURE = { code: '57014', message: 'canceling statement due to statement timeout' };
 
+// Each case does a real SSR render, and the six together run in ~5.2s against
+// vitest's 5s DEFAULT per-test timeout. That margin is thin enough that under
+// CPU pressure a single render breaches it: this file failed twice while the
+// machine was busy and then passed 6/6 in isolation, with the failing run taking
+// 9.8s against 5.2s for a passing one.
+//
+// Stated plainly because it is a mitigation, not a confirmed diagnosis — the
+// original failure's error text was overwritten before I could re-read it, so
+// "slow render hit the default timeout" is the best-supported cause and not a
+// proven one. If this file ever fails again, capture the message first.
+const RENDER_TIMEOUT_MS = 30_000;
+
 describe('the library page before 0284 is applied', () => {
   it('names the migration instead of telling someone to refresh', async () => {
     mocks.failure = MISSING_TABLE;
@@ -81,20 +93,20 @@ describe('the library page before 0284 is applied', () => {
     expect(html).toContain('0284_library_books_podcasts.sql');
     expect(html).toContain("isn&#x27;t switched on yet");
     expect(html).not.toContain('Refresh and try again');
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('still says "refresh" for a failure that refreshing might actually fix', async () => {
     mocks.failure = READ_FAILURE;
     const html = await renderLibrary();
     expect(html).toContain('Refresh and try again');
     expect(html).not.toContain('0284_library_books_podcasts.sql');
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('renders the library itself when the tables are there', async () => {
     const html = await renderLibrary();
     expect(html).not.toContain('Refresh and try again');
     expect(html).not.toContain('0284_library_books_podcasts.sql');
-  });
+  }, RENDER_TIMEOUT_MS);
 });
 
 describe('the assistants page before 0283 is applied', () => {
@@ -104,18 +116,18 @@ describe('the assistants page before 0283 is applied', () => {
     expect(html).toContain('0283_assistant_links.sql');
     expect(html).toContain("aren&#x27;t switched on yet");
     expect(html).not.toContain('Refresh and try again');
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('still says "refresh" for a failure that refreshing might actually fix', async () => {
     mocks.failure = READ_FAILURE;
     const html = await renderAssistants();
     expect(html).toContain('Refresh and try again');
     expect(html).not.toContain('0283_assistant_links.sql');
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('renders the key list when the tables are there', async () => {
     const html = await renderAssistants();
     expect(html).not.toContain('Refresh and try again');
     expect(html).not.toContain('0283_assistant_links.sql');
-  });
+  }, RENDER_TIMEOUT_MS);
 });

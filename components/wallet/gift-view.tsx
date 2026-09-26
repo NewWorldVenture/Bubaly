@@ -13,11 +13,11 @@ import { Field, Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/states';
 import { QrCode } from '@/components/ui/qr-code';
 import { useToast } from '@/components/ui/toast';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { occasionLabel, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '@/lib/wallet/gift';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGiftLinkAction, approveGiftAction, dismissGiftAction } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type GiftLinkRow = { id: string; token: string; occasion: string | null; isActive: boolean; childName: string | null };
 export type PendingGift = { id: string; giverName: string | null; amountCents: number; message: string | null; occasion: string | null; childName: string | null };
@@ -26,6 +26,10 @@ export type ChildOpt = { id: string; name: string };
 export function GiftView({ links, pending, childOptions, canManage }: {
   links: GiftLinkRow[]; pending: PendingGift[]; childOptions: ChildOpt[]; canManage: boolean;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

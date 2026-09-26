@@ -19,9 +19,12 @@ const sources = Object.fromEntries([
   // adherence.ts resolves a dose slot in the family's zone; the in-page loader
   // below throws on any module missing from this list, so its imports belong here.
   'lib/time/zoned.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
-  'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
+  'components/ui/input.tsx', 'components/ui/modal.tsx',
+  // medications-module.tsx asks before a destructive write via useConfirm; the
+  // provider reaches the loader with it, so its source belongs here too.
+  'components/ui/confirm.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
@@ -497,6 +500,12 @@ test('medication edit and confirmed delete read back the saved name and the depe
 
 test('schedule removal retires its actionable dose while retaining its logged history', async ({ page }) => {
   const state = await fixture(page); state.rows.medication_doses = [{ ...recorded }]; await mount(page); await ready(page);
+  // deleteSchedule asks through useConfirm before it writes. Nothing wraps this
+  // fixture in a ConfirmProvider, so the hook falls back to window.confirm —
+  // which Playwright dismisses unless a handler accepts it, exactly as the
+  // medication-delete test above does. Without this the click is a no-op and
+  // the schedule is never removed.
+  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove schedule', exact: true }).click();
   await expect(markTaken(page)).toHaveCount(0); await expect(page.getByText('1 taken', { exact: true })).toBeVisible();
   expect(state.rows.medication_schedules).toEqual([]);

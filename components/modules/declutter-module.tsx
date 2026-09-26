@@ -18,13 +18,15 @@ import type { Tables, DeclutterZoneKind } from '@/lib/database.types';
 import {
   ZONE_KINDS, SCORE_LABELS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Zone = Tables<'declutter_zones'>;
 type Mission = Tables<'declutter_missions'>;
 type Session = Tables<'declutter_sessions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 const HEALTH_STYLE = {
   fresh: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   due: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
@@ -34,7 +36,10 @@ const HEALTH_STYLE = {
 const HEALTH_LABEL = { fresh: 'Fresh', due: 'Due for a reset', overdue: 'Overdue', never: 'Never reset' } as const;
 
 export function DeclutterModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -65,7 +70,7 @@ export function DeclutterModule() {
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
-  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today), [zones.data, missions.data, members, today]);
+  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const zoneOf = (id: string | null) => zones.data.find((z) => z.id === id) ?? null;
 
@@ -102,7 +107,7 @@ export function DeclutterModule() {
   }
 
   async function deleteMission(m: Mission) {
-    if (!confirm(`Delete “${m.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     success(tr('declutterModule.missionDeleted'));
@@ -304,7 +309,7 @@ export function DeclutterModule() {
                 {sessions.data.slice(0, 6).map((s) => (
                   <li key={s.id} className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm">
                     <p className="font-medium">{s.minutes} min{zoneOf(s.zone_id) ? ` · ${zoneOf(s.zone_id)?.name}` : ''}</p>
-                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${s.missions_done} mission${s.missions_done === 1 ? '' : 's'}` : ''}</p>
+                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${s.missions_done} mission${s.missions_done === 1 ? '' : 's'}` : ''}</p>
                   </li>
                 ))}
               </ul>

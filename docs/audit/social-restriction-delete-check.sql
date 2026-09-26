@@ -3,7 +3,7 @@
 -- An adult pinned to `read_only` must not be able to delete that row and fall
 -- back to their household default (`marketing_manager`: connect + publish).
 -- 0034 guarded INSERT/UPDATE on social_access_permissions and left DELETE on
--- the generic `is_family_member` policy; 0318 gives DELETE the UPDATE
+-- the generic `is_family_member` policy; 0344 gives DELETE the UPDATE
 -- predicate. Controls: the restriction really denies publish while it stands,
 -- and a parent (family admin) can still remove it.
 --

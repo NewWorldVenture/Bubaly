@@ -5,6 +5,11 @@
 // pure transform of already-fetched rows so the math is unit-tested directly and
 // reused by the client module without duplicating logic.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type ChoreLike = {
   id: string;
   title: string;
@@ -164,17 +169,27 @@ export function rewardsProgress(
 }
 
 /** Human due-date label + urgency flag relative to `now`. */
-export function dueLabel(due: string | null, now: Date = new Date()): { label: string; tone: 'overdue' | 'today' | 'soon' | 'normal' | 'none' } {
-  if (!due) return { label: 'No due date', tone: 'none' };
+export function dueLabel(
+  due: string | null,
+  now: Date = new Date(),
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): { label: string; tone: 'overdue' | 'today' | 'soon' | 'normal' | 'none' } {
+  // The DATE takes the locale; the four words take a translator the caller
+  // supplies, falling back to English without one — the contract fmtRelative uses
+  // for "Today" and "Tomorrow". Localising only the date would have left a German
+  // family reading "Overdue" beside "Di., 14. Juli".
+  const word = (key: string, english: string) => (t ? t(key) : english);
+  if (!due) return { label: word('todos.noDueDate', 'No due date'), tone: 'none' };
   const d = new Date(due);
-  if (Number.isNaN(d.getTime())) return { label: 'No due date', tone: 'none' };
+  if (Number.isNaN(d.getTime())) return { label: word('todos.noDueDate', 'No due date'), tone: 'none' };
   const today = new Date(now); today.setHours(0, 0, 0, 0);
   const target = new Date(d); target.setHours(0, 0, 0, 0);
   const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return { label: 'Overdue', tone: 'overdue' };
-  if (diff === 0) return { label: 'Today', tone: 'today' };
-  if (diff === 1) return { label: 'Tomorrow', tone: 'soon' };
-  return { label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), tone: 'normal' };
+  if (diff < 0) return { label: word('todos.overdue', 'Overdue'), tone: 'overdue' };
+  if (diff === 0) return { label: word('calendar.today', 'Today'), tone: 'today' };
+  if (diff === 1) return { label: word('quickCapture.tomorrow', 'Tomorrow'), tone: 'soon' };
+  return { label: createFormat(locale).fmtDate(d, 'EEE, MMM d'), tone: 'normal' };
 }
 
 // Keyword → emoji map for chores that don't carry an explicit emoji icon.

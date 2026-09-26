@@ -1,4 +1,4 @@
--- A child's chore-proof folder is theirs (0350).
+-- A child's chore-proof folder is theirs (0376).
 --
 -- Child B's proof photo sits at <fam>/<B>/.... As SIBLING A: deleting it, and
 -- uploading into B's folder, must be refused. Controls: A uploads to A's own
@@ -23,7 +23,7 @@ begin
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values (fam, uA, 'A', 'child', true) returning id into mA;
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values (fam, uB, 'B', 'child', true) returning id into mB;
   insert into storage.buckets (id, name, public) values ('chore-proof', 'chore-proof', false) on conflict (id) do nothing;
-  bPath := fam::text || '/' || mB::text || '/probe-0350-clean.jpg';
+  bPath := fam::text || '/' || mB::text || '/probe-0376-clean.jpg';
   insert into storage.objects (bucket_id, name, owner) values ('chore-proof', bPath, uB);
 
   perform set_config('request.jwt.claim.sub', uA::text, true);
@@ -35,11 +35,11 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise warning 'BREACH: a sibling deleted someone''s proof photo (rows: %)', n; failures := failures + 1; end if;
   begin
-    insert into storage.objects (bucket_id, name, owner) values ('chore-proof', fam::text || '/' || mB::text || '/probe-0350-fake.jpg', uA);
+    insert into storage.objects (bucket_id, name, owner) values ('chore-proof', fam::text || '/' || mB::text || '/probe-0376-fake.jpg', uA);
     raise warning 'BREACH: a sibling uploaded into someone''s proof folder'; failures := failures + 1;
   exception when insufficient_privilege then null;
   end;
-  insert into storage.objects (bucket_id, name, owner) values ('chore-proof', fam::text || '/' || mA::text || '/probe-0350-mine.jpg', uA);
+  insert into storage.objects (bucket_id, name, owner) values ('chore-proof', fam::text || '/' || mA::text || '/probe-0376-mine.jpg', uA);
   get diagnostics n = row_count;
   if n <> 1 then raise warning 'CONTROL FAILED: a child could not upload their own proof (rows: %)', n; failures := failures + 1; end if;
   reset role;
@@ -52,7 +52,7 @@ begin
   if n <> 1 then raise warning 'CONTROL FAILED: a parent could not delete proof (rows: %)', n; failures := failures + 1; end if;
   reset role;
 
-  delete from storage.objects where bucket_id = 'chore-proof' and name like fam::text || '/%probe-0350-%';
+  delete from storage.objects where bucket_id = 'chore-proof' and name like fam::text || '/%probe-0376-%';
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uA, uB);
 

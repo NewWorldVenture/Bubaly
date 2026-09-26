@@ -38,8 +38,17 @@ export async function setMomentPrepDoneAction(input: { eventId: string; doneIds:
   const doneIds = Array.from(new Set((input.doneIds ?? []).filter((v) => typeof v === 'string' && v.trim()))).slice(0, 32);
   const supabase = await createServer();
 
-  const { data: existing } = await supabase.from('user_preferences')
+  // Read-merge-write so we never clobber other notification_prefs keys. A read
+  // that FAILED is not an empty prefs blob: the upsert below replaces the WHOLE
+  // notification_prefs column, so merging into `{}` would erase App Lock, the
+  // Google Calendar token and every other key this member has set. Fail closed
+  // instead — the same guard Capture shortcuts and App Lock already use.
+  const { data: existing, error: readError } = await supabase.from('user_preferences')
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
+  if (readError) {
+    console.error('[dashboard/moment-prep] preferences read failed', readError);
+    return { ok: false, error: readError.message };
+  }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const map = (prefs[PREF_KEY] && typeof prefs[PREF_KEY] === 'object' && !Array.isArray(prefs[PREF_KEY]))
     ? { ...(prefs[PREF_KEY] as Record<string, unknown>) } : {};

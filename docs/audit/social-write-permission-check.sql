@@ -1,4 +1,4 @@
--- Does RLS enforce the social permission matrix on writes? (0330)
+-- Does RLS enforce the social permission matrix on writes? (0356)
 --
 -- CHILD (default social role read_only): disconnecting the family's social
 -- account, switching off require_approval, rewriting a post, deleting a post,

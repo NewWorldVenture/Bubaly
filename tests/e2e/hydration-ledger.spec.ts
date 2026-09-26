@@ -14,7 +14,7 @@ const sources = Object.fromEntries([
   'components/modules/habits-module.tsx', 'lib/hooks/use-realtime-query.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',

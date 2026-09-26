@@ -96,10 +96,12 @@ describe('aiPicks', () => {
 });
 
 describe('activityFeed + relativeTime', () => {
+  // The wording unified on the app's compact form — see the note in
+  // tests/marketplace-discover.test.ts.
   it('formats coarse relative times', () => {
-    expect(relativeTime('2026-07-09T11:58:00.000Z', NOW)).toBe('2 min ago');
-    expect(relativeTime('2026-07-09T09:00:00.000Z', NOW)).toBe('3 hr ago');
-    expect(relativeTime('2026-07-07T09:00:00.000Z', NOW)).toBe('2 days ago');
+    expect(relativeTime('2026-07-09T11:58:00.000Z', NOW)).toBe('2m ago');
+    expect(relativeTime('2026-07-09T09:00:00.000Z', NOW)).toBe('3h ago');
+    expect(relativeTime('2026-07-07T09:00:00.000Z', NOW)).toBe('2d ago');
   });
 
   it('folds orders, reviews and fresh listings into one newest-first feed', () => {
@@ -116,7 +118,26 @@ describe('activityFeed + relativeTime', () => {
     expect(feed[0].text).toBe('Sarah rented a dress');
     expect(feed[1].text).toBe('Emma listed a dress');
     expect(feed[2].text).toBe('Chris received a review');
-    expect(feed[0].when).toBe('2 min ago');
+    expect(feed[0].when).toBe('2m ago');
+  });
+
+  // The feed's `when` chip takes the locale; each item's `text` does not, and that
+  // is a catalogue change rather than a formatter one (I18N-002). Pinning both here
+  // says which half is done, so the English prose is a known gap and not an
+  // oversight the next reader has to rediscover.
+  it('localises the when chip and leaves the text English, on purpose', () => {
+    const feed = activityFeed(
+      [{ id: 'o1', kind: 'rent', status: 'active', buyer_member: 'sarah', listing_id: 'l1', created_at: '2026-07-09T09:00:00.000Z' }],
+      [],
+      [{ id: 'l1', title: 'a dress', member_id: 'emma', created_at: '2026-07-09T11:30:00.000Z' }],
+      (id) => (id === 'sarah' ? 'Sarah' : null),
+      NOW,
+      5,
+      'de-DE',
+    );
+    const order = feed.find((i) => i.id === 'o-o1');
+    expect(order?.when).toBe('vor 3 Std.');
+    expect(order?.text).toBe('Sarah rented a dress');
   });
 
   it('reads "Someone" when the member is unknown', () => {

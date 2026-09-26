@@ -210,9 +210,35 @@ describe('translate', () => {
     expect(translate({ greet: 'Hello {name}' }, 'greet', { other: 'x' })).toBe('Hello {name}');
   });
 
-  it('falls back to English, then to the key itself', () => {
-    expect(translate({}, 'nav.family')).toBe(SOURCE_MESSAGES['nav.family']);
+  // The English fallback MOVED; it did not go away, and this case is where you
+  // find that out.
+  //
+  // `translate` used to read `messages[key] ?? SOURCE_MESSAGES[key] ?? key`,
+  // and that middle term is a static import of the en-US catalogue. Because
+  // components/i18n/locale-provider.tsx is 'use client' and imported translate
+  // from lib/i18n/messages.ts, en-US was a live reference in the browser graph:
+  // 841,247 B raw / 251,553 B gzip in one chunk, on 406 of 606 pages, measured
+  // on a production build. That is PERF-001, and it cancelled out the scoping
+  // work exactly — /pricing narrowed its payload to 31 KB of JSON and then
+  // shipped the whole catalogue anyway.
+  //
+  // So `translate` now reads `messages[key] ?? key` and lives in
+  // lib/i18n/translate.ts with no catalogue behind it. The guarantee the old
+  // fallback existed for — "a missing translation should look like an
+  // untranslated product, not a broken one" — is unchanged, because it is
+  // enforced one level up in `getMessages`, which builds `{ ...enUS }` and
+  // assigns the locale's overlay over it. Every caller that matters is handed
+  // that complete map, so for them the two readings cannot differ. The case
+  // above this one pins exactly that, and is the reason this one may be
+  // relaxed rather than a sign that it is being relaxed to fit.
+  it('no longer carries a catalogue of its own — the key is the last resort', () => {
+    expect(translate({}, 'nav.family')).toBe('nav.family');
     expect(translate({}, 'nope.not.a.key')).toBe('nope.not.a.key');
+    // And the guarantee, end to end through the function a caller actually
+    // uses. en-GB overrides nothing today, so every one of its keys arrives by
+    // the `{ ...enUS }` base in getMessages — which is the fallback, now in the
+    // one place that has a catalogue to fall back to.
+    expect(translate(getMessages('en-GB'), 'nav.family')).toBe(SOURCE_MESSAGES['nav.family']);
   });
 });
 

@@ -40,7 +40,7 @@ async function loadOrderRole(orderId: string) {
   // Only the two people in the exchange arrange its pickup. Anyone else in the
   // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
   // so a sibling could propose, confirm - minting the hand-off code - or cancel
-  // someone else's pickup. 0346 enforces the same in RLS.
+  // someone else's pickup. 0372 enforces the same in RLS.
   const me = ctx.active.member.id;
   const role: 'buyer' | 'seller' | null = order
     ? (order.seller_member === me ? 'seller' : order.buyer_member === me ? 'buyer' : null)

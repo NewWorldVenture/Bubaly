@@ -27,15 +27,16 @@ export default async function FamilyAccessPage() {
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),
   ]);
 
-  // A dropped error here is not an empty list, it is a WRONG list. An unreadable
-  // `child_logins` makes every child look as though they have no login, and the
-  // page's whole purpose is deciding who to give one to — so the parent would
-  // create a second login for a username that is already taken. An unreadable
-  // `family_members` hides the household entirely.
+  // A dropped child_logins error is not a blank row — it CHANGES WHAT THE PAGE
+  // OFFERS. `usernameByMember` drives the choice below between "reset this
+  // child's PIN" and "give this child a login", so an unread failure makes every
+  // existing login look absent and turns the whole list into create-a-login
+  // prompts for children who already have one. That is a write offered on the
+  // strength of a read that did not happen.
   const readError = membersError ?? loginsError;
   if (readError) {
-    console.error('[family-access] kid login read failed', readError);
-    return <ErrorState message={t('familyAccess.couldNotLoadKidLogins')} />;
+    console.error('[dashboard/family-access] access read failed', readError);
+    return <ErrorState message={t('familyAccess.couldNotLoadChildLogins')} />;
   }
 
   const usernameByMember = new Map((logins ?? []).map((l) => [l.member_id, l.username]));

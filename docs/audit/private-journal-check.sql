@@ -1,4 +1,4 @@
--- A private journal is private (0338).
+-- A private journal is private (0364).
 --
 -- TEEN A's entry (private by default). As SIBLING B: reading it, rewriting it,
 -- deleting it and writing an entry in A's name must all be refused. As the

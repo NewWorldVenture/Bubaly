@@ -1,6 +1,8 @@
 // lib/home/utilities.ts — pure helpers for Utility Tracking. Latest-per-kind,
 // monthly totals, trend and period-over-period delta. No Supabase/React.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export const UTILITY_KINDS = ['electric', 'gas', 'water', 'sewer', 'trash', 'internet', 'phone', 'cable', 'other'] as const;
 export type UtilityKind = (typeof UTILITY_KINDS)[number];
 
@@ -8,8 +10,9 @@ export function utilityLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
-export function usd(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+/** Cents as dollars for the reader; the currency stays the money's own. */
+export function usd(cents: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
 export type BillLike = { kind: string; period_month: string; amount_cents: number };

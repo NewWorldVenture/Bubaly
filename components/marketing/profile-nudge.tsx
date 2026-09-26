@@ -63,7 +63,7 @@ export function ProfileNudge() {
     <section className="rounded-2xl border border-brand/25 bg-brand/[0.05] p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 text-brand-text ring-1 ring-brand/25">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text ring-1 ring-brand/25">
             <Sparkles className="h-4 w-4" />
           </span>
           <div>

@@ -26,6 +26,11 @@ const SOURCE_FILES = [
   'components/modules/voice-module.tsx', 'lib/capture/save.ts', 'lib/capture/parse.ts',
   'lib/voice/command-router.ts', 'lib/voice/transcript.ts', 'lib/supabase/errors.ts',
   'lib/time/zoned.ts', 'lib/supabase/settle.ts',
+  // The history list stamps each command with fmtTimeAgo, which voice-module.tsx
+  // takes from useFormat rather than the en-US bare exports. The real formatter
+  // runs here: createFormat builds Intl objects from the locale code, and the
+  // `date-fns` entry in `mocks` below covers the one npm import it carries.
+  'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/i18n/locales.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
@@ -118,7 +123,17 @@ async function fixture(page: Page) {
       '@/components/app/page-header': { PageHeader: () => null },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
       '@/lib/analytics/use-journey': { useJourney: () => ({ start() {}, complete() {}, abandon() {} }) },
-      '@/components/i18n/locale-provider': { useTranslations: () => tr },
+      // useFormat() calls useLocale() and reads locale.code off it, so this has
+      // to hand back the whole Locale record. A () => 'en-US' stub would leave
+      // code undefined and Intl would throw somewhere far from here.
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
+      // The real lib/utils/format.ts runs, and date-fns is the one npm module it
+      // imports; the in-page loader has no bundler. Only parseISO is reached at
+      // runtime here - every pattern this fixture formats is Intl-mapped inside
+      // that module - but the CommonJS require binds all four names at import.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
     };
     const modules = {};
     function load(id) {

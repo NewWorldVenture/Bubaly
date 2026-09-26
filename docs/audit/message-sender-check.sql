@@ -1,4 +1,4 @@
--- A family chat message is its sender's (0341).
+-- A family chat message is its sender's (0367).
 --
 -- As TEEN A against the PARENT's message: posting a message as the parent,
 -- rewriting the parent's message, soft-deleting it, and hard-deleting it must

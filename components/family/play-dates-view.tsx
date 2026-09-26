@@ -14,8 +14,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime } from '@/lib/family/safety';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime as fmtDateTimeIn } from '@/lib/family/safety';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type PlayDate = Tables<'play_dates'>;
 
@@ -23,6 +23,9 @@ const STATUS_FLOW: Record<string, string> = { planned: 'confirmed', confirmed: '
 
 export function PlayDatesView() {
   const t = useTranslations();
+  // The date and clock follow the reader.
+  const locale = useLocale();
+  const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);

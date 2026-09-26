@@ -1,4 +1,4 @@
--- A read receipt is the reader's (0336).
+-- A read receipt is the reader's (0362).
 --
 -- As TEEN A: marking sibling B as having read an announcement, and erasing
 -- B's receipt, must be refused. Control: A marks their own read.

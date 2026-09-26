@@ -42,17 +42,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/* May this response be kept for whoever opens the app next? Only static
-   styles, scripts and images that carry no user's data: never the image
-   optimizer (it proxies private family media from this origin), and never a
-   response the server marked private or no-store. */
-function isSharedStaticAsset(request, url, res) {
-  if (!(request.destination === 'style' || request.destination === 'script' || request.destination === 'image')) return false;
-  if (url.pathname.startsWith('/_next/image')) return false;
-  const cacheControl = (res.headers.get('Cache-Control') || '').toLowerCase();
-  return !/(^|[,\s])(private|no-store)([,\s=]|$)/.test(cacheControl);
-}
-
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
@@ -83,7 +72,7 @@ self.addEventListener('fetch', (event) => {
       (cached) =>
         cached ||
         fetch(request).then((res) => {
-          if (res.ok && isSharedStaticAsset(request, url, res)) {
+          if (res.ok && isShareableAsset(request, url) && !saysPrivate(res)) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(request, copy));
           }
@@ -92,6 +81,37 @@ self.addEventListener('fetch', (event) => {
     ),
   );
 });
+
+/* PRIVACY INVARIANT (M-023), asset half.
+   The navigation branch above refuses to cache authenticated HTML on the
+   grounds that cached responses "persist unencrypted after logout and would be
+   served offline to whoever next opens the app on a shared/family device".
+   Every word of that applies to a family's PHOTOS, and this branch used to
+   cache any `image` that came back 200 on `destination` alone — so the reason
+   was written out in full two dozen lines above the code that ignored it.
+
+   `/_next/image` is SAME-ORIGIN, so the cross-origin return above never saw it,
+   and it is the optimizer proxy in front of private family media. Combined with
+   the cache-first read, the next account on a shared device was served the
+   previous account's photo straight out of Cache Storage — no network request,
+   so nothing server-side could deny it, and logout does not clear Cache Storage.
+
+   Two rules, because one does not cover the other:
+     - a response that declares itself private is never written; and
+     - `/_next/image` is never written, whatever it declares, because what it
+       proxies is chosen by the page rather than by this worker. Its output is
+       still held by the browser's own HTTP cache and the CDN, which are
+       partitioned and cleared with the session as Cache Storage is not. */
+const PRIVATE_DIRECTIVE = /(^|,)\s*(private|no-store)\s*(,|$)/;
+
+function saysPrivate(res) {
+  return PRIVATE_DIRECTIVE.test((res.headers.get('Cache-Control') || '').toLowerCase());
+}
+
+function isShareableAsset(request, url) {
+  if (url.pathname === '/_next/image') return false;
+  return request.destination === 'style' || request.destination === 'script' || request.destination === 'image';
+}
 
 // Push notifications (Phase 10 dispatch sends Web Push payloads here).
 self.addEventListener('push', (event) => {

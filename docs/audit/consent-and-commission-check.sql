@@ -4,7 +4,7 @@
 -- As a CHILD: opting the family into network sharing is refused (INSERT raises;
 -- UPDATE matches zero rows). As an ADULT MANAGER: filing a converted referral,
 -- inflating a commission, or voiding one is refused — members never write this
--- table (0327). Controls: the child can still read the consent row; a parent
+-- table (0353). Controls: the child can still read the consent row; a parent
 -- can opt the family in.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;

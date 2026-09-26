@@ -13,7 +13,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { displayTimezone } from '@/lib/display/calendar';
 import {
-  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel as countdownLabelIn, normalizeSettings, buildHints,
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
@@ -208,6 +208,9 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
   const tr = useTranslations();
   const locale = useLocale().code;
   const timezone = displayTimezone(data.timezone).timezone;
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale, tr);
   switch (widget) {
     case 'clock': return <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />;
     case 'weather': return <WeatherTile size={size} />;
@@ -356,13 +359,14 @@ function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
+  const locale = useLocale();
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (
@@ -382,6 +386,9 @@ function NowNextStrip({ events, memberById, now, timezone, clock24 }: {
 }) {
   const tr = useTranslations();
   const locale = useLocale().code;
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale, tr);
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -515,6 +522,10 @@ export function DisplayShell(props: DisplayShellProps) {
 function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, userId }: DisplayShellProps) {
   const t = useTranslations();
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale.code, tr);
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
@@ -819,9 +830,9 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
-                      <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
-                      <button onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveUp')} onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveDown')} onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.delete')} onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                   <div className="space-y-2">

@@ -2,12 +2,23 @@ import { describe, it, expect } from 'vitest';
 import {
   daysUntilDue, returnStatus, isOverdue, returnLabel, needsDueReminder, needsOverdueAlert,
 } from '@/lib/marketplace/returns';
+import { shiftLocalDay } from '@/lib/time/local-day';
 
 const NOW = new Date('2026-07-13T12:00:00');
-const dayFromNow = (n: number) => {
-  const d = new Date(NOW); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-};
+
+// `endsOn` is `marketplace_orders.ends_on`, a Postgres DATE — already a calendar
+// day, not an instant. The module reads it as such: local midnight of the due
+// day minus local midnight of `now` (lib/marketplace/returns.ts daysUntilDue).
+// So the fixture must produce the day key the SAME way.
+//
+// The old helper built local midnight and then keyed it with
+// `d.toISOString().slice(0, 10)`, which re-expresses that local moment at
+// Greenwich. West of Greenwich that round-trips unchanged, which is why TZ=UTC
+// and TZ=America/Los_Angeles stayed green; east of Greenwich local midnight is
+// the previous day at Greenwich, so every key walked back one day and
+// `dayFromNow(0)` handed the module yesterday. That literal was a statement
+// about the host's offset, not about the contract.
+const dayFromNow = (n: number) => shiftLocalDay(NOW, n);
 
 describe('daysUntilDue', () => {
   it('counts whole days to the due date', () => {

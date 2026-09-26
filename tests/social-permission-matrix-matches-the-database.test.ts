@@ -9,7 +9,7 @@ import { ROLE_PERMISSIONS, SOCIAL_PERMISSIONS, type SocialRole } from '@/lib/soc
  * cell — SQL granted `admin` manage_access, JS did not — and manage_access is
  * what the social_access_permissions policies check, so a social admin could
  * rewrite anyone's role (and make themselves owner) directly against the API.
- * 0322 fixed the cell. This keeps the two copies equal, cell by cell, by
+ * 0348 fixed the cell. This keeps the two copies equal, cell by cell, by
  * reading the latest migration that defines the function.
  */
 
@@ -41,7 +41,7 @@ function sqlGrants(body: string, role: string, permission: string): boolean {
 describe('the database and the app agree on every social permission', () => {
   const { file, body } = latestDefinition();
 
-  it('reads the latest definition (0322 or later)', () => {
+  it('reads the latest definition (0348 or later)', () => {
     expect(Number(file.slice(0, 4))).toBeGreaterThanOrEqual(322);
   });
 

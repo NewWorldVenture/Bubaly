@@ -1,4 +1,4 @@
--- A driving record is not the driver's to erase (0339).
+-- A driving record is not the driver's to erase (0365).
 --
 -- As the TEEN: deleting their 90 mph trip, or editing its max speed down,
 -- must be refused. Controls: the teen still logs a trip; the PARENT deletes one.

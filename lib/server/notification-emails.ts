@@ -66,7 +66,8 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   // Resolve recipient emails + names. EVERY auth user, not the first page:
   // a bare listUsers() returns GoTrue's default 50, and a recipient missing from
   // this map takes the "no email on file" branch below, which stamps sent_at.
-  // Truncation there is not a delayed email, it is a deleted one.
+  // Truncation there is not a delayed email, it is a deleted one — the
+  // notification is settled as `skipped` and never retried.
   const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('[notification-email] recipient lookup failed', authUsersError);

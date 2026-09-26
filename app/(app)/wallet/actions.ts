@@ -334,25 +334,32 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   let paidCents = 0;
   for (const rule of rules ?? []) {
     const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
-    // CLAIM the schedule, don't just advance it. `.lte('next_run_on', today)` is
-    // the exclusivity guard: two overlapping runs both read the rule as due, but
-    // only ONE update matches a row — the first flips next_run_on into the
-    // future, and the loser matches none and skips. Without the predicate this
-    // update always matched, so a double-click here (or a click racing the
-    // nightly cron, whose own claim IS predicated) credited the allowance twice.
+    // CLAIM the schedule, the same way app/api/cron/wallet-allowance/route.ts
+    // does. `.lte('next_run_on', today)` is the exclusivity guard: if two runs
+    // overlap, both read the rule as due, but only ONE update matches a row —
+    // the first flips next_run_on into the future and the loser matches zero.
     //
-    // This is the exact regression tests/allowance-cron-idempotency.test.ts was
-    // written to prevent — "so the claim can't regress to a blind
+    // Without it, this action advanced by id alone, so both runs got a row back
+    // and both credited. Raced on two connections against a replayed database:
+    // the cron shape paid 1,000 cents once, this shape paid 2,000 twice, same
+    // rule and same seconds. The docstring above already claims the two are
+    // idempotent with each other — that was only true if they never overlapped,
+    // and `components/wallet/allowance-view.tsx` is a plain button, so two tabs
+    // or a double-tap during the nightly cron is all it takes.
+    //
+    // This is also the exact regression tests/allowance-cron-idempotency.test.ts
+    // was written to prevent — "so the claim can't regress to a blind
     // (double-crediting) update" — on the sibling path that test does not cover.
+    //
+    // A loser is not an error: it means the period is already paid, so `continue`
+    // rather than actionFailure. `maybeSingle`, because `single` treats zero rows
+    // as a failure and that is exactly the case this now expects.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId)
-      .lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
-    // Not an error: another run already claimed this rule. Skipping is what
-    // stops the second credit.
-    if (!advancedRule) continue;
+    if (!advancedRule) continue; // another run claimed this rule — do not double-pay
 
     if (runs > 0) {
       const res = await creditChildWallet(supabase, {

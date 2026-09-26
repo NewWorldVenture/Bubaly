@@ -237,7 +237,7 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
         </div>
       )}
 
-      <div key={step} className="animate-in fade-in slide-in-from-bottom-2 duration-300"
+      <div key={step} className="animate-fade-in-up"
         role="group" aria-labelledby={step !== 'done' ? 'onboarding-step-title' : undefined}>
         {step !== 'done' && (
           <div className="mb-6 text-center">

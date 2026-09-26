@@ -1,7 +1,7 @@
 -- Can a child switch off their own screen-time limit?
 --
 -- screen_time_limits was member FOR ALL, and the module showed "set daily
--- limit" to everyone. 0325: members read, managers write. As the CHILD: raising
+-- limit" to everyone. 0351: members read, managers write. As the CHILD: raising
 -- or deleting their limit matches zero rows, creating one is refused; they can
 -- still read it (control). As the PARENT: setting it succeeds (control).
 \set ON_ERROR_STOP on

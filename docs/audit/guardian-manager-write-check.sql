@@ -1,7 +1,7 @@
 -- AUTHZ-005: can a child change who Guardian trusts and how their calls route?
 --
 -- Guardian's screening decisions come from four tables. 0215 made routing
--- rules manager-only; 0319 does the same for caller trust (guardian_contacts),
+-- rules manager-only; 0345 does the same for caller trust (guardian_contacts),
 -- member routing profiles (guardian_member_profiles) and the learning queue
 -- (guardian_suggestions). guardian_communications keeps its member INSERT on
 -- purpose (the signed-ingress suites rely on member-written rows) and is not

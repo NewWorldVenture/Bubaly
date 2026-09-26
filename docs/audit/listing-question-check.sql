@@ -1,4 +1,4 @@
--- A listing question is asked, and answered, in your own name (0345).
+-- A listing question is asked, and answered, in your own name (0371).
 --
 -- SELLER S owns a listing; BUYER B asked a question. As SIBLING X: asking as
 -- B, answering as S, and rewriting B's question must be refused. Controls: X

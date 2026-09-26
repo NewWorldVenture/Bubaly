@@ -8,6 +8,7 @@ import { REWARD_MODE_LABELS } from '@/lib/chores/logic';
 import { createChoreAction } from '../actions';
 import { PlanGenerator } from './plan-generator';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'New mission' };
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export default async function NewMissionPage() {
           <label className={labelCls}><span className={spanCls}>{t('missionsNew.dueDate')}</span><input type="datetime-local" name="due_at" className={inputCls} /></label>
           <label className={labelCls}><span className={spanCls}>{t('missionsNew.iconEmoji')}</span><input name="icon" maxLength={4} className={inputCls} placeholder="🧹" /></label>
 
-          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Sparkles className="h-4 w-4" /> {t('missionsNew.createMission')}</button></div>
+          <div className="sm:col-span-2"><SubmitButton className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Sparkles className="h-4 w-4" /> {t('missionsNew.createMission')}</SubmitButton></div>
         </form>
       </Card>
     </div>

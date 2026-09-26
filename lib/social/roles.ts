@@ -6,7 +6,7 @@
 // used by the UI to hide controls and by server actions to reject calls.
 //
 // The database enforces the same matrix: public.social_has_permission mirrors
-// ROLE_PERMISSIONS (0322), and since 0330 every social table's write policies
+// ROLE_PERMISSIONS (0348), and since 0356 every social table's write policies
 // require the permission its server action checks. Keep the two in step;
 // tests/social-permission-matrix-matches-the-database.test.ts compares them.
 

@@ -1,22 +1,76 @@
 // Prep-plan generation — service-callable core (no request context), shared by
 // the on-demand server action and the model-refresh cron. Reads real upcoming
 // signals (trips, member birthdays, expiring documents), runs the pure generator,
-// and upserts plans + steps. Idempotent; preserves is_done on regeneration.
+// and upserts plans + steps. Idempotent; preserves is_done, and preserves what
+// the family decided about a plan (dismissed/done) on regeneration.
+//
+// EVERY DAY IN THIS FILE IS THE FAMILY'S DAY, which is why `tz` is a parameter
+// rather than something this module reads off the server. It used to open with
+//
+//     const todayKey = now.toISOString().slice(0, 10);
+//
+// — the day at GREENWICH — and then spend that one key four ways:
+//
+//   - as the lower bound of `vacations.start_date` and `documents.expires_at`.
+//     West of Greenwich that key is TOMORROW's for the last hours of every day
+//     (7h in Los Angeles, 12h at Etc/GMT+12), so a trip departing today and a
+//     passport expiring today were both filtered out of their own family's prep
+//     as already past — the exact moment the plan matters most.
+//   - as the upper bound, `now + 120 * 86_400_000` and `now + 60 * ...`. Those
+//     added fixed milliseconds to an INSTANT: a local day is 23 or 25 hours
+//     twice a year, so the horizon slid by an hour across a DST transition and
+//     formatted as the wrong day. They are now calendar-day arithmetic on the
+//     day KEY, which cannot slide.
+//   - as the birthday signal's date, via `nextBirthdayDate(...).toISOString()`.
+//     That built a Date from the RUNTIME's local parts and then re-expressed it
+//     at Greenwich, so east of Greenwich the day walked backwards: a birthday on
+//     the 5th was emitted as the 4th, and the plan's whole step ladder with it.
+//   - as `generatePrepPlans`'s "today", from which every `daysUntil` and every
+//     `overdue` flag is measured.
+//
+// CONVERTING ONE OF THOSE AND NOT THE OTHERS WOULD BE WORSE THAN LEAVING THEM
+// ALONE: before, all four were Greenwich and at least agreed with each other.
+// They move together here, and the one value they all come from is `todayKey`.
+//
+// EVERY COLUMN THIS TOUCHES IS A `date`, NOT A `timestamptz` — `vacations
+// .start_date` (0070_vacations.sql:35), `documents.expires_at`
+// (0002_tables.sql:349), `family_members.birthday` (0002_tables.sql:39),
+// `prep_plans.target_date` and `prep_plan_steps.due_date` (0131_prep_plans.sql).
+// A DATE column ALREADY holds the day on the family's wall, so it is bounded
+// and written with a bare day KEY and never with an instant. Stapling a zone
+// (or a `T00:00:00Z`) onto one of these would MOVE it, which is the same error
+// one day out in the other direction.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { generatePrepPlans, type HorizonSignal } from './prep';
-import { nextBirthdayDate } from '@/lib/moments/birthdays';
+import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
+import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
 
 export type PrepGenerationResult = { ok: boolean; error?: string; plans: number };
 
-export async function runPrepGeneration(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date()): Promise<PrepGenerationResult> {
-  const todayKey = now.toISOString().slice(0, 10);
-  const in120 = new Date(now.getTime() + 120 * 86_400_000).toISOString().slice(0, 10);
-  const in60 = new Date(now.getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
+/**
+ * `tz` is the family's IANA zone and is REQUIRED — not optional with a 'UTC'
+ * default. A defaulted zone is how a caller keeps compiling while it keeps
+ * being wrong; required, the typechecker names every call site. Both callers
+ * already hold the family row this comes from (`families.timezone`, which 0002
+ * defaults to 'UTC'), so neither needs a second read.
+ */
+export async function runPrepGeneration(
+  sb: DB,
+  familyId: string,
+  createdBy: string | null,
+  tz: string,
+  now: Date = new Date(),
+): Promise<PrepGenerationResult> {
+  // The one day key the whole function is measured from. Horizons step whole
+  // CALENDAR days off it rather than adding N x 86_400_000 to an instant.
+  const todayKey = dayKeyInTz(now, tz);
+  const in120 = addDaysToDayKey(todayKey, 120);
+  const in60 = addDaysToDayKey(todayKey, 60);
 
   const [trips, members, docs] = await settleAll([
     sb.from('vacations').select('id, title, start_date').eq('family_id', familyId).gte('start_date', todayKey).lte('start_date', in120),
@@ -30,17 +84,48 @@ export async function runPrepGeneration(sb: DB, familyId: string, createdBy: str
   const signals: HorizonSignal[] = [];
   for (const t of trips.data ?? []) if (t.start_date) signals.push({ id: t.id, kind: 'trip', title: t.title ?? 'Trip', date: t.start_date });
   for (const m of members.data ?? []) {
-    const next = m.birthday ? nextBirthdayDate(m.birthday, now) : null;
-    if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next.toISOString().slice(0, 10) });
+    // Day key in, day key out. `family_members.birthday` is a DATE column, the
+    // answer is a DATE, and the "next occurrence on or after today" question is
+    // asked against the FAMILY's today — never the runtime's, and never through
+    // an instant that would have to be re-expressed as a day afterwards.
+    const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
+    if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
   }
   for (const d of docs.data ?? []) if (d.expires_at) signals.push({ id: d.id, kind: 'doc_expiry', title: d.title ?? 'Document', date: d.expires_at });
 
-  const plans = generatePrepPlans(signals, now);
+  const plans = generatePrepPlans(signals, todayKey);
   if (plans.length === 0) return { ok: true, plans: 0 };
 
-  const planRows = plans.map((p) => ({
+  // WHAT THE FAMILY DECIDED ABOUT A PLAN IS NOT THE GENERATOR'S TO UNDO.
+  // `generatePrepPlans` is pure over the current signals and never looks at the
+  // rows already on the table, so every plan whose signal is still in the
+  // horizon is re-emitted on every run. Writing a hardcoded `status: 'active'`
+  // back through the upsert therefore RE-ACTIVATED a plan the family had
+  // dismissed with the X on /dashboard/prep-plans — their only way to hide one,
+  // since there is no un-dismiss — on the next "Generate plans" click and,
+  // with nobody watching, on every model-refresh cron sweep.
+  //
+  // Same shape as lib/intelligence/hard-signals-server.ts: read what the family
+  // already decided, leave those rows out of the write entirely, and omit
+  // `status` from the payload so a dismissal landing BETWEEN this read and the
+  // upsert is not reset either. New rows take the schema's 'active' default
+  // (0131_prep_plans.sql), which is the only place that value belongs.
+  //
+  // THE READ FAILS CLOSED. PostgREST answers a refusal with
+  // `{ data: null, error }`, so a dropped error reads as "this family has
+  // dismissed nothing" and the very next write un-dismisses everything. A
+  // generation that cannot see the existing rows does not write.
+  const { data: existing, error: existingErr } = await sb.from('prep_plans')
+    .select('signal_kind, signal_id, status').eq('family_id', familyId);
+  if (existingErr) return { ok: false, error: existingErr.message, plans: 0 };
+  const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
+
+  const fresh = plans.filter((p) => !decided.has(`${p.kind}:${p.signalId}`));
+  if (fresh.length === 0) return { ok: true, plans: 0 };
+
+  const planRows = fresh.map((p) => ({
     family_id: familyId, signal_kind: p.kind, signal_id: p.signalId,
-    title: p.title, target_date: p.targetDate, urgency: p.urgency, status: 'active', created_by: createdBy,
+    title: p.title, target_date: p.targetDate, urgency: p.urgency, created_by: createdBy,
   }));
   const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
   if (planErr) return { ok: false, error: planErr.message, plans: 0 };
@@ -50,7 +135,7 @@ export async function runPrepGeneration(sb: DB, familyId: string, createdBy: str
   const idByKey = new Map<string, string>();
   for (const r of idRows ?? []) idByKey.set(`${r.signal_kind}:${r.signal_id}`, r.id);
 
-  const stepRows = plans.flatMap((p) => {
+  const stepRows = fresh.flatMap((p) => {
     const planId = idByKey.get(`${p.kind}:${p.signalId}`);
     if (!planId) return [];
     return p.steps.map((s, i) => ({
@@ -62,5 +147,5 @@ export async function runPrepGeneration(sb: DB, familyId: string, createdBy: str
     if (stepErr) return { ok: false, error: stepErr.message, plans: 0 };
   }
 
-  return { ok: true, plans: plans.length };
+  return { ok: true, plans: fresh.length };
 }

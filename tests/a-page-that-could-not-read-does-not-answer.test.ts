@@ -41,7 +41,7 @@ describe('a page that could not read says so', () => {
   it('the kid-login page refuses to show an empty roster it cannot support', () => {
     const source = readFileSync('app/(app)/dashboard/family-access/page.tsx', 'utf8');
     expect(source).toMatch(/error: loginsError/);
-    expect(source).toContain('familyAccess.couldNotLoadKidLogins');
+    expect(source).toContain('familyAccess.couldNotLoadChildLogins');
     expect(source.indexOf('if (readError)')).toBeLessThan(source.indexOf('const usernameByMember'));
   });
 
@@ -51,15 +51,18 @@ describe('a page that could not read says so', () => {
     // Still degrades — no early return was added to a page that documented why.
     expect(contacts).not.toMatch(/if \(contactsError\) return/);
 
+    // The settings page goes further (main's audit): its form is seeded from the
+    // profile, so an unread profile stops the page instead of degrading.
     const settings = readFileSync('app/(app)/guardian/settings/page.tsx', 'utf8');
-    expect(settings).toContain("console.error('[guardian/settings] profile read failed'");
+    expect(settings).toContain("console.error('[guardian/settings] guardian_member_profiles read failed'");
+    expect(settings).toMatch(/if \(profileError\) \{/);
   });
 
   it('both new messages exist in every locale', () => {
     for (const locale of ['en-US', 'nl-NL', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT']) {
       const messages = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8'));
       expect(messages['conflicts.couldNotCheckForClashes'], locale).toBeTruthy();
-      expect(messages['familyAccess.couldNotLoadKidLogins'], locale).toBeTruthy();
+      expect(messages['familyAccess.couldNotLoadChildLogins'], locale).toBeTruthy();
     }
   });
 });

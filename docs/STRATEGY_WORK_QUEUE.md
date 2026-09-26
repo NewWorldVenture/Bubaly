@@ -144,6 +144,7 @@ than picking one.
 | M13 + M14 | Inventory and moving as assistant tools; `plan_move` template |
 | M21 | Every notification is actionable; the quiet half folds into "Also today" |
 | M24 | Trust Center Activity tab: tool-call ledger, dials, what was read and withheld |
+| M15 (part) | **S-05** — pet-aware trip prep (one task per animal from the `pets` table, carrying its care notes) and a travel disruption re-flow: pure `replanDisruption`, a Report-a-disruption action that shifts itinerary items and notifies, and the `trips.replanDisruption` tool. Verified 2026-09-20: 25 tests across `tests/vacation-disruption.test.ts` + `tests/prepare-vacation-pets.test.ts`, i18n gate clean, and the UI carries an explicit *"still needs rebooking by a person"* notice — it never claims a rebooking |
 | W1–W8 (part) | Public site stage 1: outcome-first homepage, `MARKETING_NAV`, footer, the Bubaly-Handled proof band, the hero-outcomes rail, and the first-brief / decisions / kitchen-mode / switching / social-proof bands |
 
 Also on the branch: `docs/MARKET_DOMINATION_AUDIT.md`, and a build change that
@@ -154,8 +155,141 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 
 ### Available now
 
+> ## ⚠️ THIS LIST IS STALE. Measure before you build.
+>
+> **On 2026-09-20 every test named by all twenty sections was run: 78 files,
+> 1,546 tests, all passing.** Every section's owned files exist too (the three
+> gaps are deliberate — `tests/marketing-display-page.test.ts:60` *asserts*
+> `app/(marketing)/display/page.tsx` does not exist).
+>
+> It started with one section. An agent took `S-05` from "Available now",
+> claimed it, then checked the tree before writing and found the whole thing
+> already built and passing at `b17fa42d`. Checking `S-07`, `S-10` and `S-14`
+> found the same. So the sweep was widened to all twenty, and the honest
+> summary is that **this file's Landed / Available / In-progress lists no longer
+> describe the branch**. The Landed table below names 14 items; the tests say
+> the work reaches considerably further.
+>
+> **What that measurement does and does not prove.** It proves every acceptance
+> test this queue names is green. It does **not** prove each section is complete
+> against its own "Done when" list, because a section's tests need not cover its
+> whole scope — only `S-05` was checked that way, item by item, and it passed.
+> So treat a section here as *probably landed* and verify before claiming.
+>
+> ### That gap has now been closed for all 20 sections.
+>
+> A verification pass put **one agent on each section**, reading its own
+> "Done when" list clause by clause against the tree rather than against this
+> file's summary. `S-05` was already checked that way. Results:
+>
+> * **16 LANDED with every clause met** — `S-01`, `S-02`, `S-03`, `S-04`,
+>   `S-06`, `S-07`, `S-08`, `S-09`, `S-10`, `S-11`, `S-12`, `S-13`, `S-16`,
+>   `S-17`, `S-18`, `S-19`. Each returned file-and-line evidence per clause.
+> * **`S-14` — was 5 of 6, now 6 of 6, by correcting the clause rather than the
+>   code.** The clause asked for onboarding answers to land with
+>   `family_facts.source = 'onboarding'` *and* to be confirmed facts. The
+>   database refuses that value: `family_facts_source_check` admits only
+>   `('user','ai_conversation','ai_inferred','import')`. The feature is built —
+>   the memory gate, the confirmed lane and the provenance (in `notes`) are all
+>   there and tested. Recorded as `SPEC-001` in `finalaudit.md` and closed by
+>   **amending the clause** to source `'user'` with an onboarding marker in
+>   `notes`, which is what `lib/onboarding/facts.ts` writes.
+>
+>   Widening the constraint is **not** a second way to close it, and saying so
+>   is the point of this entry. Two reasons, either one fatal. First, a widened
+>   CHECK is never reached: `MEMORY_SOURCES`
+>   (`lib/services/memory/index.ts:53-54`) refuses an unknown token in
+>   TypeScript before Postgres sees it. Second, and worse, the source token *is*
+>   the confirmed-lane selector (`:146`), so an `'onboarding'` fact would route
+>   to `family_playbook_suggestions` — the review inbox — which is the opposite
+>   of the confirmed facts the same clause demands in the same breath. The
+>   clause's own `asked_for=true` already **means** source `'user'`: that is the
+>   translation at `lib/ai/tools/memory.ts:127`, and `asked_for` was never a
+>   column. So the two halves of the clause were one knob set to two
+>   contradictory positions, and `'user'` is the only faithful reading of it.
+>   Guarded by
+>   `tests/the-strategy-queue-does-not-ask-for-a-memory-source-the-service-cannot-confirm.test.ts`.
+> * **`S-15` — was 4 of 5, now 5 of 5.** The unmet clause was a **real defect**,
+>   on a file `S-15` itself owns: the six platform tiles on `/admin/reports`
+>   rendered a failed read as `0`. Fixed and mutation-tested (`METRIC-001`).
+>
+> * **`S-20` — 6 of 7.** Six clauses met (per-day amounts derived with `ceil`,
+>   the real card omitted below `HANDLED_PUBLIC_MIN` and never rendering a `0`,
+>   the illustrative card's sample badge, the matrix stacking on phones, the
+>   toggle's touch targets, no competitor price). The seventh asks that *"the
+>   demo family gets persisted completed runs with step events"* — and there is
+>   **no demo family**, because `3994805e` *"Remove demo mode (#414)"*
+>   deliberately deleted `lib/demo/`, `components/demo/`,
+>   `app/(marketing)/demo/`, `supabase/seed_demo_account.sql` and the pricing
+>   card, leaving only a comment at `pricing-content.tsx:507` explaining the
+>   grid change. The clause is **stale**, not unbuilt. Recorded as `SPEC-002`;
+>   the remedy is to delete the clause.
+>
+> **The lesson worth carrying.** Three sections came back PARTIAL, and the three
+> failed in three *different* directions:
+>
+> | | what PARTIAL meant | remedy |
+> |---|---|---|
+> | `S-15` | a genuine defect the acceptance tests did not catch | fix the code |
+> | `S-14` | a clause the code was **right** to disobey | amend the clause (migrating is not a live option) |
+> | `S-20` | a clause describing a feature **deliberately deleted** | delete the clause |
+>
+> A pass that assumed any one of those shapes would have been wrong two times
+> in three — reporting a shipped feature as missing, or a deleted one as a
+> regression, or quietly "fixing" a spec to match a real bug. Each clause was
+> read rather than scored, which is the only reason all three came out right.
+>
+> ### The synthesiser overturned one LANDED verdict, which is why it existed
+>
+> A final agent spot-checked clauses independently rather than trusting the
+> nineteen verdicts. It **disagreed with `S-11`'s LANDED** and was half right:
+>
+> * *"web tsc and mobile tsc both clean"* — the verifier marked this met using
+>   an **off-tree workaround** (fetching types into a scratchpad), which is not
+>   evidence. On a bare checkout `mobile/` typechecks **red**:
+>   `app/(tabs)/assistant.tsx(5,105): Cannot find module 'expo-audio'`, because
+>   `mobile/node_modules/expo-audio` was missing while `mobile/package.json:27`
+>   declares `expo-audio ~57.0.3`. **Resolved**: `npm install` in `mobile/`
+>   restores it and `npx tsc --noEmit` exits **0**. The clause holds — it was a
+>   stale sandbox `node_modules`, and CI's *Mobile (Expo) · Typecheck · Config*
+>   job proves it independently on a fresh install. The synthesiser's proposed
+>   remedy of *"add a mobile install+typecheck step to CI"* was already done.
+> * **A named test had never been written** — and this one was real. The
+>   *"Tests to add"* line asks for `tests/display-render.test.ts` extended with
+>   *"ask tile renders without a mic in SSR"*; the file contained neither `ask`
+>   nor `mic`. **Now written** (4 cases), with a `next/navigation` mock, because
+>   `AskBubaly` calls `useRouter()` and the tile could not be server-rendered in
+>   that harness at all — which is the practical reason nobody had written it.
+>   Mutation-tested: deleting `mic-button.tsx:148`'s
+>   `if (!micAvailable(support)) return null` turns exactly the two mic
+>   assertions red, and one case proves the search string is not vacuous.
+>
+> **The lesson the synthesiser is the evidence for**: a verifier that wants its
+> section to pass will accept evidence it gathered off-tree. Nineteen agents
+> reading carefully still produced one verdict that a twentieth, reading only to
+> disagree, could overturn.
+>
+> **Re-derive it, do not trust this paragraph:**
+>
+> ```bash
+> # every test path this file names, that exists on disk
+> python3 - <<'EOF' > /tmp/q.txt
+> import re, os
+> src = open('docs/STRATEGY_WORK_QUEUE.md', encoding='utf-8').read()
+> print('\n'.join(t for t in sorted(set(
+>     re.findall(r'`(tests/[a-z0-9./-]+\.test\.ts)', src))) if os.path.exists(t)))
+> EOF
+> npx vitest run $(tr '\n' ' ' < /tmp/q.txt)
+> ```
+>
+> **Before you write a line of any section**: grep for the files it says it
+> owns and run its named tests. That check costs two minutes. Skipping it costs
+> a day of duplicated work, which is what the "do not duplicate work" rule in
+> every brief is for.
+
 Every section in §7 is available unless a branch `claude/strategy-<ID>` already
-exists on the remote. Twenty sections, sized so that each is one reviewable PR.
+exists on the remote — **and unless the sweep above says it has already
+landed, which as of 2026-09-20 it says of all twenty.** Twenty sections, sized so that each is one reviewable PR.
 
 ### Being worked on the integration branch right now
 
@@ -208,6 +342,7 @@ migration per feature. Nothing in this list may be created by an agent.
 - M23: new RLS on documents/notes/journal_entries honouring member_id (owner or can_manage_family) + SQL helper has_active_delegation(family_id, domain) consulted by sensitive-table read policies. No new tables.
 - M33: new SECURITY INVOKER function public.search_household(family_id, q, limit) (search_path pinned) UNIONing pg_trgm similarity over documents, inventory_items, trips/vacations, bills, home_warranties/renewals, decisions, calendar_events, notes, family_facts + GIN trigram indexes on their title/name columns. No new tables; underlying RLS applies.
 - W2 + W7 + W3 (ONE migration): CREATE OR REPLACE public.public_stats() adding ai_handled_30d bigint and avg_first_brief_minutes numeric (SECURITY DEFINER, anon-executable, excludes the demo family).
+  - ⚠️ **Flagged, not edited — this is the owner's list.** *"excludes the demo family"* is **stale**: `3994805e` *"Remove demo mode (#414)"* deleted demo mode, and a replayed database has no family matching `%demo%`. The exclusion would be a no-op rather than a bug, so the migration is still safe to approve as written — but whoever writes it should know the clause guards nothing, and decide whether to drop it. Same root cause as `SPEC-002`. Left in place because §6 is owner-approved and an agent editing a migration spec here is exactly what that rule forbids.
 - X1 + X2 + X4 + X6 + X9 + X11 (ONE migration): new table family_metric_weeks(family_id, week_start date, time_saved_minutes int, handled_actions int, auto_captured_pct numeric, signal_precision numeric, value_ratio numeric, weekly_active bool, created_at) unique(family_id, week_start), family-scoped SELECT RLS, service-role writes from the weekly-digest cron.
 - X8 + X9: ALTER TABLE family_members ADD COLUMN last_active_at timestamptz + index (family_id, last_active_at desc); service-role updates only, throttled from requireUserContext.
 - X2 optional follow-up: created_via text on calendar_events/todo_items/bills/family_reminders so manual captures are stamped explicitly.
@@ -652,7 +787,7 @@ GAP: memory controls are split across /dashboard/knowledge (family_facts), Setti
 
 > M29 + M30 (no-migration) — contacts import with a review/entity-resolution step; onboarding facts remembered; 'Do one thing now'
 
-Read audit items M29 and M30. Verified: the migrate wizard imports only events/tasks/grocery/notes from ICS/CSV and its 'Nothing left behind' card overstates; onboarding answers are never written to family_facts; the done screen has no real-workflow handoff. BUILD: (1) extend lib/migrate/parse.ts with a vCard (.vcf) and contacts-CSV parser → family_contacts rows (name, phones, emails, notes; dedupe by normalised email/phone) and a pure resolveImportedItems() that proposes member assignment (name tokens vs family_members display names) and duplicate matches against existing rows (events by title+start, contacts by email/phone); (2) add a 'Review' step to components/migrate/migrate-wizard.tsx between upload and commit showing proposed member/category per item with overrides; commit through app/(app)/dashboard/migrate/actions.ts (family-scoped; audit_logs as today); fix the overstated card copy to name what is imported; (3) after finalizeOnboardingAction succeeds (app/onboarding/actions.ts), call lib/services/memory rememberFact for each structured answer (child ages, household size, goals, region, dinner cadence) with source 'onboarding' and asked_for=true so they are confirmed facts, honouring memory_enabled; (4) a 'Do one thing now' card on the onboarding done step and on /home for first-session users (activation milestone not yet reached) that launches an outcome via buildOutcomePlan seeded from the family's snapshot and links into the first step. Tests: tests/migrate-contacts-parse.test.ts (vCard/CSV → contacts; dedupe), tests/migrate-resolve.test.ts (member assignment + duplicate matching), tests/onboarding-remember-facts.test.ts (answers → rememberFact with source onboarding; skipped when memory disabled), extend tests/onboarding-flow.test.ts.
+Read audit items M29 and M30. Verified: the migrate wizard imports only events/tasks/grocery/notes from ICS/CSV and its 'Nothing left behind' card overstates; onboarding answers are never written to family_facts; the done screen has no real-workflow handoff. BUILD: (1) extend lib/migrate/parse.ts with a vCard (.vcf) and contacts-CSV parser → family_contacts rows (name, phones, emails, notes; dedupe by normalised email/phone) and a pure resolveImportedItems() that proposes member assignment (name tokens vs family_members display names) and duplicate matches against existing rows (events by title+start, contacts by email/phone); (2) add a 'Review' step to components/migrate/migrate-wizard.tsx between upload and commit showing proposed member/category per item with overrides; commit through app/(app)/dashboard/migrate/actions.ts (family-scoped; audit_logs as today); fix the overstated card copy to name what is imported; (3) after finalizeOnboardingAction succeeds (app/onboarding/actions.ts), call lib/services/memory rememberFact for each structured answer (child ages, household size, goals, region, dinner cadence) with the confirmed-lane source the service actually takes — source 'user', because a person typed every answer — and the provenance carried in notes as "Answered during onboarding", honouring memory_enabled; (4) a 'Do one thing now' card on the onboarding done step and on /home for first-session users (activation milestone not yet reached) that launches an outcome via buildOutcomePlan seeded from the family's snapshot and links into the first step. Tests: tests/migrate-contacts-parse.test.ts (vCard/CSV → contacts; dedupe), tests/migrate-resolve.test.ts (member assignment + duplicate matching), tests/onboarding-remember-facts.test.ts (answers → rememberFact with source 'user' plus the onboarding marker in notes; skipped when memory disabled), extend tests/onboarding-flow.test.ts.
 
 **Files this section owns.** Anything outside this list is somebody else's; if you must touch it, keep the change to one additive line and say so in your PR.
 
@@ -667,7 +802,7 @@ Read audit items M29 and M30. Verified: the migrate wizard imports only events/t
 
 **Tests to add**: `tests/migrate-contacts-parse.test.ts`, `tests/migrate-resolve.test.ts`, `tests/onboarding-remember-facts.test.ts`, `tests/onboarding-flow.test.ts (extend)`, `tests/migrate-parse.test.ts (existing stays green)`
 
-**Done when**: Contacts import round-trips vCard and CSV with dedupe; the review step assigns members and flags duplicates before commit; onboarding answers become confirmed family_facts with source 'onboarding' unless memory is disabled; first-session users get a real outcome launcher; copy no longer claims 'nothing left behind' beyond what is imported; existing migrate/onboarding tests green.
+**Done when**: Contacts import round-trips vCard and CSV with dedupe; the review step assigns members and flags duplicates before commit; onboarding answers become confirmed family_facts with source 'user' and an onboarding marker in notes, unless memory is disabled; first-session users get a real outcome launcher; copy no longer claims 'nothing left behind' beyond what is imported; existing migrate/onboarding tests green.
 
 ### S-15 · The metrics core — one handled/time-saved accounting, X3, X5, X7, X10, X12
 
@@ -859,12 +994,22 @@ Where it appears: (1) homepage section 6 KitchenModeBand — CSS-only tablet moc
 
 ### S-20 · Public site: what the price buys, in numbers the app can produce
 
-> Public site stage 3 — pricing value block, per-day framing, outcome-first tier copy, case-study cards, demo seed of completed runs
+> Public site stage 3 — pricing value block, per-day framing, outcome-first tier copy, case-study cards
+>
+> **Three demo-mode requirements were removed from this section on 2026-09-20**
+> (the summary above, the owned file `lib/demo/seed.ts`, the `TestAccountCard`
+> line below, and the "Done when" clause). They asked for work on a feature
+> `3994805e` *"Remove demo mode (#414)"* had already deleted. Recorded as
+> `SPEC-002` in `finalaudit.md`, and removed rather than left in place because
+> an agent taking S-20 and trying to satisfy them would **rebuild demo mode** —
+> the one-click shared household, the email gate and the cleanup cron that were
+> taken out on purpose. Nothing else in S-20 changed; the other six clauses were
+> verified met.
 
 Build these parts of the site spec:
 
 PRICING
-Skeleton kept: hero + Monthly/Yearly toggle (coarse:min-h-11 beside setPeriod — tests/mobile-pricing-toggle-touch-target.test.ts; /^monthly$/ /^yearly$/ buttons — tests/e2e/public.spec.ts), three PlanCards, HowTrialWorks, admin feature matrix, TestAccountCard (id="demo" anchor added to its wrapper), TrustStrip with familiesNote.
+Skeleton kept: hero + Monthly/Yearly toggle (coarse:min-h-11 beside setPeriod — tests/mobile-pricing-toggle-touch-target.test.ts; /^monthly$/ /^yearly$/ buttons — tests/e2e/public.spec.ts), three PlanCards, HowTrialWorks, admin feature matrix, TrustStrip with familiesNote. (The TestAccountCard that stood here was deleted with demo mode by `3994805e`; `pricing-content.tsx:507` carries the comment explaining the grid it left behind.)
 
 1. NEW components/marketing/pricing-value-block.tsx (client-safe: useTranslations from components/i18n/locale-provider, imports only components/marketing/primitives and lib/marketing/value.ts; receives handled stats and sample numbers as props from the server page). Mounted directly above the plan cards. Part A 'Work that stops landing on you': eyebrow pricingValue.eyebrow, title pricingValue.title, body, then a tier × row matrix with rows pricingValue.colYouDecide / colPrepares / colHandles and cells pricingValue.trial* / basic* / plus* (Family+ 'handles' names the routines a family approves once — meals→list every Sunday, forms→calendar, bill and renewal sweeps). On phones (<md) the matrix renders as three stacked tier cards each containing the three rows — no horizontal table (tests/e2e/overflow.spec.ts, mobile.spec.ts).
 
@@ -911,9 +1056,8 @@ Where: homepage section 7 SwitchingBand (three columns + 3-step strip + privacy 
 - `components/marketing/pricing-value-block.tsx`
 - `app/(marketing)/pricing/pricing-content.tsx`
 - `app/(marketing)/pricing/page.tsx`
-- `lib/demo/seed.ts`
-- `components/billing/upgrade-modal.tsx`
+- `components/app/upgrade-modal.tsx` *(the list said `components/billing/`, which does not exist; the per-day-consuming modal is this one — `:12` imports `formatPerDay`/`perDayCents` from `lib/marketing/value.ts`)*
 
 **Tests to add**: `tests/marketing-value.test.ts`, `tests/marketing-handled-honesty.test.ts`, `tests/mobile-pricing-toggle-touch-target.test.ts`, `tests/marketing-claims-contract.test.ts`
 
-**Done when**: Per-day amounts are derived with ceil from lib/constants/plans.ts (33c/83c yearly, 41c/101c monthly at the current plan prices) and appear UNDER the monthly price for paid tiers only; the REAL card is omitted below HANDLED_PUBLIC_MIN and never renders a 0; the ILLUSTRATIVE card carries the sample badge and the estimate note; the matrix stacks on phones with no horizontal scroll; the Monthly/Yearly toggle and its touch targets are byte-identical; the demo family gets persisted completed runs with step events; no competitor price anywhere.
+**Done when**: Per-day amounts are derived with ceil from lib/constants/plans.ts (33c/83c yearly, 41c/101c monthly at the current plan prices) and appear UNDER the monthly price for paid tiers only; the REAL card is omitted below HANDLED_PUBLIC_MIN and never renders a 0; the ILLUSTRATIVE card carries the sample badge and the estimate note; the matrix stacks on phones with no horizontal scroll; the Monthly/Yearly toggle and its touch targets are byte-identical; no competitor price anywhere.

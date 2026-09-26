@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * A daily screen-time limit is a parental control. The module showed "set
  * daily limit" to every member and the table was member-writable, so a child
- * could raise their own limit to 24 hours from the app itself. 0325 makes the
+ * could raise their own limit to 24 hours from the app itself. 0351 makes the
  * table manager-write (docs/audit/screen-time-limit-check.sql); this pins the
  * control to managers in the UI, so a child is not offered a button the
  * database will refuse.
@@ -22,7 +22,7 @@ describe('the screen-time limit control', () => {
     expect(source.slice(Math.max(0, at - 260), at)).toMatch(/\{canSetLimits && \(/);
   });
 
-  it('offers deleting a logged entry only to a manager (0340)', () => {
+  it('offers deleting a logged entry only to a manager (0366)', () => {
     const at = source.indexOf("aria-label={t('screenTime.delete')}");
     expect(at, 'the delete control moved — did the module change?').toBeGreaterThan(-1);
     expect(source.slice(Math.max(0, at - 200), at)).toMatch(/\{canSetLimits && <button/);

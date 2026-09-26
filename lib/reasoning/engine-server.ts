@@ -20,12 +20,19 @@ type DB = SupabaseClient<Database>;
 const IMPACT_PRIORITY: Record<string, number> = { high: 90, medium: 60, low: 35 };
 const SIGNAL_HREF = '/dashboard/family-signals';
 
-/** Assemble the six-question reasoning report from the family's live data. */
-export async function loadReasoningReport(sb: DB, familyId: string, now: Date = new Date()): Promise<ReasoningReport> {
+/**
+ * Assemble the six-question reasoning report from the family's live data.
+ *
+ * `tz` is the family's IANA zone. Nothing in THIS file resolves a day key with
+ * it; it is carried because both sources it composes — the operating index and
+ * the family context's snapshot — bound DATE columns with the family's day, and
+ * a loader that defaulted it would hand them Greenwich's.
+ */
+export async function loadReasoningReport(sb: DB, familyId: string, tz: string, now: Date = new Date()): Promise<ReasoningReport> {
   const readErrors: ReasoningReadSource[] = [];
 
   // FOI (orchestrator + ranked suggestions) — the richest single source.
-  const foi = await loadOperatingIndex(sb, familyId, now).catch((err) => {
+  const foi = await loadOperatingIndex(sb, familyId, tz, now).catch((err) => {
     console.error('[reasoning-engine] operating_index read failed', { familyId, err });
     readErrors.push('operating_index');
     return null;
@@ -36,7 +43,7 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
   }));
 
   // Graph reasoning insights (R2) — hubs / ripple / coverage.
-  const ctx = await loadFamilyContext(sb, familyId).catch((err) => {
+  const ctx = await loadFamilyContext(sb, familyId, tz).catch((err) => {
     console.error('[reasoning-engine] relationship_graph read failed', { familyId, err });
     readErrors.push('relationship_graph');
     return null;
@@ -73,8 +80,8 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
 }
 
 /** Load the report and persist today's snapshot (idempotent per family/day). */
-export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId: string | null, now: Date = new Date()): Promise<ReasoningReport> {
-  const report = await loadReasoningReport(sb, familyId, now);
+export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId: string | null, tz: string, now: Date = new Date()): Promise<ReasoningReport> {
+  const report = await loadReasoningReport(sb, familyId, tz, now);
   try {
     // Best-effort persistence — the report is returned regardless — but a
     // PostgREST write failure returns { error } without throwing, so we must
@@ -82,6 +89,12 @@ export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId:
     // drop every daily snapshot and break "since yesterday" trends with no signal.
     const { error } = await sb.from('reasoning_snapshots').upsert({
       family_id: familyId,
+      // NOT converted here, deliberately: `reasoning_snapshots.as_of_date` is
+      // this upsert's idempotency key, and moving it changes what "already
+      // snapshotted today" means for rows written under the old key. It has its
+      // own entry in the write allowlist of
+      // tests/family-day-not-greenwich-day.test.ts and belongs to that change,
+      // not this one.
       as_of_date: now.toISOString().slice(0, 10),
       all_clear: report.allClear,
       attention_count: report.answers.filter((a) => a.status === 'attention').length,

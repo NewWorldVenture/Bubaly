@@ -1,10 +1,25 @@
 // Reading and writing the family's Bubaly settings (0257 `family_ai_settings`).
 //
-// The row is a preference, so the read is deliberately forgiving — a missing
-// row, or a read that fails because the table is not there yet in a partially
-// migrated environment, both answer the DEFAULTS rather than an error. The
-// gate calls this on every tool execution; a settings hiccup must never be the
-// reason a family's work stops, and the defaults are the cautious ones.
+// There are TWO reads of the same row, because two kinds of caller need
+// different answers when the read fails:
+//
+//  - `getAISettings` / `readAISettings` are the forgiving read the gate, the
+//    planner and the crons use on every execution. A missing row, or a read
+//    that fails because the table is not there yet in a partially migrated
+//    environment, both answer the DEFAULTS rather than an error, so a settings
+//    hiccup is never the reason a family's work stops. Be clear about what
+//    that costs: the defaults are the shipped behaviour (Bubaly on, `execute`,
+//    memory on, no quiet hours), NOT a tightening — for a family that switched
+//    something off or dialled a category down, a failed read loosens it for as
+//    long as the failure lasts.
+//
+//  - `loadAISettings` is the strict read for the page that SHOWS the settings
+//    to a family and lets a parent edit them. A missing row is still the
+//    defaults — that is genuinely what the gate enforces for that family — but
+//    a read that FAILED answers an error. The defaults are not this family's
+//    settings, and presenting them as if they were told a family that had
+//    switched Bubaly off that it was on; a parent who then changed one
+//    category wrote the invented empty map over every level they had set.
 //
 // The write is the opposite: manager-only, validated field by field, and
 // stamped with who changed it. What a family may hand to an AI is exactly the
@@ -27,8 +42,34 @@ export async function getAISettings(scope: ServiceScope): Promise<AISettings> {
   return readAISettings(scope.db, scope.familyId);
 }
 
+type SettingsRead = { ok: true; settings: AISettings } | { ok: false; error: unknown };
+
+async function querySettings(db: ServiceScope['db'], familyId: string): Promise<SettingsRead> {
+  const { data, error } = await db
+    .from('family_ai_settings')
+    .select('*')
+    .eq('family_id', familyId)
+    .maybeSingle();
+  if (error) return { ok: false, error };
+  return { ok: true, settings: settingsFromRow(familyId, (data as Row | null) ?? null) };
+}
+
 /**
- * The same read for callers that hold a client and a family id but no
+ * The family's settings as the settings page shows them — or an error when
+ * the read failed. See the header: this is the read that must not pass the
+ * defaults off as the family's own answer.
+ */
+export async function loadAISettings(scope: ServiceScope): Promise<ServiceResult<AISettings>> {
+  const read = await querySettings(scope.db, scope.familyId);
+  if (!read.ok) {
+    console.error('[service:ai-settings] read failed', read.error);
+    return fail(describeDbError(read.error, 'Could not load your Bubaly settings.'), { code: SERVICE_CODES.db });
+  }
+  return ok(read.settings);
+}
+
+/**
+ * The forgiving read (`getAISettings`'s) for callers that hold a client and a family id but no
  * `ServiceScope` — the chat assistant's trust wrapper, which gates the tools a
  * family actually talks to and needs to know whether Bubaly is switched on.
  */
@@ -36,16 +77,12 @@ export async function readAISettings(
   db: ServiceScope['db'],
   familyId: string,
 ): Promise<AISettings> {
-  const { data, error } = await db
-    .from('family_ai_settings')
-    .select('*')
-    .eq('family_id', familyId)
-    .maybeSingle();
-  if (error) {
-    console.error('[service:ai-settings] read failed; using defaults', error);
+  const read = await querySettings(db, familyId);
+  if (!read.ok) {
+    console.error('[service:ai-settings] read failed; using defaults', read.error);
     return { familyId, ...DEFAULT_AI_SETTINGS };
   }
-  return settingsFromRow(familyId, (data as Row | null) ?? null);
+  return read.settings;
 }
 
 export type AISettingsPatch = {

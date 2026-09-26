@@ -34,7 +34,7 @@ export function BehaviorModule() {
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   // The behavior log is what a parent reviews: anyone may log, but only a
-  // manager changes or removes an entry (0351) - a child cannot delete the
+  // manager changes or removes an entry (0377) - a child cannot delete the
   // hard day they had.
   const canRemove = isManager(role);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);

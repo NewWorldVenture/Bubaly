@@ -1,4 +1,4 @@
--- A marketplace offer is withdrawn, not deleted by a sibling (0344).
+-- A marketplace offer is withdrawn, not deleted by a sibling (0370).
 --
 -- As TEEN A: deleting sibling B's offer must be refused; the offer is still
 -- there afterwards. Control: A still reads it.

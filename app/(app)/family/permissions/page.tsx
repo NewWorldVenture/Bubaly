@@ -6,6 +6,7 @@ import { ROLE_LABELS, ROLE_ORDER, ROLE_DESCRIPTIONS, type MemberRole } from '@/l
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Permissions' };
 export const dynamic = 'force-dynamic';
@@ -14,10 +15,20 @@ export default async function FamilyPermissionsPage() {
   const t = await getTranslations();
   await requireUserContext();
   const supabase = await createServer();
-  const { data: perms } = await supabase
+  const { data: perms, error: permsError } = await supabase
     .from('permissions')
     .select('role, resource, can_create, can_read, can_update, can_delete')
     .order('resource');
+
+  // The empty copy here told the family something FALSE about their own database:
+  // "Permission rules load from the database once the policy seed is applied."
+  // That reads as a setup step they have not done, when the rows may be present
+  // and the read simply refused — so a parent debugging an RLS regression was
+  // being pointed at a seed script. A failed read says so.
+  if (permsError) {
+    console.error('[family/permissions] permission read failed', permsError);
+    return <ErrorState message={t('permissions.couldNotLoadYourPermission')} />;
+  }
 
   const byResource = new Map<string, Map<string, { c: boolean; r: boolean; u: boolean; d: boolean }>>();
   for (const p of perms ?? []) {

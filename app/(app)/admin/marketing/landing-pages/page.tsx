@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { archiveLandingPage, createLandingPage, setLandingPublished, updateLandingPage } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Landing Pages', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export default async function LandingPagesPage() {
                    <input name="cta_label" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_label === 'string' ? (p.metadata as Record<string, unknown>).cta_label as string : ''} placeholder={t('landingPages.ctaLabel')} className={inputCls} />
                    <input name="cta_href" defaultValue={typeof (p.metadata as Record<string, unknown> | null)?.cta_href === 'string' ? (p.metadata as Record<string, unknown>).cta_href as string : ''} placeholder={t('landingPages.ctaLink')} className={inputCls} />
                    <textarea name="body" rows={4} defaultValue={p.body ?? ''} placeholder={t('landingPages.bodyCopy')} className="sm:col-span-2 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-                   <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('landingPages.saveChanges')}</button>
+                   <SubmitButton className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('landingPages.saveChanges')}</SubmitButton>
                  </form>
                </details>
              </div>
@@ -65,13 +66,13 @@ export default async function LandingPagesPage() {
                    <form action={setLandingPublished}>
                     <input type="hidden" name="id" value={p.id} />
                     <input type="hidden" name="publish" value={p.published ? '0' : '1'} />
-                    <button className="rounded-lg border border-border px-2 py-1 font-medium hover:bg-elevated">
+                    <SubmitButton className="rounded-lg border border-border px-2 py-1 font-medium hover:bg-elevated">
                       {p.published ? 'Unpublish' : 'Publish'}
-                     </button>
+                     </SubmitButton>
                    </form>
                    <form action={archiveLandingPage}>
                      <input type="hidden" name="id" value={p.id} />
-                     <button type="submit" className="text-muted hover:text-rose-400">{t('landingPages.archive')}</button>
+                     <SubmitButton className="text-muted hover:text-rose-400">{t('landingPages.archive')}</SubmitButton>
                    </form>
                  </div>
               </div>
@@ -90,7 +91,7 @@ export default async function LandingPagesPage() {
           <input name="cta_label" placeholder={t('adminMarketingLandingPages.ctaLabelEGGetStarted')} className={inputCls} />
           <input name="cta_href" placeholder={t('adminMarketingLandingPages.ctaLinkSignupOrHttps')} className={inputCls} />
           <p className="text-xs text-muted">{t('adminMarketingLandingPages.pagesAreCreatedAsDraftsUse')} <strong>{t('adminMarketingLandingPages.publish')}</strong> {t('adminMarketingLandingPages.toMakeThemLiveAt')} <span className="font-mono">/lp/&lt;slug&gt;</span>.</p>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingLandingPages.createPage')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingLandingPages.createPage')}</SubmitButton>
         </form>
       </Card>
     </div>

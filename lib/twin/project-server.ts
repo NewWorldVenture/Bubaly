@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import {
-  projectTwin, projectionSummary, eventWindow, stalePrunableEntityIds,
+  projectTwin, projectionSummary, eventWindow, stalePrunableEntityIds, isProjectedRow,
   type TwinSnapshot,
 } from './project';
 import { readAll } from '@/lib/supabase/read-all';
@@ -250,6 +250,56 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     if (edgeErr) {
       console.error('[twin] graph_edges upsert failed', edgeErr);
       return { ok: false, error: edgeErr.message, entities: 0, edges: 0 };
+    }
+  }
+
+  // Prune stale edges. The node prune above reaches an edge only through the
+  // 0129 FK cascade — i.e. only when one of its ENDS disappears. A relation that
+  // MOVED between two ends that both survive (the Odyssey's primary driver
+  // changing from Emma to Dad) leaves the old edge behind for good, because an
+  // upsert can only ever add one. So the graph would show Emma AND Dad driving
+  // it, and keep every historical assignment as though all of them were current.
+  //
+  // Same evidence rule as the node prune: the projection is proof of absence
+  // only where this run actually looked. An edge is removed only when it is the
+  // projector's own (stamped `provenance.source === 'projection'`, so a
+  // hand-linked edge survives), BOTH its ends are nodes this run saw and kept,
+  // and BOTH those ends belong to tables the read covered completely. Anything
+  // else is unknown, not gone: a capped table's edges are left alone exactly as
+  // its nodes are, and an edge hanging off a pruned end is the cascade's job.
+  const refTableById = new Map<string, string>();
+  for (const r of idRows ?? []) {
+    if (r.ref_table && r.ref_id && !pruned.has(r.id)) refTableById.set(r.id, r.ref_table);
+  }
+  const edgeKey = (source: string, target: string, relation: string) => `${source}\u0000${target}\u0000${relation}`;
+  const liveEdges = new Set(edgeRows.map((e) => edgeKey(e.source_id, e.target_id, e.relation)));
+
+  // Every edge, not the first thousand — same reason as the node read above: a
+  // short read here can only under-prune, so it would hide the very rows this
+  // prune exists to remove. A failed read is not an empty table; fail closed.
+  const { rows: edgeIdRows, error: edgeReadErr } = await readAll((from, to) => sb.from('graph_edges')
+    .select('id, source_id, target_id, relation, attributes').eq('family_id', familyId)
+    .order('id').range(from, to));
+  if (edgeReadErr) {
+    console.error('[twin] graph_edges read failed', edgeReadErr);
+    return { ok: false, error: edgeReadErr.message, entities: 0, edges: 0 };
+  }
+
+  const staleEdges = (edgeIdRows ?? []).filter((e) => {
+    const sourceTable = refTableById.get(e.source_id);
+    const targetTable = refTableById.get(e.target_id);
+    if (!sourceTable || !targetTable) return false;          // an end this run did not see, or just pruned
+    if (!coveredRefTables.has(sourceTable)) return false;    // read truncated — unknown, not empty
+    if (!coveredRefTables.has(targetTable)) return false;
+    if (!isProjectedRow(e.attributes)) return false;         // hand-linked, keep it
+    return !liveEdges.has(edgeKey(e.source_id, e.target_id, e.relation));
+  }).map((e) => e.id);
+
+  if (staleEdges.length) {
+    const { error: edgePruneErr } = await sb.from('graph_edges').delete().eq('family_id', familyId).in('id', staleEdges);
+    if (edgePruneErr) {
+      console.error('[twin] graph_edges prune failed', edgePruneErr);
+      return { ok: false, error: edgePruneErr.message, entities: 0, edges: 0 };
     }
   }
 

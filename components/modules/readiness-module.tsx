@@ -47,7 +47,7 @@ export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; 
   const O = STATUS[overall.status];
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center gap-4 rounded-xl border border-border bg-surface/40 p-4">
         <Dial score={overall.score} status={overall.status} />
         <div>
           <div className={cn('flex items-center gap-1.5 text-sm font-semibold', O.text)}>
@@ -63,7 +63,7 @@ export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; 
         {cards.map((card) => {
           const S = STATUS[card.status];
           return (
-            <div key={card.horizon} className="flex flex-col rounded-xl border border-border bg-card p-4">
+            <div key={card.horizon} className="flex flex-col rounded-xl border border-border bg-surface/40 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="font-semibold">{card.title}</h3>
                 <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', S.text,

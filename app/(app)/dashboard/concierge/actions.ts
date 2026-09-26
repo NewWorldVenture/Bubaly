@@ -284,27 +284,38 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
   const familyId = ctx.active.familyId;
   const effect = dialEffect(level);
 
-  // The read error is checked. It used to be discarded, and that is what made
-  // this self-worsening: with two rows already present the single-row read
-  // fails, `existing?.id` is undefined, and the else-branch below adds a THIRD.
-  // Reporting the failure is the honest outcome — the dial did not move, and
-  // saying so beats writing another row nobody asked for.
-  const { data: existing, error: lookupError } = await sb
-    .from('trust_policies').select('id')
+  // Update the live policy on its FILTER, then insert only if none existed.
+  //
+  // This used to read the policy first and branch on what came back, with the
+  // read's error discarded. A PostgREST read RESOLVES with { data, error }, so a
+  // refused read handed back `data: null` — indistinguishable from "no policy
+  // yet" — and the else branch inserted a SECOND autopilot policy.
+  //
+  // Two rows change the answer, because both carry priority 10 and the engine
+  // takes the highest-priority match (lib/trust/engine.ts). It also ratcheted:
+  // once two rows exist, `.maybeSingle()` itself fails — postgrest-js returns
+  // PGRST116 with `data: null` for more than one row — so every later save read
+  // null again and inserted yet another policy. The dial could never take
+  // effect again, and reported success every time.
+  //
+  // Updating on the FILTER rather than on an id read back removes the read that
+  // could not tell "refused" from "absent". 0302_one_live_system_policy.sql is
+  // the other half: it disables the duplicates already in the database and adds
+  // a partial unique index, so at most one LIVE system policy per (family, name)
+  // survives for this update to move. The filter matches that index — a
+  // disabled loser is left alone rather than re-enabled into a violation.
+  const { data: updated, error: updateError } = await sb.from('trust_policies')
+    .update({ effect, enabled: true })
     .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
-    .eq('is_system', true).eq('enabled', true).maybeSingle();
-  if (lookupError) {
-    console.error('[concierge] autopilot policy lookup failed', { familyId, error: lookupError });
-    return { ok: false, error: describeActionError(lookupError, t('actions.couldNotUpdateThatPolicy')) };
+    .eq('is_system', true).eq('enabled', true)
+    .select('id');
+  if (updateError) {
+    console.error('[concierge] autopilot policy update failed', { familyId, effect, error: updateError });
+    return { ok: false, error: describeActionError(updateError, t('actions.couldNotUpdateThatPolicy')) };
   }
 
-  if (existing?.id) {
-    const { error } = await sb.from('trust_policies')
-      .update({ effect, enabled: true })
-      .eq('id', existing.id).eq('family_id', familyId);
-    if (error) return { ok: false, error: error.message };
-  } else {
-    const { error } = await sb.from('trust_policies').insert({
+  if ((updated ?? []).length === 0) {
+    const { error: insertError } = await sb.from('trust_policies').insert({
       family_id: familyId, name: AUTOPILOT_POLICY_NAME,
       description: 'Governs whether Bubaly executes accepted concierge plans on its own (allow), asks first (require_approval), or stays hands-off (deny).',
       domain: AUTOPILOT_DOMAIN, capability: AUTOPILOT_CAPABILITY,
@@ -315,14 +326,18 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
     // second submit loses with 23505 instead of creating a rival row. The
     // winner already carries a level the parent chose; re-apply ours over it
     // rather than reporting a failure for a dial that is about to be right.
-    if (error?.code === '23505') {
+    if (insertError?.code === '23505') {
       const { error: retryError } = await sb.from('trust_policies')
         .update({ effect, enabled: true })
         .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
         .eq('is_system', true).eq('enabled', true);
-      if (retryError) return { ok: false, error: retryError.message };
-    } else if (error) {
-      return { ok: false, error: error.message };
+      if (retryError) {
+        console.error('[concierge] autopilot policy insert-race update failed', { familyId, effect, error: retryError });
+        return { ok: false, error: retryError.message };
+      }
+    } else if (insertError) {
+      console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
+      return { ok: false, error: insertError.message };
     }
   }
 

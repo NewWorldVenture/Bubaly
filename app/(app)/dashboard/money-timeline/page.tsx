@@ -6,7 +6,7 @@ import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
 import { insightDedupeKey, type CashflowTimeline } from '@/lib/finance/timeline';
 import { MoneyTimelineModule } from '@/components/modules/money-timeline-module';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Financial Copilot' };
 export const dynamic = 'force-dynamic';
@@ -21,13 +21,19 @@ export default async function MoneyTimelinePage() {
   await requireAal2(ctx, 'money', '/dashboard/money-timeline');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  // The forecast's "today" and its week buckets are the family's, not the
+  // server's — every day key below is resolved in this zone.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { locale } = await getLocaleContext();
 
   // The loader throws on a real money read failure (see timeline-load.ts):
   // a forecast missing its bills or a trip is a reassuring-but-wrong balance,
   // so it fails closed here rather than rendering "smooth water".
   let timeline: CashflowTimeline;
   try {
-    timeline = await loadMoneyTimeline(supabase, familyId);
+    // The insight copy carries amounts and week labels, so the forecast is
+    // built for whoever is reading this page.
+    timeline = await loadMoneyTimeline(supabase, familyId, tz, new Date(), { locale: locale.code });
   } catch (err) {
     console.error('[dashboard/money-timeline] forecast read failed', err);
     const tr = await getTranslations();

@@ -3,6 +3,7 @@
 // stay a thin Supabase reader.
 
 import type { MemberRole } from '@/lib/constants/roles';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 // ── Finances ────────────────────────────────────────────────────────────────
 export type HomeTxn = { type: string; amount: number; date: string };
@@ -28,9 +29,18 @@ export function summarizeMonthFinances(txns: HomeTxn[], now: Date): MonthFinance
   return { income, expenses, remaining: income - expenses };
 }
 
-/** Whole dollars with thousands separators, e.g. 2767.6 → "$2,767.60". */
-export function usd(amount: number): string {
-  return `$${(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * Dollars with thousands separators, e.g. 2767.6 → "$2,767.60".
+ *
+ * This one carried a second defect behind the hardcoded locale: it prefixed the
+ * "$" BY HAND and only localised the digits. Handing it a European locale that way
+ * would have produced "$2.767,60" — the symbol in the American position with
+ * German separators, which is a currency notation nobody uses. `style: 'currency'`
+ * puts the symbol where the locale puts it ("2.767,60 $") and is what the rest of
+ * the app already does.
+ */
+export function usd(amount: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(amount ?? 0);
 }
 
 // ── Family members ────────────────────────────────────────────────────────────

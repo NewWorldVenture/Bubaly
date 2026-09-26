@@ -13,7 +13,7 @@ const mock = vi.hoisted(() => ({
   slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[], cleanups: new Set<() => void>(),
   read: vi.fn<() => Promise<Result>>(), createClient: vi.fn(), eq: vi.fn(),
   channel: vi.fn(), removeChannel: vi.fn(), realtime: undefined as (() => void) | undefined,
-  published: false, fetch: vi.fn(), toast: vi.fn(), locale: 'en-US' as LocaleCode,
+  published: false, fetch: vi.fn(), toast: vi.fn(), locale: 'en-US' as LocaleCode, confirm: vi.fn(async () => true),
   scope: { familyId: 'family-a', family: { name: 'Review family' }, userId: 'user-a', role: 'parent', members: [] }, checkout: '',
 }));
 
@@ -73,6 +73,10 @@ vi.mock('@/components/i18n/locale-provider', async () => {
   };
 });
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mock.toast, error: mock.toast }) }));
+// The component is called as a plain function here, so its hooks are supplied by
+// this file. The delete confirmation answers yes: these cases are about what the
+// module renders and which callbacks fire, not about the question it asks.
+vi.mock('@/components/ui/confirm', () => ({ useConfirm: () => mock.confirm }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 // Integration adds independent family-value cards alongside the subscription.

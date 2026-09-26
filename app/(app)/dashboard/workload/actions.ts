@@ -17,7 +17,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
   const t = await getTranslations();
   const ctx = await requireUserContext();
   // Rebalancing moves a chore - and the points it will earn - between
-  // members: a manager's call (0348 holds RLS to the same).
+  // members: a manager's call (0374 holds RLS to the same).
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
   const supabase = await createServer();
 

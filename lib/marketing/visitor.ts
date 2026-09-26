@@ -90,15 +90,23 @@ export function initialConsent(gpc: boolean): ConsentState {
   return resolveConsent([], { gpc });
 }
 
-/** Persist a decision durably (append-only, server-side) and return the resolved state. */
+/**
+ * Persist a decision durably (append-only, server-side) and return the resolved
+ * state. The decision is recorded against the visitor this browser IS — the
+ * `bubaly_vid` cookie the same-origin fetch carries — so no id is sent in the
+ * body: the route binds to the cookie and refuses a body that names anyone else.
+ */
 export async function postConsent(
-  anonymousId: string, state: ConsentState, gpc: boolean, source: string,
+  state: ConsentState, gpc: boolean, source: string,
 ): Promise<ConsentState | null> {
   try {
+    // Make sure the cookie exists (it is written here if storage lost it) so the
+    // request below carries the identity the decision belongs to.
+    if (!getAnonymousId()) return null;
     const res = await fetch('/api/mkt/consent', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ anonymousId, consents: state, gpc, source }),
+      body: JSON.stringify({ consents: state, gpc, source }),
       keepalive: true,
     });
     if (!res.ok) return null;

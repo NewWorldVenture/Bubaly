@@ -1,9 +1,9 @@
 -- Can a family member rewrite or erase an audit trail?
 --
 -- social_audit_logs, vacation_audit_logs and sync_change_logs let any member
--- UPDATE and DELETE. 0321 makes them append-only for members: SELECT and INSERT
+-- UPDATE and DELETE. 0347 makes them append-only for members: SELECT and INSERT
 -- stay (the app writes some trails from members' own sessions), UPDATE and
--- DELETE go. 0330 then drops member INSERT on social_audit_logs, whose only
+-- DELETE go. 0356 then drops member INSERT on social_audit_logs, whose only
 -- writer is the social_write_audit trigger. Judged on row counts: a refused UPDATE/DELETE raises nothing.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
@@ -35,7 +35,7 @@ begin
   -- Controls: the trail is readable, and still appendable.
   select count(*) into n from public.social_audit_logs where family_id = fam;
   if n <> 1 then raise warning 'CONTROL FAILED: the teen cannot read social_audit_logs (%)', n; failures := failures + 1; end if;
-  -- 0330: social_audit_logs is written by the SECURITY DEFINER social_write_audit
+  -- 0356: social_audit_logs is written by the SECURITY DEFINER social_write_audit
   -- trigger, never by a member directly, so a member cannot forge an entry.
   begin
     insert into public.social_audit_logs (family_id, action) values (fam, 'teen.appended');

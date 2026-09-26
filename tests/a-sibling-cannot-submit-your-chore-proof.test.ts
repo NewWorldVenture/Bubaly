@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: `user-${harness.memberId}` },
     memberships: [],
-    active: { familyId: 'family-1', role: harness.role, member: { id: harness.memberId, family_id: 'family-1' } },
+    active: { familyId: 'family-1', role: harness.role, member: { id: harness.memberId, family_id: 'family-1' }, family: { id: 'family-1', timezone: 'UTC' } },
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db, createServiceClient: () => harness.db }));

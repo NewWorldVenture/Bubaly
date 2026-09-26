@@ -1,4 +1,4 @@
--- A redemption spends your own points (0347).
+-- A redemption spends your own points (0373).
 --
 -- CHILD A had a 500-point redemption approved. As A: cancelling it (or
 -- moving it back to requested) to get the points back, re-pointing it at

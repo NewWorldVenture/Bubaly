@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * The behavior log is the chart a parent keeps. The module offered delete to
  * every member and the table was member-writable, so a child could delete the
- * hard day they had. 0351 makes editing and deleting an entry a manager's
+ * hard day they had. 0377 makes editing and deleting an entry a manager's
  * (docs/audit/behavior-log-check.sql); this pins the delete control to
  * managers in the UI, and a refused delete to an error rather than "Deleted".
  */

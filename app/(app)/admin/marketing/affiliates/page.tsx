@@ -11,6 +11,7 @@ import type { Tables } from '@/lib/database.types';
 import { saveAffiliateAction, toggleAffiliateStatusAction, deleteAffiliateAction, markAffiliatePaidAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -70,7 +71,7 @@ export default async function AffiliatesPage() {
           <input name="email" type="email" placeholder={t('adminMarketingAffiliates.email')} className={inputCls} />
           <input name="code" placeholder={t('adminMarketingAffiliates.codeEGCoolblog')} className={inputCls} />
           <input name="commission_rate" type="number" min="0" max="100" step="1" placeholder={t('adminMarketingAffiliates.commission')} className={inputCls} />
-          <button type="submit" className={btnCls}>{t('adminMarketingAffiliates.addAffiliate')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingAffiliates.addAffiliate')}</SubmitButton>
         </form>
       </Card>
 
@@ -102,14 +103,14 @@ export default async function AffiliatesPage() {
                         <div className="flex items-center justify-end gap-1">
                           {(sum?.pendingPayoutCents ?? 0) > 0 && (
                             <form action={markAffiliatePaidAction.bind(null, a.id)}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('affiliates.payOut')}</button>
+                              <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('affiliates.payOut')}</SubmitButton>
                             </form>
                           )}
                           <form action={toggleAffiliateStatusAction.bind(null, a.id, a.status === 'active' ? 'paused' : 'active')}>
-                            <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{a.status === 'active' ? 'Pause' : 'Activate'}</button>
+                            <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{a.status === 'active' ? 'Pause' : 'Activate'}</SubmitButton>
                           </form>
                           <form action={deleteAffiliateAction.bind(null, a.id)}>
-                            <button type="submit" className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</button>
+                            <SubmitButton className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</SubmitButton>
                           </form>
                         </div>
                       </td>

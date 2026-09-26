@@ -15,17 +15,20 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime } from '@/lib/family/safety';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime as fmtDateTimeIn } from '@/lib/family/safety';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'driving_trips'>;
 
 export function DrivingSafetyView() {
   const tr = useTranslations();
+  // The date and clock follow the reader.
+  const locale = useLocale();
+  const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   // The trip log is what a parent reviews; a driver must not be able to erase
-  // their own speeding or phone-use record (0339: managers edit and delete).
+  // their own speeding or phone-use record (0365: managers edit and delete).
   const canDelete = isManager(role);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 

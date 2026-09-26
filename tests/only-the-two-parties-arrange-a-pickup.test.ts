@@ -5,7 +5,7 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
  * A marketplace pickup is arranged by the two people in the exchange. The
  * hand-off actions used to treat anyone who was not the seller as the buyer,
  * so a sibling could propose, confirm (minting the hand-off code) or cancel
- * someone else's pickup. 0346 enforces the same in RLS.
+ * someone else's pickup. 0372 enforces the same in RLS.
  */
 const harness = vi.hoisted(() => ({ db: null as unknown, memberId: 'member-x' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));

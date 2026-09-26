@@ -1,7 +1,7 @@
 -- The database's social permission check, against the app's role matrix.
 --
 -- 1. A member a parent made a social `admin` must not be able to manage social
---    access (lib/social/roles.ts: admin = ALL except manage_access). Before 0322
+--    access (lib/social/roles.ts: admin = ALL except manage_access). Before 0348
 --    the SQL granted admin everything, so that member could rewrite anyone's
 --    social role, and promote themselves to owner, directly against the API.
 -- 2. AUTHZ-002's database half: an explicit role grants nothing to a member who

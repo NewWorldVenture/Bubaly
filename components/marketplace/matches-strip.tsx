@@ -40,7 +40,7 @@ export function MarketplaceMatchesStrip({ matches }: { matches: EnrichedMatch[] 
       <div className="mb-2.5 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-semibold">{t('matchesStrip.matchesOnTheBoard')}</h2>
-        <span className="ml-auto rounded-full bg-brand/12 px-2 py-0.5 text-xs font-medium text-brand-text">
+        <span className="ml-auto rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-text">
           {visible.length}
         </span>
       </div>

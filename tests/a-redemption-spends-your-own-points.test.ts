@@ -6,7 +6,7 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
  * (economy). Both request actions took the member from the caller, so a child
  * could file a request that - once a parent approved "Sam wants movie night" -
  * spent a sibling's balance. A non-manager now requests only for themselves;
- * 0347 holds RLS to the same.
+ * 0373 holds RLS to the same.
  */
 const harness = vi.hoisted(() => ({ db: null as unknown, memberId: 'member-a', role: 'child' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));

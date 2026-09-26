@@ -2,6 +2,9 @@
 // No Supabase / React so haversine, geofence membership, transition detection,
 // and labels stay deterministically unit-testable.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export interface LatLng { latitude: number; longitude: number }
 
 export interface PlaceLike extends LatLng {
@@ -56,14 +59,17 @@ export function classifyTransition(prevPlaceId: string | null, nextPlaceId: stri
   return 'moved';
 }
 
-/** Compact "time ago" label from an ISO timestamp relative to `now`. */
-export function timeAgo(iso: string, now: Date): string {
-  const mins = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+/**
+ * Compact "time ago" label from an ISO timestamp relative to `now`.
+ *
+ * NOTE: nothing in the application calls this. It is exported and unit-tested and
+ * no surface renders it — `components/modules/locator-module.tsx` uses
+ * `sinceLabel` from lib/location/overview.ts instead. Kept because it is public
+ * API another surface may reach for; recorded because a tested export with no
+ * caller is a guard measuring nothing.
+ */
+export function timeAgo(iso: string, now: Date, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return createFormat(locale).fmtTimeAgo(iso, { now });
 }
 
 /** Human distance label (m under 1 km, else km to one decimal). */
