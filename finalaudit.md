@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-214 finding IDs from four workers and two parallel sessions; none of it was
+215 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 224 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 225 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35277,6 +35277,73 @@ absence check.
 
 **Status:** FIXED (missions, money-timeline). OPEN (dispute filing UI).
 
+### `[CLAUDE-1][LOW][UI WRITES]` C1-S9-74 — seventeen calls nobody waited for
+
+**The shape.** `void someAction(…)` calls a server action and does not wait
+for it. There are two ways such a call fails unseen:
+- a **refusal** the action answers (`ok: false`);
+- a **rejection** of the call itself: a lapsed session, or a dropped network.
+
+The charter forbids ignoring failed promises. After the two money-timeline
+calls fixed under `C1-S9-73`, UI code had seventeen more. All were triaged:
+
+- **3 already correct:** the command bar, delivered value, and capture
+  shortcuts. Each reads the result *and* handles a rejection.
+- **3 deliberate:** visitor-analytics stitching on sign-up, and two dashboard
+  telemetry clicks. Both actions catch their own failures, and neither may
+  block what the person is doing.
+- **11 fixed:**
+  - **The library player, ×5 → one helper, `saveInBackground`.** A refusal and
+    a rejection are both logged now. An `onFail` hook lets a position save take
+    back its claim on `lastSaved`, which is the number the unmount check trusts
+    to decide there is nothing left to save. Before, one refused periodic save
+    followed by leaving the page inside the save interval lost the bookmark
+    silently. An older rollback never overwrites a newer claim (asserted).
+  - **AI settings.** A rejected load set neither `settings` nor `loadError`, so
+    the screen said *"Loading what Bubaly may do…"* forever. A spinner claims
+    something is still happening, so this was a different answer. It now shows
+    the load error.
+  - **Routines Undo and moments Undo.** A rejected call made "Undo" a silent
+    no-op over events and list items that were still there. Both now toast the
+    existing "Could not undo…" messages.
+  - **Workload snapshot and social mark-read.** Background writes. A failure is
+    now logged; for mark-read, the refresh shows the server's truth.
+  - **The sign-up referral cookie.** For an OAuth sign-up this cookie is the
+    *only* carrier of the referral (the email path also writes auth metadata),
+    and the form says *"Referral code noted"* either way. A failure was
+    swallowed (`.catch(() => {})`). It is now retried once, and a final failure
+    is logged.
+
+**OPEN (LOW), design:** for an OAuth sign-up whose cookie could not be set,
+the badge still says "noted". Carrying the code through the OAuth redirect
+would remove that dependency.
+
+**Guard: `a-fire-and-forget-action-is-classified`.** Every remaining
+`void …Action(` site is listed as `checked` or `deliberate`, with its reason
+and count. A new site fails until it is classified, and so does a classified
+site that disappears. A `checked` site must read the result *and* carry a
+non-empty `.catch`, because `.catch(() => {})` is a swallow, not a check. The
+file also holds the player's rollback guards and the referral retry guards.
+
+**13 mutations, all red.** One survived at first: my regex spanned both
+branches of the helper, so the catch branch's `onFail` stood in for a deleted
+one in the refusal branch. Each branch is now bounded with `between()`.
+
+**One more slip of mine, caught by the lint gate.** The first AI-settings fix
+translated its message *inside* the load effect, which added a second
+`exhaustive-deps` warning. Putting `t` in the dependency list is not safe: it
+is memoised only under the locale provider, and without one it is a new
+function every render, so the load would loop. The failure is now recorded as
+state and translated at render. The lint count is back to its one known,
+refuted warning.
+
+**Stated limit:** the census matches `void xAction(`. A call that is not
+prefixed with `void` is not covered, for example
+`startTransition(() => xAction())` returning the promise.
+
+**Status:** FIXED (11). Deliberate (3), with reasons in the guard. OPEN (the
+OAuth referral badge).
+
 ---
 
 ## What this pass did NOT establish
@@ -35348,8 +35415,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,391 passing / 17,394 across 1,365
-files.** (Re-run after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,397 passing / 17,400 across 1,366
+files.** (Re-run after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

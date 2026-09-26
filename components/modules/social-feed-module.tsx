@@ -211,7 +211,11 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
-                    if (!item.isRead) void markReadAction({ id: item.id, read: true }).then(() => router.refresh());
+                    // The refresh shows the server's truth either way, so a refused
+                    // mark-read is a smaller answer — logged, not dropped. Audit C1-S9-74.
+                    if (!item.isRead) void markReadAction({ id: item.id, read: true })
+                      .then((res) => { if (!res.ok) console.warn('[social-feed] mark-read refused', res.error); router.refresh(); })
+                      .catch((error: unknown) => console.warn('[social-feed] mark-read call failed', error));
                   }} />
               ))}
             </div>

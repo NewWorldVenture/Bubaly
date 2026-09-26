@@ -162,6 +162,11 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             delete applyIds.current[key];
             success(tr('routinesPanel.undone'));
             onApplied();
+          }).catch((error: unknown) => {
+            // A failed call used to leave "Undo" doing nothing, silently, over
+            // events that are still on the calendar. Audit C1-S9-74.
+            console.error('[routines] undo call failed', error);
+            toastError(tr('actions.couldNotUndoThoseEvents'));
           });
         },
       });
