@@ -144,11 +144,11 @@ export function ScreenTimeModule() {
               </div>
               {limit > 0 && (
                 <div className="mt-3">
-                  <div className="h-2 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(prog.pct, `Screen time used today: ${prog.pct}% of limit`)}>
+                  <div className="h-2 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(prog.pct, t('screenTime.usedTodayPct', { pct: prog.pct }))}>
                     <div className={`h-full rounded-full ${prog.over ? 'bg-danger' : 'bg-success'}`} style={{ width: `${prog.pct}%` }} />
                   </div>
                   <p className="mt-1 flex items-center justify-between text-[11px] text-muted">
-                    <span>{prog.over ? `Over by ${formatMinutes(prog.used - prog.limit)}` : `${formatMinutes(prog.remaining)} left`}</span>
+                    <span>{prog.over ? t('screenTime.overBy', { time: formatMinutes(prog.used - prog.limit) }) : t('screenTime.timeLeft', { time: formatMinutes(prog.remaining) })}</span>
                     {streak > 0 && <span className="inline-flex items-center gap-1 text-amber-500"><Flame className="h-3 w-3" /> {streak}{t('screenTime.dUnder')}</span>}
                   </p>
                 </div>

@@ -127,7 +127,9 @@ export function InsuranceModule() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-fg">{tr(policyTypeMeta(r.policyType).labelKey)} · {r.insurer}</p>
                       <p className="text-xs opacity-90">
-                        {r.urgency === 'lapsed' ? `Lapsed ${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} ago` : `Renews in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'} (${fmtDate(r.renewalDate, locale)})`}
+                        {r.urgency === 'lapsed'
+                        ? (Math.abs(r.daysUntil) === 1 ? tr('insurance.lapsedDaysAgoOne') : tr('insurance.lapsedDaysAgoMany', { n: Math.abs(r.daysUntil) }))
+                        : (r.daysUntil === 1 ? tr('insurance.renewsInDaysOne', { date: fmtDate(r.renewalDate, locale) }) : tr('insurance.renewsInDaysMany', { n: r.daysUntil, date: fmtDate(r.renewalDate, locale) }))}
                       </p>
                     </div>
                     {r.urgency === 'lapsed' && <AlertTriangle className="h-4 w-4 shrink-0" />}

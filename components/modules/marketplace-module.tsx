@@ -443,7 +443,7 @@ export function MarketplaceModule({
       </Modal>
 
       {/* Review offers (owner) */}
-      <Modal open={!!offersFor} onClose={() => setOffersFor(null)} title={offersFor ? `Offers on "${offersFor.title}"` : 'Offers'}>
+      <Modal open={!!offersFor} onClose={() => setOffersFor(null)} title={offersFor ? t('marketplace.offersOn', { title: offersFor.title }) : t('marketplace.offersTitle')}>
         {dialogOffers.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('marketplace.noOpenOffersRightNow')}</p>
         ) : (

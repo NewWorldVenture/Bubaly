@@ -460,11 +460,11 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
       : await supabase.from('home_locations').insert({ family_id: familyId, created_by: userId, ...payload });
     setLoading(false);
     if (error) return toastError(describeDbError(error));
-    onSaved(location ? 'Location updated' : parent ? `Added to ${parent.name}` : 'Room added');
+    onSaved(location ? tr('inventory.locationUpdated') : parent ? tr('inventory.addedTo', { name: parent.name }) : tr('inventory.roomAdded'));
   }
 
   return (
-    <Modal open title={location ? `Edit · ${location.name}` : parent ? `Add a container in ${parent.name}` : 'Add a room or area'} onClose={onClose}>
+    <Modal open title={location ? tr('inventory.editLocation', { name: location.name }) : parent ? tr('inventory.addContainerIn', { name: parent.name }) : tr('inventory.addRoomOrArea')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>

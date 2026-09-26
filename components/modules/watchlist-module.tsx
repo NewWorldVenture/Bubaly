@@ -173,8 +173,8 @@ export function WatchlistModule() {
           ) : topPicks.length === 0 ? (
             <p className="mt-4 text-sm text-muted">
               {titles.data.some((t) => t.status === 'want' || t.status === 'watching')
-                ? `Nothing fits tonight’s crowd and time${tonight.excluded[0] ? ` — closest: ${tonight.excluded[0].title.title} (${tonight.excluded[0].blockers.join('; ')})` : ''}.`
-                : 'Add a few titles the family wants to watch and the picker takes it from there.'}
+                ? (tonight.excluded[0] ? tr('watchlist.nothingFitsClosest', { title: tonight.excluded[0].title.title, reasons: tonight.excluded[0].blockers.join('; ') }) : tr('watchlist.nothingFits'))
+                : tr('watchlist.addTitlesToStart')}
             </p>
           ) : (
             <ul className="mt-4 space-y-2">

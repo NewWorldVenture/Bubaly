@@ -154,17 +154,17 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
                 </p>
                 <p className="text-xs text-muted">
                   {s.category ?? 'Other'} · {usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo · {usd(annualCostCents(s.cost_cents, s.cadence))}/yr
-                  {s.next_charge ? ` · next ${fmtDate(s.next_charge)}` : ''}
-                  {usage.state === 'recorded' ? ` · last recorded use ${fmtDate(usage.lastUsed)}`
-                    : usage.state === 'unknown' ? ' · usage unknown; Edit to add last use'
-                      : usage.state === 'future' ? ' · last-use date is in the future; Edit to correct'
-                        : ' · last-use date is invalid; Edit to correct'}
+                  {s.next_charge ? ` · ${t('subscriptions.nextChargeOn', { date: fmtDate(s.next_charge) })}` : ''}
+                  {' · '}{usage.state === 'recorded' ? t('subscriptions.lastRecordedUse', { date: fmtDate(usage.lastUsed) })
+                    : usage.state === 'unknown' ? t('subscriptions.usageUnknown')
+                      : usage.state === 'future' ? t('subscriptions.lastUseFuture')
+                        : t('subscriptions.lastUseInvalid')}
                 </p>
                 <SubscriptionPriceHistoryReview
                   key={JSON.stringify([subscriptionReviewContextKey(context), s.id, s.name, s.cost_cents, s.cadence, s.note, s.status, s.last_used, s.next_charge, s.category])}
                   context={context}
                   subscription={{ id: s.id, name: s.name, costCents: s.cost_cents, cadence: s.cadence, note: s.note }}
-                  onPrefill={(charge) => edit(s, charge.amountCents, `Selected recorded charge: USD ${(charge.amountCents / 100).toFixed(2)} on ${charge.date}, source transactions/${charge.recordId}. Review the editable cost and choose Save. This is not a confirmed provider plan-price change; other fields are preserved.`)}
+                  onPrefill={(charge) => edit(s, charge.amountCents, t('subscriptions.prefillNote', { amount: (charge.amountCents / 100).toFixed(2), date: charge.date, id: charge.recordId }))}
                 />
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
@@ -266,8 +266,8 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
       {canReview && visibleReview.result && (
         <div className="space-y-3">
           <p role="status" className="text-xs text-muted">{t('subscriptions.reviewed')} {visibleReview.result.recordsRead} {t('subscriptions.recordedExpensesFrom')} {visibleReview.result.window.from} to {visibleReview.result.window.to}.
-            {visibleReview.result.limited ? ' History was limited to the 500 most recent records; this is a partial review.' : ''}
-            {visibleReview.result.unsupportedCurrencyRecords > 0 ? ` ${visibleReview.result.unsupportedCurrencyRecords} records were excluded because their currency is unknown or unsupported.` : ''}
+            {visibleReview.result.limited ? ` ${t('subscriptions.historyLimited')}` : ''}
+            {visibleReview.result.unsupportedCurrencyRecords > 0 ? ` ${visibleReview.result.unsupportedCurrencyRecords === 1 ? t('subscriptions.excludedOne') : t('subscriptions.excludedMany', { n: visibleReview.result.unsupportedCurrencyRecords })}` : ''}
           </p>
           {candidates.length === 0 ? <p className="text-sm text-muted">{t('subscriptions.noNewCandidatesMeetTheseConservative')}</p> : candidates.map((candidate) => (
             <details key={candidate.id} className="rounded-xl border border-border p-3">

@@ -175,7 +175,7 @@ export function ProjectsModule() {
                   <span className="text-xs text-muted">{total}</span>
                 </div>
                 <ul className="space-y-2">{list.map((p) => <Card key={p.id} p={p} />)}</ul>
-                {col.key === 'done' && total > 3 && <button onClick={() => setShowDone((v) => !v)} className="mt-2 text-xs text-muted hover:text-fg">{showDone ? 'Show fewer' : `Show all ${total}`}</button>}
+                {col.key === 'done' && total > 3 && <button onClick={() => setShowDone((v) => !v)} className="mt-2 text-xs text-muted hover:text-fg">{showDone ? tr('listToggle.showFewer') : tr('listToggle.showAll', { n: total })}</button>}
                 {list.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted">{tr('projects.nothingHere')}</p>}
               </section>
             );

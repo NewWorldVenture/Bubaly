@@ -672,7 +672,7 @@ export function SchoolModule() {
                 </div>
               )}
               {todayClasses.length === 0 ? (
-                <EmptyState icon={BookOpen} title={tr('school.noClassesToday')} description={selectedMember ? `No classes scheduled for ${firstName(selectedMember.display_name)} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noClassesToday')} description={selectedMember ? tr('school.noClassesFor', { name: firstName(selectedMember.display_name) }) : tr('school.addClassesToSee')} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
               ) : (
                 <div className="space-y-2.5">
                   {todayClasses.map((c) => (

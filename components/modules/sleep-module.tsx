@@ -141,12 +141,12 @@ export function SleepModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-brand-text" /> {t('sleep.consistency')}</div>
           <p className="mt-2 text-2xl font-bold">{summary.consistency !== null ? `${summary.consistency}/100` : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{summary.adherence !== null ? `${summary.adherence}% of nights within 30 min of the routine` : 'Same bedtime every night scores 100'}</p>
+          <p className="mt-1 text-xs text-muted">{summary.adherence !== null ? t('sleep.adherencePct', { pct: summary.adherence }) : t('sleep.sameBedtimeScores')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><TrendIcon className="h-4 w-4 text-brand-text" /> {t('sleep.trend')}</div>
           <p className="mt-2 text-2xl font-bold capitalize">{summary.trend === 'unknown' ? '—' : summary.trend}</p>
-          <p className="mt-1 text-xs text-muted">{summary.debtMinutes > 0 ? `${fmtHours(summary.debtMinutes)} of sleep debt this week` : 'No sleep debt this week'}</p>
+          <p className="mt-1 text-xs text-muted">{summary.debtMinutes > 0 ? t('sleep.debtThisWeek', { time: fmtHours(summary.debtMinutes) }) : t('sleep.noDebtThisWeek')}</p>
         </div>
       </div>
 

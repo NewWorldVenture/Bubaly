@@ -46,9 +46,9 @@ vi.mock('@/components/i18n/locale-provider', async () => {
   // These tests call components as plain functions with hand-mocked hooks, so
   // useContext is unavailable. Resolve through the real catalogue rather than
   // returning the key, so assertions keep checking the words a user sees.
-  const { SOURCE_MESSAGES } = await import('@/lib/i18n/messages');
+  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return {
-    useTranslations: () => (key: string) => SOURCE_MESSAGES[key] ?? key,
+    useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
     useLocale: () => ({ code: 'en-US', language: 'en', region: 'US', dir: 'ltr' }),
     useLocaleSource: () => 'default',
   };

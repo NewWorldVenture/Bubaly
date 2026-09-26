@@ -88,8 +88,8 @@ export function SubscriptionPriceHistoryReview({ context, subscription, onPrefil
                     return (
                       <li key={charge.recordId} className="min-w-0 space-y-2 rounded-lg bg-surface/40 p-2">
                         <p><time dateTime={charge.date}>{charge.date}</time> - {dollars(charge.amountCents)}</p>
-                        <p className="text-xs text-muted">{charge.differenceFromTrackedCents === null ? 'Not comparable to the tracked billing amount.' : `Compared with tracked amount: ${difference(charge.differenceFromTrackedCents)}.`}
-                          {charge.differenceFromPreviousCents !== null ? ` Difference from previous recorded charge: ${difference(charge.differenceFromPreviousCents)}.` : ' First charge in the observed group.'}</p>
+                        <p className="text-xs text-muted">{charge.differenceFromTrackedCents === null ? t('priceHistory.notComparable') : t('priceHistory.comparedWithTracked', { diff: difference(charge.differenceFromTrackedCents) })}
+                          {' '}{charge.differenceFromPreviousCents !== null ? t('priceHistory.differenceFromPrevious', { diff: difference(charge.differenceFromPreviousCents) }) : t('priceHistory.firstCharge')}</p>
                         <a href={`#${sourceId}`} className="block break-all text-xs text-brand-text underline">{t('subscriptionPriceHistoryReview.sourceTransactions')}{charge.recordId}</a>
                         <div id={sourceId} className="break-words text-xs text-muted">{t('subscriptionPriceHistoryReview.recordedSource')} {group.name}, {charge.date}, {dollars(charge.amountCents)}{t('subscriptionPriceHistoryReview.account')} <code className="break-all">{group.accountId}</code>{t('subscriptionPriceHistoryReview.member')} <code className="break-all">{group.memberId ?? 'unassigned'}</code>.</div>
                         {selected && <Button type="button" variant="secondary" onClick={() => {

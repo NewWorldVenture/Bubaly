@@ -62,7 +62,7 @@ export function PlaybookModule() {
       const res = await refreshPlaybookAction();
       if (!res.ok) { toastError(res.error ?? 'Could not learn right now'); return; }
       refresh();
-      success(res.added ? `Found ${res.added} thing${res.added === 1 ? '' : 's'} Bubaly noticed` : 'No new patterns yet — check back after more activity');
+      success(res.added ? (res.added === 1 ? t('playbook.foundOne') : t('playbook.foundMany', { n: res.added })) : t('playbook.noNewPatterns'));
     });
   }
 

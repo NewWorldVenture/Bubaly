@@ -181,7 +181,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
             {suggestions.length > 6 && (
               <button onClick={() => setShowAllSuggestions(v => !v)}
                 className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-semibold text-muted transition hover:text-fg">
-                {showAllSuggestions ? 'Show fewer' : `Show all ${suggestions.length}`}
+                {showAllSuggestions ? t('listToggle.showFewer') : t('listToggle.showAll', { n: suggestions.length })}
                 <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAllSuggestions && 'rotate-180')} />
               </button>
             )}

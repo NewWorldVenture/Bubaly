@@ -436,7 +436,7 @@ export function RelationshipModule() {
         </div>
         {(gifts ?? []).length === 0 ? (
           <EmptyState icon={Gift} title={t('relationship.noGiftIdeasYet')}
-            description={`Jot down ideas as you spot them${profile?.partner_member_id ? `, pull from ${partnerName}’s wishlist,` : ''} or let AI suggest a few.`}
+            description={profile?.partner_member_id ? t('relationship.ideasHintWithPartner', { name: partnerName }) : t('relationship.ideasHint')}
             action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addAGiftIdea')}</Button>} />
         ) : (
           <>

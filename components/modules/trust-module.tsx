@@ -31,6 +31,12 @@ import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 
+// What a person reads for a grant's effect; the stored values stay identifiers.
+const TRUST_STATE_KEYS: Record<string, string> = {
+  allow: 'trustState.allow', approval: 'trustState.approval', require_approval: 'trustState.approval',
+  deny: 'trustState.deny', auto_approve: 'trustState.autoApprove',
+};
+
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
   id: string; name: string; description: string | null; domain: string; capability: string;
@@ -538,7 +544,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
                     return (
                       <td key={cap} className="px-2 py-2 text-center">
                         <button onClick={() => cycle(domain, cap)} disabled={!canManage || busy === `${domain}__${cap}`}
-                          title={explicit ? `Override: ${explicit}` : `Role default: ${def}`}
+                          title={explicit ? tr('trust.overrideState', { state: tr(TRUST_STATE_KEYS[explicit] ?? explicit) }) : tr('trust.roleDefaultState', { state: tr(TRUST_STATE_KEYS[def]) })}
                           className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border text-[10px] font-bold transition',
                             state === 'allow' && 'border-green-500/40 bg-green-500/15 text-green-400',
                             state === 'deny' && 'border-red-500/40 bg-red-500/15 text-red-400',

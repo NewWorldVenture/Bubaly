@@ -1032,7 +1032,7 @@ export function MessagesModule() {
               <div className="min-w-0">
                 <p className="truncate font-semibold">{activeConv.name ?? 'Direct Message'}</p>
                 <p className="text-xs text-muted">
-                  {activeConv.kind === 'direct' ? 'Direct message' : `Family group • ${memberCount} members`}
+                  {activeConv.kind === 'direct' ? tr('messages.directMessage') : memberCount === 1 ? tr('messages.familyGroupOne') : tr('messages.familyGroupMany', { n: memberCount })}
                 </p>
               </div>
             </div>

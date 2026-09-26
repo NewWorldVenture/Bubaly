@@ -14,11 +14,13 @@ import { readsAsSentence, sentenceTemplates } from './helpers/sentence-templates
 // 117 -> 92.
 // Batch 2 (dashboards, billing, declutter, marketplace panels, assistant,
 // concierge, focus, care, career), 92 -> 57.
+// Batch 3 (insurance renewals, inventory, language, moving, sleep, screen
+// time, subscriptions, trust, watchlist and more), 57 -> 27.
 //
 // Not counted, on purpose: app/api (prompts for the model), a thrown Error (a
 // log line and the error boundary), a translator's own argument, class lists,
 // URLs and queries, and an AI system prompt.
-const CEILING = 57;
+const CEILING = 27;
 
 describe('English sentence templates on the signed-in and public surface do not grow', () => {
   const files = sourceFiles().filter((f) => !f.startsWith('app/api/'));

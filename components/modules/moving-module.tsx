@@ -301,7 +301,7 @@ export function MovingWorkspace() {
             ))}
             <div className="ml-auto flex items-center gap-2 pb-1">
               {tab === 'timeline' && <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-brand" /> {tr('moving.showDone')}</label>}
-              {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? `Add the ${plan.length}-step checklist` : 'Checklist complete'}</Button>}
+              {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? tr('moving.addNStepChecklist', { n: plan.length }) : tr('moving.checklistComplete')}</Button>}
             </div>
           </div>
 
@@ -489,7 +489,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
         <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.category')}>{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
-          <Field label="Due" hint={`Move day is ${fmtDate(move.move_date, locale)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('moving.due')} hint={tr('moving.moveDayIs', { date: fmtDate(move.move_date, locale) })}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> {tr('moving.followTheMoveDate')}</label>
         <p className="text-xs text-muted">{tr('moving.fixedDatesIncludingOlderTasks')}</p>
@@ -529,12 +529,12 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
       ? await supabase.from('move_boxes').update(payload).eq('id', box.id)
       : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload });
     setLoading(false);
-    if (error) return toastError(error.code === '23505' ? `Box #${boxNumber} already exists for this move` : describeDbError(error));
+    if (error) return toastError(error.code === '23505' ? tr('moving.boxExists', { n: boxNumber }) : describeDbError(error));
     onSaved();
   }
 
   return (
-    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
+    <Modal open title={box ? tr('moving.editBox', { n: box.box_number }) : tr('moving.boxN', { n: nextNumber })} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-[6rem_1fr] gap-3">
           <Field label={tr('moving.number')} required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>

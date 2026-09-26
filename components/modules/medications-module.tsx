@@ -630,7 +630,7 @@ export function MedicationsModule() {
       </Modal>
 
       {/* Schedule modal */}
-      <Modal open={!!scheduleFor} onClose={closeSchedule} title={`Add schedule${scheduleFor ? ` · ${scheduleFor.name}` : ''}`}>
+      <Modal open={!!scheduleFor} onClose={closeSchedule} title={scheduleFor ? t('medications.addScheduleFor', { name: scheduleFor.name }) : t('medications.addSchedule')}>
         <form onSubmit={saveSchedule} className="space-y-4">
           <fieldset disabled={!!busy} className="space-y-4">
           <Field label={t('medications.timeOfDay')} required>
