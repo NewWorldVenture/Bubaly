@@ -26718,6 +26718,24 @@ SQL definition and compares all 9 roles × 11 permissions with
 the parser reads the other eight correctly. AUTHZ-002 moves to 🛠 FIXED + PASS
 in the repository.
 
+## C1-K-24 · HIGH · A child could fill their own savings goal, or erase a funded one
+
+Every wallet table is manager-write — `child_wallets`, `wallet_buckets` and
+`wallet_transactions` carry `can_manage_family` policies and restrictive
+guards — except `wallet_goals`, which kept "Members manage wallet_goals" FOR
+ALL. Only `wallet_fund_goal` (0208, SECURITY DEFINER, manager-gated) is meant to
+move `saved_cents`, together with the Save-bucket debit that pays for it; the
+app creates goals only through `createGoalAction`, which checks `isManager`.
+Measured on the replayed schema: a child set their goal's `saved_cents` to the
+target (reached, no money moved), deleted a funded goal (the goal row is the
+only record of what a parent set aside after the Save debit), and created a
+pre-filled goal.
+
+`0323_a_savings_goal_is_a_manager_write.sql`: members read, managers write;
+the RPC is unaffected. `docs/audit/wallet-goal-manager-write-check.sql` fails
+before and passes after (child reads; parent edits and deletes); 47/47 probes;
+26 wallet test files pass.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
