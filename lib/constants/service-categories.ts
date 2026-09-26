@@ -14,6 +14,9 @@ export type ServiceCategory = {
   id: string;
   label: string;
   description: string;
+  /** What the page SHOWS: catalogue keys for label and description (I18N-004). */
+  labelKey: string;
+  descriptionKey: string;
   icon: LucideIcon;
   /** Icon chip tint: [background, foreground] tailwind classes. */
   tint: string;
@@ -41,6 +44,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'family-life',
     label: 'Family Life',
     description: 'Connect, organize & cherish every moment.',
+    labelKey: 'serviceCategory.familyLifeLabel',
+    descriptionKey: 'serviceCategory.familyLifeDescription',
     icon: Heart,
     tint: 'bg-violet-500/15 text-violet-300',
     countLabel: 'tools',
@@ -56,6 +61,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'finances',
     label: 'Finances',
     description: 'Manage money, budgets & financial goals.',
+    labelKey: 'serviceCategory.financesLabel',
+    descriptionKey: 'serviceCategory.financesDescription',
     icon: DollarSign,
     tint: 'bg-emerald-500/15 text-emerald-300',
     countLabel: 'tools',
@@ -69,6 +76,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'kids-education',
     label: 'Kids & Education',
     description: 'Support learning, school & development.',
+    labelKey: 'serviceCategory.kidsEducationLabel',
+    descriptionKey: 'serviceCategory.kidsEducationDescription',
     icon: GraduationCap,
     tint: 'bg-amber-500/15 text-amber-300',
     countLabel: 'tools',
@@ -84,6 +93,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'health-wellness',
     label: 'Health & Wellness',
     description: 'Track health, wellness & live better together.',
+    labelKey: 'serviceCategory.healthWellnessLabel',
+    descriptionKey: 'serviceCategory.healthWellnessDescription',
     icon: HeartPulse,
     tint: 'bg-blue-500/15 text-blue-300',
     countLabel: 'tools',
@@ -97,6 +108,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'communications',
     label: 'Communications',
     description: 'Stay connected across all channels.',
+    labelKey: 'serviceCategory.communicationsLabel',
+    descriptionKey: 'serviceCategory.communicationsDescription',
     icon: MessageSquare,
     tint: 'bg-cyan-500/15 text-cyan-300',
     countLabel: 'tools',
@@ -110,6 +123,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'home-management',
     label: 'Home Management',
     description: 'Manage your home & daily essentials.',
+    labelKey: 'serviceCategory.homeManagementLabel',
+    descriptionKey: 'serviceCategory.homeManagementDescription',
     icon: Home,
     tint: 'bg-pink-500/15 text-pink-300',
     countLabel: 'tools',
@@ -132,6 +147,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'home-safety',
     label: 'Home Safety',
     description: 'Protect your family & what matters most.',
+    labelKey: 'serviceCategory.homeSafetyLabel',
+    descriptionKey: 'serviceCategory.homeSafetyDescription',
     icon: ShieldCheck,
     tint: 'bg-red-500/15 text-red-300',
     countLabel: 'tools',
@@ -144,6 +161,8 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     id: 'integrations',
     label: 'All Integrations',
     description: 'Connected apps & smart integrations.',
+    labelKey: 'serviceCategory.integrationsLabel',
+    descriptionKey: 'serviceCategory.integrationsDescription',
     icon: LayoutGrid,
     tint: 'bg-violet-500/15 text-violet-300',
     countLabel: 'integrations',

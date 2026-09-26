@@ -14,6 +14,7 @@ import { SERVICE_CATEGORY_BY_ID, navItemsForHrefs } from '@/lib/constants/servic
 import type { NavItem } from '@/lib/constants/navigation';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
   const t = useTranslations();
@@ -42,8 +43,8 @@ export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
           <Icon className="h-6 w-6" />
         </span>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight">{category.label}</h1>
-          <p className="text-xs text-muted">{category.description}</p>
+          <h1 className="text-xl font-bold tracking-tight">{t(category.labelKey)}</h1>
+          <p className="text-xs text-muted">{t(category.descriptionKey)}</p>
         </div>
       </div>
 
@@ -62,7 +63,7 @@ export function ServiceCategoryView({ categoryId }: { categoryId: string }) {
       <UpgradeModal
         open={upgradeFor !== null}
         onClose={() => setUpgradeFor(null)}
-        featureLabel={upgradeFor?.label}
+        featureLabel={upgradeFor ? navLabel(t, upgradeFor.label) : undefined}
         requiredLevel={upgradeLevel}
       />
     </div>

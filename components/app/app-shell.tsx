@@ -31,6 +31,7 @@ import { AIOrb } from './ai-orb';
 import { CommandBar } from './command-bar';
 import { RoleDensity } from './role-density';
 import { setActiveFamilyAction } from '@/app/(app)/actions';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 /** Desktop top-bar search. Submitting hands the query to the AI Assistant via
  *  its existing `?q=` deep-link (the assistant auto-sends and strips the param),
@@ -278,6 +279,7 @@ function SidebarDashboardLinks() {
 
 /** Grouped, plan-gated sidebar navigation. */
 function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
+  const t = useTranslations();
   const { planLevel, isSuperAdmin, featureTiers, role } = useApp();
   const manager = isManager(role);
   return (
@@ -293,7 +295,7 @@ function SidebarNav({ onLocked }: { onLocked: (item: NavItem) => void }) {
         return (
           <div key={group.title} className="space-y-1">
             <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted/70">
-              {group.title}
+              {navLabel(t, group.title)}
             </p>
             {isSuggested && <SidebarDashboardLinks />}
             {group.layout === 'grid' ? (
@@ -470,7 +472,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const inner = (
               <>
                 <item.icon className={cn('h-6 w-6', active && 'scale-110')} />
-                {item.label}
+                {navLabel(t, item.label)}
                 {locked && <Lock className="absolute right-1/2 top-1.5 h-3 w-3 translate-x-3" />}
               </>
             );
@@ -490,7 +492,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <UpgradeModal
         open={upgradeFor !== null}
         onClose={() => setUpgradeFor(null)}
-        featureLabel={upgradeFor?.label}
+        featureLabel={upgradeFor ? navLabel(t, upgradeFor.label) : undefined}
         requiredLevel={upgradeLevel}
       />
     </div>

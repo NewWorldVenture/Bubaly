@@ -34,6 +34,7 @@ import { useApp } from './app-context';
 import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 /**
  * Live unread-messages count for the sidebar badge. Seeds from the server
@@ -247,7 +248,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
           return (
             <section key={group.title} className="space-y-2">
               <div className="flex items-baseline gap-2 px-0.5">
-                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted/80">{group.title}</h3>
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted/80">{navLabel(t, group.title)}</h3>
                 <span className="h-px flex-1 bg-border/50" aria-hidden />
                 <span className="text-[10px] font-semibold tabular-nums text-muted/50">{resolved.length}</span>
               </div>
@@ -262,12 +263,12 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                     <>
                       <item.icon className={cn('h-5 w-5 shrink-0', locked ? 'text-muted/45' : 'text-fg/80')} />
                       <span className={cn('min-w-0 flex-1 text-left text-[13px] font-medium leading-tight line-clamp-2',
-                        locked ? 'text-muted/50' : 'text-fg')}>{item.label}</span>
+                        locked ? 'text-muted/50' : 'text-fg')}>{navLabel(t, item.label)}</span>
                       {locked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted/45" />}
                     </>
                   );
                   return (
-                    <ServiceTooltip key={item.href} label={item.label} description={descriptions[item.href] ?? ''}>
+                    <ServiceTooltip key={item.href} label={navLabel(t, item.label)} description={descriptions[item.href] ?? ''}>
                       <div className={cn(
                         'group relative flex items-stretch rounded-xl border border-transparent transition',
                         'hover:border-border hover:bg-elevated/50',
@@ -275,7 +276,7 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                         {locked ? (
                           <button
                             type="button" onClick={() => onLocked(item)}
-                            title={`${item.label} — upgrade to unlock`}
+                            title={t('nav.upgradeToUnlock', { label: navLabel(t, item.label) })}
                             className={cn('flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left', pinnable && 'pr-8')}
                           >
                             {inner}
@@ -293,9 +294,9 @@ function AllServicesModal({ open, onClose, onLocked, pinned, onTogglePin, onPinA
                             type="button"
                             disabled={busy}
                             onClick={(e) => { e.stopPropagation(); onTogglePin(item.href); }}
-                            aria-label={isPinned ? `Unpin ${item.label} from sidebar` : `Pin ${item.label} to sidebar`}
+                            aria-label={t(isPinned ? 'nav.unpinFromSidebar' : 'nav.pinToSidebar', { label: navLabel(t, item.label) })}
                             aria-pressed={isPinned}
-                            title={isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                            title={t(isPinned ? 'nav.unpinTitle' : 'nav.pinTitle')}
                             className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted/50 transition hover:bg-elevated hover:text-brand-text disabled:opacity-50"
                           >
                             <Star className={cn('h-4 w-4', isPinned && 'fill-brand text-brand-text')} />

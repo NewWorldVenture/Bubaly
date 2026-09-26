@@ -13,6 +13,7 @@ import { featureAccessByTier } from '@/lib/features/tiers';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 export function isActive(pathname: string, href: string): boolean {
   if (href === '/dashboard') return pathname === '/dashboard';
@@ -74,8 +75,10 @@ export function resolveItems(
 export function NavEntry({ item, variant, locked, onLocked, badge }: {
   item: NavItem; variant: 'list' | 'grid'; locked: boolean; onLocked: (item: NavItem) => void; badge?: number;
 }) {
+  const t = useTranslations();
   const pathname = usePathname();
   const active = !locked && isActive(pathname, item.href);
+  const label = navLabel(t, item.label);
 
   // Expandable group (list variant only): navigates to its own page AND
   // exposes a chevron to reveal its sub-destinations.
@@ -96,11 +99,11 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
       <button
         type="button"
         onClick={() => onLocked(item)}
-        title={`${item.label} — upgrade to unlock`}
+        title={t('nav.upgradeToUnlock', { label })}
         className={cn(base, 'text-muted/45 hover:bg-elevated/60 hover:text-muted')}
       >
         <item.icon className="h-5 w-5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
         <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
       </button>
     );
@@ -112,7 +115,7 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
       className={cn(base, active ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}
     >
       <item.icon className="h-5 w-5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       {Badge}
     </Link>
   );
@@ -122,6 +125,8 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
  *  a nested list of sub-destinations. Auto-expands when you're on the parent or
  *  any child route. */
 function ExpandableNavEntry({ item }: { item: NavItem }) {
+  const t = useTranslations();
+  const label = navLabel(t, item.label);
   const pathname = usePathname() ?? '';
   const parentActive = isActive(pathname, item.href);
   const childActive = (item.children ?? []).some((c) => isActive(pathname, c.href));
@@ -138,12 +143,12 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
       <div className={cn(row, 'pr-1', parentActive ? 'bg-brand/15 text-brand-text shadow-sm' : 'text-muted hover:bg-elevated hover:text-fg')}>
         <Link href={item.href} className="flex min-w-0 flex-1 items-center gap-3">
           <item.icon className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
         </Link>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
+          aria-label={t(open ? 'nav.collapseSection' : 'nav.expandSection', { label })}
           aria-expanded={open}
           className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-current/70 transition hover:bg-black/10 dark:hover:bg-white/10"
         >
@@ -166,7 +171,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
                 )}
               >
                 <child.icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                <span className="min-w-0 flex-1 truncate">{navLabel(t, child.label)}</span>
               </Link>
             );
           })}
