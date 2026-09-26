@@ -60,13 +60,12 @@ export function SignupForm() {
     // For an OAuth signup this cookie is the ONLY carrier of the referral (the
     // email path also writes it into auth metadata), and the form says
     // "Referral code noted" either way. A failed save was swallowed whole —
-    // both a refusal and a failed call. It is retried once, and a final
-    // failure is logged rather than dropped. Audit C1-S9-74.
-    const remember = () => rememberReferralCodeAction(referralCode).then((res) => {
-      if (!res.ok) throw new Error('referral cookie refused');
-    });
-    void remember()
-      .catch(() => remember())
+    // both a refusal and a failed call. It stays ONE best-effort call (the
+    // contract tests/e2e/signup-boundaries.spec.ts holds; a retry briefly added
+    // here broke it), and both failures are now logged, not dropped.
+    // Audit C1-S9-74.
+    void rememberReferralCodeAction(referralCode)
+      .then((res) => { if (!res.ok) console.warn('[signup] referral code was not remembered for an OAuth signup'); })
       .catch((error: unknown) => console.warn('[signup] referral code could not be remembered for an OAuth signup', error));
   }, [referralCode]);
 

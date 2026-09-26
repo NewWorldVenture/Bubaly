@@ -25,6 +25,7 @@ const CLASSIFIED: Record<string, { kind: 'checked' } | { kind: 'deliberate'; why
   'components/billing/family-delivered-value.tsx::loadFamilyDeliveredValueAction': { kind: 'checked' },
   'components/capture/capture-shortcuts.tsx::saveCaptureShortcutsAction': { kind: 'checked' },
   'components/moments/moments-view.tsx::removeMomentGroceryAction': { kind: 'checked' },
+  'components/auth/signup-form.tsx::rememberReferralCodeAction': { kind: 'checked' },
   'components/auth/signup-form.tsx::stitchIdentityAction': {
     kind: 'deliberate',
     why: 'visitor-analytics stitching; the action try/catches itself and must never block sign-up',
@@ -108,11 +109,12 @@ describe('the library player takes back a position it did not save (C1-S9-74)', 
 });
 
 describe('the referral cookie is not swallowed (C1-S9-74)', () => {
-  it('a failed save is retried once and a final failure is logged', () => {
+  it('one best-effort call, whose refusal and failure are both logged', () => {
+    // ONE call: tests/e2e/signup-boundaries.spec.ts counts them, and a retry
+    // added under this entry turned two of its cases red (E2E run 18).
     const form = strip(readFileSync('components/auth/signup-form.tsx', 'utf8'));
-    expect(form).toContain('rememberReferralCodeAction(referralCode)');
-    expect(form).toContain("if (!res.ok) throw new Error('referral cookie refused');");
-    expect(form).toContain('.catch(() => remember())');
+    expect(form.match(/rememberReferralCodeAction\(/g)).toHaveLength(1);
+    expect(form).toContain("if (!res.ok) console.warn('[signup] referral code was not remembered");
     expect(form).toMatch(/\.catch\(\(error: unknown\) => console\.warn\('\[signup\] referral code could not be remembered/);
     expect(form).not.toContain('rememberReferralCodeAction(referralCode).catch(() => {})');
   });

@@ -35311,8 +35311,12 @@ calls fixed under `C1-S9-73`, UI code had seventeen more. All were triaged:
   - **The sign-up referral cookie.** For an OAuth sign-up this cookie is the
     *only* carrier of the referral (the email path also writes auth metadata),
     and the form says *"Referral code noted"* either way. A failure was
-    swallowed (`.catch(() => {})`). It is now retried once, and a final failure
-    is logged.
+    swallowed (`.catch(() => {})`). Both a refusal and a failed call are now
+    logged. **Corrected after E2E run 18:** this first shipped with a retry,
+    and `tests/e2e/signup-boundaries.spec.ts` counts the calls. Its "one
+    best-effort call" contract went red in two cases. The retry is gone; the
+    logging stays. Reproduced locally (the retry version fails both cases with
+    one extra call) and verified (56/56 with the fix).
 
 **OPEN (LOW), design:** for an OAuth sign-up whose cookie could not be set,
 the badge still says "noted". Carrying the code through the OAuth redirect
@@ -35514,6 +35518,26 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Eighteenth run, on `e64bedeb` (run 36256461009): 1,291 passed, 5 failed, 0 flaky
+in 10.6m. TWO NEW FAILURES, BOTH MINE:**
+- `signup-boundaries.spec.ts:228` (confirmation-required signup sends the
+  referral);
+- `signup-boundaries.spec.ts:369` (a rejected referral action must not become
+  an unhandled rejection).
+
+**Root cause:** the retry `C1-S9-74` added to the referral cookie save made
+two calls where the spec's fixture counts exactly one. I did not run the E2E
+specs that mount the component I changed before pushing. That was the slip.
+The spec is self-contained (it transpiles `SignupForm` into the page and
+intercepts every request), so it runs locally in seconds.
+
+**Fix:** one call, logged. The retry version reproduces both failures locally,
+and the fix passes the whole spec (56/56). The other three failures are the
+known `phone-auth-http` cases.
+
+**Practice from here:** before pushing a component change, grep `tests/e2e`
+for the component and run those specs locally.
 
 **Seventeenth run, on `572a8bf1` (run 36255594733): 1,293 passed, 3 failed, 0 flaky
 in 8.0m**, covering `C1-S9-73`: the `/missions` review card, the new create
