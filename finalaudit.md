@@ -26619,6 +26619,65 @@ mappings, conflicts, jobs, reminders) still grant any member FOR ALL. They hold
 family-shared data and some may be written from member sessions, so each needs
 its own writer inventory before tightening.
 
+## C1-K-20 · HIGH · A failed read published an empty calendar to every subscriber
+
+`/api/sync/feeds/[token]` is the iCalendar URL that Apple Calendar, Outlook and
+Google poll for as long as a subscription lives. They treat each answer as the
+truth, so an empty `VCALENDAR` deletes every Bubaly event on the device. The
+route ignored the error from its paged events read: a transient database
+failure published an empty feed, with `Cache-Control: public, s-maxage=900`, so
+the edge kept serving it for fifteen minutes. A failed calendar lookup answered
+404, which some clients take as "this feed was deleted".
+
+**Fix.** A failed read answers 503 with `no-store` and `Retry-After`, and the
+client keeps what it has. `readAll` also reports hitting its cap as an error,
+and that case is not a failure: exactly 2,000 rows are the nearest events in
+order, so a very busy calendar still publishes them (logged). A clean "no such
+enabled feed" is still 404. **Test:** `a-failed-feed-read-does-not-empty-a-calendar`
+(5); the two failure cases fail with the fix reverted, and the controls and the
+cap case hold both ways.
+
+## C1-K-21 · MEDIUM · Paid AI limits that a failed count lifted
+
+Four routes metered paid model calls by counting today's audit rows — the
+child and family Money Coach, the Money Mentor (`ai/invest`) and the
+relationship helper — and the public gift link capped pending pledges the same
+way: `if ((count ?? 0) >= limit)`. A failed count is `{ count: null, error }`,
+`?? 0` made it zero, and the limit was lifted for as long as the read kept
+failing. Each now refuses (503, or a gift error) when the count cannot be read.
+
+The child coach also coached on reads it had not checked: a failed ledger,
+bucket or goal read told a child their balance was zero. It now stops (503),
+as does the family coach, and a failed wallet lookup is no longer "not found".
+
+**Test:** `an-unreadable-meter-is-not-zero` scans `app/` and `lib/` for any
+count destructured without its error and then compared as `?? 0`, and pins the
+five sites; all 6 fail with the fixes reverted.
+
+**Recorded, not changed:** `wallet_audit_logs` accepts INSERT from any family
+member, so a member can forge financial audit entries (and pad the AI meter).
+Every writer uses the member's own session (`logWalletAudit`), so closing it
+means moving those writes to the service role first.
+
+## Swept clean · the API routes this file never named
+
+The C1 brief listed routes the audit had never named; 13 remained on this
+branch. `sync/[provider]/*` and `sync/feeds/[token]` are C1-K-19/20. The rest:
+
+- `ai/runs/[id]` (+ `answer`, `cancel`, `pause`, `resume`, `rerun`): the
+  detail read goes through the caller's client and returns the page's `RunView`
+  (another family's run is "not found", never "forbidden"); `answer`, `resume`
+  and `rerun` restart work and carry the same concierge access gate as intake;
+  `rerun` is manager-only in `controls.ts`.
+- `ai/wallet/child/[childId]`: family-scoped wallet lookup; reads are
+  family-wide by RLS design. Its fail-open reads are C1-K-21.
+- `cron/library-feeds`: cron-authorized; batches the stalest 40 feeds; a
+  failing feed advances `last_fetched_at`, so broken feeds cannot starve
+  healthy ones; feeds are fetched through `public-document-fetch`, whose
+  address policy allows only global unicast (so NAT64 is excluded) and pins the
+  connection to the validated address (DNS rebinding closed). One stale comment
+  contradicting the status code was removed.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as

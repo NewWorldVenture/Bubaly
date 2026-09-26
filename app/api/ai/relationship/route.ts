@@ -38,11 +38,17 @@ export async function POST() {
 
     // Per-day metering (per family), counted from the family audit log.
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-    const { count: usedToday } = await supabase
+    const { count: usedToday, error: meterError } = await supabase
       .from('audit_logs').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('action', AI_AUDIT_ACTION)
       .gte('created_at', startOfDay.toISOString());
-    if ((usedToday ?? 0) >= RELATIONSHIP_AI_DAILY_LIMIT) {
+    // An unreadable meter is not "none used": that answer lifted the daily
+    // limit, and every call behind it is a paid model call.
+    if (meterError || usedToday === null) {
+      console.error('[ai-relationship] usage meter read failed', meterError);
+      return NextResponse.json({ error: t('relationship.theRelationshipHelperIsnT') }, { status: 503 });
+    }
+    if (usedToday >= RELATIONSHIP_AI_DAILY_LIMIT) {
       return NextResponse.json(
         { error: `You've reached today's suggestion limit (${RELATIONSHIP_AI_DAILY_LIMIT}/day). Try again tomorrow.` },
         { status: 429 },

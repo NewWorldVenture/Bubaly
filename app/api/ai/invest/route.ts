@@ -36,10 +36,16 @@ export async function POST(req: NextRequest) {
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      const { count } = await supabase
+      const { count, error: meterError } = await supabase
         .from('wallet_audit_logs').select('id', { count: 'exact', head: true })
         .eq('family_id', familyId).eq('action', 'ai_invest_call').gte('created_at', startOfDay.toISOString());
-      if ((count ?? 0) >= dailyLimit) {
+      // An unreadable meter is not "none used": that answer lifted the daily
+      // limit, and every call behind it is a paid model call.
+      if (meterError || count === null) {
+        console.error('[ai-invest] usage meter read failed', meterError);
+        return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 503 });
+      }
+      if (count >= dailyLimit) {
         return NextResponse.json({ error: `You've reached today's Money Mentor limit (${dailyLimit}/day). Upgrade to Plus for unlimited.` }, { status: 429 });
       }
     }

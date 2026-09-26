@@ -39,13 +39,19 @@ export async function POST() {
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      const { count: usedToday } = await supabase
+      const { count: usedToday, error: meterError } = await supabase
         .from('wallet_audit_logs')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('action', 'ai_coach_call')
         .gte('created_at', startOfDay.toISOString());
-      if ((usedToday ?? 0) >= dailyLimit) {
+      // An unreadable meter is not "none used": that answer lifted the daily
+      // limit, and every call behind it is a paid model call.
+      if (meterError || usedToday === null) {
+        console.error('[ai-wallet] usage meter read failed', meterError);
+        return NextResponse.json({ error: tr('wallet.failedToGenerateCoaching') }, { status: 503 });
+      }
+      if (usedToday >= dailyLimit) {
         return NextResponse.json(
           { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
           { status: 429 },
@@ -53,7 +59,13 @@ export async function POST() {
       }
     }
 
-    const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await settleAll([
+    const [
+      { data: childWallets, error: walletsError },
+      { data: buckets, error: bucketsError },
+      { data: txns, error: txnsError },
+      { data: members, error: membersError },
+      { data: goals, error: goalsError },
+    ] = await settleAll([
       supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
       supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -62,6 +74,14 @@ export async function POST() {
       supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);
+
+    // Coaching a family on a ledger it could not read tells every child their
+    // balance is zero. Stop instead.
+    const readError = walletsError ?? bucketsError ?? txnsError ?? membersError ?? goalsError;
+    if (readError) {
+      console.error('[ai-wallet] ledger read failed', readError);
+      return NextResponse.json({ error: tr('wallet.failedToGenerateCoaching') }, { status: 503 });
+    }
 
     const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
