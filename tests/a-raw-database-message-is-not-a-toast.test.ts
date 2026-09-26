@@ -12,15 +12,13 @@ import { describe, expect, it } from 'vitest';
  * and it passes an unclassified message through unchanged, so nothing that was
  * said before is lost.
  *
- * Thirty such toasts in thirteen files; twenty-eight are fixed. The two left are
- * in the display grid, whose E2E harness (display-ownership.spec.ts) transpiles
- * the component and resolves its imports from a fixed map: a new import of
- * `@/lib/supabase/errors` throws inside that browser. Fixing them means changing
- * the harness in the same commit, which is its own change.
+ * Thirty such toasts in thirteen files. Twenty-eight were fixed in C1-S9-84;
+ * the last two, in the display grid, in C1-S9-87 — together with its E2E
+ * harness (display-ownership.spec.ts), which transpiles the component and
+ * resolves imports from a fixed map, so `@/lib/supabase/errors` had to be added
+ * to that map in the same commit. The baseline is now empty: this is a ban.
  */
-const BASELINE = new Map<string, number>([
-  ['components/display/display-grid.tsx', 2],
-]);
+const BASELINE = new Map<string, number>([]);
 
 const RAW = /toastError\(\s*\w+\.message\s*\)/g;
 

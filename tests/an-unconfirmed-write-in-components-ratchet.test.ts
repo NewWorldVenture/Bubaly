@@ -90,16 +90,17 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   // C1-S9-86: the burn-down is finished. What is left is a register of writes
   // where zero rows is the ORDINARY answer (nothing unread, no prior ballot,
-  // no other primary), and each must say so where it is written: an audit ID
-  // in the comment above it. A baseline entry without one is a to-do, not a
-  // decision, and this refuses it.
+  // no other primary), and each must say so where it is written. Same rule,
+  // same window as the two server ratchets (C1-S9-60): a `//` comment naming
+  // its audit entry within the twelve lines above. A baseline entry without
+  // one is a to-do, not a decision, and this refuses it.
   it('every write left in the baseline says why, beside it', () => {
     const undocumented: string[] = [];
     for (const file of BASELINE.keys()) {
       const lines = readFileSync(file, 'utf8').split('\n');
       for (const site of unconfirmedWritesIn(file)) {
-        const lead = lines.slice(Math.max(0, site.line - 16), site.line + 1).join('\n');
-        if (!/Audit C1-S9-\d+/.test(lead)) undocumented.push(`${file}:${site.line}`);
+        const above = lines.slice(Math.max(0, site.line - 13), site.line).join('\n');
+        if (!/\/\/.*Audit C1-S9-\d+/.test(above)) undocumented.push(`${file}:${site.line}`);
       }
     }
     expect(undocumented, 'a deliberate unconfirmed write must carry its audit ID in the comment above it').toEqual([]);

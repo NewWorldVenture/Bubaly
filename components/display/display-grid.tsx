@@ -8,6 +8,7 @@ import {
   Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon, MonitorCog,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
@@ -635,7 +636,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       const { error } = await supabase.from('display_layouts')
         .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
       if (!owner.active) return;
-      if (error) { toastError(error.message); return; }
+      if (error) { toastError(describeDbError(error)); return; }
       setPersisted({ tiles, settings });
       success(tr('displayGrid.displaySaved'));
       if (draftRevision.current === revision) setEditing(false);
@@ -670,7 +671,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       if (!owner.active) return;
       if (error) {
         console.error('[display] setup card dismissal write failed', error);
-        toastError(error.message);
+        toastError(describeDbError(error));
         return;
       }
       setSettings((current) => ({ ...current, setupDismissed: true }));

@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-227 finding IDs from four workers and two parallel sessions; none of it was
+228 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 237 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 238 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -36266,6 +36266,54 @@ toasts (`C1-S9-84`).
 
 ---
 
+### `[CLAUDE-1][LOW][COPY + INSTRUMENT]` C1-S9-87 — the last two raw-message toasts, and a rule I had re-invented
+
+**`display-grid`: the two toasts `C1-S9-84` left open.** Saving a display layout
+and dismissing its setup card toasted `error.message` on a resolved error.
+Both now use `describeDbError(error)`.
+
+The obstacle was `display-ownership.spec.ts`. It transpiles the component in
+the browser and resolves imports from a fixed map. `lib/supabase/errors.ts` is
+now in its sources and its map; the file has no imports of its own, so it
+loads like `lib/display/ambient.ts`.
+- **Proven both ways, locally** (a temporary Playwright config on the
+  preinstalled Chromium, deleted after). With the harness change: 25/25. With
+  the component changed and the harness **reverted**: the spec fails across
+  the board. The harness change is required, not incidental.
+- **The thrown-error path is untouched.** Its `catch` still shows
+  `error.message`, which is outside the ban. The spec asserts that path's
+  exact text ("Fixture offline"), and `describeDbError` could classify
+  "offline" as a network error and change it. That path shows a transport
+  error, not PostgREST's text.
+
+`a-raw-database-message-is-not-a-toast` now has an **empty baseline**, so it
+is a ban. Re-introducing the form in `display-grid` goes red.
+
+**A rule I had re-invented.** `C1-S9-86` added "every write left in the
+baseline says why, beside it" to the components ratchet. I went to add the
+same rule to the two server ratchets and found it already there:
+- the server-action ratchet, since `C1-S9-60`;
+- the outside-actions ratchet, with its exemption for locked files keyed to
+  their `IN PROGRESS` rows.
+
+Mine was **looser**: any text within 16 lines, where theirs requires a `//`
+comment naming the audit entry within the twelve lines above. It is aligned
+now. All 8 deliberate component writes pass the stricter rule, and the
+lost-reason mutations for career and voting are red under it.
+
+Checked while there: every write in both server ratchets carries its audit
+ID (47 outside actions, excluding the two locked files; 14 in actions). All
+three write ratchets are now registers of documented decisions under one
+rule.
+
+**Gate.** Full vitest was 17,531 / 17,534 after the display change. The
+rule alignment is test-only; it was verified by its own file (6/6) and the
+eight `C1-S9-86` mutations (all red).
+
+**Status:** FIXED. **Closes:** `C1-S9-84`'s open item (`display-grid`).
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -36336,7 +36384,7 @@ standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
 Status: ✅ PASS — `npx vitest run`: **17,531 passing / 17,534 across 1,371
-files.** (After `C1-S9-86`, green on its first run; 17,515 / 17,518 re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+files.** (Unchanged by `C1-S9-87`, whose display change was run in full and whose test-only rule alignment was run by file; after `C1-S9-86`, green on its first run; 17,515 / 17,518 re-run after `C1-S9-85`, whose first run was red on one regex-literal pin (`pets-module-write-boundary`) the pre-check could not see; 17,497 / 17,500 after `C1-S9-84`, which added the raw-message guard, green on its first run; 17,483 / 17,486 after `C1-S9-83`, also green on its first run; 17,471 / 17,474 after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

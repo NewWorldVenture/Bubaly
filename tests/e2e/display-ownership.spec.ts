@@ -17,6 +17,8 @@ const sources = Object.fromEntries([
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
   'components/ui/widget-boundary.tsx',
+  // display-grid describes a refused save with describeDbError (Audit C1-S9-87).
+  'lib/supabase/errors.ts',
 ].map((file) => [file, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -100,6 +102,7 @@ test.beforeEach(async ({ page }) => {
       const exports = {}, module = { exports };
       const require = id => {
         if (id === '@/lib/display/ambient') return load('lib/display/ambient.ts');
+        if (id === '@/lib/supabase/errors') return load('lib/supabase/errors.ts');
         if (id === '@/lib/display/calendar') return load('lib/display/calendar.ts');
         if (id === '@/lib/onboarding/ics-time') return load('lib/onboarding/ics-time.ts');
         if (id === '@/lib/display/tiles') return load('lib/display/tiles.ts');
