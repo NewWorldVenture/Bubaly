@@ -20,10 +20,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ requireUserContext: vi.fn(), createServer: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
-vi.mock('@/lib/i18n/server', () => ({
-  getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
-  getTranslations: async () => (key: string) => key,
-}));
+// The real en-US catalogue, in the shape the action reads (it takes `messages`
+// off the locale context), rather than an identity translator.
+vi.mock('@/lib/i18n/server', async () => {
+  const { getMessages, translate } = await import('@/lib/i18n/messages');
+  const messages = getMessages('en-US');
+  return {
+    getLocaleContext: async () => ({ locale: { code: 'en-US' }, source: 'default', messages }),
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) =>
+      translate(messages, key, params),
+  };
+});
 
 const { refreshPlaybookAction } = await import('@/app/(app)/dashboard/playbook/playbook-actions');
 
@@ -32,11 +39,19 @@ type TableReply = { rows?: Row[]; error?: { code: string; message: string } | nu
 
 let tables: Record<string, TableReply>;
 let upserts: { rows: Row[]; options: unknown }[];
+/** Signatures already in family_playbook_suggestions, so a repeat upsert conflicts. */
+let existingSignatures: Set<string>;
 
 /**
  * A PostgREST-shaped builder: every filter returns itself, `range` narrows the
  * slice `readAll` pages through, and awaiting it resolves `{ data, error }` —
  * never rejects, exactly like the real client.
+ *
+ * The upsert models `ON CONFLICT (family_id, signature) DO NOTHING` (0126:31)
+ * and PostgREST's two answers to it: bare, there is no representation at all
+ * (`data: null`); with `.select()` — which is what sends
+ * `Prefer: return=representation` — RETURNING yields ONLY the rows the statement
+ * actually inserted.
  */
 function from(table: string) {
   let from_ = 0;
@@ -46,9 +61,20 @@ function from(table: string) {
   Object.assign(query, {
     select: self, eq: self, gte: self, lte: self, in: self, order: self, limit: self,
     range: (a: number, b: number) => { from_ = a; to = b; return query; },
-    upsert: async (rows: Row[], options: unknown) => {
+    upsert: (rows: Row[], options: unknown) => {
       upserts.push({ rows, options });
-      return { data: null, error: null };
+      const inserted: Row[] = [];
+      for (const row of rows) {
+        const signature = String(row.signature);
+        if (existingSignatures.has(signature)) continue;
+        existingSignatures.add(signature);
+        inserted.push({ id: `sug-${signature}` });
+      }
+      return {
+        select: async () => ({ data: inserted, error: null, count: null }),
+        then: (resolve: (r: { data: null; error: null; count: null }) => unknown) =>
+          resolve({ data: null, error: null, count: null }),
+      };
     },
     then: (resolve: (r: { data: Row[] | null; error: unknown; count: null }) => unknown) => {
       const reply = tables[table] ?? { rows: [] };
@@ -82,6 +108,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   upserts = [];
+  existingSignatures = new Set<string>();
   tables = {
     meal_plans: { rows: TACO_PLANS },
     meals: { rows: TACO_MEALS },

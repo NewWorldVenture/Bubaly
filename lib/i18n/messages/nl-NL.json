@@ -2718,6 +2718,7 @@
   "confirm.removeNamed": "“{name}” verwijderen?",
   "consent.notThisVisitor": "Deze privacykeuzes horen bij een andere browser, dus ze kunnen hier niet worden gelezen of gewijzigd.",
   "consent.visitorCookieRequired": "Deze browser heeft nog geen bezoekers-ID, dus je privacykeuzes konden niet worden geladen of opgeslagen. Laad de pagina opnieuw en probeer het nog eens.",
+  "playbookActions.couldNotCountNewInsights": "Bubaly heeft opgeslagen wat het heeft geleerd, maar kon niet bepalen hoeveel daarvan nieuw was. Laad de pagina opnieuw om je inbox te zien.",
   "quickCapture.dayAtTime": "{day} om {time}",
   "quickCapture.tomorrow": "Morgen",
   "calendar.today": "Vandaag",

@@ -10,6 +10,7 @@
 
 import { confirmFact } from '@/lib/services/memory';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { translate } from '@/lib/i18n/messages';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -43,8 +44,9 @@ function travelSeason(date: string): string {
  * signatures insert as 'suggested', existing ones are left untouched.
  */
 export async function refreshPlaybookAction(): Promise<Result> {
-  // A server action carries the request's locale, the same as a page does.
-  const { locale } = await getLocaleContext();
+  // A server action carries the request's locale, the same as a page does. Its
+  // catalogue comes with it — `getTranslations()` would resolve the locale again.
+  const { locale, messages } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const sb = await createServer();
@@ -173,10 +175,36 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }));
 
   // ignoreDuplicates: never overwrite an existing suggestion (esp. accepted/dismissed).
-  const { error } = await sb.from('family_playbook_suggestions')
-    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true });
+  //
+  // …and `added` is therefore the DATABASE's number, not `rows.length`. `rows` is
+  // the CANDIDATE list. `learnPlaybook` is deterministic over signatures that are
+  // stable functions of the household (lib/playbook/learn.ts), so every refresh
+  // after the first regenerates the same signatures and `ON CONFLICT DO NOTHING`
+  // skips every one of them — an accepted or dismissed card keeps its row for
+  // good (confirmFact/forgetFact only change `status`, and `clearAiMemory` only
+  // deletes `ai_memory:%` signatures), and nothing expires them. Reporting the
+  // candidate count told a family who had already worked their inbox down "Found
+  // 6 things Bubaly noticed" over the "Nothing to review right now" empty state,
+  // on every press, for good — and made the one honest branch ("No new patterns
+  // yet", playbook-module.tsx) unreachable while the family had any pattern at all.
+  //
+  // `.select('id')` is what appends `Prefer: return=representation`
+  // (lib/supabase/errors.ts), and RETURNING on `ON CONFLICT DO NOTHING` yields
+  // ONLY the rows actually inserted — so its length is the number we can stand by.
+  const { data: inserted, error } = await sb.from('family_playbook_suggestions')
+    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true })
+    .select('id');
   if (error) return { ok: false, error: error.message };
-  return { ok: true, added: rows.length };
+  // We asked for the representation and did not get one, so there is no honest
+  // count to report. Guessing either way — 0, or the candidate count — is the
+  // same defect with a friendlier face, so say we could not tell. The rows DID
+  // land, and the page is not refreshed on `ok: false`, so the copy tells the
+  // family the one thing that shows them: reload.
+  if (!inserted) {
+    console.error('[dashboard/playbook] suggestion upsert returned no representation');
+    return { ok: false, error: translate(messages, 'playbookActions.couldNotCountNewInsights') };
+  }
+  return { ok: true, added: inserted.length };
 }
 
 /**

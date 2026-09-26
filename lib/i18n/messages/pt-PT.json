@@ -2718,6 +2718,7 @@
   "confirm.removeNamed": "Remover «{name}»?",
   "consent.notThisVisitor": "Estas escolhas de privacidade pertencem a outro navegador, por isso não podem ser consultadas nem alteradas a partir daqui.",
   "consent.visitorCookieRequired": "Este navegador ainda não tem um identificador de visitante, por isso não foi possível carregar nem guardar as suas escolhas de privacidade. Recarregue a página e tente novamente.",
+  "playbookActions.couldNotCountNewInsights": "O Bubaly guardou o que aprendeu, mas não conseguiu perceber quanto disso era novo. Recarregue a página para ver a sua caixa de entrada.",
   "quickCapture.dayAtTime": "{day} às {time}",
   "quickCapture.tomorrow": "Amanhã",
   "calendar.today": "Hoje",

@@ -2718,6 +2718,7 @@
   "confirm.removeNamed": "Remove “{name}”?",
   "consent.notThisVisitor": "These privacy choices belong to a different browser, so they cannot be read or changed from here.",
   "consent.visitorCookieRequired": "This browser has no visitor id yet, so your privacy choices could not be loaded or saved. Reload the page and try again.",
+  "playbookActions.couldNotCountNewInsights": "Bubaly saved what it learned, but could not tell how much of it was new. Reload the page to see your inbox.",
   "quickCapture.dayAtTime": "{day} at {time}",
   "quickCapture.tomorrow": "Tomorrow",
   "calendar.today": "Today",
