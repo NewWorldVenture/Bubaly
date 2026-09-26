@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:15:00Z
+- Last Updated: 2026-09-26T18:20:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26960,6 +26960,25 @@ Checked and left as designed: `wallet_cards`, `wallet_passes` and
 `wallet_rewards` are added by any member through un-gated wallet-hub actions
 by design (loyalty cards, passes); `concierge_plan_actions` is written when any
 member applies a plan, subject to the trust evaluation.
+
+## C1-K-33 · MEDIUM · Marketplace reports filed in someone else's name, or pre-dismissed
+
+`marketplace_reports` feeds the platform Trust & Safety queue, and a report's
+verdict is stored in `status`, `resolution`, `reviewed_by` and `reviewed_at`,
+which the super-admin writes with the service role. The member INSERT policy
+checked only family membership. A member filed a report naming a sibling as
+`reporter_member`, and filed one already `dismissed` with a resolution, so it
+never reached the open queue. `reportListingAction` writes none of the verdict
+columns and names the caller's own member row.
+`0332_a_marketplace_report_is_filed_open_by_its_reporter.sql` makes INSERT
+require exactly that: `is_self_member(reporter_member)`, `status = 'open'`, and
+no verdict columns set. `docs/audit/marketplace-report-check.sql` fails 2 ways
+before and passes after (56/56), with a control that a member still files their
+own report. Marketplace and report suites pass (312/312).
+
+Checked and left: `family_onboarding` (the questionnaire, used only for
+marketing segments) and `onboarding_imports` (the time-to-first-value metric)
+are low impact.
 
 ## Swept clean · the API routes this file never named
 
