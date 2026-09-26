@@ -26183,6 +26183,36 @@ Recorded as a fragility, not a defect: gating a signature check on
 `NODE_ENV` rather than on the presence of the secret means a staging box run
 with `next dev` would accept unsigned webhooks.
 
+## The master ledger's open list, worked to the end
+
+The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
+*integration verification pending*, not *unfixed*. Filtering on each finding's
+**original** status leaves seven that were genuinely open. Their state now:
+
+| Finding | State | Why |
+| --- | --- | --- |
+| **F-C07** 19 undocumented env vars | ✅ closed this pass | all documented; a guard fails on any new undocumented `process.env.X` |
+| **F-C09** credentials fail at first use | ✅ mitigated (no change) | the boot guard it asks for already existed (`1fa0ac5b`) and is tested; *not* hard-failing is a stated, tested decision |
+| **F-C10** mobile has no tests | ◐ mostly mitigated | 16 root test files cover it; the one runtime advisory (`expo-router`) needs a device build to upgrade safely |
+| **F-K05** member-writable medical tables | owner decision | an asymmetry the UI and database agree on, not a lie; needs a product call and a held migration. C1-K-01's probe measured the same boundary independently |
+| **F-C08** forward release pinned in the past | operator | code half already closed upstream; the release needs production credentials |
+| **F-001** production ledger at `0001–0003` | operator | credentialed repair; agents must not apply migrations |
+| **F19** AI endpoints unmetered | pricing decision | not a code defect |
+
+Nothing on that list is now closable from a sandbox without either
+credentials, a device, or a decision that belongs to the owner.
+
+## Swept clean · no service-client write takes its family from the request
+
+52 service-role writes set `family_id`. With RLS bypassed, one sourced from
+the request body would be a cross-family write. Traced individually, every one
+derives from the session (`ctx.active.familyId`), from a row already fetched
+under a family scope, or — for the Twilio screening callback — from a
+server-owned session row keyed by an id our server issued, which the webhook
+signature covers because it signs the full URL including the query string.
+`billing/change-plan`'s `preferredFamilyId` is matched against the caller's own
+memberships, so it cannot name a foreign household.
+
 ## Converged with another session on C1-K-01/03
 
 While this pass was running, another session found the **same class
