@@ -140,11 +140,16 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const { error } = await supabase.from('guardian_contacts')
+  // 0333 makes this table manager-written, and RLS FILTERS a delete rather than
+  // refusing it — so a stale id answered `error: null` and reported the contact
+  // gone. The code gate above already stops a non-manager; this stops a lie.
+  const { data: rows, error } = await supabase.from('guardian_contacts')
     .delete()
     .eq('id', contactId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian contact', t('guardian.couldNotDeleteTheGuardianContact'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianContact') };
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -159,12 +164,17 @@ export async function updateContactTrustAction(
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const { error } = await supabase.from('guardian_contacts')
+  // The audit entry below records the NEW trust level unconditionally, so a
+  // filtered write logged a trust change that never happened — on the one field
+  // that decides whether a caller rings through. Read back before logging.
+  const { data: rows, error } = await supabase.from('guardian_contacts')
     .update({ trust_level: trustLevel, trust_override: true })
     .eq('id', contactId)
-    .eq('family_id', familyId);
+    .eq('family_id', familyId)
+    .select('id');
 
   if (error) return actionFailure('update contact trust', t('guardian.couldNotUpdateContactTrust'), error);
+  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotUpdateContactTrust') };
 
   await logGuardianAudit({
     family_id: familyId,

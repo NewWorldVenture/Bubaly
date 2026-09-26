@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T13:07:23Z
-- Total Audit Items: 14096
-- Not Started: 13861
-- In Progress: 231
+- Last Updated: 2026-09-26T13:22:25Z
+- Total Audit Items: 14142
+- Not Started: 13906
+- In Progress: 233
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
-- Failed: 3
+- Failed: 2
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), and three rows that had drifted outside the summary table were folded back in. Now: 14,096 = 13,861 + 231 + 1 + 3. See Q56.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 moved ❌ → 🔄 (Q57). Now: 14,142 = 13,906 + 233 + 1 + 2. See Q56 and Q57.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -13805,7 +13805,7 @@ PRODUCTION READY: NO
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
-| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
+| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | 🔄 IN PROGRESS | High |Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. · 2026-09-26: REPRODUCED as a real authenticated child on a full 345-migration replay ("a child promoted a blocked caller to immediate_family"); docs/audit/guardian-screening-write-boundary-check.sql fails before 0333 and passes after, including the parent positive control and member reads | 0333 makes guardian_contacts and guardian_member_profiles manager-written (permissive mng_* + RESTRICTIVE guards, strays swept by shape); gated-write probe recorded list 92→94; deleteContactAction and updateContactTrustAction now read back (the trust change was audit-logged unconditionally) | Fresh replay 346/346, probes 55/55 twice, re-apply rehearsal clean, conflict targets 186/186, full suite 17,123/17,126 (3 = container Node 22) |Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. Moves ❌→🔄, not to FIXED + PASS: an operator must apply 0333 (agents must not apply migrations to production) and the boundary must then be verified against the deployed database. See Q57. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
 | SERVICE-274EDFA6815C | SERVICE | createAssistantLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -14248,6 +14248,52 @@ PRODUCTION READY: NO
 | LIBRARY-0056DCF9E763 | LIBRARY | lib/sync/audit.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-CC76B9A33321 | LIBRARY | lib/time/zoned.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-C57404E4E963 | LIBRARY | lib/ui/gallery.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| MIGRATION-2BFE0CE0B23C | MIGRATION | supabase/migrations/0285_conflict_targets_inferable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8FF24A0E7DA7 | MIGRATION | supabase/migrations/0286_blog_updated_at_is_a_content_date.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8D08083B41A4 | MIGRATION | supabase/migrations/0290_money_anon_write_grants.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9A8811C272B0 | MIGRATION | supabase/migrations/0291_sync_log_skips_deleted_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-539964B2A745 | MIGRATION | supabase/migrations/0292_privileged_rpc_grant_reassert.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5B9CED571760 | MIGRATION | supabase/migrations/0293_notifications_related_id_is_a_key.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7C05699BD42B | MIGRATION | supabase/migrations/0294_family_scoped_read_indexes.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-518F01A936A9 | MIGRATION | supabase/migrations/0295_reward_redemption_decision_guard.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-10E4CFDF9E0A | MIGRATION | supabase/migrations/0296_family_credentials_manager_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A9BFDB4517FF | MIGRATION | supabase/migrations/0297_sensitive_tables_respect_role.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-CB9C80C565D9 | MIGRATION | supabase/migrations/0298_invites_update_manager_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-258AF69C8DDB | MIGRATION | supabase/migrations/0299_family_keeps_a_manager.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-0192906EF00B | MIGRATION | supabase/migrations/0300_entitlement_is_not_client_writable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-137B4BFBCF7A | MIGRATION | supabase/migrations/0301_notification_authorship.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-977805879C76 | MIGRATION | supabase/migrations/0302_one_live_system_policy.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-EDD777ACC457 | MIGRATION | supabase/migrations/0303_document_bytes_boundary.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-61492AD9AAB3 | MIGRATION | supabase/migrations/0304_economy_invest_decision_guard.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9A55DE49DA69 | MIGRATION | supabase/migrations/0305_chore_award_amounts_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-F3B172550A4C | MIGRATION | supabase/migrations/0306_money_instructions_are_not_member_writable.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-BDFF389ED311 | MIGRATION | supabase/migrations/0307_chore_prices_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-FE3B26EA314B | MIGRATION | supabase/migrations/0308_reward_catalogue_is_manager_run.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5D774991D477 | MIGRATION | supabase/migrations/0309_prescriptions_are_manager_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-B5E70B9CA3B2 | MIGRATION | supabase/migrations/0310_ui_only_manager_gates_are_enforced.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-F9778888C17B | MIGRATION | supabase/migrations/0311_family_scoped_references.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-34BE1C8BB6C7 | MIGRATION | supabase/migrations/0312_sensitive_documents_match_real_folder_names.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-9141A0E2BE90 | MIGRATION | supabase/migrations/0313_meal_plan_groceries_stay_in_one_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-BE6007D744D4 | MIGRATION | supabase/migrations/0314_circle_join_codes_are_unambiguous.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-FFC074C15283 | MIGRATION | supabase/migrations/0315_a_listing_is_claimed_once.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-B7488DB9F993 | MIGRATION | supabase/migrations/0316_a_chore_is_paid_once.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-3D916127D33E | MIGRATION | supabase/migrations/0317_listing_status_decides_from_a_locked_row.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-8A999315D728 | MIGRATION | supabase/migrations/0318_a_policy_should_say_what_it_checks.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-CE7C59F76A4D | MIGRATION | supabase/migrations/0319_a_driving_score_is_not_the_drivers_to_grade.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-3D0A95BAE466 | MIGRATION | supabase/migrations/0320_a_reward_costs_what_the_parent_set.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-973FDA6C20BF | MIGRATION | supabase/migrations/0321_invite_terms_are_fixed_at_issue.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-1ABDE84EC69F | MIGRATION | supabase/migrations/0322_a_family_cannot_write_its_own_entitlement.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-822878A10B5A | MIGRATION | supabase/migrations/0323_a_health_record_is_not_a_siblings_to_rewrite.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-5E387277CEEF | MIGRATION | supabase/migrations/0324_a_location_is_only_your_own_to_post.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A076E88DA9B3 | MIGRATION | supabase/migrations/0325_allowance_and_gift_writes_are_managers_only.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-EEB546C018F3 | MIGRATION | supabase/migrations/0326_a_guardian_number_belongs_to_one_family.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7A85B6584968 | MIGRATION | supabase/migrations/0327_the_terms_of_a_deal_are_fixed_when_it_is_struck.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A76F05AD248B | MIGRATION | supabase/migrations/0328_a_prescription_is_a_parents_to_write.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-650D9F449E6C | MIGRATION | supabase/migrations/0329_a_childs_own_record_is_not_theirs_to_rewrite.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-7612FB5B2EAB | MIGRATION | supabase/migrations/0330_a_behaviour_note_belongs_to_whoever_wrote_it.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-A3915A0867C0 | MIGRATION | supabase/migrations/0331_a_journal_is_the_one_thing_nobody_else_writes.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-61E07EEE563E | MIGRATION | supabase/migrations/0332_a_diagnosis_is_not_the_familys_to_browse.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
+| MIGRATION-0A4628571BE1 | MIGRATION | supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql | 🔄 IN PROGRESS | High | docs/audit/guardian-screening-write-boundary-check.sql fails before and passes after; fresh replay 346/346; probes 55/55 twice; re-apply rehearsal clean | Written 2026-09-26 for AUTHZ-005 | Local replay only | Discovered 2026-09-26 (Q56/Q57). Not applied to production — agents must not; an operator applies it with the other pending migrations. |
 
 ## Inventory and evidence rules
 
@@ -16521,7 +16567,7 @@ Two assistant redirects and five Contact Center neighbor failures reproduced; ac
 
 ### AUTHZ-005 — Guardian contact trust and member profiles require database manager write authority
 
-Status: ❌ FAIL
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: supabase/migrations/01370_ai_call_guardian.sql:91; supabase/migrations/01370_ai_call_guardian.sql:148; app/(app)/guardian/actions.ts
 
@@ -16542,14 +16588,18 @@ The existing contacts and profiles authenticated FOR ALL policies use active fam
 #### Fixes Applied
 Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force.
 
+2026-09-26 (Q57): `supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql` replaces 01370's `FOR ALL … is_family_member` policy on both tables with manager-gated permissive policies, adds RESTRICTIVE guards ANDed with every permissive policy so a stray one cannot reopen the boundary alone, and sweeps any other permissive write policy by shape. Every writer outside the eleven manager-gated Guardian actions runs on the service client, so no legitimate path is removed. `deleteContactAction` and `updateContactTrustAction` now read the row back; the trust change had been audit-logged unconditionally, so a filtered write recorded a trust change that never happened.
+
 #### Retest Results
 Pending disposable role-boundary reproduction and authorized schema repair.
+
+2026-09-26: `docs/audit/guardian-screening-write-boundary-check.sql`, run as real `authenticated` sessions on a fresh replay, FAILED before 0333 with "a child promoted a blocked caller to immediate_family" and PASSES after it: a child cannot promote a caller, delete the blocking contact, insert an `immediate_family` contact, set `default_mode_unknown` to `immediate_ring`, clear their Guardian number or delete their profile; a child still reads both tables; a parent still writes both. Fresh replay 346/346, all 55 probes pass twice, the re-apply rehearsal is clean.
 
 #### Evidence
 Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed.
 
 #### Final Status
-❌ FAIL
+🔄 IN PROGRESS — repository fix proven; awaiting operator application of 0333 and verification against the deployed database.
 
 ### SMS-002 — Guardian SMS recovery after provider retries stop
 
@@ -29547,6 +29597,112 @@ branch. Every additional writer multiplies the chance of a conflicted
 what silenced this branch for 31 check-ins. Read-only discovery can safely fan out;
 the ledger has one writer per session.
 
+---
+
+## Q57 — AUTHZ-005: Guardian screening could be turned off by the person it protects
+
+Taken next because it was one of three ❌ FAIL items — the highest-severity
+unverified work in the ledger — and the only one whose record said what it was
+waiting for: *"Pending database policy repair; additional action checks alone
+cannot prevent direct data writes."*
+
+### Reproduced before fixing
+
+Guardian screens a family member's calls and texts. `guardian_contacts` holds each
+caller's `trust_level` (`blocked` … `immediate_family`), and
+`guardian_member_profiles` holds how each member's calls route. 01370 gave both one
+policy, `FOR ALL … is_family_member(family_id)`. All eleven Guardian server actions
+check `isManager`, but PostgREST is reachable with the same JWT, so those checks
+were a UI boundary and not a database one.
+
+The probe ran first, against a fresh 345-migration replay, as a real
+`authenticated` child:
+
+```
+ERROR:  a child promoted a blocked caller to immediate_family
+```
+
+A number a parent had blocked as a scam line would ring straight through, and the
+same child could set `default_mode_unknown = 'immediate_ring'` and turn off
+screening for every unknown caller. The protection could be switched off by the
+person it exists to protect.
+
+**One false start, recorded.** The probe's first draft used `'immediate'` as the
+top trust level and died on `invalid input value for enum guardian_trust_level`. It
+failed, but not because of the defect it was meant to find, which is the failure
+mode the calibration discipline exists to catch. The real enum was read from the
+catalog, and the corrected probe fails on the defect itself.
+
+### Why manager-only breaks nothing
+
+Every writer to these tables was traced. Eleven are Guardian server actions, all
+gated on `isManager` in code. The rest — the inbound SMS, voice and WhatsApp
+webhooks, the screening route, the decision pipeline, SMS recovery and the learning
+cron — run on the service client, which bypasses RLS. There is no member-side
+write to preserve. Reads stay family-wide, because a screening rule nobody can see
+is not one.
+
+### The fix, and what it set off
+
+`0333_guardian_screening_is_a_parents_to_configure.sql`, in 0328's shape:
+manager-gated permissive policies, plus RESTRICTIVE guards ANDed with every
+permissive policy so a stray one added later cannot reopen the boundary on its own.
+Any other permissive write policy is swept by shape rather than by name, and
+narrowing by name is how 0217 left six tables behind. The sweep removed 01370's two
+`FOR ALL` policies.
+
+Q53's machinery then did exactly what it was built to do, without being told:
+
+1. `docs/audit/gated-write-tables-check.sql` **failed**, naming the two tables:
+   a migration had narrowed writes the client guard did not know about.
+2. Adding them to its recorded list (92 → 94) made
+   `tests/a-filtered-delete-is-not-a-deletion.test.ts`, which reads that list,
+   **name two sites** in `app/(app)/guardian/actions.ts`.
+3. Both now read back. `updateContactTrustAction` is the one that mattered: it
+   audit-logs the new trust level **unconditionally**, so a filtered write recorded
+   a trust change that never happened, on the one field that decides whether a
+   caller rings through.
+
+A migration narrows a table, the probe notices, and the client guard follows,
+with no hand-maintained list in between. That is the property Q53 was built for,
+and this is its first real use.
+
+### Verified
+
+- Probe fails before 0333, passes after: a child cannot promote a caller, delete
+  the blocking contact, insert an `immediate_family` contact, disable unknown-caller
+  screening, clear their Guardian number or delete their profile. A child still
+  reads both tables. A parent still writes both.
+- Fresh replay **346/346**; all **55** probes pass, twice; the re-apply rehearsal
+  onto an existing schema is clean; 186/186 `ON CONFLICT` targets infer.
+- `migration-version-safety` pinned the next version at 0333; it now reads 0334.
+  The non-overlap argument it records was re-checked against main's 0312–0317,
+  which never touch either table.
+- Full suite 17,123 of 17,126; the 3 failures are this container's Node 22.
+
+### The ledger had stopped recording migrations at 0284
+
+Looking up the row for 0333 turned up nothing — and nothing for **46 migrations**:
+0285 onward, the whole run of security migrations included (0297's invite
+boundary, 0300–0332's role narrowing). Q56's discovery scan covered `lib/`,
+components and layouts, not `supabase/migrations/`, so it missed them. They are
+added with the ledger's own ID scheme (`MIGRATION-` + sha256(path)[:12], confirmed
+against an existing row before use).
+
+Forty-five are ⬜ NOT STARTED, noting that each replays cleanly in a fresh
+bootstrap. That is the same state as the 300 migrations already in the ledger,
+which also replay cleanly and are also ⬜, and consistency with them matters more
+than showing progress. 0333 is 🔄, because its verification above is complete
+apart from production.
+
+### Status: ❌ FAIL → 🔄 IN PROGRESS, not FIXED + PASS
+
+The ledger's one 🛠 FIXED + PASS row (SEC-005) was granted after deployed
+verification, and this follows the same rule. The repository no longer fails, but
+production still does until an operator applies 0333. Agents must not apply
+migrations to production, and the boundary then has to be verified against the
+deployed database. That is the precise remaining step, and it is the owner's.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -29575,7 +29731,7 @@ Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,54
 Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressions pass locally. Initiation ownership, real successful hosted recipient/PKCE recovery, production Auth configuration and physical-device reopening remain unverified. Comparison witnesses carry no authentication authority, MAC or TTL.
 
 ## Authorization
-Status: 🔄 IN PROGRESS — 55 filtered-write sites fixed across client and server (Q52–Q54); the gated-table list is now measured from `pg_policies` (92 tables) by docs/audit/gated-write-tables-check.sql rather than hand-written (19); data-reading GET routes are now gated or named public with a reason (Q55). Complete deployed role/RLS workflow verification remains open.
+Status: 🔄 IN PROGRESS — AUTHZ-005 reproduced and fixed in the repository by 0333 (❌→🔄, awaiting operator application; Q57). 57 filtered-write sites fixed across client and server (Q52–Q54); the gated-table list is now measured from `pg_policies` (92 tables) by docs/audit/gated-write-tables-check.sql rather than hand-written (19); data-reading GET routes are now gated or named public with a reason (Q55). Complete deployed role/RLS workflow verification remains open.
 
 Earlier: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
 
@@ -29588,7 +29744,7 @@ Status: 🔄 IN PROGRESS — all 146 routes now fall under the gate rule (writes
 Earlier: 🔄 IN PROGRESS — local callback/action transport and neutrality gates pass; complete endpoint workflows remain open.
 
 ## Database
-Status: 🔄 IN PROGRESS — 345 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures; 54/54 boundary probes pass, run twice, including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
+Status: 🔄 IN PROGRESS — 346 migrations replay onto a fresh PostgreSQL 16 + pgvector with 0 failures (0333 added, Q57); 55/55 boundary probes pass, run twice, including the new Guardian screening probe and including the new gated-write-tables probe (calibrated in three policy shapes and both drift directions). Production ledger and deployed policies remain unverified from here.
 
 Earlier: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
 

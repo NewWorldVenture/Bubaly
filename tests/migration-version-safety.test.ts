@@ -59,9 +59,12 @@ describe('Supabase migration filename safety', () => {
     // wallet_transactions — no table appears on both sides, and nothing in this
     // branch's own 0318-0327 goes near the eight either.
     //
-    // This reads 0333: main holds 0001-0317, this branch 0318-0327 and
-    // 0328-0332.
-    expect(audit.nextVersion).toBe('0333');
+    // This reads 0334: main holds 0001-0317, this branch 0318-0327, 0328-0332,
+    // and 0333 (Guardian screening is a parent's to configure). 0333 touches only
+    // guardian_contacts and guardian_member_profiles; main's 0312-0317 do not go
+    // near either, so the non-overlap argument above still holds — checked, not
+    // assumed, against the same list.
+    expect(audit.nextVersion).toBe('0334');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
