@@ -399,3 +399,52 @@ describe('lib/ai best-effort writes log a no-op and never raise (C1-S9-66)', () 
     expect(code(release)).not.toContain('.select(');
   });
 });
+
+/**
+ * Audit C1-S9-67 — lib/marketing. The CRM claim is proved behaviourally in
+ * crm-claim-never-overwrites-an-owner; these cover the rest.
+ */
+describe('marketing automation and platform writes (C1-S9-67)', () => {
+  const events = read('lib/marketing/automation-events.ts');
+  const runner = read('lib/marketing/automation-runner.ts');
+  const platform = read('lib/marketing/platform.ts');
+  const recurring = read('lib/marketing/recurring-ads-runner.ts');
+  const onboardingContact = read('lib/marketing/onboarding-contact.ts');
+  const identity = read('lib/marketing/identity.ts');
+
+  it('an event run result that matched nothing throws, as an error does', () => {
+    expect(events).toContain("if (runError || wroteNoRows(recorded)) throw new Error('Could not record the event-driven automation result.');");
+  });
+
+  it('a scheduled run moved on mid-flight is logged, still counted, never thrown', () => {
+    const b = code(block(runner, 'if (wroteNoRows(recorded)) {'));
+    expect(b).toContain('its outcome was not recorded');
+    expect(b).not.toMatch(/\bthrow\b|\breturn\b|\bcontinue\b/);
+    const after = runner.slice(at(runner, 'if (wroteNoRows(recorded)) {'));
+    expect(after.slice(0, 400)).toContain('ran++;');
+  });
+
+  it('a regenerated page that vanished is reported at its own write', () => {
+    expect(platform).toContain("if (wroteNoRows(saved)) throw new Error(`Marketing page ${page.id} was not found when saving its regeneration.`);");
+  });
+
+  it('log-only writes never raise', () => {
+    for (const [src, needle] of [
+      [recurring, "if (error || wroteNoRows(noted)) console.error("],
+      [onboardingContact, "if (error || wroteNoRows(updated)) console.error("],
+      [identity, "if (stitchError || wroteNoRows(stitched)) console.error("],
+    ] as const) {
+      const line = src.slice(at(src, needle)).split('\n')[0];
+      expect(line).not.toMatch(/\bthrow\b|\breturn\b/);
+    }
+  });
+
+  it('deliberate ones carry their reasons', () => {
+    expect(events).toContain('zero rows is a workflow deleted mid-run');
+    expect(runner).toContain('Rows deliberately not checked, as in automation-events.');
+    expect(platform).toContain('a first generation has no\n  // prior set');
+    expect(platform).toContain('keeps them out of retrieval at\n    // least as surely as marking them stale');
+    expect(recurring).toContain('zero rows is a campaign deleted since\n        // the due scan');
+    expect(identity).toContain('zero is the ordinary "nothing to carry" case');
+  });
+});

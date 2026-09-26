@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -68,8 +69,10 @@ export async function upsertOnboardingContact(admin: DB, p: {
   // the record saying something other than what the caller just established,
   // with nothing to say so.
   if (existingId) {
-    const { error } = await admin.from('crm_contacts').update(row).eq('id', existingId);
-    if (error) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error });
+    // "A write that did not land" includes one that matched nothing — a
+    // contact deleted since the read. Audit C1-S9-67.
+    const { data: updated, error } = await admin.from('crm_contacts').update(row).eq('id', existingId).select('id');
+    if (error || wroteNoRows(updated)) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error: error ?? 'no rows updated' });
   } else {
     const { error } = await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
     if (error) console.error('[onboarding-contact] contact insert failed', error);

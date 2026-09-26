@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-207 finding IDs from four workers and two parallel sessions; none of it was
+208 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 217 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 218 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34792,6 +34792,58 @@ over-tightening), all killed. **Ratchet: 98 → 89 across 50 files.**
 
 ---
 
+### `[CLAUDE-1][MEDIUM][MARKETING]` C1-S9-67 — lib/marketing: a second CRM claim that could overwrite an owner
+
+**Thirteen writes** in the marketing library.
+
+**The same race as `C1-S9-61`, in a second place (fixed, proved
+behaviourally).** `stitchVisitorIdentity` runs at sign-in. It reads a CRM
+contact by email and, if the read saw no owner, sets `owner_id`, with the write
+filtered on `id` alone. A lead claimed in between (a CRM import, another
+sign-in) was overwritten. `C1-S9-61` closed exactly this in `resolveContactId`;
+the sweep then found its twin here. The write now repeats the read's condition
+(`.is('owner_id', null)`), and a claim that loses applies the lifecycle stage
+only, never the owner. A new suite, `crm-claim-never-overwrites-an-owner`,
+injects a client in which the claim loses the race. Removing the predicate,
+letting the fallback write an owner, or claiming regardless of the read each
+turns it red.
+
+**A run result that did not record (fixed).** Event-driven automation reserves
+or claims its run row and then records the outcome; the error path threw, and a
+record matching nothing did not. It now does.
+
+**A run moved on mid-flight (log, still counted).** The scheduled runner's
+result write is status-guarded (`running`). Zero rows means a reaper moved the
+run while its steps ran, so **the emails went out and the ledger says
+"failed"**. It is still counted as run, because it did run, and it is logged,
+because there is no longer a row this path owns to correct. The guard proves it
+neither throws nor stops counting.
+
+**A regenerated page that vanished (fixed attribution).** A page deleted
+mid-regeneration made the *version* upsert fail on its foreign key: a throw,
+but blamed on the wrong write. It is now reported at the page write.
+
+**Confirmed for the log (3).** The visitor stitch, the onboarding contact update
+(whose own comment says "a write that did not land leaves the record saying
+something other than what the caller just established"), and the recurring-ad
+failure note.
+
+**Deliberate (6).** Both `run_count` increments (a workflow deleted mid-run),
+the platform's AEO clear (its error gates the insert), stale-embedding marking
+(ids read just above, and deleted is as good as stale), retiring a finished
+campaign, and consent carry-forward (filtered to unattributed rows; the file
+already calls a failure there "the SAFE direction").
+
+**Noted, not this class:** both `run_count` increments are read-modify-write
+(`(flow.run_count ?? 0) + 1`), so two concurrent runs lose a count. A counter
+race, not a silent no-op; recorded for the backlog rather than widened into
+this sweep.
+
+**Status:** FIXED. Guard: 3 behavioural + 5 source cases, 9 mutations (two
+over-tightening), all killed. **Ratchet: 89 → 83 across 49 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34861,8 +34913,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,298 passing / 17,301 across 1,356
-files.** (Re-run after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,306 passing / 17,309 across 1,357
+files.** (Re-run after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed
