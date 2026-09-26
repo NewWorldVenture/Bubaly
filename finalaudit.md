@@ -36183,6 +36183,15 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Twenty-second run, on `d8305eeb` (run 36262274028): 1,293 passed, 3 failed, 0 flaky
+in 10.6m**, covering:
+- `C1-S9-81`: eight modules, and the subscriptions render mocks;
+- `C1-S9-82`: the photo row-before-file order, the routine template chain
+  and the `photos-localization` mock.
+
+Only the known `phone-auth-http` cases fail. `C1-S9-83` and `-84`
+(committed) were held until it reported.
+
 **Twenty-first run, on `038a3175` (run 36260734830): 1,293 passed, 3 failed, 0 flaky
 in 11.0m**, covering:
 - `C1-S9-78`: the concierge plan acceptance, confirmed on the client and read
