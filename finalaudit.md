@@ -14060,7 +14060,7 @@ PRODUCTION READY: NO
 | MAIN-F-C04 | UPSTREAM | F-C04: /blog shipped its entire search corpus to the browser (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3073). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C05 | UPSTREAM | F-C05: Every unrouted path answered a login form (Medium, fixed — supersedes F13) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3085). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C06 | UPSTREAM | F-C06: A CSS margin lived in the message catalogue (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3109). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | ✅ CLOSED (Pass C1-K) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D02 | UPSTREAM | F-D02: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -24288,7 +24288,7 @@ lengths, hex colours, URLs and CSS keywords. It deliberately does not catch
 `network.bandNone` (`'none'` — a word a reader sees); both are pinned so the
 rule cannot widen onto them.
 
-## F-C07 — Nineteen environment variables are undocumented *(Medium, open)*
+## F-C07 — Nineteen environment variables are undocumented *(Medium, closed in Pass C1-K)*
 
 `.env.example` documents 75; app code reads 89. Nineteen are absent.
 
@@ -24301,6 +24301,27 @@ is configured by two undocumented variables (`APPLE_SYNC_ENABLED`,
 Fix: add the operator-facing variables with a line each saying what breaks when
 unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
 under their own heading.
+
+**Closed (Pass C1-K).** Re-measured first rather than trusted: the code reads 88
+variables, `.env.example` documented 82 of a different set, and the gap was
+exactly nineteen. All nineteen are now in `.env.example`, each saying what
+breaks when it is unset:
+
+- operator-facing, in their own sections — `CONTACT_CENTER_INBOUND_SECRET`
+  (whose entry now says in capitals that it rejects every inbound message when
+  unset, and recommends the header over `?key=`, which lands in access logs),
+  `APPLE_SYNC_ENABLED` / `APPLE_CALDAV_BASE_URL`, `X_CLIENT_ID` /
+  `X_CLIENT_SECRET` (with the third dependency, `SYNC_TOKEN_KEY`), the four
+  `GITHUB_*` feedback variables with their precedence, and the two build-identity
+  variables `/api/build-info` and the display error screen report;
+- `AI_PROVIDER_STUB_DIR` under the existing test-only heading;
+- `NODE_ENV`, `NEXT_RUNTIME`, `TZ`, `VERCEL_ENV`, `VERCEL_REGION` and the two
+  commit-SHA variables under a new *Set by the platform — do not set by hand*
+  block, so their existence is recorded without inviting anyone to set them.
+
+`tests/every-env-var-the-code-reads-is-documented.test.ts` keeps it closed: a
+new `process.env.X` in `app/`, `lib/` or `components/` fails until
+`.env.example` names X. Calibrated by deleting one entry; the guard names it.
 
 ## F-C08 — The forward-release mechanism is pinned 38 migrations in the past *(High, open)*
 
