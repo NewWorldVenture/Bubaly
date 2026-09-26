@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:20:00Z
+- Last Updated: 2026-09-26T18:25:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -26979,6 +26979,28 @@ own report. Marketplace and report suites pass (312/312).
 Checked and left: `family_onboarding` (the questionnaire, used only for
 marketing segments) and `onboarding_imports` (the time-to-first-value metric)
 are low impact.
+
+## C1-K-34 · MEDIUM · Fake marketplace ratings: reviews without an exchange, and orders a member could file
+
+Seller ratings on the marketplace (the creator pages show them) come from
+`marketplace_reviews`, which `leaveReviewAction` writes only for a completed
+order the caller was party to, about the other party. The INSERT policy
+checked only `reviewer_member = self`. Any member could rate any member, on an
+order they were not part of or one not yet completed, and any family member
+could edit or delete anyone's review. Separately, every order is created by a
+SECURITY DEFINER function (`marketplace_buy_now`, `_accept_offer`,
+`_close_auction`, `_negotiation_respond`), but member INSERT and DELETE policies
+were still present: a member could file a "completed" order between any two
+members, which is also a way to unlock reviews, or delete a real order.
+Measured: 5 breaches.
+
+`0333_a_marketplace_review_needs_a_completed_exchange.sql` drops the unused
+order INSERT and DELETE (the party-scoped lifecycle UPDATE stays). Review
+INSERT now requires a completed order in the family with the reviewer and
+reviewee on the matching sides, and the unused review UPDATE and DELETE are
+dropped. `docs/audit/marketplace-review-check.sql` fails 5 ways before and
+passes after (57/57), with a control that the buyer still reviews their own
+completed exchange. Marketplace suites pass (580/580).
 
 ## Swept clean · the API routes this file never named
 
