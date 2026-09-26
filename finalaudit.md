@@ -14061,7 +14061,7 @@ PRODUCTION READY: NO
 | MAIN-F-C05 | UPSTREAM | F-C05: Every unrouted path answered a login form (Medium, fixed — supersedes F13) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3085). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C06 | UPSTREAM | F-C06: A CSS margin lived in the message catalogue (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3109). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | ✅ CLOSED (Pass C1-K) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | ✅ MITIGATED (boot guard 1fa0ac5b; see finding) | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D02 | UPSTREAM | F-D02: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D03 | UPSTREAM | F-D03: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -24398,7 +24398,7 @@ block "must not be bypassed or treated as a missing-credentials failure".
 So F-C08's code half is closed and F-C08's release half, like F5, is the
 operator's.
 
-## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
+## F-C09 — Supabase credentials fail at first use, not at boot *(Low, mitigated — see status)*
 
 `NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
 read with a non-null assertion, and there is no central env validation module.
@@ -24407,6 +24407,30 @@ Reproduced: starting the built app with those unset made `/pricing` answer 500
 with `Error: supabaseUrl is required` while `/terms` and `/cookies` rendered
 fine. A misconfigured deploy degrades into scattered 500s on whichever pages
 happen to read the database, instead of refusing to start.
+
+**Status (Pass C1-K): mitigated by code that predates this finding — no change
+made.** Checked rather than assumed, and the finding's premise was partly wrong:
+
+- *"There is no central env validation module"* — there is.
+  `checkRequiredEnv()` in `lib/health/status.ts` checks `REQUIRED_ENV`
+  (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`), treating blank as missing.
+- *Nothing says why* — `instrumentation.ts` `register()` runs it at server
+  start in the Node runtime and logs **one** line naming every missing
+  variable, pointing at `GET /api/health`, which reports the same. Both landed
+  in `1fa0ac5b` on 2026-09-05, before this finding was written.
+- Both are covered: `tests/instrumentation-boot-guard.test.ts` and
+  `tests/health-endpoint.test.ts`, 22 cases, green.
+
+What is still literally true is that the app does not **refuse** to start —
+and that is a stated, tested decision, not an oversight. The guard's contract
+reads *"never throw (a boot hook that throws would take down the deploy)"*,
+and this finding's own reproduction shows why: `/terms` and `/cookies` render
+without Supabase. A hard fail would take the legal pages down with the rest.
+
+So the diagnosis gap this finding describes is closed; whether a misconfigured
+deploy should instead refuse to serve anything is a product decision, and it
+has already been made the other way on purpose.
 
 ## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
 
