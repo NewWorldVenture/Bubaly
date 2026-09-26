@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:35:00Z
+- Last Updated: 2026-09-26T18:40:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -27028,6 +27028,19 @@ list; nothing consumes an install), `family_connections` (connection labels;
 the module lets any member disconnect), `smart_devices` (a manual inventory, no
 device control), `calendar_feeds` (the feeds page lets any member subscribe
 the family to an ICS URL; the fetcher's SSRF guard is C1-K's NAT64 fix).
+
+## C1-K-36 · LOW · Ballot stuffing in family polls, meal votes and the watchlist
+
+`family_poll_votes`, `meal_vote_ballots` and `watchlist_votes` let any member
+write any member's vote. Measured: a teen cast a poll vote as a sibling,
+flipped the sibling's watchlist vote, and deleted the sibling's poll vote.
+Every writer (the voting, meals and watchlist modules and the recipe-vote
+action) writes the caller's own member row.
+`0335_a_vote_is_cast_by_its_voter.sql` requires `is_self_member(member_id)` for
+writes, and also lets a manager remove a vote. `docs/audit/vote-owner-check.sql`
+fails 3 ways before and passes after (59/59), with controls that a member
+votes as themselves and a parent can remove a vote. Vote, meal and watchlist
+suites pass (261/261).
 
 ## Swept clean · the API routes this file never named
 
