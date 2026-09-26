@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T19:03:00Z
+- Last Updated: 2026-09-26T19:04:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -25799,6 +25799,7 @@ Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-ty
 Status: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
+*C1-K update (2026-09-26):* local full unit run on 5ac14917+: 16,952 pass. Three fail, all known container-only Node-22 cases (the node pin and two stream-runtime tests), which pass in hosted CI on the pinned Node. Hosted Web job green on fc36052c. Hosted E2E on 7b8f2d67: 1,293 pass, and the only failures are the three phone-auth-http cases that are red on `main` as well.
 Status: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
 ## Authentication
@@ -25806,6 +25807,7 @@ Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressio
 
 ## Authorization
 Status: 🔄 IN PROGRESS — callback routing preserves provider-backed admin authority and guest/plan selection in local checks. Complete deployed role/RLS workflow verification remains open.
+*C1-K update (2026-09-26):* a sweep of member-writable tables and the server actions that write them (C1-K-17 … C1-K-55) closed about forty authorization gaps in the repository. These include the sync engine acting on a parent's Google account, the social permission matrix, points and redemptions, chat impersonation, emergency pickup contacts, public-bucket listing and private journals. The owner decisions it surfaced are listed in the status header.
 
 ## Core User Journeys
 Status: 🔄 IN PROGRESS — full feature and deployed persistence verification pending.
@@ -25815,6 +25817,7 @@ Status: 🔄 IN PROGRESS — local callback/action transport and neutrality gate
 
 ## Database
 Status: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
+*C1-K update (2026-09-26, branch `claude/youthful-turing-ppwrkl`):* hosted Database job green on fc36052c (migrations through 0346, 70 probes). Locally, migrations through 0351 replay and 75/75 boundary probes pass. Each C1-K migration (0318–0351) ships with a probe that fails before and passes after. None of them is applied in production until the F-001 ledger repair.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — real provider delivery and production configuration remain unverified.
