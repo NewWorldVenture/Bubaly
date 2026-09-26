@@ -14,6 +14,8 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -103,6 +105,10 @@ export function PhotosModule() {
       return q.order('created_at', { ascending: false });
     },
   });
+
+  // SEC-001: every photo, video, cover and download below is read through a URL
+  // signed with this viewer's session. `url` stays the stored reference.
+  const media = useFamilyMediaUrls(allPhotos.map((p) => p.url));
 
   const photos = allPhotos.filter((p) =>
     !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
@@ -293,8 +299,7 @@ export function PhotosModule() {
                     className="group text-left">
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <FamilyMediaImg src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
                       ) : (
                         <div className="flex h-full items-center justify-center text-5xl opacity-30">
                           <kind.icon className="h-12 w-12" style={{ color: kind.color }} />
@@ -364,10 +369,10 @@ export function PhotosModule() {
                       <Play className="h-10 w-10 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
+                    <FamilyMediaImg src={photo.url} alt={photo.caption ?? tr('photosModule.photo')}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
-                      loading="lazy" decoding="async" />
+                      loading="lazy" decoding="async"
+                      fallback={<div className="aspect-square w-full bg-surface/40" />} />
                   )}
                   {/* Video badge */}
                   {isVideo && (
@@ -414,8 +419,7 @@ export function PhotosModule() {
                       <Play className="h-5 w-5 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
+                    <FamilyMediaImg src={photo.url} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
@@ -483,24 +487,25 @@ export function PhotosModule() {
           <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
             {photos[lightboxIdx].media_type === 'video' ? (
               <video
-                src={photos[lightboxIdx].url ?? ''}
+                src={media(photos[lightboxIdx].url) ?? undefined}
                 controls
                 autoPlay
                 playsInline
                 className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
               />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
-                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+              <FamilyMediaImg src={photos[lightboxIdx].url} alt={photos[lightboxIdx].caption ?? ''}
+                className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl"
+                fallback={<div className="h-[50vh] w-[60vw] max-w-full rounded-2xl bg-white/10" />} />
             )}
             {/* Controls */}
             <div className="mt-4 flex items-center gap-3 text-white">
               <span id={lightboxLabelId} className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
               {photos[lightboxIdx].caption && <p id={lightboxCaptionId} className="text-sm">{photos[lightboxIdx].caption}</p>}
               <div className="ml-auto flex gap-2">
-                <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
-                  onClick={(e) => e.stopPropagation()}
+                <a href={media(photos[lightboxIdx].url) ?? undefined} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                  aria-disabled={media(photos[lightboxIdx].url) ? undefined : true}
+                  onClick={(e) => { e.stopPropagation(); if (!media(photos[lightboxIdx].url)) e.preventDefault(); }}
                   className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                   <Download className="h-4 w-4" />
                 </a>
@@ -702,8 +707,8 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
   return (
     <Modal open onClose={onClose} title={tr('photos.editPhoto')}>
       <div className="space-y-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
+        <FamilyMediaImg src={photo.url} alt="" className="max-h-48 w-full rounded-xl object-cover"
+          fallback={<div className="h-48 w-full rounded-xl bg-surface/40" />} />
         <Field label={tr('photos.caption')}>
           {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={tr('photos.addACaption')} autoFocus />}
         </Field>

@@ -28,6 +28,8 @@ import {
 import type { Tables, MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -534,6 +536,10 @@ export function MessagesModule() {
     () => messages.filter((m) => m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
     [messages],
   );
+  // SEC-001: attachments are private conversations. Every image, file and voice
+  // note below is read through a URL signed with this viewer's session; a Giphy
+  // link in the same field is external and passes through unchanged.
+  const media = useFamilyMediaUrls(messages.map((m) => m.attachment_url));
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
     const label = timeGroup(msg.created_at);
@@ -793,15 +799,16 @@ export function MessagesModule() {
                               )}>
                                 {/* Image */}
                                 {msg.kind === 'image' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={msg.attachment_url} alt={msg.attachment_name ?? 'Photo'}
-                                      className="mb-2 max-h-56 rounded-xl object-cover" />
+                                  <a href={media(msg.attachment_url) ?? undefined} target="_blank" rel="noreferrer">
+                                    <FamilyMediaImg src={msg.attachment_url} alt={msg.attachment_name ?? 'Photo'}
+                                      className="mb-2 max-h-56 rounded-xl object-cover"
+                                      fallback={<span className="mb-2 block h-40 w-56 max-w-full rounded-xl bg-surface/40" />} />
                                   </a>
                                 )}
                                 {/* File — download card */}
                                 {msg.kind === 'file' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer" download
+                                  <a href={media(msg.attachment_url) ?? undefined} target="_blank" rel="noreferrer" download
+                                    aria-disabled={media(msg.attachment_url) ? undefined : true}
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
                                       isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
@@ -821,7 +828,7 @@ export function MessagesModule() {
                                 {/* Voice message — inline audio player ('voice' is the
                                     legacy/seed kind; 'audio' is what the recorder sends). */}
                                 {(msg.kind === 'audio' || msg.kind === 'voice') && msg.attachment_url && (
-                                  <audio controls preload="none" src={msg.attachment_url}
+                                  <audio controls preload="none" src={media(msg.attachment_url) ?? undefined}
                                     className="mb-1 h-10 w-56 max-w-full" aria-label={tr('messages.voiceMessage')} />
                                 )}
                                 {/* Text */}
@@ -1089,10 +1096,9 @@ export function MessagesModule() {
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {sharedPhotos.map((p) => (
-                  <a key={p.id} href={p.attachment_url ?? '#'} target="_blank" rel="noreferrer"
+                  <a key={p.id} href={media(p.attachment_url) ?? undefined} target="_blank" rel="noreferrer"
                     className="aspect-square overflow-hidden rounded-lg bg-elevated">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.attachment_url ?? ''} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
+                    <FamilyMediaImg src={p.attachment_url} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
                   </a>
                 ))}
               </div>

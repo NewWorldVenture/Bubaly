@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import Link from 'next/link';
 import {
   Plus, Calendar as CalendarIcon, CheckSquare, UtensilsCrossed, MoreHorizontal,
@@ -755,9 +755,11 @@ export default async function HomePage() {
                 const when = new Date(p.taken_at || p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
-                    {src
-                      ? <Image src={src} alt={p.caption ?? 'Family memory'} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover transition group-hover:scale-105" />
-                      : <span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-6 w-6" /></span>}
+                    {/* Signed per viewer, not the stored public URL, and not through the
+                        optimizer, whose output is marked public (SEC-001). */}
+                    <FamilyMediaImg src={src} alt={p.caption ?? 'Family memory'} loading="lazy" decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105"
+                      fallback={<span className="grid h-full w-full place-items-center text-muted"><ImageIcon className="h-6 w-6" /></span>} />
                     <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white">{when}</span>
                   </Link>
                 );

@@ -32,6 +32,8 @@ import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { visibleReminderTags, withReminderProvenance } from '@/lib/reminders/provenance';
 import { familyMediaPath } from '@/lib/storage/family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Reminder = Tables<'family_reminders'>;
 
@@ -508,7 +510,7 @@ export function RemindersModule() {
                       </button>
                     ) : null; })()}
                     {reminder.url && (
-                      <a href={reminder.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand-text hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <a href={safeWebLink(reminder.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand-text hover:underline" onClick={(e) => e.stopPropagation()}>
                         <Link2 className="h-3.5 w-3.5" />{tr('reminders.link')}
                       </a>
                     )}
@@ -540,8 +542,7 @@ export function RemindersModule() {
                   )}
 
                   {reminder.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={reminder.image_url} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
+                    <FamilyMediaImg src={reminder.image_url} alt="" className="mt-2 h-20 w-20 rounded-lg object-cover" />
                   )}
                 </div>
 
@@ -881,8 +882,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
             <div className="flex items-center gap-3">
               {imageUrl
                 ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <div className="relative"><img src={imageUrl} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
+                  <div className="relative"><FamilyMediaImg src={imageUrl} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
                     <button type="button" onClick={() => setImageUrl('')} aria-label={tr('reminders.removeImage')} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
                   </div>
                 )

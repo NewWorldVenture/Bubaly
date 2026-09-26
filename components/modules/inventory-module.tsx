@@ -23,6 +23,7 @@ import {
 } from '@/lib/inventory/finder';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
@@ -32,10 +33,6 @@ const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { max
 const todayIso = () => new Date().toISOString().slice(0, 10);
 function fmtDate(d: string): string {
   return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
 }
 
 export function InventoryModule() {
@@ -255,14 +252,11 @@ export function InventoryModule() {
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
-                const url = photoUrl(item.photo_path);
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
-                    {url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-                      <img src={url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
-                    ) : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>}
+                    <FamilyMediaImg src={item.photo_path} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover"
+                      fallback={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{item.name}{item.quantity > 1 ? <span className="text-muted"> ×{item.quantity}</span> : null}</p>
                       <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
@@ -392,7 +386,6 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -419,10 +412,8 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
           <Field label={tr('inventory.tags')} hint="Comma-separated">{(id) => <Input id={id} name="tags" defaultValue={item?.tags.join(', ') ?? ''} placeholder={tr('inventory.travelInsured')} />}</Field>
         </div>
         <div className="flex items-center gap-3">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-            <img src={url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-          ) : <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>}
+          <FamilyMediaImg src={photoPath} alt="" className="h-12 w-12 rounded-xl object-cover"
+            fallback={<span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>} />
           <label className="cursor-pointer text-sm text-brand-text">
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />

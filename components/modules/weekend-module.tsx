@@ -14,6 +14,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -191,7 +192,7 @@ export function WeekendModule() {
                     <span className="font-medium">{f.label}</span>
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
-                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
+                    <a href={safeWebLink(f.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
                     <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
@@ -272,7 +273,7 @@ export function WeekendModule() {
                           ) : (
                             <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'interested')}><Star className="h-3.5 w-3.5" /> {t('weekend.save')}</Button>
                           )}
-                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">{t('weekend.tickets')} <ExternalLink className="h-3 w-3" /></a>}
+                          {e.url && <a href={safeWebLink(e.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">{t('weekend.tickets')} <ExternalLink className="h-3 w-3" /></a>}
                         </div>
                       </div>
                     </div>

@@ -26,6 +26,7 @@ import {
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Renewal = Tables<'renewals'>;
 
@@ -209,7 +210,7 @@ export function RenewalsModule() {
                               <span className={cn('inline-flex items-center gap-1', expired && 'text-rose-400')}><Clock className="h-3.5 w-3.5" />{t('renewals.expires')} {fmtDate(r.expires_at)} · {countdown(r)}</span>
                               {r.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(r.member_id) ?? '?'} size={14} />{memberName(r.member_id)}</span>}
                               {r.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{r.cost}</span>}
-                              {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('renewals.renew')}</a>}
+                              {r.url && <a href={safeWebLink(r.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('renewals.renew')}</a>}
                             </div>
                             {r.notes && <p className="mt-1.5 text-sm text-fg/80">{r.notes}</p>}
                           </div>

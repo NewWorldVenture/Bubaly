@@ -25,6 +25,7 @@ import { dayKeyIn } from '@/lib/time/zoned';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -486,7 +487,7 @@ export function RelationshipModule() {
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                   {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
-                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
+                  {g.url && <a href={safeWebLink(g.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'

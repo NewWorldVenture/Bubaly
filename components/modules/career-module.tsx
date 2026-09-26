@@ -19,6 +19,7 @@ import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
 } from '@/lib/career/hub';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
@@ -149,7 +150,7 @@ export function CareerModule() {
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
-            {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+            {a.url && <a href={safeWebLink(a.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
             <button onClick={() => setAppForm({ open: true, application: a })} aria-label={`Edit ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
             <button onClick={() => deleteApplication(a)} aria-label={`Delete ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>

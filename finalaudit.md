@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T13:36:25Z
-- Total Audit Items: 14143
-- Not Started: 13906
-- In Progress: 235
+- Last Updated: 2026-09-26T16:55:00Z
+- Total Audit Items: 14171
+- Not Started: 13898
+- In Progress: 271
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
 
-Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Now: 14,143 = 13,906 + 235 + 1 + 1. See Q56–Q58.
+Ledger reconciliation 2026-09-26 (Claude session, branch claude/bubaly-repo-connect-etzqg7): the counts above are recomputed from the table by DISTINCT ID rather than carried forward. The previous header said 14,038 items and 192 in progress; the table at that commit held 14,015 distinct IDs with a status (13,842 not started / 169 in progress / 1 fixed + pass / 3 fail), and 15 in-progress IDs are listed twice (a summary row plus a second table), which is where a row count overstates them. Sixty-one IDs moved ⬜ → 🔄 for defects fixed and guard-verified in Q48–Q55, each row recording its test, fix and retest. None is marked PASS: the brief requires the full user workflow, and none of them has been exercised in a browser. Eighty-one source files that had no row at all were added (Q56), then 46 migrations (0285–0333) that had none (Q57), and three rows that had drifted outside the summary table were folded back in. AUTHZ-005 and AUTHZ-003 moved ❌ → 🔄 (Q57, Q58). Recount 2026-09-26 (Q59/Q60): counting every distinct ID in the Audit Summary table, each at its most advanced status, the committed table at c8711138 already held 14,166 IDs with 258 in progress — 23 more in-progress IDs than the header said since Q56, all of them rows that were in the table, so the header undercounted rather than the table overstating. Q59/Q60 then added five new IDs (SEC-006 and four new source files) and moved eight more ⬜ → 🔄. Now: 14,171 = 13,898 + 271 + 1 + 1. See Q56–Q60.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -85,7 +85,7 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
+- SEC-001: Family media bucket explicitly public. Every consumer now reads through a URL signed with the viewer's session and renders nothing on failure (Q59), so the bucket can be made private without breaking an image — but until an operator flips it after this release is live (docs/runbooks/LB-009-family-media-signed-urls.md), a stored URL still reads without a session, and authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
 - PUSH-003: Overlapping dispatch runs no longer deliver the same batch twice (the cursor write is a compare-and-set); a partial retry inside one run can still repeat a delivery, which needs a claim column beside pushed_at.
@@ -3147,7 +3147,7 @@ PRODUCTION READY: NO
 | CONTROL-AAF6682B1F8A | CONTROL | Textarea at line 277 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-14680E4D1959 | CONTROL | Button at line 280 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C2AE1D14A015 | CONTROL | Button at line 281 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — reminder card and editor image; the reminder link now goes through safeWebLink (SEC-006) | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-FDD2504884EB | CONTROL | ErrorState at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5EACC750938F | CONTROL | Button at line 265 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0521203B2D3C | CONTROL | Button at line 268 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3416,7 +3416,7 @@ PRODUCTION READY: NO
 | CONTROL-4B5D1B113D5A | CONTROL | button at line 127 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6B618FEA71D1 | CONTROL | button at line 134 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7409702763E4 | CONTROL | a at line 141 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-F978F5B7A4B6 | COMPONENT | components/modules/photos-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-F978F5B7A4B6 | COMPONENT | components/modules/photos-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — grid, list, lightbox image/video/download, album covers, edit preview | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-07EBA84DA361 | CONTROL | ErrorState at line 210 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B82FB0148768 | CONTROL | input at line 223 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C031415A4CD0 | CONTROL | Button at line 227 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3728,7 +3728,7 @@ PRODUCTION READY: NO
 | CONTROL-88A828476560 | CONTROL | button at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CDF47709DF1A | CONTROL | button at line 168 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F32FCE4B99ED | CONTROL | button at line 221 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E8159AD22642 | COMPONENT | components/modules/messages-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E8159AD22642 | COMPONENT | components/modules/messages-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — image, file, voice note and shared-photo rail | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-B298286441E4 | CONTROL | Button at line 554 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B7060B750386 | CONTROL | input at line 557 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FE21B9123D32 | CONTROL | button at line 578 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4177,7 +4177,7 @@ PRODUCTION READY: NO
 | CONTROL-483327DBD9DB | CONTROL | Textarea at line 238 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A06E8A8E18F2 | CONTROL | Button at line 245 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4D1762E4B356 | CONTROL | Button at line 246 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) | English suffix plurals replaced with CLDR plural keys (inventory); declutter keeps one composite sentence | Green | Browser workflow not yet exercised. See finalaudit.md Q50. |
+| COMPONENT-C72AAD46CF55 | COMPONENT | components/modules/inventory-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-plural-is-not-a-suffix.test.ts (ratchet 227, calibrated both ways) · tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | English suffix plurals replaced with CLDR plural keys (inventory); declutter keeps one composite sentence · 2026-09-26 (Q59): family-media reads signed per viewer — list and editor; the render-time getPublicUrl helper is gone | Green · 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Browser workflow not yet exercised. See finalaudit.md Q50. · Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-0A12BE13FB72 | CONTROL | ErrorState at line 128 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-E81704CB4087 | CONTROL | Button at line 138 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A98C9EB844BF | CONTROL | Button at line 139 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5265,7 +5265,7 @@ PRODUCTION READY: NO
 | CONTROL-E02A87E4EFDF | CONTROL | input at line 334 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-20AFA9430859 | CONTROL | Button at line 337 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C05138354C9F | CONTROL | Button at line 338 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-86EC8609CEF4 | COMPONENT | components/modules/closet-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-86EC8609CEF4 | COMPONENT | components/modules/closet-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — list, recommendations and editor; the render-time getPublicUrl helper is gone | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
 | CONTROL-AA276B618426 | CONTROL | ErrorState at line 172 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-25F249C66E17 | CONTROL | Button at line 182 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BB8B6255C834 | CONTROL | Button at line 183 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -10252,7 +10252,7 @@ PRODUCTION READY: NO
 | LIBRARY-D7D7A618B96F | LIBRARY | lib/social/unfurl.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-EC1C2786E6B8 | LIBRARY | lib/storage/avatars.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AADB2DB77F07 | LIBRARY | lib/storage/documents.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-02F9B7049DA7 | LIBRARY | lib/storage/family-media.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-02F9B7049DA7 | LIBRARY | lib/storage/family-media.ts | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): the reference writer is joined by lib/storage/family-media-ref.ts, which signs every stored reference with the viewer's session; the unguessable-name note stays accurate until the bucket is private | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Consumer half of SEC-001. See Q59. |
 | LIBRARY-EDC7DFDC114E | LIBRARY | lib/storage/feedback-attachments.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-3ABB99740F1B | LIBRARY | lib/storage/marketplace-photos.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-6E08A0BB8033 | LIBRARY | lib/stripe/capabilities.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11374,7 +11374,7 @@ PRODUCTION READY: NO
 | CALLBACK-FEFF9E8A5B7D | CALLBACK | /api/webhooks/stripe | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-18839EEC356A | STORAGE | avatars | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-9B16B44D0E0A | STORAGE | documents | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| STORAGE-EA481A772907 | STORAGE | family-media | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| STORAGE-EA481A772907 | STORAGE | family-media | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): every consumer now reads through createSignedUrls, authorised by 0216's family-folder SELECT policy; the bucket itself is still public=true | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Bucket flip is the operator step in docs/runbooks/LB-009-family-media-signed-urls.md, deliberately NOT a migration (supabase db push on main would land it before the clients). SEC-001 stays ❌. See Q59. |
 | STORAGE-1DDCE18AC48B | STORAGE | feedback-attachments | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-EB36B9D6149D | STORAGE | marketing-assets | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | STORAGE-621E786D7D24 | STORAGE | marketplace-photos | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12057,7 +12057,7 @@ PRODUCTION READY: NO
 | SUPPORT-F7E1F2317110 | SUPPORT | docs/runbooks/LB-005-authenticated-e2e.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-3FD16150512D | SUPPORT | docs/runbooks/LB-006-provider-callback-smoke.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-7E32A3784100 | SUPPORT | docs/runbooks/LB-008-backup-restore-drill.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-1462F49C5A6C | SUPPORT | docs/runbooks/LB-009-family-media-signed-urls.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-1462F49C5A6C | SUPPORT | docs/runbooks/LB-009-family-media-signed-urls.md | 🔄 IN PROGRESS | High | Runbook re-read against the code | 2026-09-26 (Q59): rewritten — Phase 1 done, the storage_path backfill dropped (paths are parsed from the stored URL, no row changes), reminder column corrected to image_url, full consumer list, flip-after-live ordering and verification steps | Runbook matches the shipped code | Operator runbook for the remaining SEC-001 step. See Q59. |
 | SUPPORT-2F25BDB991D8 | SUPPORT | docs/runbooks/LB-016-wallet-permissive-policy-finding.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-39A19900E08A | SUPPORT | docs/runbooks/README.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-A9E03426134E | SUPPORT | docs/runbooks/family-pricing.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13380,7 +13380,7 @@ PRODUCTION READY: NO
 | PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
-| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending | 2026-09-26 (Q58): the service-worker cache half — private rendered images outliving logout — is fixed and tested (see SUPPORT-98FD1D4C44AD). The bucket itself is still public; its rollout order (every consumer before the access change) is unchanged, so SEC-001 stays ❌ FAIL. |
+| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. · 2026-09-26 (Q59): tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): consumer half — every family-media read is signed with the viewer's session and renders nothing on failure; no data migration needed | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | 2026-09-26 (Q58): the service-worker cache half — private rendered images outliving logout — is fixed and tested (see SUPPORT-98FD1D4C44AD). The bucket itself is still public; its rollout order (every consumer before the access change) is unchanged, so SEC-001 stays ❌ FAIL. · Stays ❌ FAIL: the bucket is still public=true and a stored URL still reads without a session until an operator flips it after this release is live (runbook). See Q59. |
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -13614,7 +13614,7 @@ PRODUCTION READY: NO
 | JOB-3A0C45177B5D | JOB | /api/cron/social-publish | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-9BB09AB06EF2 | SERVICE | assertXCredentials | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-8C21B3472285 | SERVICE | loadScheduledXAccessToken | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
-| LIBRARY-9399B73C5399 | LIBRARY | lib/social/links.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
+| LIBRARY-9399B73C5399 | LIBRARY | lib/social/links.ts | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts asserts safeSocialLink and safeWebLink agree | 2026-09-26 (Q60): delegates to lib/utils/safe-link.ts so SEC-004's rule has one definition | Guard passes | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. · See Q60. |
 | SERVICE-ECB438856465 | SERVICE | safeSocialLink | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | LIBRARY-64AAEA1B313B | LIBRARY | lib/social/schedule-time.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-89713EC4F6A6 | SERVICE | scheduleTimezone | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
@@ -14295,6 +14295,11 @@ PRODUCTION READY: NO
 | MIGRATION-61E07EEE563E | MIGRATION | supabase/migrations/0332_a_diagnosis_is_not_the_familys_to_browse.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: no ledger row existed (Q56). Replays cleanly in a fresh 346-migration bootstrap; production application and deployed behaviour unverified. |
 | MIGRATION-0A4628571BE1 | MIGRATION | supabase/migrations/0333_guardian_screening_is_a_parents_to_configure.sql | 🔄 IN PROGRESS | High | docs/audit/guardian-screening-write-boundary-check.sql fails before and passes after; fresh replay 346/346; probes 55/55 twice; re-apply rehearsal clean | Written 2026-09-26 for AUTHZ-005 | Local replay only | Discovered 2026-09-26 (Q56/Q57). Not applied to production — agents must not; an operator applies it with the other pending migrations. |
 | MIGRATION-1D84DA6B461C | MIGRATION | supabase/migrations/0334_a_social_restriction_is_not_its_holders_to_lift.sql | 🔄 IN PROGRESS | Critical | docs/audit/social-access-delete-boundary-check.sql fails before and passes after; fresh replay 347/347; probes 56/56 twice | Written 2026-09-26 for AUTHZ-003 | Local replay only | Not applied to production — agents must not; an operator applies it with the other pending migrations. See Q58. |
+| LIBRARY-99CA5C569F65 | LIBRARY | lib/storage/family-media-ref.ts | 🔄 IN PROGRESS | Critical | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | New 2026-09-26 (Q59): strict reference parser (public/sign/authenticated/render URLs and bare paths; traversal, non-uuid family and non-http schemes refused; lookalike hosts treated as this bucket) and one-call signer with no fallback | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| LIBRARY-8223CBE7FA46 | LIBRARY | lib/storage/use-family-media.ts | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | New 2026-09-26 (Q59): memory-only signed-URL cache keyed to the offline-cache purge generation; refresh ahead of expiry; a denied reference held as null, not retried in a loop | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| COMPONENT-14BBCA62DA12 | COMPONENT | components/media/family-media-img.tsx | 🔄 IN PROGRESS | High | tests/a-family-media-reference-is-never-rendered-raw.test.ts pins that src comes only from the signed lookup | New 2026-09-26 (Q59): the one <img> for a stored family-media reference; placeholder of the same box while signing or when denied | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Discovered 2026-09-26 as new source. See Q59. |
+| LIBRARY-8869B0D28BB8 | LIBRARY | lib/utils/safe-link.ts | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts | New 2026-09-26 (Q60): http(s)-only, no credentials, no whitespace, ≤4096 — SEC-004's rule, generalised | Guard passes; calibrated | Discovered 2026-09-26 as new source. See Q60. |
+| SEC-006 | SEC | Stored typed links must not become active-content links outside social | 🔄 IN PROGRESS | High | tests/a-stored-link-is-a-web-link.test.ts: 17 refused spellings (javascript/JavaScript/leading-space/data/vbscript/file/credentials/whitespace/bare host/overlength), and a source guard over every href on a stored link field; calibrated by reverting the wishlist site, which the guard names | 12 sites now render href={safeWebLink(x) ?? undefined}: reminders, wishlists, renewals, signups, projects, career, recipes (source), relationship gifts, weekend (feed and event), pros website, public review links. A refused link renders as text with no anchor | tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | New 2026-09-26: React 18.3 renders javascript: hrefs with only a warning and type="url" accepts them, so a member-saved link ran script in whoever clicked it. Admin notification urls are server-written constants and named as such. No browser execution attempted or claimed. See Q60. |
 
 ## Inventory and evidence rules
 
@@ -29797,6 +29802,120 @@ regression is the authoritative browser proof, which this session has not re-run
 **Verified:** full suite 17,128 of 17,131 (the 3 are this container's Node 22),
 lint exit 0, typecheck exit 0.
 
+## Q59 — SEC-001: every family-media read is signed, so the bucket can be made private
+
+Taken next because SEC-001 is the one remaining ❌ FAIL, and Critical. Q58 fixed its
+service-worker half; this is the consumer half, which is the step the rollout order
+says must come first: *deploy every legacy/new-reference consumer before changing
+bucket access.*
+
+### Reproduced
+
+`family-media` is `public = true` (0216). Thirteen consumers put the stored value
+straight into `src`/`href`: Photos (grid, list, lightbox image, video and download,
+album covers, edit preview), Messages (image, file, voice note, shared-photo rail),
+Reminders (card, editor), Closet and Inventory (a render-time `getPublicUrl` helper in
+each), On This Day, Family (cover, album highlights), and the server pages Home,
+Planning, Memories, Grandparent portal and Display. Home and Planning also routed the
+image through `next/image`, whose optimiser output is marked `public`. Flipping the
+bucket in that state breaks every image in the product at once — which is why it had
+not been flipped.
+
+### Fixed
+
+- `lib/storage/family-media-ref.ts` classifies a stored value — the public URL
+  `getPublicUrl` built, a signed/authenticated/render URL, or a bare
+  `{family_id}/…` path — and signs the lot in ONE `createSignedUrls` call with the
+  **viewer's** session. Storage authorises the signing against 0216's
+  `is_family_member((storage.foldername(name))[1])`, so a grandparent in two
+  households signs both and nobody signs a family they are not in.
+- **No data migration.** The object path is read out of the URL that is already
+  stored, so the old plan's `storage_path` backfill for messages and reminders is
+  unnecessary, and writers keep storing exactly what they stored before.
+- **No fallback.** A reference that cannot be signed renders nothing. Falling back to
+  the stored URL is the public read being removed, and it would have kept "working"
+  right up to the flip, hiding the failure.
+- **A lookalike is this bucket.** A URL on any host with this bucket's storage path is
+  signed rather than rendered — rendering it would be a public read by another route,
+  and signing a path the viewer cannot read just fails. Traversal segments, encoded
+  slashes, a non-uuid family segment and non-http(s) schemes are refused.
+- `lib/storage/use-family-media.ts` keeps signed URLs **in memory only**, for one
+  session: cleared by the same purge that clears the offline cache on sign-out or an
+  identity change, and a signing call that finishes after a sign-out is discarded, so
+  a URL minted for the previous user cannot be handed to the next. URLs are reused for
+  most of their hour, re-signed ahead of expiry, which keeps the browser cache useful
+  and stops the kiosk re-downloading (and remounting) its slideshow every 120 seconds.
+- `components/media/family-media-img.tsx` is the one `<img>` for a stored reference,
+  with a same-size placeholder while signing and when denied. Video, audio and
+  download links use the `media(...)` lookup.
+- The Display resolves its photos on the client with that cache; while the first
+  signing is in flight the frame shows its gradient rather than the stock set.
+
+### Why the bucket flip is NOT in this commit
+
+`.github/workflows/supabase-production-migrations.yml` runs `supabase db push` when
+migrations land on `main`. A flip committed alongside the consumers would reach the
+database before the new clients deployed, and every open tab and installed PWA still
+on the old build would lose every image. The flip is therefore an operator step, after
+this release is live, written out with its verification and rollback in
+`docs/runbooks/LB-009-family-media-signed-urls.md` (rewritten: it had the reminder
+column as `photo_url` — it is `image_url` — and planned a backfill that is no longer
+needed).
+
+### Retest
+
+| Check | Result |
+|---|---|
+| `tests/a-family-photo-is-signed-not-public.test.ts` — 12 cases | ✅ |
+| same file against a mutant that falls back to the stored URL | ❌ 3 cases, as intended |
+| `tests/a-family-media-reference-is-never-rendered-raw.test.ts` — 4 cases | ✅ |
+| same, with one raw `<img src={photo.url}>` put back in photos-module | ❌ names the file |
+| same, with the closet `photoUrl` helper put back | ❌ names the file |
+| `tsc --noEmit` | ✅ |
+| `npm run lint` | ✅ exit 0, 10 warnings (budget 12), none new |
+| full vitest | 17,150 / 17,153 — the 3 are the container's Node 22 |
+
+### Status
+
+**SEC-001 stays ❌ FAIL.** Until the bucket is private, a stored URL still reads without
+a session. Nothing here has run against a private bucket or in a browser: the signing
+path is exercised with a stubbed Storage client, not the real Storage API. Eight ledger
+IDs move ⬜ → 🔄 across Q59 and Q60, and four new source files get rows.
+
+A signed URL is a bearer credential until it expires (one hour): minted only for a
+member, but not re-checked per request, so leaving a family or signing out does not
+revoke one already held. That is the documented contract, not a gap this closes.
+
+## Q60 — SEC-006: a link one member saves must not run script in another's session
+
+Found while calibrating Q59's guard, which flagged `href={reminder.url}`. That is not
+a media reference, but it is worse: React 18.3 renders a `javascript:` href with only a
+console warning, and `<input type="url">` accepts one — `javascript:alert(1)` is a
+valid absolute URL. So a child could save `javascript:…` as the link on a reminder
+assigned to a parent, and it would run as the parent on click. A row written through
+the API skips the form entirely.
+
+SEC-004 fixed exactly this for social posts. The same shape was live in **twelve**
+other places: reminders, wishlists, renewals, sign-ups, projects, career, a recipe's
+source, relationship gift ideas, two weekend links, a pro's website, and the public
+review links (written by a super admin, read by the public).
+
+- `lib/utils/safe-link.ts` → `safeWebLink`: http(s) only, no embedded credentials, no
+  whitespace, at most 4096 characters — SEC-004's rule, generalised.
+  `lib/social/links.ts` now delegates to it, so the rule has one definition.
+- All twelve render `href={safeWebLink(x) ?? undefined}`. A refused value keeps its text
+  and loses the anchor; nothing is "repaired" by guesswork.
+- Excluded and named: the four admin-notification hrefs, whose `url` is only ever a
+  constant `/admin/…` path written by the server; and the password vault, which
+  already forces an `https://` prefix onto anything that is not http(s).
+- `tests/a-stored-link-is-a-web-link.test.ts`: 17 refused spellings, parity with
+  `safeSocialLink`, and a source guard over every `href` on a stored link field.
+  Calibrated: reverting the wishlist site fails it and names the file.
+
+Status 🔄, not PASS: no browser execution was attempted, and other free-text URL
+fields rendered through a local variable rather than a member expression are not
+covered by the guard's pattern.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -29817,7 +29936,7 @@ Status: ✅ PASS — `npm run lint` exit 0 with 10 warnings against its `--max-w
 Earlier: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — 17,123 of 17,126 pass locally under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
+Status: 🔄 IN PROGRESS — 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
 
 Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
@@ -29854,7 +29973,7 @@ Status: 🔄 IN PROGRESS — unattached-label ratchet held at 16 (three label-le
 Earlier: 🔄 IN PROGRESS — complete accessibility verification pending.
 
 ## Security
-Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (private rendered images no longer outlive logout), its public-bucket half still open (Q57, Q58). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
+Status: 🔄 IN PROGRESS — two of the three ❌ FAIL items (AUTHZ-005, AUTHZ-003) reproduced and fixed in the repository by 0333/0334; SEC-001's service-worker half fixed (Q58) and every family-media consumer now reads through a URL signed with the viewer's session, with no fallback (Q59) — the bucket flip itself is an operator step after release, so SEC-001 stays ❌. Stored typed links in twelve places could carry `javascript:` into another member's session; all now pass `safeWebLink` (SEC-006, Q60). The filtered-write class (RLS filters rather than refuses, so `error: null` reads as success) closed at every measured site; constant-time comparison guard refined without weakening (Q48). Open permanent security records remain.
 
 Earlier: 🔄 IN PROGRESS — focused auth ownership/admission regressions pass; open permanent security records and distributed ownership boundaries remain unresolved.
 

@@ -26,6 +26,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Recipe = Tables<'family_recipes'>;
 
@@ -489,7 +490,7 @@ export function RecipesModule() {
             {/* Footer */}
             <div className="flex items-center justify-between pt-2">
               {viewing.source_url && (
-                <a href={viewing.source_url} target="_blank" rel="noreferrer"
+                <a href={safeWebLink(viewing.source_url) ?? undefined} target="_blank" rel="noreferrer"
                   className="flex items-center gap-1 text-sm text-brand-text hover:underline">
                   <ExternalLink className="h-3.5 w-3.5" /> {tr('recipes.viewOriginal')}
                 </a>

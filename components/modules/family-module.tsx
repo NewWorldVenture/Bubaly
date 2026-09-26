@@ -24,6 +24,7 @@ import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -259,8 +260,9 @@ export function FamilyModule() {
           {/* Cover */}
           <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-56">
             {family?.cover_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
+              // Free text, so it may be an outside image or one of this family's
+              // own photos; the latter is signed like any other (SEC-001).
+              <FamilyMediaImg src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
             ) : (
               <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/25 via-violet-600/15 to-blue-900/20 text-muted">
                 <Users className="h-10 w-10" />
@@ -361,8 +363,7 @@ export function FamilyModule() {
                   <Link key={a.id} href="/dashboard/memories" className="group overflow-hidden rounded-xl border border-border bg-surface/40">
                     <div className="h-20 w-full">
                       {a.cover_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={a.cover_url} alt={a.name} className="h-full w-full object-cover transition group-hover:scale-[1.03]" />
+                        <FamilyMediaImg src={a.cover_url} alt={a.name} className="h-full w-full object-cover transition group-hover:scale-[1.03]" />
                       ) : <div className="grid h-full w-full place-items-center bg-elevated text-muted"><Sparkles className="h-5 w-5" /></div>}
                     </div>
                     <div className="p-2">

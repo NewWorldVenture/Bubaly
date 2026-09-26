@@ -22,6 +22,7 @@ import {
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
@@ -408,7 +409,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                     <p className={cn('truncate text-sm', m.is_purchased && 'text-muted line-through')}>{m.name} <span className="text-xs text-muted">×{m.quantity}{m.unit ? ` ${m.unit}` : ''}</span></p>
                     <p className="text-[11px] text-muted">{money(materialLineCents(m))}{m.is_purchased && m.actual_cost_cents !== null && m.est_cost_cents !== null && m.actual_cost_cents !== m.est_cost_cents ? ` (est. ${money(Math.round(m.est_cost_cents * m.quantity))})` : ''}{m.store ? ` · ${m.store}` : ''}</p>
                   </div>
-                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" aria-label={tr('projects.openLink')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+                  {m.url && <a href={safeWebLink(m.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('projects.openLink')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
                   <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={`Edit ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => deleteMaterial(m)} aria-label={`Delete ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>
