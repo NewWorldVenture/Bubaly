@@ -1797,7 +1797,7 @@ export interface Database {
         Partial<{ reason: string; campaign_id: string | null }>
       >;
       resend_webhook_events: T<
-        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null },
+        { svix_id: string; event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null; counter_applied_at: string | null },
         { svix_id: string; event_type: string; status?: string; received_at?: string; processed_at?: string | null; error?: string | null },
         Partial<{ event_type: string; status: string; received_at: string; processed_at: string | null; error: string | null }>
       >;
@@ -2803,6 +2803,8 @@ export interface Database {
       marketplace_negotiation_offer: { Args: { p_listing: string; p_buyer_member: string; p_buyer_family: string; p_amount: number; p_message?: string | null }; Returns: Json };
       marketplace_negotiation_respond: { Args: { p_negotiation: string; p_action: string; p_amount?: number | null; p_message?: string | null }; Returns: Json };
       economy_decide_redemption: { Args: { p_redemption_id: string; p_approve: boolean; p_note?: string | null }; Returns: Json };
+      // 0337: mark + increment in one transaction, for the claim holder only.
+      apply_resend_campaign_counter: { Args: { p_svix_id: string; p_received_at: string; p_campaign_id: string; p_field: string }; Returns: string };
       invest_decide_order: { Args: { p_order_id: string; p_approve: boolean }; Returns: Json };
       guardian_review_suggestion: { Args: { p_suggestion_id: string; p_decision: string; p_note?: string | null }; Returns: Json };
       marketplace_complete_handoff: { Args: { p_order_id: string; p_code: string }; Returns: Json };

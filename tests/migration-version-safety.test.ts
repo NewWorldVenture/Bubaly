@@ -59,18 +59,19 @@ describe('Supabase migration filename safety', () => {
     // wallet_transactions — no table appears on both sides, and nothing in this
     // branch's own 0318-0327 goes near the eight either.
     //
-    // This reads 0337: main holds 0001-0317, this branch 0318-0327, 0328-0332,
+    // This reads 0338: main holds 0001-0317, this branch 0318-0327, 0328-0332,
     // 0333 (Guardian screening is a parent's to configure), 0334 (a social
     // restriction is not its holder's to lift), 0335 (a reward is paid for
-    // with points that exist) and 0336 (a device is buzzed once per
+    // with points that exist), 0336 (a device is buzzed once per
     // notification — a new service-only table, push_deliveries, that no
-    // migration on main names). 0333 touches only guardian_contacts and
+    // migration on main names) and 0337 (an email event is counted once — a
+    // column on resend_webhook_events and a service-only function). 0333 touches only guardian_contacts and
     // guardian_member_profiles, 0334 only social_access_permissions, 0335 only a
     // trigger on reward_redemptions that reads chore_assignments; main's
     // 0312-0317 go near none of them — 0316 ("a chore is paid once") touches
     // wallet_transactions, not the points columns 0335 sums — so the non-overlap
     // argument above still holds, checked against the same list.
-    expect(audit.nextVersion).toBe('0337');
+    expect(audit.nextVersion).toBe('0338');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

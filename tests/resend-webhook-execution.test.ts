@@ -34,7 +34,7 @@ function deferred() {
 // The shared fake applies filters, uniqueness and stored mutations. This wrapper
 // only injects failures/pauses before execution, so retry and race assertions read
 // the resulting database state instead of checking query strings.
-function fixture() {
+function fixture(options: { counterFunction?: boolean } = {}) {
   const db = new InMemorySupabase({ uniques: {
     resend_webhook_events: [['svix_id']], marketing_suppressions: [['email']],
   } });
@@ -70,6 +70,34 @@ function fixture() {
           run(false).then(resolve, reject),
       };
       return query;
+    },
+    // 0337's apply_resend_campaign_counter, emulated over the same store and
+    // through the same interceptor: a campaign read/update failure fails the
+    // whole call, as the real function's transaction would, so nothing is
+    // marked and nothing counted. `counterFunction: false` answers the way
+    // PostgREST does for a database that has not been migrated, which sends the
+    // route down its compare-and-set fallback.
+    async rpc(name: string, args: Row) {
+      if (name !== 'apply_resend_campaign_counter') throw new Error(`Unexpected rpc ${name}`);
+      if (options.counterFunction === false) {
+        return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.apply_resend_campaign_counter in the schema cache' } };
+      }
+      for (const operation of ['read', 'update'] as const) {
+        const attempt = { table: 'marketing_email_campaigns', operation, payload: args };
+        attempts.push(attempt);
+        const injected = await intercept(attempt);
+        if (injected) return injected;
+      }
+      const receipt = db.table('resend_webhook_events').find((r) => r.svix_id === args.p_svix_id);
+      if (!receipt || receipt.status !== 'processing' || receipt.received_at !== args.p_received_at || receipt.counter_applied_at) {
+        return { data: receipt?.counter_applied_at ? 'already_applied' : 'claim_lost', error: null };
+      }
+      receipt.counter_applied_at = new Date().toISOString();
+      const row = db.table('marketing_email_campaigns').find((r) => r.id === args.p_campaign_id);
+      if (!row) return { data: 'no_campaign', error: null };
+      const field = String(args.p_field);
+      row[field] = (Number(row[field] ?? 0)) + 1;
+      return { data: 'applied', error: null };
     },
   };
   mocks.createServiceClient.mockReturnValue(client);
@@ -360,8 +388,10 @@ describe('signed Resend suppression and durable receipt execution', () => {
 describe('campaign counters survive concurrent events', () => {
   const campaign = 'campaign-under-contention';
 
+  // These exercise the compare-and-set loop, which since 0337 is the fallback
+  // for a database without apply_resend_campaign_counter.
   function withCampaign(counters: Row) {
-    const f = fixture();
+    const f = fixture({ counterFunction: false });
     f.db.seed('marketing_email_campaigns', [{ id: campaign, ...counters }]);
     return f;
   }
@@ -414,9 +444,48 @@ describe('campaign counters survive concurrent events', () => {
   });
 
   it('leaves an unknown campaign alone without failing the event', async () => {
-    const f = fixture();
+    const f = fixture({ counterFunction: false });
     const response = await POST(signedRequest('email.opened', { id: 'msg_none', campaign: 'no-such-campaign' }));
     expect(response.status).toBe(200);
     expect(f.event().status).toBe('processed');
+  });
+});
+
+// EMAIL-002's other half (0337). The counter used to be incremented before the
+// receipt was finalised; a failed finalisation released the claim, the provider
+// retried, and the same event was counted again.
+describe('an email event is counted once', () => {
+  const campaign = 'campaign-counted-once';
+
+  it('a retry after a failed finalisation does not count the event again', async () => {
+    const f = fixture();
+    f.db.seed('marketing_email_campaigns', [{ id: campaign, opens: 0 }]);
+    let failFinalisation = true;
+    f.intercept((a) => {
+      if (a.table === 'resend_webhook_events' && a.operation === 'update' && a.payload?.status === 'processed' && failFinalisation) {
+        failFinalisation = false; return failure;
+      }
+      return null;
+    });
+    expect((await POST(signedRequest('email.opened', { id: 'msg_once', campaign }))).status).toBe(503);
+    expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(1);
+    expect((await POST(signedRequest('email.opened', { id: 'msg_once', campaign }))).status).toBe(200);
+    expect(f.db.table('marketing_email_campaigns')[0].opens, 'one open event, counted once').toBe(1);
+    expect(f.event().status).toBe('processed');
+  });
+
+  it('without 0337 the same path still counts twice — the gap the migration closes', async () => {
+    const f = fixture({ counterFunction: false });
+    f.db.seed('marketing_email_campaigns', [{ id: campaign, opens: 0 }]);
+    let failFinalisation = true;
+    f.intercept((a) => {
+      if (a.table === 'resend_webhook_events' && a.operation === 'update' && a.payload?.status === 'processed' && failFinalisation) {
+        failFinalisation = false; return failure;
+      }
+      return null;
+    });
+    await POST(signedRequest('email.opened', { id: 'msg_twice', campaign }));
+    await POST(signedRequest('email.opened', { id: 'msg_twice', campaign }));
+    expect(f.db.table('marketing_email_campaigns')[0].opens).toBe(2);
   });
 });
