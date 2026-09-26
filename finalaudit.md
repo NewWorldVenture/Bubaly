@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-208 finding IDs from four workers and two parallel sessions; none of it was
+209 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 218 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 219 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34844,6 +34844,69 @@ over-tightening), all killed. **Ratchet: 89 → 83 across 49 files.**
 
 ---
 
+### `[CLAUDE-1][MEDIUM][INTEGRATIONS]` C1-S9-68 — broken integrations shown as healthy, an undo stack that counted a refusal as removed, and an invariant written down
+
+**Twenty-four writes** in `lib/sync`, `lib/life-events`, `lib/server` and
+`lib/social`.
+
+**A failing sync shown as healthy (fixed).** Both sync engines (generic and
+Google) recorded a failure in their `catch` with three writes whose results were
+discarded whole: the run, the job, and the connection's health. A health write
+that silently did nothing left `/dashboard/sync` showing a **failing integration
+as healthy**, on the screen a member checks to see whether it works. The block
+was duplicated verbatim in both engines. It is now one helper,
+`recordSyncFailure`, beside the module's existing audit helpers and held to their
+rule: *loud, never fatal*. It reads every result, reports zero rows as well as
+errors, and is wrapped in `try/catch`, because a **rejected** request must not
+escape into the engine's own `catch` block. The first draft lacked that wrapper;
+the module's stated rule ("deliberately never throws into the caller") is what
+caught it. Five behavioural cases.
+
+**The same shape for X (log).** When X's refresh token is spent, the account's
+health is set to `error`. The caller gets a thrown error, but the accounts page
+reads the row, and a no-op left X **showing healthy while every publish
+failed**. Confirmed for the log, with the throw unchanged. The token-rotation
+compare-and-set writes had their *errors* discarded too; those are now logged.
+Only result-reading changed in that credential state machine, never control
+flow.
+
+**An undo stack that counted a refusal as removed (fixed, proved
+behaviourally).** A life-event launch keeps an undo stack of everything it
+created, and `checkedDelete` checked only the error. A delete that resolved and
+removed nothing (a policy refusal) reported the rollback **complete** while the
+row stayed. Each undo now passes `.select('id')` visibly at the call site, and the
+helper compares against what this launch created: 1, or `taskIds.length` for move
+tasks. The existing boundary suite's `breakDelete` gained a third mode, `none`,
+for that exact case. It fails without the fix and passes with it. The plan's
+handoff note (on a plan this launch just made) now takes the existing rollback
+on zero rows as it did on an error.
+
+**RLS in the path (fixed).** `stampFeed` records a calendar feed's sync status.
+`syncFeed` is called from the settings action **with the user's client** as well
+as from the cron, so RLS can make it match nothing without an error. Zero rows is
+now the same "status could not be saved" as an error.
+
+**An invariant written down.** The push pruner deletes dead devices, and the
+file's own comment says *"`pruned` has to mean the row is gone"*. On the service
+role, zero rows does mean gone, and **every current caller passes the service
+role**. That was checked caller by caller: the push test route, the marketing
+admin, both crons, and notification generation. But `push_devices_delete` is
+owner-only, so a future caller passing a user's client would silently "prune" a
+dead endpoint forever. That dependence is now stated beside the code rather than
+left to be rediscovered. Notification-email and push stamps are deliberate on
+the same basis; the profile display-name sync is deliberate because someone who
+has not joined a family has no membership rows.
+
+**A thirteenth exact-statement guard red on an improvement** —
+`cron-recovery-boundaries`, pinning `const { error }` on the feed status write.
+Re-pointed at "the result is read, error and zero rows".
+
+**Status:** FIXED. Guard: 7 behavioural + 6 source cases, 11 mutations (three
+over-tightening, including a sync helper that throws), all killed.
+**Ratchet: 83 → 68 across 44 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34913,8 +34976,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,306 passing / 17,309 across 1,357
-files.** (Re-run after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,319 passing / 17,322 across 1,358
+files.** (Re-run after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

@@ -30,7 +30,8 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
 // the deliberate ones stay counted with their reasons) → 114/63 (C1-S9-64:
 // the Stripe mirrors, a wallet hold, a referral rollback) → 98/55 (C1-S9-65:
 // lib/services) → 89/50 (C1-S9-66: lib/ai) → 83/49 (C1-S9-67:
-// lib/marketing).
+// lib/marketing) → 68/44 (C1-S9-68: sync, life events, lib/server,
+// lib/social).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
@@ -60,25 +61,20 @@ const BASELINE = new Map<string, number>([
   ['lib/feedback/notify.ts', 1],
   ['lib/guardian/callbacks.ts', 2],
   ['lib/library/ingest.ts', 2],
-  ['lib/life-events/launch.ts', 6],
   ['lib/marketing/automation-events.ts', 1],
   ['lib/marketing/automation-runner.ts', 1],
   ['lib/marketing/identity.ts', 2],
   ['lib/marketing/platform.ts', 2],
   ['lib/marketing/recurring-ads-runner.ts', 1],
   ['lib/network/aggregate-server.ts', 3],
-  ['lib/server/calendar-feeds.ts', 1],
   ['lib/server/notification-emails.ts', 1],
   ['lib/server/profiles.ts', 1],
   ['lib/server/push.ts', 3],
   ['lib/services/approvals/index.ts', 2],
   ['lib/services/meals/index.ts', 1],
-  ['lib/social/account-tokens.ts', 5],
-  ['lib/social/publish.ts', 1],
+  ['lib/social/account-tokens.ts', 4],
   ['lib/stripe/treasury.ts', 1],
   ['lib/stripe/webhook.ts', 1],
-  ['lib/sync/engine/generic.ts', 3],
-  ['lib/sync/engine/google.ts', 3],
   ['lib/twin/project-server.ts', 1],
   ['lib/wallet/server.ts', 1],
 ]);
@@ -121,6 +117,6 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(83);
+    expect(total).toBe(68);
   });
 });

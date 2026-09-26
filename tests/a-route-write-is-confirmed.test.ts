@@ -448,3 +448,57 @@ describe('marketing automation and platform writes (C1-S9-67)', () => {
     expect(identity).toContain('zero is the ordinary "nothing to carry" case');
   });
 });
+
+/**
+ * Audit C1-S9-68 — sync, life events, lib/server, lib/social. recordSyncFailure
+ * and the life-event undo stack are proved behaviourally elsewhere.
+ */
+describe('sync, server and social writes (C1-S9-68)', () => {
+  it('both sync engines record a failure through the one confirmed helper', () => {
+    for (const file of ['lib/sync/engine/generic.ts', 'lib/sync/engine/google.ts']) {
+      const src = code(read(file));
+      expect(src, file).toContain('await recordSyncFailure(admin, {');
+      // The three discarded writes must not come back beside it.
+      expect(src, file).not.toMatch(/await admin\.from\('sync_connections'\)\.update\(\{ health: 'error'/);
+      expect(src, file).not.toMatch(/if \(run\) await admin\.from\('sync_job_runs'\)/);
+    }
+  });
+
+  it('every life-event undo asks for the rows it removed', () => {
+    const launch = read('lib/life-events/launch.ts');
+    const calls = code(launch).match(/checkedDelete\([^;]*?\.delete\(\)[\s\S]*?\)\)?[,;]/g) ?? [];
+    expect(calls.length).toBeGreaterThanOrEqual(5);
+    for (const c of calls) expect(c).toContain(".select('id')");
+    expect(launch).toContain("checkedDelete(scope.db.from('move_tasks').delete()");
+    expect(launch).toContain(".select('id'), taskIds.length),");
+  });
+
+  it('the feed status stamp treats zero rows as unsaved — the settings action runs it on the user client', () => {
+    const fn = block(read('lib/server/calendar-feeds.ts'), 'async function stampFeed(');
+    expect(fn).toContain('if (error || wroteNoRows(data)) {');
+    expect(fn).toContain("return new Error('Calendar feed status update failed');");
+  });
+
+  it('the push prunes stay ungated on rows, and say what that depends on', () => {
+    const push = read('lib/server/push.ts');
+    expect(push).toContain('every caller passes the SERVICE ROLE');
+    const prunes = code(push).match(/from\('push_devices'\)\.delete\(\)\.eq\('id', d\.id\);/g) ?? [];
+    expect(prunes).toHaveLength(2);
+  });
+
+  it('a reconnect-required account is not left showing healthy without a word', () => {
+    const tokens = read('lib/social/account-tokens.ts');
+    const b = code(block(tokens, 'if (healthError || wroteNoRows(flagged)) {'));
+    expect(b).toContain('it may still show as healthy');
+    expect(b).not.toMatch(/\breturn\b|\bthrow\b/);
+    // The throw to the caller still follows.
+    expect(tokens.slice(at(tokens, 'if (healthError || wroteNoRows(flagged)) {')).slice(0, 400)).toContain("xFailure('reconnectRequired');");
+  });
+
+  it('the compare-and-set token writes keep their errors and stay ungated on rows', () => {
+    const tokens = read('lib/social/account-tokens.ts');
+    for (const binding of ['handBackError', 'blockError', 'healedError']) {
+      expect(tokens, binding).toContain(`if (${binding}) console.error(`);
+    }
+  });
+});

@@ -116,6 +116,13 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
             // endpoint that never gets pruned is retried on every notification
             // from here on, spending a send each time and reporting itself
             // cleaned up each time.
+            // Rows deliberately not checked — and this rests on an invariant
+            // worth stating: every caller passes the SERVICE ROLE (checked under
+            // C1-S9-68: the push test route, the marketing admin, both crons and
+            // notification generation). There, zero rows means the device row is
+            // already gone, which is what `pruned` promises. A caller passing a
+            // user's client would break that — `push_devices_delete` is
+            // owner-only — and the dead endpoint would be "pruned" forever.
             const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
             if (pruneError) {
               console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
@@ -133,6 +140,7 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
         if (outcome === 'sent') result.sent++;
         else if (outcome === 'unconfigured') result.skipped++;
         else if (outcome === 'unregistered') {
+          // As above: service role, so zero rows means already gone. C1-S9-68.
           const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
           if (pruneError) result.failed++;
           else result.pruned++;
@@ -378,6 +386,8 @@ export async function dispatchPendingPushes(
         notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
       });
     }
+    // Rows deliberately not checked: service role, and a notification deleted
+    // since the scan is not pushed again. Audit C1-S9-68.
     const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
     if (stampError) {
       totals.failed++;
