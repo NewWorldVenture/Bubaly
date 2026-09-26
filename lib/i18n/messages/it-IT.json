@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Risparmiato finora",
   "billing.savings": "Risparmi",
   "billing.savingsGoals": "Obiettivi di risparmio",
+  "billing.serviceFeeAddedAtCheckout": "Al pagamento viene aggiunta una commissione di servizio Bubaly una tantum di {fee}.",
+  "billing.serviceFeeShownAtCheckout": "Eventuali commissioni di servizio Bubaly sono indicate al pagamento, prima che tu paghi.",
   "billing.setAMonthlyBudget": "Imposta un budget mensile →",
   "billing.spendingByCategory": "Spese per categoria",
   "billing.spendingByPerson": "Spese per persona",

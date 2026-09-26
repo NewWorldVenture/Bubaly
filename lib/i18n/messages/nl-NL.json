@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Tot nu toe bespaard",
   "billing.savings": "Spaargeld",
   "billing.savingsGoals": "Spaardoelen",
+  "billing.serviceFeeAddedAtCheckout": "Bij het afrekenen wordt eenmalig {fee} aan Bubaly-servicekosten toegevoegd.",
+  "billing.serviceFeeShownAtCheckout": "Eventuele Bubaly-servicekosten worden bij het afrekenen getoond, voordat je betaalt.",
   "billing.setAMonthlyBudget": "Een maandbudget instellen →",
   "billing.spendingByCategory": "Uitgaven per categorie",
   "billing.spendingByPerson": "Uitgaven per persoon",

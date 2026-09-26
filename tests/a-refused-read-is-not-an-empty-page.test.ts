@@ -386,11 +386,10 @@ describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
     // Keyed by file and BINDING NAME rather than line, because the API version
     // broke on its own commit when an unrelated fix shifted line numbers.
     const accepted = new Set([
-      // Tracked by tests/silent-empty-read-ratchet.test.ts, which owns its own
-      // baseline and demands pruning as each is fixed.
-      'app/(app)/dashboard/billing/page.tsx::data',
+      // billing and money-timeline were tracked by
+      // tests/silent-empty-read-ratchet.test.ts and fixed under C1-S9-71;
+      // removed (the stale-entry case below now demands it).
       'app/(app)/dashboard/family-digital-twin/page.tsx::savedSimRows',
-      'app/(app)/dashboard/money-timeline/page.tsx::data',
       // auth.getUser() — the signed-out branch hands off to the section layouts
       // that actually enforce auth, which this file's header states it does not.
       'app/(app)/layout.tsx::auth',
@@ -400,11 +399,9 @@ describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
       'app/(app)/marketplace/negotiations/page.tsx::members',
       'app/(app)/marketplace/reviews/page.tsx::members',
       'app/gift/[token]/page.tsx::cw', 'app/gift/[token]/page.tsx::m', 'app/gift/[token]/page.tsx::fam',
-      // C1-S9-29: the storage error is deliberately unbound. What matters there
-      // is the COUNT — `expectedProof.length > mediaUrls.length` — which is what
-      // turns a failed signing into a stated gap instead of a silent one, and is
-      // guarded above.
-      'app/(app)/missions/page.tsx::data',
+      // missions: C1-S9-29 left the storage error unbound because what matters
+      // is the COUNT (`expectedProof.length > mediaUrls.length`, guarded above).
+      // C1-S9-71 binds and logs it as well; the count is unchanged. Removed.
       // Verified benign: pre-fills a name field, and the write is the user's own
       // submission, so a failed read costs one retyped name.
       'app/onboarding/page.tsx::profile',
@@ -421,5 +418,10 @@ describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
     }
     const unexpected = [...found].filter((f) => !accepted.has(f)).sort();
     expect(unexpected, 'a page read binding only `data` that has not been triaged').toEqual([]);
+    // Added under C1-S9-71, when three entries here outlived their fixes
+    // unnoticed: an accepted entry that no longer occurs is a slot a regression
+    // could reopen without failing anything.
+    const stale = [...accepted].filter((f) => !found.has(f)).sort();
+    expect(stale, 'an accepted entry that no longer occurs: remove it').toEqual([]);
   });
 });

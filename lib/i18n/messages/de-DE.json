@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Bisher gespart",
   "billing.savings": "Ersparnisse",
   "billing.savingsGoals": "Sparziele",
+  "billing.serviceFeeAddedAtCheckout": "Beim Bezahlen wird einmalig eine Bubaly-Servicegebühr von {fee} hinzugefügt.",
+  "billing.serviceFeeShownAtCheckout": "Eine etwaige Bubaly-Servicegebühr wird beim Bezahlen angezeigt, bevor Sie zahlen.",
   "billing.setAMonthlyBudget": "Monatsbudget festlegen →",
   "billing.spendingByCategory": "Ausgaben nach Kategorie",
   "billing.spendingByPerson": "Ausgaben pro Person",

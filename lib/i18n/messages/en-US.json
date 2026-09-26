@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Saved So Far",
   "billing.savings": "Savings",
   "billing.savingsGoals": "Savings Goals",
+  "billing.serviceFeeAddedAtCheckout": "A one-time {fee} Bubaly service fee is added at checkout.",
+  "billing.serviceFeeShownAtCheckout": "Any Bubaly service fee is shown at checkout, before you pay.",
   "billing.setAMonthlyBudget": "Set a monthly budget →",
   "billing.spendingByCategory": "Spending by Category",
   "billing.spendingByPerson": "Spending by Person",

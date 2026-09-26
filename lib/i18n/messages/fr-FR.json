@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Économisé à ce jour",
   "billing.savings": "Épargne",
   "billing.savingsGoals": "Objectifs d'épargne",
+  "billing.serviceFeeAddedAtCheckout": "Des frais de service Bubaly uniques de {fee} sont ajoutés au paiement.",
+  "billing.serviceFeeShownAtCheckout": "Les éventuels frais de service Bubaly sont indiqués au paiement, avant que vous ne payiez.",
   "billing.setAMonthlyBudget": "Définir un budget mensuel →",
   "billing.spendingByCategory": "Dépenses par catégorie",
   "billing.spendingByPerson": "Dépenses par personne",

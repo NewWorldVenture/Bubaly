@@ -38,10 +38,15 @@ export default async function MoneyTimelinePage() {
   // Degrades safely before migration 0168 (treat as "no persisted state").
   const statusByKey: Record<string, string> = {};
   try {
-    const { data } = await supabase
+    // A smaller answer, not a false one: a refused read shows every insight as
+    // not yet acknowledged, and dismissed ones return until it succeeds. Logged
+    // rather than hidden — the `catch` below cannot see a resolved error.
+    // Audit C1-S9-71.
+    const { data, error: statusError } = await supabase
       .from('money_timeline_insights')
       .select('dedupe_key, status')
       .eq('family_id', familyId);
+    if (statusError) console.error('[money-timeline] insight status read failed; showing all as unacknowledged', statusError);
     for (const row of data ?? []) statusByKey[row.dedupe_key] = row.status;
   } catch { /* table not applied yet */ }
 

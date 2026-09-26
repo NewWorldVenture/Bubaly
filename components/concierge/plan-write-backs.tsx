@@ -31,7 +31,11 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
     (async () => {
       try {
         const sb = createClient();
-        const { data } = await sb.from('concierge_plan_actions').select('action_kind').eq('plan_id', planId);
+        // A refused read shows nothing as applied yet; re-applying is safe
+        // because the materializer is idempotent (C1-S9-48). The error is now
+        // logged rather than dropped. Audit C1-S9-71.
+        const { data, error } = await sb.from('concierge_plan_actions').select('action_kind').eq('plan_id', planId);
+        if (error) console.error('[concierge] applied write-backs read failed', error);
         if (active && data) setApplied(new Set(data.map((r) => r.action_kind as WriteBackKind)));
       } catch { /* table not applied yet → no applied state */ }
     })();

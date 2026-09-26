@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-211 finding IDs from four workers and two parallel sessions; none of it was
+212 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 221 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 222 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35036,6 +35036,64 @@ report success for work that did not happen?*
   put-away double-count race (`C1-S9-65`); durable tool-call finalize
   (`C1-S9-66`); the marketing `run_count` read-modify-write race (`C1-S9-67`).
 
+### `[CLAUDE-1][MEDIUM][READS]` C1-S9-71 — the silent-empty ratchet reaches zero, and a service fee that went undisclosed
+
+**The last five.** `tests/silent-empty-read-ratchet.test.ts` (PLA-0624/0625)
+tracks `.tsx` reads that bind only `data` and so turn a refused read into an
+empty one. Five files were left in its baseline. Each was triaged by the rule
+this pass uses throughout: fix what gives a **different** answer, log what
+gives a **smaller** one.
+
+**One different answer (fixed): the service-fee disclosure.**
+`app/(app)/dashboard/billing/page.tsx` reads `stripe_settings` so that a family
+is told about a configured Bubaly fee **before** they pay. A refused read
+*resolves* with an error, so the `try/catch` around it never fires. `data` was
+null, `serviceFeeEnabled(null)` is false, and the notice silently disappeared,
+exactly when it could not be known whether a fee applies. It now shows a
+notice that is true either way: *"Any Bubaly service fee is shown at checkout,
+before you pay."* That was checked, not assumed: the fee reaches Stripe as
+`subscription_data.add_invoice_items` (`app/api/billing/checkout/route.ts:106`),
+which Checkout itemises before payment. The error branch states no amount and
+does not fail the plans page.
+
+Both notices were also **English literals handed to a translated module**, so
+every locale saw them unchanged. They are now two catalogue keys, inserted in
+place in the seven base catalogues, and the configured-fee sentence keeps its
+`{fee}` placeholder.
+
+**Four smaller answers (logged, and guarded against escalation):**
+- **money-timeline:** a refused insight-status read shows every insight as
+  unacknowledged.
+- **missions:** proof signing. The gap was already *stated* to the parent under
+  `C1-S9-29`; the error was the one thing still dropped.
+- **app-context:** a refused roster refresh keeps the roster on screen
+  (`if (data)`).
+- **plan-write-backs:** a refused ledger read shows nothing as applied. I
+  checked that this is safe rather than assuming it: `materializeConciergePlan`
+  re-reads the ledger and refuses on error. Checking it is how `C1-S9-72` was
+  found.
+
+**The ratchet at zero is kept, not deleted.** Its header said "when it hits [],
+delete this test". Deleting it would have removed the one check that still
+matters, that **no new** file introduces the shape. With an empty baseline, that
+check is now a ban rather than a ratchet. The header says so.
+
+**An instrument finding.** `a-refused-read-is-not-an-empty-page` has its own
+`accepted` set for page reads binding only `data`. Three of these files were
+listed in it, and it was checked one way only, so the entries would have
+outlived their fixes unnoticed. The entries are pruned, and the test now fails
+on a stale entry. That check was proved by re-adding one.
+
+**Guard:** `tests/a-dropped-component-read-error-is-seen.test.ts` (10 cases).
+**19 mutations, all red.** They include four over-tightenings: the fee branch
+throwing, money-timeline escalating, the missions log turned into a bail, and
+the roster emptied on error. One more has the fee branch stating an amount it
+cannot know. The rest are dropped errors, lost logs, the configured notice
+reverted to English, a catalogue losing `{fee}`, and the materializer's ledger
+bail falling through.
+
+**Status:** FIXED.
+
 ---
 
 ## What this pass did NOT establish
@@ -35107,8 +35165,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,333 passing / 17,336 across 1,360
-files.** (Re-run after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,343 passing / 17,346 across 1,361
+files.** (Re-run after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

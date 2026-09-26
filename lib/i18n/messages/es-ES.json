@@ -2464,6 +2464,8 @@
   "billing.savedSoFar": "Ahorrado hasta ahora",
   "billing.savings": "Ahorros",
   "billing.savingsGoals": "Objetivos de ahorro",
+  "billing.serviceFeeAddedAtCheckout": "Al pagar se añade una tarifa de servicio única de Bubaly de {fee}.",
+  "billing.serviceFeeShownAtCheckout": "Cualquier tarifa de servicio de Bubaly se muestra al pagar, antes de que se cobre nada.",
   "billing.setAMonthlyBudget": "Fijar un presupuesto mensual →",
   "billing.spendingByCategory": "Gastos por categoría",
   "billing.spendingByPerson": "Gastos por persona",

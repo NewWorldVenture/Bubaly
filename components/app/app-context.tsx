@@ -73,12 +73,16 @@ function AppProviderState({ value, initialMembers, children }: AppProviderProps)
 
   const refreshMembers = useCallback(async () => {
     const supabase = createClient();
-    const { data } = await supabase
+    // A refused refresh keeps the roster already on screen (`if (data)`), so
+    // this is a stale list rather than a false empty one — but the error was
+    // dropped, and it is now logged. Audit C1-S9-71.
+    const { data, error } = await supabase
       .from('family_members')
       .select('*')
       .eq('family_id', value.familyId)
       .eq('is_active', true)
       .order('created_at');
+    if (error) console.error('[app-context] member roster refresh failed; keeping the current roster', error);
     if (data) setMembers(data);
   }, [value.familyId]);
 

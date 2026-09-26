@@ -84,7 +84,10 @@ export default async function MissionsPage() {
     const expectedProof = (s.media_paths ?? []).slice(0, 4);
     const mediaUrls: string[] = [];
     for (const path of expectedProof) {
-      const { data } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
+      // The gap is already STATED below (proofUnavailable); the error was the
+      // one thing still dropped. Audit C1-S9-71.
+      const { data, error: signError } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
+      if (signError) console.error('[missions] proof signing failed', { submissionId: s.id, error: signError.message });
       if (data?.signedUrl) mediaUrls.push(data.signedUrl);
     }
     const proofUnavailable = expectedProof.length > mediaUrls.length;
