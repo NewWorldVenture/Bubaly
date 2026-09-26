@@ -24,6 +24,10 @@ vi.mock('react', async (original) => ({
 }));
 vi.mock('@/app/(app)/dashboard/navigation-actions', () => ({ loadSidebarPrefs: mocks.load, saveSidebarNavAction: mocks.save }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mocks.success, error: mocks.error }) }));
+// NavigationChoices reads the plan context to mark pins the rail locks or hides.
+vi.mock('@/components/app/app-context', () => ({
+  useApp: () => ({ role: 'parent', isSuperAdmin: false, planLevel: 2, featureTiers: {} }),
+}));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };
@@ -61,7 +65,8 @@ beforeEach(() => {
   mocks.save.mockReset().mockResolvedValue({ ok: true });
   mocks.success.mockReset(); mocks.error.mockReset(); mocks.dispatch.mockReset();
   storage = new Map([[SIDEBAR_NAV_STORAGE_KEY, JSON.stringify(original)], [SIDEBAR_NAV_CHILDREN_STORAGE_KEY, JSON.stringify(children)]]);
-  vi.stubGlobal('window', { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: mocks.dispatch });
+  vi.stubGlobal('window', { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: mocks.dispatch,
+    addEventListener: () => undefined, removeEventListener: () => undefined });
   vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
 });
 afterEach(() => vi.unstubAllGlobals());

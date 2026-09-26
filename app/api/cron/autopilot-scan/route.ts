@@ -31,8 +31,14 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    // `timezone` is selected alongside `id` because the scan needs each
+    // family's own day, and this loop is already holding that family's row.
+    // A cron over every family is NOT a reason to fall back to Greenwich —
+    // it runs at 06:30 UTC, which is 23:30 the previous day in Los Angeles,
+    // so a Greenwich "today" here is the wrong day for the whole US west
+    // coast on every single run.
     const { rows: families, error } = await readAll((from, to) => supabase
-      .from('families').select('id').order('id').range(from, to), { max: 5000 });
+      .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Read once for the whole pass rather than per family.
@@ -53,7 +59,7 @@ export async function GET(req: NextRequest) {
         const entitlement = await resolveFeatureEntitlement(supabase, fam.id, AUTOPILOT_FEATURE_HREF, tiers);
         if (!entitlement.allowed) { skipped++; continue; }
 
-        const r = await runAutopilotScan(supabase, fam.id, null);
+        const r = await runAutopilotScan(supabase, fam.id, null, fam.timezone || 'UTC');
         scanned += r.scanned;
         autoExecuted += r.autoExecuted;
         notified += r.notified;

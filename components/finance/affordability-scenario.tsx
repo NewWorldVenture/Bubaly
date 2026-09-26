@@ -10,18 +10,18 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Info, Loader2, XCircle } from 'lucide-react';
 import { assessAffordabilityAction } from '@/app/(app)/dashboard/family-cfo/actions';
-import { money, pretty, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
+import { money as moneyIn, pretty as prettyIn, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // A commitment that lands outside the 12-week horizon was never weighed by the
 // forecast, so it gets a neutral chip of its own — never the green "Yes", which
 // would be an affirmative money answer with no evidence behind it.
 const VERDICT: Record<AffordabilityVerdict, { labelKey: string; icon: typeof CheckCircle2; chip: string; ring: string }> = {
-  not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed', icon: Info, chip: 'bg-slate-500/12 text-slate-600 dark:text-slate-300', ring: 'border-border' },
-  ok: { labelKey: 'affordabilityScenario.verdictOk', icon: CheckCircle2, chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
-  tight: { labelKey: 'affordabilityScenario.verdictTight', icon: AlertTriangle, chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
-  breaches: { labelKey: 'affordabilityScenario.verdictBreaches', icon: XCircle, chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
+  not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed', icon: Info, chip: 'bg-slate-500/10 text-slate-600 dark:text-slate-300', ring: 'border-border' },
+  ok: { labelKey: 'affordabilityScenario.verdictOk', icon: CheckCircle2, chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
+  tight: { labelKey: 'affordabilityScenario.verdictTight', icon: AlertTriangle, chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
+  breaches: { labelKey: 'affordabilityScenario.verdictBreaches', icon: XCircle, chip: 'bg-rose-500/10 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
 };
 
 const RECURRENCES: { value: ScenarioRecurrence; labelKey: string }[] = [
@@ -40,6 +40,10 @@ const INPUT = 'mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-
 
 export function AffordabilityScenario({ buffer }: { buffer: number }) {
   const t = useTranslations();
+  // Amounts and week labels follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const money = (n: number) => moneyIn(n, locale.code);
+  const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(defaultDate);

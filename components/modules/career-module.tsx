@@ -16,15 +16,17 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Database, Tables, CareerEmploymentType, CareerStatus, CareerWorkMode, JobStage } from '@/lib/database.types';
 import {
-  JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
+  JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money as moneyIn, isoDate,
 } from '@/lib/career/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
 type Resume = Tables<'resume_versions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const STAGE_STYLE: Record<JobStage, string> = {
@@ -34,7 +36,12 @@ const STAGE_STYLE: Record<JobStage, string> = {
 };
 
 export function CareerModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -88,7 +95,7 @@ export function CareerModule() {
   }
 
   async function deleteApplication(a: Application) {
-    if (!confirm(`Remove ${a.role_title} at ${a.company}?`)) return;
+    if (!(await askConfirm({ title: tr('career.removeApplicationQ', { role: a.role_title, company: a.company }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('job_applications').delete().eq('id', a.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.applicationRemoved'));
@@ -104,7 +111,7 @@ export function CareerModule() {
   }
 
   async function deleteResume(r: Resume) {
-    if (!confirm(`Delete “${r.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('resume_versions').delete().eq('id', r.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.resumeDeleted'));
@@ -117,7 +124,7 @@ export function CareerModule() {
   }
 
   async function deleteProfile(p: Profile) {
-    if (!confirm(`Delete “${p.title}” for ${nameOf(p.member_id)} with every application and resume?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('career.deleteProfileBody') }))) return;
     const { error } = await createClient().from('career_profiles').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setProfileId('');

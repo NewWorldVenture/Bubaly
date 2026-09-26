@@ -13,6 +13,7 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { saveQuoteAction, setQuoteStatusAction, deleteQuoteAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Proposals · Quotes', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -82,7 +83,7 @@ export default async function ProposalsPage() {
             {contactList.map((c) => <option key={c.id} value={c.id}>{contactDisplayName(c)}</option>)}
           </select>
           <input name="valid_until" type="date" className={inputCls} />
-          <button type="submit" className={btnCls}>{t('adminMarketingProposals.createQuote')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingProposals.createQuote')}</SubmitButton>
         </form>
       </Card>
 
@@ -113,21 +114,21 @@ export default async function ProposalsPage() {
                         <div className="flex items-center justify-end gap-1">
                           {qt.status === 'draft' && (
                             <form action={setQuoteStatusAction.bind(null, qt.id, 'sent')}>
-                              <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{t('proposals.send')}</button>
+                              <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-muted hover:text-fg">{t('proposals.send')}</SubmitButton>
                             </form>
                           )}
                           {(qt.status === 'sent') && (
                             <>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'accepted')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('proposals.accept')}</button>
+                                <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/10">{t('proposals.accept')}</SubmitButton>
                               </form>
                               <form action={setQuoteStatusAction.bind(null, qt.id, 'declined')}>
-                                <button type="submit" className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">{t('proposals.decline')}</button>
+                                <SubmitButton className="rounded-md border border-border px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">{t('proposals.decline')}</SubmitButton>
                               </form>
                             </>
                           )}
                           <form action={deleteQuoteAction.bind(null, qt.id)}>
-                            <button type="submit" className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</button>
+                            <SubmitButton className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</SubmitButton>
                           </form>
                         </div>
                       </td>

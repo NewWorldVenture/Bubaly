@@ -25,8 +25,14 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    // `timezone` is selected alongside `id` because prep generation needs each
+    // family's OWN day, and this loop is already holding that family's row. A
+    // cron over every family is not a reason to fall back to Greenwich: the
+    // whole point of prep plans is "a trip departing today", and read against
+    // Greenwich's today that trip is filtered out as already gone for every
+    // family west of UTC during their own evening.
     const { rows: families, error } = await readAll((from, to) => supabase
-      .from('families').select('id').order('id').range(from, to), { max: 5000 });
+      .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Batch the skip-decision reads into ONE query instead of 2-per-family, so the
@@ -57,7 +63,7 @@ export async function GET(req: NextRequest) {
           continue;
         }
         const twin = await runTwinProjection(supabase, fam.id, null);
-        const prep = await runPrepGeneration(supabase, fam.id, null, now);
+        const prep = await runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now);
         // R10: keep the hard-signal family intelligence current too. Non-fatal —
         // a signal-detection hiccup must not fail the twin/prep refresh.
         try { await runSignalDetection(supabase, fam.id, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }

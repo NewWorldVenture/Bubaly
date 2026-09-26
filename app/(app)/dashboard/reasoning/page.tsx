@@ -32,7 +32,10 @@ export default async function ReasoningPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id);
+  // The family's zone — the report composes the operating index, which keys
+  // on the family's day.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz);
 
   const attention = report.answers.filter((a) => a.status === 'attention').length;
   const hasReadErrors = report.readErrors.length > 0;
@@ -61,7 +64,7 @@ export default async function ReasoningPage() {
             </p>
           )}
           {report.allClear && !hasReadErrors && (
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" /> {t('dashboardReasoning.allClear')}
             </span>
           )}

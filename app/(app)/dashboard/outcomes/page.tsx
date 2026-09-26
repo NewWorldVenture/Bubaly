@@ -74,7 +74,7 @@ export default async function OutcomesPage({ searchParams }: { searchParams?: Pr
   let reasoning: Awaited<ReturnType<typeof loadFamilyContext>> | null = null;
   let reasoningError = false;
   try {
-    reasoning = await loadFamilyContext(supabase, familyId, now);
+    reasoning = await loadFamilyContext(supabase, familyId, tz, now);
   } catch (error) {
     reasoningError = true;
     console.error('[dashboard/outcomes] reasoning context read failed', error);

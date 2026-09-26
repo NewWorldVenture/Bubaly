@@ -16,6 +16,28 @@
 // server action reads the same functions to build the rows, and both are tested
 // without a database.
 //
+// WHICH KINDS ARE DE-DUPLICATED, and why it is not all five. A kind is
+// de-duplicated here only where something in the repo has already decided what
+// its identity is:
+//
+//   * events    — title + start instant (`eventKey`).
+//   * contacts  — normalised email/phone, falling back to an exact name.
+//   * grocery   — normalised name against the UNBOUGHT items of the list the
+//                 import writes to. Not a new rule: it is the one
+//                 `lib/services/groceries/index.ts addItems` already applies to
+//                 a typed add, borrowed verbatim so the two cannot disagree.
+//   * tasks     — NOT de-duplicated. `chores` has no done-ness column at all
+//                 (it lives on `chore_assignments.status`), so "the same chore,
+//                 still open" is a join and a scope nobody has chosen yet.
+//   * notes     — NOT de-duplicated, by decision recorded in
+//                 `lib/services/notes/index.ts`: "two identical notes are two
+//                 rows, which is the honest outcome."
+//
+// The two that are not de-duplicated are SAID SO in the review step rather than
+// shown as a bare count, because a keyless list legitimately repeats — a family
+// really does take the bins out more than once — and a silent "same name, so
+// dropped" would fail closed against what they meant.
+//
 // Deliberately conservative. A proposal that is wrong costs the reviewer a
 // click; a proposal that is confidently wrong and auto-applied costs them trust.
 // So a member is proposed only on a WHOLE-token name match, an ambiguous text
@@ -23,6 +45,7 @@
 // the caller did not list.
 
 import type { EventCategory } from '@/lib/database.types';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import {
   contactKeys, normalizeEmail, normalizePhone,
   type ImportedContact, type ImportedEvent, type ImportedItem,
@@ -34,6 +57,13 @@ export type ExistingMember = { id: string; displayName: string };
 export type ExistingEvent = { title: string; startsAt: string };
 /** A `family_contacts` row already in the family (the duplicate guard). */
 export type ExistingContact = { name: string; email: string | null; phone: string | null; phoneAlt?: string | null };
+/**
+ * A `grocery_items` row the import has to compare against: an item still to buy
+ * on the list the import writes to. The caller decides which rows qualify — see
+ * `resolveImportedItems` for why "still to buy" is the whole of the rule, and
+ * why passing a checked item here would be a bug rather than extra safety.
+ */
+export type ExistingGroceryItem = { name: string };
 
 export type MemberProposal = { memberId: string | null; memberName: string | null };
 
@@ -56,13 +86,26 @@ export type ResolvedContact = MemberProposal & {
   duplicate: boolean;
 };
 
+/**
+ * No `MemberProposal`: the importer's grocery insert has no member column to
+ * put one in, and proposing an owner the commit would silently drop is exactly
+ * the confidently-wrong proposal this module's header refuses to make.
+ */
+export type ResolvedGroceryItem = {
+  index: number;
+  name: string;
+  duplicate: boolean;
+};
+
 export type ResolutionPlan = {
   events: ResolvedEvent[];
   tasks: ResolvedTask[];
+  grocery: ResolvedGroceryItem[];
   contacts: ResolvedContact[];
   /** Counts the review step shows without re-walking the lists. */
   duplicateEvents: number;
   duplicateContacts: number;
+  duplicateGrocery: number;
   assignedEvents: number;
   assignedTasks: number;
   assignedContacts: number;
@@ -157,9 +200,12 @@ export type ResolveInput = {
   members: ExistingMember[];
   events?: ImportedEvent[];
   tasks?: ImportedItem[];
+  grocery?: ImportedItem[];
   contacts?: ImportedContact[];
   existingEvents?: ExistingEvent[];
   existingContacts?: ExistingContact[];
+  /** Items still to buy on the list the import writes to — nothing else. */
+  existingGrocery?: ExistingGroceryItem[];
 };
 
 /**
@@ -197,6 +243,28 @@ export function resolveImportedItems(input: ResolveInput): ResolutionPlan {
     return { index, name: t.name, memberId: match?.id ?? null, memberName: match?.displayName ?? null };
   });
 
+  // Grocery items have no key of their own — the only identity an
+  // `ImportedItem` carries is its free-text name — so the rule is BORROWED
+  // whole from the one the shopping module already applies to a typed add
+  // (`lib/services/groceries/index.ts`, `addItems`): "deduplication is on the
+  // normalised name against OPEN items only: 'milk' added a week ago and
+  // already bought should be addable again, but adding it twice before the shop
+  // should not produce two lines."
+  //
+  // That is why `existingGrocery` must be the unbought items of the list the
+  // import writes to and nothing else. Widening it to every grocery row the
+  // family ever had would drop the weekly milk — failing closed against the
+  // family's intent, which is worse than the duplicate it prevents. Narrowing
+  // it, or letting a failed read arrive here as an empty array, imports a
+  // second copy of the whole file; the caller fails closed instead.
+  const seenGrocery = new Set((input.existingGrocery ?? []).map((g) => normalizeName(g.name)));
+  const grocery: ResolvedGroceryItem[] = (input.grocery ?? []).map((g, index) => {
+    const key = normalizeName(g.name);
+    const duplicate = seenGrocery.has(key);
+    seenGrocery.add(key);
+    return { index, name: g.name, duplicate };
+  });
+
   const seenContacts = new Set<string>();
   const seenContactNames = new Set<string>();
   for (const row of input.existingContacts ?? []) {
@@ -217,9 +285,11 @@ export function resolveImportedItems(input: ResolveInput): ResolutionPlan {
   return {
     events,
     tasks,
+    grocery,
     contacts,
     duplicateEvents: events.filter((e) => e.duplicate).length,
     duplicateContacts: contacts.filter((c) => c.duplicate).length,
+    duplicateGrocery: grocery.filter((g) => g.duplicate).length,
     assignedEvents: events.filter((e) => e.memberId).length,
     assignedTasks: tasks.filter((t) => t.memberId).length,
     assignedContacts: contacts.filter((c) => c.memberId).length,

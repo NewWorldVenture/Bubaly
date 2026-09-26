@@ -56,8 +56,10 @@ import {
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -188,9 +190,11 @@ const TABS = ['Overview', 'Transactions', 'Budgets', 'Bills', 'Savings Goals', '
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function fmtCurrency(n: number, showSign = false): string {
+// Takes the locale rather than pinning en-US. Each component that renders money
+// shadows this with a binding of the same name, so the call sites read unchanged.
+function currencyIn(locale: LocaleCode, n: number, showSign = false): string {
   const sign = showSign && n > 0 ? '+' : '';
-  return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(n));
+  return sign + new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(Math.abs(n));
 }
 
 const ACCOUNT_TYPE_COLORS: Record<string, string> = {
@@ -310,7 +314,12 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     if (!name.trim() || !amount) return;
     setSaving(true);
     const parsedAmount = parseFloat(amount);
-    const finalAmount = type === 'expense' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+    // Amount goes UNSIGNED; the direction lives in `type`. That is what
+    // `createTransaction` enforces (it refuses anything <= 0 outright), what the
+    // wallet action writes, and what this module's own reads already assume —
+    // every rollup below sums `Math.abs(tx.amount)` and prints the sign from
+    // `tx.type`. Negating an expense here refused every expense the form sent.
+    const finalAmount = Math.abs(parsedAmount);
     const supabase = createClient();
     const res = await createTransactionAction({
       name: name.trim(), amount: finalAmount, category, date, type,
@@ -512,6 +521,10 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
   const { familyId, family, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -877,6 +890,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteTransactionAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.transactionRemoved'));
@@ -884,6 +898,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteBudget(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteBudgetAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.budgetRemoved'));
@@ -891,6 +906,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteBill(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBillQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
@@ -912,6 +928,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteGoal(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteSavingsGoalAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.goalRemoved'));
@@ -919,6 +936,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteAccount(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteAccountQ'), body: tr('billing.deleteAccountBody') }))) return;
     const supabase = createClient();
     const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
@@ -1218,7 +1236,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                 {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
               </p>
-              <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+              <button aria-label={tr('a11y.delete')} onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -1254,7 +1272,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className={cn('text-sm font-bold', over ? 'text-red-400' : 'text-muted')}>
                       {fmtCurrency(b.spent)} / {fmtCurrency(b.amount)}
                     </span>
-                    <button onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                    <button aria-label={tr('a11y.delete')} onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1307,7 +1325,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                <button aria-label={tr('a11y.delete')} onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -1341,7 +1359,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted">{pct.toFixed(0)}{tr('billing.saved')}</p>
                     </div>
                   </div>
-                  <button onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                  <button aria-label={tr('a11y.delete')} onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -1578,7 +1596,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted capitalize">{a.type}{a.last_four ? ` ···${a.last_four}` : ''}</p>
                     </div>
                     <p className="text-sm font-bold shrink-0">{fmtCurrency(a.balance ?? 0)}</p>
-                    <button onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
+                    <button aria-label={tr('a11y.delete')} onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

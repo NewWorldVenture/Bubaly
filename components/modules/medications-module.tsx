@@ -24,6 +24,7 @@ import {
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Medication = Tables<'medications'>;
 type Schedule = Tables<'medication_schedules'>;
@@ -72,6 +73,7 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 
 export function MedicationsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role, family } = useApp();
   // A dose slot is the family's 08:00, not the viewer's. Resolving it in the
   // family's zone is what lets the reminder cron recognise a dose this
@@ -343,7 +345,7 @@ export function MedicationsModule() {
 
   async function deleteMed(m: Medication) {
     if (!canMutate(true) || !latest.current.meds.some((item) => item.id === m.id && item.family_id === familyId)) return;
-    if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: m.name }), body: t('medications.deleteMedicationBody') }))) return;
     await mutate('remove-medication', true, () => createClient().from('medications').delete().eq('id', m.id).eq('family_id', familyId).select('id').single(),
       confirmAll, () => success(t('medicationsModule.medicationDeleted')));
   }
@@ -385,6 +387,7 @@ export function MedicationsModule() {
 
   async function deleteSchedule(id: string) {
     if (!canMutate(true) || !latest.current.schedules.some((s) => s.id === id && s.family_id === familyId)) return;
+    if (!(await askConfirm({ title: t('medications.deleteScheduleQ'), body: t('medications.deleteScheduleBody') }))) return;
     await mutate('remove-schedule', true, () => createClient().from('medication_schedules').delete().eq('id', id).eq('family_id', familyId).select('id').single(), confirmAll);
   }
   function closeMed() {

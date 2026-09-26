@@ -32,13 +32,81 @@ import type { Messages } from '@/lib/i18n/messages';
  *
  * Every other scope includes this, because everything renders inside it.
  */
-export const ROOT_CHROME_SCOPE = ['error', 'globalError', 'root'] as const;
+//
+// `a11y` is here rather than in each surface's own list, and that is a deliberate
+// widening. Those keys are the accessible NAMES of controls — Delete, Close,
+// Clear search — and a control can appear on any surface: the blog's search
+// field, a public gift page, the sign-in screen. Scoping them per surface means
+// that adding an `aria-label` to an auth component fails a test about
+// authentication copy, for a reason that has nothing to do with the author's
+// intent. 28 short strings in the active locale is a few hundred bytes against
+// the marketing scope's 2 KB, and the alternative is a guard that punishes the
+// right change.
+// `logo` and `language` are here rather than repeated per surface because they
+// are demonstrably on more than one: the brand mark and the language picker
+// render in the marketing chrome, the auth chrome and the public-link chrome.
+// Everything narrower stays on the surface that actually mounts it — a scope
+// that collects "probably shared" is a scope on its way back to `all`.
+// `toast` is here for a reason worth stating: ToastProvider is mounted by
+// app/layout.tsx INSIDE the root LocaleProvider and ABOVE every nested
+// ScopedLocaleProvider, so it always resolves against this scope and never a
+// narrower one. Its dismiss control carries `aria-label={tr('toast.dismiss')}`,
+// so leaving it out meant a screen reader on /cookies reading the literal
+// string "toast.dismiss" the moment the English fallback is removed.
+export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo', 'language', 'toast'] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'blogBlogSearch', 'blogTableOfContents', 'fFormRenderer', 'faqTabs',
   'formRenderer', 'handledProof', 'pricingValue', 'subscribe', 'tableOfContents',
+  // The shared chrome this surface mounts, which tests/i18n-client-scope.test.ts
+  // could not see until its entry globs were fixed: a git pathspec `**\/`
+  // requires at least one intervening directory, so `app/(marketing)/**\/layout.tsx`
+  // matched NOTHING and the route group's root layout — where the header, the
+  // cookie banner and the skip link mount — was never walked. Every one of
+  // these keys rendered correct English on the live site anyway, through
+  // `translate`'s SOURCE_MESSAGES fallback. That fallback is what PERF-001
+  // wants to remove from the client bundle, and removing it while these were
+  // out of scope would have put raw keys on the cookie banner's buttons.
+  'nav', 'marketing', 'consentManager', 'modal', 'registerSw', 'exitIntent',
+  'backToTop', 'skipLink',
+  // The public pricing, contact and showcase copy — 56 keys the guard could not
+  // see until its extractor learned that 105 client modules bind the translator
+  // as `tr` rather than `t`. `planOutcomes` is the sharpest of them: it lives in
+  // the SAME table as `pricingValue` (lib/marketing/value.ts) and was missed
+  // while its sibling was caught, because one is read with `t` and the other
+  // with `tr`.
+  'aiShowcase', 'blogShareButtons', 'contact', 'contactForm', 'planOutcomes',
+  'pricingContent', 'pricingPricingContent', 'shareButtons', 'socialProof',
+  'switching', 'trustStrip',
+  // `consentUi` is reached ONLY through the CONSENT_UI table in
+  // lib/marketing/consent-ui.ts, via `t(c.labelKey)`. It was listed by hand
+  // because the scan could not resolve a non-literal call, with a note that
+  // "a new entry in that table under a new namespace would need the same
+  // treatment". That is no longer true, and the note is kept rather than
+  // deleted because it is what asked for the fix: the guard now follows an
+  // expression-keyed call to the module its identifier comes from, so removing
+  // this line makes tests/i18n-client-scope.test.ts fail naming all five
+  // consentUi.* keys and lib/marketing/consent-ui.ts. The hand-listing is no
+  // longer load-bearing; it stays only because the scope is still the thing
+  // that ships.
+  'consentUi',
+  // `heroOutcomes` renders on /pricing as well as the homepage, and the guard
+  // could not see it until its extractor learned to read the key literals
+  // INSIDE an expression-keyed call. pricing-content.tsx holds a table of six
+  // `titleKey: 'heroOutcomes.*'` entries and renders them with `tr(o.titleKey)`,
+  // so the six were resolving through translate()'s English fallback on a
+  // PUBLIC pricing page — the fallback PERF-001 intends to delete. Its own
+  // comment says why they live there: "the bodies are the heroOutcomes.* keys
+  // the homepage rail renders, so a copy fix reaches both."
+  'heroOutcomes',
+  // `contactTopic` is the eight-entry CONTACT_TOPICS table in lib/validation.ts,
+  // rendered as the topic <option> list on the PUBLIC /contact page by
+  // `CONTACT_TOPICS.map((t) => … tr(t.labelKey))`. Found only once the guard
+  // learned to follow an expression-keyed call to the module its identifier
+  // comes from — the same shape `consentUi` above was hand-listed for.
+  'contactTopic',
 ] as const;
 
 /** Sign-in, sign-up and the consent screens. */
@@ -52,13 +120,52 @@ export const AUTH_SCOPE = [
   // rendering a raw key like `authRecovery.sendLink` at the person trying to
   // get back into their account. `actions` carries the two kid-login errors
   // that the sign-in form surfaces from the server action.
-  'authRecovery', 'authCallback', 'signOutButton', 'stepUp', 'actions',
+  'authRecovery', 'authCallback', 'signOutButton', 'stepUp',
+  // NOT the whole `actions` namespace. It was listed here for these exact two
+  // keys and brought 476 others with it — 32,141 bytes, 72% of this scope, to
+  // render two error strings on the sign-in form. Named individually they cost
+  // 195 bytes. See scopeMessages below for how a dotted entry is matched.
+  'actions.checkTheUsernameAndPin', 'actions.kidSignInIsTemporarily',
+  // The phone field's own chrome — country picker, search box, empty state.
+  // `phoneAuth` was already here; `phoneInput` is a different namespace and was
+  // invisible for the same `tr` reason.
+  'phoneInput',
 ] as const;
 
 /** The public link surfaces that sit outside a route group: a gift, a review. */
 export const PUBLIC_LINK_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'publicGift', 'publicGiftForm', 'reviewForm', 'reviewsNewReviewForm',
+  // The join-invite flow, invisible for the same entry-glob reason: /join's
+  // own layout and page were never walked, so nine keys in the surface that
+  // brings a new member into a family were outside its scope.
+  'joinInvite',
+] as const;
+
+/**
+ * The public feedback survey at `/s/<slug>`.
+ *
+ * This surface had NO scope at all until Pass BS, and the way it was missed is
+ * the finding rather than the fix. `app/s/[slug]` is the only page in the tree
+ * with no `layout.tsx` of its own, so the root layout's ROOT_CHROME_SCOPE was
+ * the whole of what reached it — and `survey-form.tsx` asks for two namespaces
+ * that are not in it. The page rendered correct English anyway, through
+ * `translate`'s SOURCE_MESSAGES fallback, which is exactly the fallback
+ * PERF-001 proposes to delete from the client bundle. It is also unauthenticated
+ * and linked out to people who are not customers.
+ *
+ * Nothing caught it because the guard's surface list was hand-written and had
+ * no completeness control — the third instance of that shape in this file's
+ * history, after the entry globs and the extractor. The control now lives in
+ * tests/i18n-client-scope.test.ts: every page under `app/` must be governed by
+ * a provider that either declares `'all'` or belongs to a walked surface.
+ *
+ * `s.*` is deliberately absent: `page.tsx` is a server component and resolves
+ * those through `getTranslations()`, which never reaches the browser.
+ */
+export const SURVEY_SCOPE = [
+  ...ROOT_CHROME_SCOPE,
+  'surveyForm', 'sSurveyForm',
 ] as const;
 
 /**
@@ -71,11 +178,23 @@ export const PUBLIC_LINK_SCOPE = [
  * behind a login where there is no crawler and no first-visit cost.
  */
 export function scopeMessages(messages: Messages, namespaces: readonly string[]): Messages {
+  // An entry containing a dot names ONE key; an entry without one names a whole
+  // namespace. Both are matched exactly, so 'log' still does not pull in
+  // 'login.*' — the case below pins that, because a prefix match would quietly
+  // re-inflate every scope.
+  //
+  // Single keys exist because of a measured 32 KB. AUTH_SCOPE listed the
+  // namespace `actions` for a comment's stated reason — "the two kid-login
+  // errors that the sign-in form surfaces from the server action" — and
+  // `actions` holds 478 keys, 32,141 bytes, 72% of the whole auth scope. The
+  // sign-in page was shipping the catalogue's largest namespace to render two
+  // error strings. Naming the two costs 195 bytes.
   const wanted = new Set(namespaces);
   const scoped: Messages = {};
   for (const key in messages) {
+    if (wanted.has(key)) { scoped[key] = messages[key]; continue; }
     const dot = key.indexOf('.');
-    if (wanted.has(dot === -1 ? key : key.slice(0, dot))) scoped[key] = messages[key];
+    if (dot !== -1 && wanted.has(key.slice(0, dot))) scoped[key] = messages[key];
   }
   return scoped;
 }

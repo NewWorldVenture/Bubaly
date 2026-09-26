@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Copy, Check, Share2, Ticket, Mail } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { fmtDate, fmtMoney } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { applyReferralCodeAction, sendReferralEmailAction } from '@/app/(app)/referrals/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -28,6 +28,7 @@ export function ReferralPanel({ code, link, rewardLabel, enabled, alreadyReferre
   code: string; link: string; rewardLabel: string; enabled: boolean; alreadyReferred: boolean; rows: Row[];
 }) {
   const t = useTranslations();
+  const { fmtDate, fmtMoney } = useFormat();
   const { success, error: toastError } = useToast();
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const [entry, setEntry] = useState('');

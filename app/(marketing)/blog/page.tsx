@@ -12,7 +12,8 @@ import { BlogCover } from '@/components/blog/blog-cover';
 import { cn } from '@/lib/utils/cn';
 import { BlogSearch } from './blog-search';
 import { resolveMarketingMetadata } from '@/lib/marketing/seo';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -76,8 +77,8 @@ const CATEGORY_ICON_COLORS: Record<BlogCategory, string> = {
   'Home & Seasonal': 'bg-teal-500/20',
 };
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function fmtDate(iso: string, locale: LocaleCode) {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /** Hero photo, or a bespoke generated cover (unique per title) for image-less posts. */
@@ -106,11 +107,17 @@ const PAGE_SIZE = 24; // cards per page — keeps the grid + image requests ligh
 
 export default async function BlogPage({ searchParams }: Props) {
   const t = await getTranslations();
+  // A server page: the locale comes from the request, as the translator does.
+  const { locale } = await getLocaleContext();
   const params = await searchParams;
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
   const activeTag = params.tag ? toHashtag(params.tag) : null;
   const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
-  const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : params.unsubscribed === 'error' ? 'error' : null;
+  const unsubscribed = params.unsubscribed === '1' ? 'done'
+    : params.unsubscribed === 'invalid' ? 'invalid'
+      // The route could not reach the database. Distinct from 'invalid', which
+      // blames the reader's link for something that was not the link's fault.
+      : params.unsubscribed === 'error' ? 'error' : null;
 
   const [allPostsRaw, featured, categoryCounts] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
@@ -168,7 +175,9 @@ export default async function BlogPage({ searchParams }: Props) {
                 // Distinct from 'invalid' on purpose: the link was fine, we were not.
                 // Telling someone their link is wrong when the database refused sends
                 // them to check the one thing that was never the problem.
-                ? 'We couldn’t complete that just now — your link is fine. Please try again in a moment, and contact support if the emails keep arriving.'
+                // It must also say what did NOT happen: the reader clicked unsubscribe
+                // and it failed, so the honest line is that they are still subscribed.
+                ? 'We couldn’t complete that just now — your link is fine, but the unsubscribe didn’t go through, so you may still receive blog emails. Please try the link again in a few minutes, and contact support if they keep arriving.'
                 : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
           </div>
         </Container>
@@ -271,7 +280,7 @@ export default async function BlogPage({ searchParams }: Props) {
                     <p className="mt-2 text-sm leading-6 text-white/55">{featured.excerpt}</p>
                     <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
                       <span className="flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5" />{featured.author}</span>
-                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{fmtDate(featured.date)}</span>
+                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />{fmtDate(featured.date, locale.code)}</span>
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{featured.readingMinutes} {t('blog.minRead')}</span>
                     </div>
                   </div>
@@ -305,7 +314,7 @@ export default async function BlogPage({ searchParams }: Props) {
                       </h3>
                       <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{post.excerpt}</p>
                       <div className="mt-auto pt-3 flex items-center gap-2 text-[11px] text-white/40">
-                        <span>{fmtDate(post.date)}</span>
+                        <span>{fmtDate(post.date, locale.code)}</span>
                         <span>·</span>
                         <span>{post.readingMinutes} min read</span>
                       </div>
@@ -345,7 +354,7 @@ export default async function BlogPage({ searchParams }: Props) {
                       <PostImage post={post} sizes="48px" className="h-12 w-12 shrink-0 rounded-lg" />
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{post.title}</p>
-                        <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date)}</p>
+                        <p className="mt-0.5 text-xs text-white/40">{fmtDate(post.date, locale.code)}</p>
                       </div>
                     </Link>
                   </li>

@@ -42,6 +42,12 @@ describe('language-module writes fail visibly', () => {
     expect(form).toContain('languageModule.theTargetLevelMustBe');
   });
   it('deleting a goal is confirmed', () => {
-    expect(bodies('deleteGoal')[0]).toMatch(/if \(!confirm\(/);
+    // The property, not the spelling: the handler asks BEFORE it writes, so
+    // nothing may be awaited ahead of the question. This guard used to pin
+    // `if (!confirm(` and went red when the ask moved to the shared, localised
+    // primitive — a change that made it stricter, not weaker.
+    const body = bodies('deleteGoal')[0];
+    expect(body).toContain('askConfirm(');
+    expect(body.indexOf('await ')).toBe(body.indexOf('await askConfirm('));
   });
 });

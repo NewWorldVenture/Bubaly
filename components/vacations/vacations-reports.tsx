@@ -7,10 +7,10 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { StatPill, Progress } from './shared';
-import { VACATION_KINDS, dollars, lookup } from '@/lib/vacations/meta';
+import { VACATION_KINDS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { daysUntil } from '@/lib/vacations/dates';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type Expense = Tables<'vacation_expenses'>;
@@ -19,6 +19,9 @@ type Score = Tables<'vacation_travel_scores'>;
 
 export function VacationsReports() {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId } = useApp();
   const { data: trips, loading: tripsLoading, error: tripsError, refresh: refreshTrips } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
   const { data: expenses, loading: expensesLoading, error: expensesError, refresh: refreshExpenses } = useRealtimeQuery<Expense>({ table: 'vacation_expenses', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacation_expenses').select('*').eq('family_id', familyId) });

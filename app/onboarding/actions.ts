@@ -285,7 +285,15 @@ export async function resetOnboardingAction(): Promise<Result> {
     status: 'reset',
   });
 
-  await logAudit(supabase, {
+  // The service client, not the caller's: this is a row the SERVER authors about
+  // a reset it just performed, and `active_family_id` may be null for a user who
+  // has not joined a household yet. 0300 pins `audit_insert` to
+  // `is_family_member(family_id) and actor_id = auth.uid()` and drops the
+  // `family_id is null` branch — this was the one client-side caller that used it,
+  // and `admin` was already in scope two lines above. Every other null-family
+  // audit writer (the admin actions, the benchmarks export) was on the service
+  // role already.
+  await logAudit(admin, {
     familyId: (prefRow?.active_family_id as string | null) ?? null, actorId: auth.user.id,
     action: 'update', resource: 'onboarding_progress', resourceId: auth.user.id,
     metadata: { onboarding: 'reset' },

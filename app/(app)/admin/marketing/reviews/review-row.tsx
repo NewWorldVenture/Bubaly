@@ -6,6 +6,7 @@ import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from '.
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 type Review = {
   id: string; rating: number; title: string | null; body: string | null;
@@ -49,14 +50,14 @@ export function ReviewRow({ review }: { review: Review }) {
         {review.status !== 'rejected' && <button onClick={() => moderate('rejected')} disabled={pending} className="inline-flex items-center gap-1 text-muted hover:text-danger"><X className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reject')}</button>}
         <button onClick={() => setReplyOpen((o) => !o)} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Reply className="h-3.5 w-3.5" /> {t('adminMarketingReviewsReviewRow.reply')}</button>
         {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />}
-        <button onClick={() => start(async () => { await deleteReviewAction(review.id); })} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+        <button aria-label={t('a11y.delete')} onClick={() => start(async () => { await deleteReviewAction(review.id); })} className="ml-auto inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
 
       {replyOpen && (
         <form action={(fd) => start(async () => { await replyToReviewAction(fd); setReplyOpen(false); })} className="mt-2 space-y-2">
           <input type="hidden" name="id" value={review.id} />
           <textarea name="reply" defaultValue={review.reply ?? ''} rows={2} placeholder={t('adminMarketingReviewsReviewRow.writeAPublicReply')} className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingReviewsReviewRow.saveReply')}</button>
+          <SubmitButton className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingReviewsReviewRow.saveReply')}</SubmitButton>
         </form>
       )}
     </div>

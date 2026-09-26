@@ -41,6 +41,14 @@ describe('career-module writes fail visibly', () => {
     expect(form).toContain('ats_score: ats.score, matched_keywords: ats.matched, missing_keywords: ats.missing');
   });
   it('destructive actions are confirmed', () => {
-    for (const fn of ['deleteApplication', 'deleteResume', 'deleteProfile']) expect(bodies(fn)[0], fn).toMatch(/if \(!confirm\(/);
+    // The property, not the spelling: the handler asks BEFORE it writes, so
+    // nothing may be awaited ahead of the question. This guard used to pin
+    // `if (!confirm(` and went red when the ask moved to the shared, localised
+    // primitive — a change that made it stricter, not weaker.
+    for (const fn of ['deleteApplication', 'deleteResume', 'deleteProfile']) {
+      const body = bodies(fn)[0];
+      expect(body, fn).toContain('askConfirm(');
+      expect(body.indexOf('await '), fn).toBe(body.indexOf('await askConfirm('));
+    }
   });
 });

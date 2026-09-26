@@ -43,9 +43,26 @@ describe('the fan-out crons are bounded and honest about what they missed', () =
 
     it(`${name} reports an unserved tail and does not answer 200`, () => {
       const s = src(name);
-      // The whole point: skipped must reach both the body and the status.
-      expect(s).toMatch(/skipped\s*=\s*\w+\.length - i/);
-      expect(s).toMatch(/failed === 0 && skipped === 0/);
+      // TWO COUNTERS, AND THEY MUST STAY TWO. Do not "simplify" `unserved` back
+      // into `skipped`: the two names record outcomes with opposite statuses.
+      //
+      //   skipped  — a recipient the run REACHED and could not email (no
+      //              address on file). Nothing to retry, so the run is still a
+      //              success: tests/the-weekly-digest-reaches-every-family and
+      //              tests/digest-cron-read-boundary pin that at 200 with a
+      //              body of exactly { sent, failed: 0, skipped: 1 }.
+      //   unserved — the tail the run NEVER ATTEMPTED because the budget ran
+      //              out. It is the failure that raises no error of its own, so
+      //              it must be counted from the loop index and must force 502.
+      //
+      // One counter cannot mean both; folding them back together forces one of
+      // those two answers to be wrong. The property asserted here is unchanged
+      // from when this guard said `skipped`: the tail is counted off the loop
+      // index, and a non-zero count cannot produce a 200.
+      //
+      // The whole point: unserved must reach both the body and the status.
+      expect(s).toMatch(/unserved\s*=\s*\w+\.length - i/);
+      expect(s).toMatch(/failed === 0 && unserved === 0/);
       expect(s).toMatch(/status: ok \? 200 : 502/);
     });
 

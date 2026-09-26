@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Note = Tables<'notes'>;
 
@@ -86,6 +87,7 @@ function renderChecklist(body: string) {
 
 export function NotesModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
@@ -158,9 +160,9 @@ export function NotesModule() {
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('notes.searchNotes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button aria-label={t('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
-            <button onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}
+            <button aria-label={t(view === 'grid' ? 'a11y.listView' : 'a11y.gridView')} onClick={() => setView(v => v === 'grid' ? 'list' : 'grid')}
               className="rounded-xl border border-border p-2 text-muted hover:bg-elevated hover:text-fg transition">
               {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
             </button>
@@ -213,10 +215,10 @@ export function NotesModule() {
           <div className="max-h-[70vh] overflow-y-auto -m-1">
             <div className="flex items-center justify-between mb-4">
               <div className="flex gap-1">
-                <button onClick={() => togglePin(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition">
+                <button aria-label={t(viewing.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => togglePin(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-brand-text transition">
                   {viewing.is_pinned ? <PinOff className="h-4 w-4 text-brand-text" /> : <Pin className="h-4 w-4" />}
                 </button>
-                <button onClick={() => duplicate(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
+                <button aria-label={t('a11y.copy')} onClick={() => duplicate(viewing)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg transition">
                   <Copy className="h-4 w-4" />
                 </button>
                 <button onClick={() => { setEditing(viewing); setViewing(null); }}
@@ -224,7 +226,7 @@ export function NotesModule() {
                   {t('notes.edit')}
                 </button>
               </div>
-              <button onClick={() => { if (confirm(t('notesModule.deleteThisNote'))) remove(viewing.id); }}
+              <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) remove(viewing.id); }}
                 className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -256,6 +258,8 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   onDelete: (id: string) => void;
   onDuplicate: (n: Note) => void;
 }) {
+  const t = useTranslations();
+  const askConfirm = useConfirm();
   if (view === 'list') {
     return (
       <div className="overflow-hidden rounded-2xl border border-border divide-y divide-border/50">
@@ -266,22 +270,30 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
           return (
             <div key={note.id} onClick={() => onOpen(note)}
               className="group flex cursor-pointer items-center gap-4 px-4 py-3 hover:bg-elevated/30 transition">
-              <div className="flex-1 min-w-0">
+              {/* The row's onClick is a mouse convenience and stays. This button is
+                  the control: a real <button> rather than role="button" on the row,
+                  because the row holds the pin, copy and delete buttons and a role
+                  with presentational children would tell assistive technology to
+                  ignore them. It wraps the content region that was already the
+                  visual target, so its accessible name is the note's title and
+                  preview and nothing moves. */}
+              <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(note); }}
+                className="focus-ring flex-1 min-w-0 rounded text-left">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
                   <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
                   {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
-              </div>
+              </button>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
+                <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
-                <button onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
-                <button onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
+                <button aria-label={t('a11y.copy')} onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -313,6 +325,13 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               color.bg, color.ring,
             )}>
             {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}
+            {/* Same reasoning as the list row: the card's footer holds the pin and
+                delete buttons, so the card itself must not take role="button". The
+                button wraps the title and the body preview — the region that was
+                already the click target — so a titleless note is still named by its
+                body text and no card gains a label it did not show before. */}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(note); }}
+              className="focus-ring flex flex-1 flex-col rounded text-left">
             {note.title && <p className="mb-2 pr-5 text-sm font-bold leading-tight">{note.title}</p>}
             {checklist ? (
               <div className="flex-1 space-y-0.5 overflow-hidden">
@@ -335,6 +354,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
             ) : (
               <p className="flex-1 line-clamp-5 text-xs leading-relaxed text-muted">{note.body}</p>
             )}
+            </button>
             <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-2">
               <div className="flex items-center gap-1.5 text-[10px] text-muted">
                 {checklist && <span className="text-success">{checkCount}/{totalCheck}</span>}
@@ -342,10 +362,10 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 {fmtRelative(note.updated_at)}
               </div>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
+                <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
-                <button onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
@@ -472,7 +492,7 @@ function NoteModal({ note, onClose, onSaved }: {
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
                   <Sparkles className="h-3.5 w-3.5" /> {t('notes.aiSummary')}
                 </span>
-                <button type="button" onClick={() => setInsights(null)} className="text-muted hover:text-fg">
+                <button type="button" aria-label={t('a11y.close')} onClick={() => setInsights(null)} className="text-muted hover:text-fg">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>

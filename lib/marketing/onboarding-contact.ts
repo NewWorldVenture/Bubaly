@@ -53,14 +53,27 @@ export async function upsertOnboardingContact(admin: DB, p: {
   // RLS is admin-only, and the match decides which row the update below
   // overwrites — so an unescaped `%` here matched an arbitrary stranger's
   // contact and rewrote it with this caller's name, email and family.
+  //
+  // A lookup that did not come back is not "no such contact". Reading it as one
+  // falls through to the INSERT, and crm_contacts has no unique key on email to
+  // refuse the second row — so a failed read forked this person into two
+  // contacts. Only a returned list may say "none"; anything else stops here.
   let existingId: string | null = null;
   if (email) {
-    const { data } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
-    existingId = data?.[0]?.id ?? null;
+    const { data, error } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
+    if (error || !Array.isArray(data)) {
+      console.error('[onboarding-contact] contact lookup by email failed', { error: error ?? 'no result list' });
+      return;
+    }
+    existingId = data[0]?.id ?? null;
   }
   if (!existingId && p.familyId) {
-    const { data } = await admin.from('crm_contacts').select('id').eq('family_id', p.familyId).limit(1);
-    existingId = data?.[0]?.id ?? null;
+    const { data, error } = await admin.from('crm_contacts').select('id').eq('family_id', p.familyId).limit(1);
+    if (error || !Array.isArray(data)) {
+      console.error('[onboarding-contact] contact lookup by family failed', { familyId: p.familyId, error: error ?? 'no result list' });
+      return;
+    }
+    existingId = data[0]?.id ?? null;
   }
 
   // Both results are read. This function decides who a CRM contact IS — the

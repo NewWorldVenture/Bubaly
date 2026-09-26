@@ -25,10 +25,10 @@ export const metadata: Metadata = { title: 'Family Operating Index' };
 export const dynamic = 'force-dynamic';
 
 const BAND_COPY: Record<Band, { label: string; blurb: string; ring: string; text: string; chip: string }> = {
-  thriving: { label: 'Thriving', blurb: 'The household is running smoothly — nice work.', ring: 'text-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
-  steady: { label: 'Steady', blurb: 'On top of things with a few easy wins available.', ring: 'text-brand-text', text: 'text-brand-text', chip: 'bg-brand/12 text-brand-text' },
-  stretched: { label: 'Stretched', blurb: 'A handful of things need attention this week.', ring: 'text-amber-500', text: 'text-amber-600 dark:text-amber-400', chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400' },
-  overloaded: { label: 'Overloaded', blurb: 'Several things are piling up — let’s clear the top ones.', ring: 'text-rose-500', text: 'text-rose-600 dark:text-rose-400', chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400' },
+  thriving: { label: 'Thriving', blurb: 'The household is running smoothly — nice work.', ring: 'text-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  steady: { label: 'Steady', blurb: 'On top of things with a few easy wins available.', ring: 'text-brand-text', text: 'text-brand-text', chip: 'bg-brand/10 text-brand-text' },
+  stretched: { label: 'Stretched', blurb: 'A handful of things need attention this week.', ring: 'text-amber-500', text: 'text-amber-600 dark:text-amber-400', chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  overloaded: { label: 'Overloaded', blurb: 'Several things are piling up — let’s clear the top ones.', ring: 'text-rose-500', text: 'text-rose-600 dark:text-rose-400', chip: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
 };
 
 const DIM_ICON: Record<DimensionId, React.ComponentType<{ className?: string }>> = {
@@ -37,8 +37,8 @@ const DIM_ICON: Record<DimensionId, React.ComponentType<{ className?: string }>>
 };
 
 const IMPACT_CHIP: Record<'high' | 'medium' | 'low', string> = {
-  high: 'bg-rose-500/12 text-rose-600 dark:text-rose-400',
-  medium: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
+  high: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   low: 'bg-brand/10 text-brand-text',
 };
 
@@ -60,9 +60,12 @@ export default async function FamilyOperatingIndexPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The family's zone. The index is snapshotted under the family's day and
+  // bounds bills/documents/goals (all DATE columns) with it.
+  const tz = ctx.active.family.timezone || 'UTC';
   let indexResult;
   try {
-    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
+    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
     return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
@@ -149,7 +152,7 @@ export default async function FamilyOperatingIndexPage() {
           <Compass className="h-4 w-4 text-brand-text" />
           <h2 className="text-sm font-semibold">{t('dashboardFamilyOperatingIndex.yourFamilyChiefOfStaff')}</h2>
           {orchestrator.allClear && (
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" /> {t('dashboardFamilyOperatingIndex.allClear')}
             </span>
           )}

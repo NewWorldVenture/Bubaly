@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSmsDraft } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · SMS', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -63,7 +64,7 @@ export default async function SmsPage() {
             </select>
             <textarea name="message" required maxLength={320} rows={4} placeholder={t('adminMarketingSms.messageKeepUnder160CharsInclude')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
             <p className="text-xs text-muted">{t('adminMarketingSms.alwaysIncludeReplyStopToOpt')}</p>
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSms.saveDraft')}</button>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSms.saveDraft')}</SubmitButton>
           </form>
         </Card>
       </div>

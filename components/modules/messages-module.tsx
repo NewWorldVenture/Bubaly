@@ -8,6 +8,7 @@ import {
   Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -23,11 +24,10 @@ import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtDate, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
+  convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
-import { familyMediaPath } from '@/lib/storage/family-media';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -81,6 +81,9 @@ async function createConversation(payload: ConvInsert) {
 
 export function MessagesModule() {
   const tr = useTranslations();
+  // The date follows the reader and the words come from the catalogue.
+  const locale = useLocale();
+  const shortTime = (iso: string) => shortTimeIn(iso, new Date(), locale.code, tr);
   const { familyId, userId, members, selfMember } = useApp();
   const { error: toastError } = useToast();
 
@@ -851,11 +854,11 @@ export function MessagesModule() {
                                 {emoji}
                               </button>
                             ))}
-                            <button onClick={() => setReplyTo(msg)}
+                            <button aria-label={tr('a11y.reply')} onClick={() => setReplyTo(msg)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                            <button aria-label={tr('a11y.moreActions')} onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>

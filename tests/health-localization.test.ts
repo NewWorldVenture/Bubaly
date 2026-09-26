@@ -9,6 +9,7 @@ const harness = vi.hoisted(() => ({
   rows: {} as Record<string, Record<string, unknown>[]>, failed: '',
   refreshes: {} as Record<string, ReturnType<typeof vi.fn>>,
   insert: vi.fn(), upsert: vi.fn(), from: vi.fn(), success: vi.fn(), error: vi.fn(), requireFeature: vi.fn(),
+  confirm: vi.fn(async () => true),
 }));
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
@@ -36,6 +37,10 @@ vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: ({ table }:
 }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: harness.from }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: harness.success, error: harness.error }) }));
+// This harness calls the component as a plain function rather than rendering it,
+// so every hook it reaches has to be supplied here. The confirmation answers yes:
+// what these cases are about is what the module renders, not the question.
+vi.mock('@/components/ui/confirm', () => ({ useConfirm: () => harness.confirm }));
 vi.mock('@/components/ui/modal', () => ({ Modal: ({ open, title, children }: { open: boolean; title: string; children: ReactNode }) =>
   open ? createElement('section', { 'aria-label': title }, children) : null,
 }));

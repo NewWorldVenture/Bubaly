@@ -16,9 +16,9 @@ import { computeReadiness } from '@/lib/vacations/readiness';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import { dateRange, countdownLabel } from '@/lib/vacations/dates';
-import { dollars, RECO_META } from '@/lib/vacations/meta';
+import { dollars as dollarsIn, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 const q = <T,>(table: string, familyId: string, vacationId: string) => ({
   table, familyId, deps: [familyId, vacationId],
@@ -27,6 +27,9 @@ const q = <T,>(table: string, familyId: string, vacationId: string) => ({
 
 export function TripOverview({ vacationId }: { vacationId: string }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 

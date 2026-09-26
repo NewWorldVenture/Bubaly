@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AIProvider } from '@/lib/ai/provider';
 import { classifyIntent, classifyIntentFast, INTENT_KEYS, INTENT_SLICES, type IntentKey } from '@/lib/ai/context/intents';
+import { localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
 
 const NOW = new Date('2026-09-05T15:00:00Z');
 
@@ -69,7 +70,22 @@ describe('fast paths', () => {
   it('carries entities from the recognisers', () => {
     const capture = classifyIntentFast('Dentist tomorrow at 3pm', { now: NOW });
     expect(capture?.entities.kind).toBe('event');
-    expect(capture?.entities.startsAt).toMatch(/^2026-09-06T/);
+    // "tomorrow at 3pm" is a claim about the READER's wall clock: the day after
+    // NOW's local day, at 15:00 local. `parseEvent` resolves it with local
+    // calendar-parts arithmetic (lib/capture/parse.ts LOCAL_OPS), and
+    // `intents.ts` serialises that instant with `toISOString()` — correctly, an
+    // instant on the wire. The old literal /^2026-09-06T/ asserted the UTC
+    // RENDERING of that instant, which was a statement about the host, not the
+    // contract: it holds only where NOW (2026-09-05T15:00Z) is still 5 Sept
+    // locally AND 15:00 local on the 6th still falls inside 6 Sept UTC — true
+    // at UTC, UTC-7 and UTC+2, false at UTC+9 (local NOW is already the 6th, so
+    // tomorrow is the 7th) and at UTC-12 (15:00 local on the 6th is 03:00Z on
+    // the 7th). Assert the local day and the local clock instead, which is true
+    // in every zone.
+    const startsAt = capture?.entities.startsAt;
+    expect(localDayKeyOf(startsAt)).toBe(shiftLocalDay(NOW, 1));
+    const at = new Date(startsAt ?? Number.NaN);
+    expect([at.getHours(), at.getMinutes()]).toEqual([15, 0]);
     const nav = classifyIntentFast('open the calendar', { now: NOW });
     expect(nav?.entities.target).toBe('calendar');
     const goal = classifyIntentFast("who's free Saturday?", { now: NOW });

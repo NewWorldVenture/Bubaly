@@ -602,9 +602,19 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  *
  *   * `memberId`/`userId` become the ASKER's, so every `created_by` and
  *     member-scoped column names the person who wanted the thing. Safe under
- *     RLS: the database client stays the approver's session, and no table the
- *     AI writes carries a `created_by = auth.uid()` predicate (`0004` applies
- *     that only to `families` and `user_preferences`).
+ *     RLS, but no longer because no predicate exists: `0339` gave
+ *     `calendar_events` a restrictive INSERT guard of
+ *     `created_by is null OR created_by = auth.uid() OR
+ *     public.can_manage_family(family_id)`, and `calendar.createEvent` is a
+ *     registered tool this function's scope reaches. The MANAGER branch is what
+ *     keeps this safe: `openForDecision` refuses any decision where
+ *     `!isManager(scope.role)`, and `MANAGER_ROLES` (`parent`/`adult`) is
+ *     exactly `can_manage_family`'s role set, so the approver always satisfies
+ *     it while writing the asker's id. `0272` does the same for `event_rsvps`.
+ *     A future table that pins `created_by` to `auth.uid()` with NO manager
+ *     branch WOULD break this path — that is what got three earlier migrations
+ *     rejected. `0004` still applies a bare pin only to `families` and
+ *     `user_preferences`, neither of which the AI writes.
  *   * `actorKind` becomes `'ai'`, because it IS Bubaly doing the work — a human
  *     released it, they did not type it. That also restores the family activity
  *     line: `recordActivity` returns early for `actorKind === 'member'`, so

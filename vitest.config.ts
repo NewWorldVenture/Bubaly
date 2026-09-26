@@ -2,17 +2,19 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 
 export default defineConfig({
-  // vitest 2.x / vite 5 transforms with esbuild, so the JSX automatic runtime
-  // must be set under `esbuild` (the `oxc` key only applies to vitest 3+/rolldown
-  // and is a no-op here). Without this, esbuild falls back to the CLASSIC runtime
-  // and compiles JSX to `React.createElement`, so any component that (correctly,
-  // per the app's automatic runtime) does not `import React` throws
-  // "React is not defined" when server-rendered in a test — the failure seen in
-  // tests/display-render.test.ts. `oxc` is kept for forward-compat with vitest 3.
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: 'react',
-  },
+  // The JSX automatic runtime must be configured, or the transform falls back to
+  // the CLASSIC runtime and compiles JSX to `React.createElement`, so any
+  // component that (correctly, per the app's automatic runtime) does not
+  // `import React` throws "React is not defined" when server-rendered in a test.
+  // tests/display-render.test.ts is the canary for that failure.
+  //
+  // WHICH key carries it depends on the transformer, and this comment used to
+  // name the wrong one. The installed vitest is 4.x, which transforms with oxc
+  // and prints "Both esbuild and oxc options were set. oxc options will be used
+  // and esbuild options will be ignored" on every run when both are present. So
+  // `oxc` is the live setting and the `esbuild` block was removed rather than
+  // kept "for forward-compat": a key that is ignored cannot be doing the job the
+  // comment credits it with, and leaving it implied the opposite.
   oxc: {
     jsx: { runtime: 'automatic' },
   },

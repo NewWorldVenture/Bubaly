@@ -7,6 +7,7 @@
 // derived from the family's own policies — nothing is invented.
 
 import type { InsurancePolicyType, PremiumFrequency } from '@/lib/database.types';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export const POLICY_TYPES: { value: InsurancePolicyType; label: string; emoji: string }[] = [
   { value: 'health', label: 'Health', emoji: '🩺' },
@@ -157,7 +158,19 @@ export function insuranceSummary(policies: readonly PolicyLike[], today: Date = 
 }
 
 /** Format cents-free currency for display (whole dollars). */
-export function fmtMoney(amount: number | null | undefined): string {
+/**
+ * Premiums and coverage, in WHOLE DOLLARS — not the cents that lib/utils/format.ts
+ * `fmtMoney` takes. The two are deliberately not merged: the columns here hold
+ * dollars and this rounds to them, so routing these amounts through the cents
+ * formatter would divide them by a hundred.
+ *
+ * `locale` follows the reader; the currency does not, because a policy is priced in
+ * the currency it was written in whichever language the family reads.
+ */
+export function fmtMoney(
+  amount: number | null | undefined,
+  locale: LocaleCode = DEFAULT_LOCALE,
+): string {
   if (amount == null) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
 }

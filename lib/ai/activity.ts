@@ -127,10 +127,16 @@ export function normalizeStatusFilter(raw: string | undefined): { status: AiRunS
  * feature name someone will reasonably type, and a dot inside the value half of
  * `column.operator.value` is not structural.
  */
+/**
+ * `*` is escaped alongside `%` and `_` because PostgREST accepts it as a SPELLING
+ * OF `%` in a `like`/`ilike` value. A class written against the SQL LIKE grammar
+ * does not contain it, which is how both of this codebase's search sanitizers
+ * missed the same character.
+ */
 function safeSearchTerm(value: string): string {
   return value
     .replace(/[(),]/g, ' ')
-    .replace(/[\\%_]/g, (c) => `\\${c}`)
+    .replace(/[\\%_*]/g, (c) => `\\${c}`)
     .trim();
 }
 

@@ -15,14 +15,14 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
-import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { reminderTimeFor } from '@/lib/moments/reminders';
 import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -36,6 +36,9 @@ const DOMAIN_ICON: Record<PrepDomain, typeof Clock> = {
 const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
+  const locale = useLocale();
+  // The date follows the reader and the words come from the catalogue.
+  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t);
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -127,7 +130,7 @@ export function HomeMomentCard() {
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
                 <Clock className="h-3.5 w-3.5 text-brand-text" />
-                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}
               </span>
             )}
             {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {

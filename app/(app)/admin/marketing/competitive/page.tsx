@@ -14,6 +14,7 @@ import {
   saveBacklinkAction, deleteBacklinkAction,
 } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -86,14 +87,14 @@ export default async function CompetitivePage() {
           <input name="name" required placeholder="HubSpot" className={inputCls} />
           <input name="domain" placeholder="hubspot.com" className={inputCls} />
           <input name="ranking" type="number" min="1" placeholder={t('adminMarketingCompetitive.rank1Top')} className={inputCls} />
-          <button type="submit" className={btnCls}>{t('adminMarketingCompetitive.addCompetitor')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingCompetitive.addCompetitor')}</SubmitButton>
         </form>
         {comps.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noCompetitorsTracked')}</p> : (
           <div className="space-y-1.5">
             {comps.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
                 <span><span className="font-medium">{c.name}</span>{c.domain && <span className="ml-2 text-xs text-muted">{c.domain}</span>}{c.ranking != null && <span className="ml-2 rounded bg-violet-500/15 px-1.5 py-0.5 text-[11px] text-violet-300">#{c.ranking}</span>}</span>
-                <form action={deleteCompetitorAction.bind(null, c.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form>
+                <form action={deleteCompetitorAction.bind(null, c.id)}><SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton></form>
               </div>
             ))}
           </div>
@@ -108,7 +109,7 @@ export default async function CompetitivePage() {
           <input name="search_volume" type="number" min="0" placeholder="Volume/mo" className={inputCls} />
           <input name="difficulty" type="number" min="0" max="100" placeholder={t('adminMarketingCompetitive.difficulty')} className={inputCls} />
           <input name="our_rank" type="number" min="1" placeholder={t('adminMarketingCompetitive.ourRank')} className={inputCls} />
-          <button type="submit" className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addKeyword')}</button>
+          <SubmitButton className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addKeyword')}</SubmitButton>
         </form>
         {kws.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noKeywordsTracked')}</p> : (
           <div className="overflow-x-auto">
@@ -122,7 +123,7 @@ export default async function CompetitivePage() {
                     <td className="py-2">{k.difficulty ?? '—'}</td>
                     <td className="py-2">{k.our_rank ?? <span className="text-muted">unranked</span>}</td>
                     <td className="py-2"><span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-300">{keywordOpportunity(k)}</span></td>
-                    <td className="py-2 text-right"><form action={deleteKeywordAction.bind(null, k.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form></td>
+                    <td className="py-2 text-right"><form action={deleteKeywordAction.bind(null, k.id)}><SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton></form></td>
                   </tr>
                 ))}
               </tbody>
@@ -139,14 +140,14 @@ export default async function CompetitivePage() {
           <input name="target_url" placeholder="/blog/post" className={inputCls} />
           <input name="authority" type="number" min="0" max="100" placeholder={t('adminMarketingCompetitive.authority')} className={inputCls} />
           <select name="status" defaultValue="active" className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
-          <button type="submit" className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</button>
+          <SubmitButton className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</SubmitButton>
         </form>
         {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (
           <div className="space-y-1.5">
             {links.map((l) => (
               <div key={l.id} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm">
                 <span><span className="font-medium">{l.source_domain}</span>{l.target_url && <span className="ml-2 text-xs text-muted">→ {l.target_url}</span>}{l.authority != null && <span className="ml-2 text-xs text-muted">DA {l.authority}</span>}<span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${l.status === 'active' ? 'bg-emerald-500/15 text-emerald-300' : l.status === 'toxic' ? 'bg-rose-500/15 text-rose-300' : 'bg-slate-500/15 text-slate-300'}`}>{l.status}</span></span>
-                <form action={deleteBacklinkAction.bind(null, l.id)}><button className="text-xs text-muted hover:text-rose-400">✕</button></form>
+                <form action={deleteBacklinkAction.bind(null, l.id)}><SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton></form>
               </div>
             ))}
           </div>

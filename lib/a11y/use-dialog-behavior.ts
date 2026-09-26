@@ -4,6 +4,15 @@ import { useEffect, type RefObject } from 'react';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
+// Dialogs nest: a delete confirmation opens on top of the dialog whose Delete
+// button was pressed. Both listen for keys on `document`, so without a stack one
+// Escape would dismiss both and the inner one's Tab trap would fight the outer
+// one's. Only the top-most open dialog answers keys, and the scroll lock lifts
+// only when the last one holding it closes.
+const openDialogs: symbol[] = [];
+const scrollLocks: symbol[] = [];
+let overflowBeforeLock = '';
+
 /**
  * What `aria-modal="true"` actually promises, as a hook.
  *
@@ -55,6 +64,9 @@ export function useDialogBehavior(
     const dialog = ref.current;
     if (!dialog) return;
 
+    const token = Symbol('dialog');
+    openDialogs.push(token);
+
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     const focusables = () => Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
@@ -62,6 +74,9 @@ export function useDialogBehavior(
     (focusables()[0] ?? dialog).focus();
 
     const onKey = (e: KeyboardEvent) => {
+      // Only the top-most dialog answers keys: one Escape must not dismiss a
+      // confirmation and the dialog underneath it at the same time.
+      if (openDialogs[openDialogs.length - 1] !== token) return;
       if (e.key === 'Escape') {
         // No `onClose` means this dialog is not dismissible. Escape does
         // nothing, and the trap below still holds — which is the point.
@@ -84,13 +99,23 @@ export function useDialogBehavior(
     };
 
     document.addEventListener('keydown', onKey);
-    const previousOverflow = document.body.style.overflow;
-    if (lockScroll) document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
+    if (lockScroll) {
       // Restore what was there rather than assuming '': a dialog opened from
       // inside another locked surface must not unlock the page behind both.
-      if (lockScroll) document.body.style.overflow = previousOverflow;
+      if (scrollLocks.length === 0) overflowBeforeLock = document.body.style.overflow;
+      scrollLocks.push(token);
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      const at = openDialogs.lastIndexOf(token);
+      if (at >= 0) openDialogs.splice(at, 1);
+      document.removeEventListener('keydown', onKey);
+      if (lockScroll) {
+        const lockAt = scrollLocks.lastIndexOf(token);
+        if (lockAt >= 0) scrollLocks.splice(lockAt, 1);
+        // The lock lifts only when the last dialog holding it has closed.
+        if (scrollLocks.length === 0) document.body.style.overflow = overflowBeforeLock;
+      }
       previouslyFocused?.focus?.();
     };
   }, [ref, open, onClose, lockScroll]);

@@ -13,6 +13,7 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { saveDealAction, setDealStageAction, deleteDealAction } from '../crm/actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -85,7 +86,7 @@ export default async function PipelinePage() {
             {contactList.map((c) => <option key={c.id} value={c.id}>{contactDisplayName(c)}</option>)}
           </select>
           <input name="close_date" type="date" className={inputCls} />
-          <button type="submit" className={btnCls}>{t('adminMarketingPipeline.addDeal')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingPipeline.addDeal')}</SubmitButton>
         </form>
       </Card>
 
@@ -116,7 +117,7 @@ export default async function PipelinePage() {
                         </button>
                       </form>
                       <form action={deleteDealAction.bind(null, d.id)}>
-                        <button type="submit" className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</button>
+                        <SubmitButton className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:text-rose-400">✕</SubmitButton>
                       </form>
                     </div>
                   </div>

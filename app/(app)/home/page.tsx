@@ -13,7 +13,8 @@ import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboard
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime, firstName, fmtMoney } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
@@ -44,7 +45,7 @@ import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
 import { getReferralConfigResult } from '@/lib/referrals/server';
 import { REFERRAL_HOME_CARD_DISMISSED_KEY } from '@/lib/referrals/core';
 import {
-  summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
+  summarizeMonthFinances, usd as usdIn, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
 import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
@@ -52,7 +53,7 @@ import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
 export const metadata: Metadata = { title: 'Home' };
@@ -108,6 +109,9 @@ function Ring({ value, size = 92, stroke = 8, children }: { value: number; size?
 // A two-slice income/expense donut with the remaining balance in the center.
 async function FinanceDonut({ income, expenses, remaining, size = 124, stroke = 14 }: { income: number; expenses: number; remaining: number; size?: number; stroke?: number }) {
   const i18nT = await getTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const { locale } = await getLocaleContext();
+  const usd = (amount: number) => usdIn(amount, locale.code);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const total = Math.max(income, income + Math.max(0, -remaining), 1);
@@ -146,6 +150,8 @@ type Member = { id: string; display_name: string; color: string | null; role: st
 
 export default async function HomePage() {
   const i18nT = await getTranslations();
+  const { locale } = await getLocaleContext();
+  const usd = (amount: number) => usdIn(amount, locale.code);
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -155,6 +161,11 @@ export default async function HomePage() {
   // The family's own day, not the server's: the Today section and its reads
   // resolve "today" in the family timezone.
   const tz = ctx.active.family.timezone || 'UTC';
+  // And so do the times PRINTED on them. This call sat above `tz` and took no
+  // zone, so the page picked the right events with `tz` and then rendered each
+  // one's clock in the server's zone — 15:00 in Los Angeles reaching a family as
+  // "10:00 PM". Bound here, after `tz` exists, because that is the whole fix.
+  const { fmtTime, fmtMoney } = await getFormat(tz);
   const todayKey = dayKeyInTz(now, tz);
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
@@ -586,7 +597,7 @@ export default async function HomePage() {
             return (
               <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
-                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString('en-US', { month: 'short' })}</span>
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString(locale.code, { month: 'short' })}</span>
                   <span className="text-sm font-black leading-none">{d.getDate()}</span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -659,7 +670,7 @@ export default async function HomePage() {
             {(tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
             {((tasks ?? []) as { id: string; title: string; due_date: string | null; assigned_to_id: string | null }[]).map((t) => {
               const owner = t.assigned_to_id ? memberById.get(t.assigned_to_id) : undefined;
-              const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : null;
+              const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })) : null;
               return (
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="h-4 w-4 shrink-0 rounded-full border-2 border-emerald-400/60" />
@@ -728,7 +739,7 @@ export default async function HomePage() {
         {/* Family Finances */}
         <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
-          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
+          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString(locale.code, { month: 'long' })}</p>
           <div className="mt-3 flex items-center gap-4">
             <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
             <div className="flex-1 space-y-2 text-sm">
@@ -748,7 +759,7 @@ export default async function HomePage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {((photos ?? []) as { id: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; created_at: string }[]).map((p) => {
                 const src = p.thumbnail_url || p.url;
-                const when = new Date(p.taken_at || p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const when = new Date(p.taken_at || p.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' });
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
                     {src

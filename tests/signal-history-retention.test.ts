@@ -56,11 +56,11 @@ describe('signal history survives reconciliation', () => {
       { id: 'stale', family_id: 'f1', dedupe_key: 'renewal:gone', status: 'open' },
       { id: 'decided', family_id: 'f1', dedupe_key: 'renewal:dismissed', status: 'dismissed' },
     ]);
-    expect((await runAutopilotScan(db, 'f1', 'u1')).cleared).toBe(1);
+    expect((await runAutopilotScan(db, 'f1', 'u1', 'UTC')).cleared).toBe(1);
     expect(db.table('autopilot_suggestions')).toHaveLength(602);
     expect(db.table('autopilot_suggestions').find((row) => row.id === 'stale')).toMatchObject({ status: 'snoozed', expires_at: NOW.toISOString() });
     expect(db.table('autopilot_suggestions').find((row) => row.id === 'decided')?.status).toBe('dismissed');
-    expect((await runAutopilotScan(db, 'f1', 'u1')).cleared).toBe(0);
+    expect((await runAutopilotScan(db, 'f1', 'u1', 'UTC')).cleared).toBe(0);
   });
 
   it.each(['acknowledged', 'dismissed'])('preserves a %s family signal and its decision time on refresh', async (status) => {

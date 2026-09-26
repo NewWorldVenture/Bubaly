@@ -23,7 +23,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
-  buildMomentPrep, momentWhen, type PrepDomain, type PrepItem, type MomentCategory, type MomentDeparture, type MomentEvent,
+  buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type PrepItem, type MomentCategory, type MomentDeparture, type MomentEvent,
 } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
@@ -34,7 +34,7 @@ import {
   loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
   removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'calendar_events'>;
 
@@ -62,6 +62,9 @@ export function MomentsView({ departures, departuresFailed = false }: {
   departuresFailed?: boolean;
 } = {}) {
   const t = useTranslations();
+  // The date follows the reader and the words come from the catalogue.
+  const locale = useLocale();
+  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t);
   const router = useRouter();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();

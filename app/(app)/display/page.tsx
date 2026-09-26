@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { unstable_rethrow } from 'next/navigation';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
@@ -22,6 +22,7 @@ import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export const metadata: Metadata = { title: 'Kitchen Display', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -122,6 +123,7 @@ async function loadDisplay(
   now: Date,
   timezone: unknown,
   untitledRun: string,
+  locale: LocaleCode,
 ): Promise<LoadedDisplay> {
   const calendar = familyDisplayCalendar(now, timezone);
   const { start, end } = calendar.todayWindow;
@@ -198,7 +200,7 @@ async function loadDisplay(
       if (!mmdd) return false;
       return mmddEnd >= mmddToday ? mmdd >= mmddToday && mmdd < mmddEnd : mmdd >= mmddToday || mmdd < mmddEnd;
     })
-    .map((m) => ({ name: m.display_name ?? 'Member', date: formatBirthday(birthdayMonthDay(m.birthday)!) }));
+    .map((m) => ({ name: m.display_name ?? 'Member', date: formatBirthday(birthdayMonthDay(m.birthday)!, locale) }));
 
   const eventDays = displayEventDays(monthEvents ?? [], calendar.monthWindow, calendar.timezone);
   const displayReminders = (reminders ?? []).map(row => ({ id: row.id, title: row.title, remind_at: displayReminderTime(row) }))
@@ -256,10 +258,10 @@ function birthdayMonthDay(raw: string | null): string | null {
 }
 
 /** "05-15" → "May 15" (safe; returns "" on a malformed pair). */
-function formatBirthday(mmdd: string): string {
+function formatBirthday(mmdd: string, locale: LocaleCode): string {
   const d = new Date(`2000-${mmdd}T00:00:00`);
   return Number.isFinite(d.getTime())
-    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    ? d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
     : '';
 }
 
@@ -305,6 +307,8 @@ export default async function KitchenDisplayPage() {
     return <DisplayReconnect />;
   }
   const t = await getTranslations();
+  // A server page: the locale comes from the request, as the translator does.
+  const { locale } = await getLocaleContext();
   const familyId = ctx.active.familyId;
   const familyName = ctx.active.family.name;
   const now = new Date();
@@ -312,7 +316,7 @@ export default async function KitchenDisplayPage() {
   let loaded: LoadedDisplay;
   try {
     const supabase = await createServer();
-    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'));
+    loaded = await loadDisplay(supabase, familyId, familyName, now, ctx.active.family.timezone, t('displayHandled.untitledRun'), locale.code);
     // Serialization firewall: these props cross the server→client boundary
     // AFTER this function returns, so a single non-JSON value anywhere in the
     // rows (a BigInt from a numeric column, a circular ref) throws OUTSIDE any

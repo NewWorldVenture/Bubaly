@@ -24,7 +24,7 @@ export function HintsTicker({ hints }: { hints: string[] }) {
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-4">
       <p
         aria-live="polite"
-        className="max-w-[92%] truncate rounded-full bg-black/45 px-5 py-2 text-sm font-medium text-white/85 shadow-lg backdrop-blur-xl transition-opacity duration-400"
+        className="max-w-[92%] truncate rounded-full bg-black/45 px-5 py-2 text-sm font-medium text-white/85 shadow-lg backdrop-blur-xl transition-opacity duration-300"
         style={{ opacity: visible ? 1 : 0 }}
       >
         {hints[i % hints.length]}

@@ -23,7 +23,8 @@ import type { StepState } from '@/lib/ai/runs/states';
 import type { CompletedSource } from '@/lib/home/today';
 import { toolDomainLabel } from '@/lib/ai/tool-domains';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 // ─── The read model ──────────────────────────────────────────────────────────
 //
@@ -179,11 +180,11 @@ export function ProgressBar({ progress }: { progress: RunProgressView }) {
   );
 }
 
-function when(iso: string): string {
+const whenIn = (locale: LocaleCode) => (iso: string): string => {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
+  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+};
 
 /**
  * M6: the tool each step runs, by step id — `ai_plan_steps.tool_name` mapped
@@ -208,6 +209,8 @@ function SourceChip({ source }: { source: CompletedSource }) {
 }
 
 export function RunTimeline({ view, showActivity, stepSources }: { view: RunView; showActivity: boolean; stepSources?: StepSources }) {
+  const locale = useLocale();
+  const when = whenIn(locale.code);
   const t = useTranslations();
   useLiveRun(view.familyId, view.id, view.planId);
   const rows = timelineRows(view.steps, view.events);

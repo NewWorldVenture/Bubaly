@@ -63,7 +63,7 @@ function LevelPicker({
           title={level.hint}
           className={cn(
             'min-h-9 rounded-md px-3 text-sm transition-colors disabled:opacity-60',
-            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-surface-2',
+            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-elevated',
           )}
         >
           {level.label}
@@ -104,7 +104,16 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     const res = await saveAISettingsAction(patch);
     setSaving(null);
     if (res.ok) { setSettings(res.settings); success(t('aiSettings.saved')); }
-    else { toastError(res.error); const reload = await loadAISettingsAction(); if (reload.ok) setSettings(reload.settings); }
+    else {
+      toastError(res.error);
+      const reload = await loadAISettingsAction();
+      if (reload.ok) setSettings(reload.settings);
+      // The reload failed too, so nothing on this page is known any more — and
+      // the optimistic guess is still showing the change the database just
+      // refused. Stop answering rather than keep it: every control here edits
+      // from what the page shows.
+      else setLoadError(reload.error);
+    }
   }, [success, toastError, t]);
 
   if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
@@ -136,7 +145,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           </Button>
         </div>
         {!settings.enabled && (
-          <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+          <p className="mt-3 rounded-lg bg-elevated px-3 py-2 text-sm">
             {t('aiSettings.bubalyIsSwitchedOffItWill')}
           </p>
         )}

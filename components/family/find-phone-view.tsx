@@ -10,14 +10,17 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { relTime } from '@/lib/family/safety';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { relTime as relTimeIn } from '@/lib/family/safety';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Loc = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
 
 export function FindPhoneView() {
   const t = useTranslations();
+  // "30m ago" on a safety surface follows the reader.
+  const locale = useLocale();
+  const relTime = (iso: string) => relTimeIn(iso, new Date(), locale.code);
   const { familyId, members } = useApp();
 
   const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<Loc>({

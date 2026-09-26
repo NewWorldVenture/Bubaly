@@ -19,6 +19,7 @@ import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { describeAIError, isAIConfigured } from '@/lib/ai/provider';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -41,28 +42,48 @@ function unauthorized(message: string, code: string) {
   return NextResponse.json({ error: message, code }, { status: 401 });
 }
 
-/** Resolve the caller from a bearer token (mobile) or the cookie session (web). */
+/**
+ * Resolve the caller from a bearer token (mobile) or the cookie session (web).
+ *
+ * Identity is the first question, and nothing runs above it. Two orderings here
+ * are load-bearing rather than incidental:
+ *
+ *   • A bearer header, once present, is authoritative. An invalid token is a
+ *     401 and never a fall-through to whatever cookies the request also
+ *     carried, so a stolen or stale mobile token cannot be upgraded into
+ *     someone else's browser session.
+ *   • Nothing else happens before the caller is known. This route's own cookie
+ *     client is built only once a session has answered — `getUserContext()`
+ *     brings its own, which is the identity question itself — and the request's
+ *     translator is resolved only on the branches that render translated copy,
+ *     every one of which is past the point where we know who is asking. So an
+ *     anonymous POST answers 401 having asked who was calling and nothing else:
+ *     no second client, no family read, no catalogue, no rate-limit row. Its
+ *     message is hardcoded English because there is no reader yet whose
+ *     language we could have looked up.
+ */
 async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
-  const tr = await getAIRequestTranslations(req);
   const token = extractBearerToken(req.headers.get('authorization'));
   if (token) {
     const bearer = await getBearerUserContext(token);
     if (bearer.ok) return { supabase: bearer.supabase, ctx: bearer.ctx, via: 'bearer' };
     if (bearer.reason === 'invalid_token') return unauthorized('Sign in to use the assistant.', 'invalid_token');
+    const tr = await getAIRequestTranslations(req);
     if (bearer.reason === 'needs_family') {
       return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
     return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
   }
 
-  const supabase = await createServer();
   let ctx = await getUserContext();
   if (!ctx) return unauthorized('Sign in to use the assistant.', 'signed_out');
+  const supabase = await createServer();
   if ('needsFamily' in ctx) {
     // Same auto-provisioning as requireUserContext(), minus the redirect.
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user && (await ensureActiveFamily(supabase, auth.user))) ctx = await getUserContext();
     if (!ctx || 'needsFamily' in ctx) {
+      const tr = await getAIRequestTranslations(req);
       return NextResponse.json({ error: tr('ai.finishSettingUpYourFamily'), code: 'needs_family' }, { status: 403 });
     }
   }
@@ -102,11 +123,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tr = await getAIRequestTranslations(req);
   try {
+    // Who is calling, before anything else. The translator used from here down
+    // is the caller's language, and the household assertion refuses in it, so
+    // both wait on `authenticate()` — which is also what keeps this handler
+    // from doing any work at all for a request that turns out to be nobody's.
     const authed = await authenticate(req);
     if (authed instanceof NextResponse) return authed;
     const { supabase, ctx } = authed;
+    const tr = await getAIRequestTranslations(req);
     const familyError = assertAIRequestFamily(req, ctx.active.familyId, tr);
     if (familyError) return familyError;
     const familyId = ctx.active.familyId;
@@ -132,6 +157,31 @@ export async function POST(req: NextRequest) {
     if (!limited.ok) return rejected(limited.retryAfter);
     const durable = await rateLimitDb(supabase, key, AI_RATE_LIMIT);
     if (!durable.ok) return rejected(durable.retryAfter);
+
+    // The plan gate, on the side that can enforce it.
+    //
+    // It used to live only on the PAGE — `requireFeature('/dashboard/assistant')`
+    // — while this route, which is what actually spends money and is what the
+    // Expo app calls with a bearer token, checked nothing beyond the rate limit
+    // above. So the gate was backwards on both halves: a free family was
+    // refused the screen its plan includes, and any signed-in member could file
+    // unlimited turns through here regardless of plan. The page comment has
+    // always said "the monthly quota is enforced at the request layer"; this is
+    // the request layer.
+    //
+    // Per-family and per-calendar-month, so it cannot be sidestepped by
+    // switching member or device the way the per-user rate limit above can.
+    let access;
+    try {
+      access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    } catch (error) {
+      // assertAIAccess throws only when the family's plan cannot be read. An
+      // unreadable plan is not an unentitled family, so answer 503 rather than
+      // refusing someone who has paid.
+      console.error('[ai] entitlement check failed', error);
+      return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
+    }
+    if (!access.ok) return accessDeniedResponse(access);
 
     const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
     if (!boundedBody.ok) {

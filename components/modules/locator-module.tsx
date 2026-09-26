@@ -23,7 +23,7 @@ import {
 } from '@/lib/location/overview';
 import { updateMyLocation, setLocationSharing, savePlace, deletePlace, setGeofenceEnabled } from '@/app/(app)/dashboard/locator/actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type MemberLocation = Tables<'member_locations'>;
 type Place = Tables<'family_places'>;
@@ -66,6 +66,7 @@ function geoErrorMessage(err: unknown): string {
 }
 
 export function LocatorModule() {
+  const locale = useLocale();
   const tr = useTranslations();
   const { familyId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -86,6 +87,18 @@ export function LocatorModule() {
   const historyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
+
+  // Both dropdowns were dismissed by clicking the page wrapper — mouse only, so
+  // a keyboard user could open the map-style or More menu and not close it. The
+  // wrapper's onClick stays for the mouse; Escape is the keyboard equivalent.
+  useEffect(() => {
+    if (!styleOpen && !moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setStyleOpen(false); setMoreOpen(false); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [styleOpen, moreOpen]);
 
   const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
     table: 'member_locations', familyId, deps: [familyId],
@@ -127,10 +140,12 @@ export function LocatorModule() {
   }, [places, liveMembers, locByMember]);
 
   const alerts = useMemo(() => arrivalAlerts(events ?? [], 6), [events]);
+  // The day headings follow the reader: two words from the catalogue, the date
+  // from the locale.
   const history = useMemo(() => groupHistoryByDay(
     (events ?? []).map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
-    now,
-  ), [events, now]);
+    now, locale.code, tr,
+  ), [events, now, locale.code, tr]);
 
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);
@@ -355,7 +370,7 @@ export function LocatorModule() {
                     <div className="flex items-center gap-1 text-xs font-medium text-brand-text"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
                   </div>
                   <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? '—'}</div>
-                  <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now)}</div>
+                  <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now, locale.code, tr)}</div>
                   <div className="flex w-16 shrink-0 items-center justify-end gap-1.5">
                     <div className="relative h-3.5 w-7 rounded-[3px] border border-current text-muted">
                       <span className="absolute -right-[3px] top-1/2 h-1.5 w-[2px] -translate-y-1/2 rounded-r bg-current" />
@@ -399,7 +414,7 @@ export function LocatorModule() {
                     <p className="truncate text-sm font-medium">{ev.place_name ?? 'A place'}</p>
                     <p className="truncate text-xs text-muted">{memberName(ev.member_id)} arrived</p>
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted">{new Date(ev.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                  <span className="shrink-0 text-[11px] text-muted">{new Date(ev.occurred_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}</span>
                 </div>
               );
             })}
@@ -464,7 +479,7 @@ export function LocatorModule() {
                           <span className={cn('absolute -left-[15px] top-1 h-2 w-2 rounded-full', i === 0 ? 'bg-brand' : 'bg-muted/50')} />
                           <div className="flex items-center justify-between">
                             <span className="text-sm">{e.place_name ?? 'A place'}</span>
-                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
+                            <span className="text-[11px] text-muted">{new Date(e.occurred_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}{i === 0 ? ' — Now' : ''}</span>
                           </div>
                           <span className="text-[10px] text-muted">{memberName(e.member_id)}</span>
                         </div>

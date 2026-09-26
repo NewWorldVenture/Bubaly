@@ -10,6 +10,7 @@ const runAssistantTurn = vi.fn();
 const createAssistantStream = vi.fn();
 const rateLimit = vi.fn();
 const rateLimitDb = vi.fn();
+const assertAIAccess = vi.fn();
 const refuseUnlessEntitled = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => cookieClient }));
@@ -31,6 +32,12 @@ vi.mock('@/lib/ai/provider', () => ({
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: (...a: unknown[]) => refuseUnlessEntitled(...a) }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: (...a: unknown[]) => rateLimitDb(...a) }));
+// Only the question is stubbed; `accessDeniedResponse` and the feature key stay
+// real, so the denial body these tests see is the one a caller sees.
+vi.mock('@/lib/server/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/ai-access')>()),
+  assertAIAccess: (...a: unknown[]) => assertAIAccess(...a),
+}));
 vi.mock('@/lib/assistant/tools', () => ({
   buildAssistantTools: () => [{ name: 'add_chore', description: 'Add a chore', input_schema: { type: 'object' }, execute: async () => ({}) }],
 }));
@@ -50,6 +57,32 @@ vi.mock('@/lib/ai/assistant-engine', async (importOriginal) => ({
 }));
 
 type Row = Record<string, unknown>;
+// The budget, not the assertions, and the difference is measured rather than
+// assumed.
+//
+// Every case in this file runs in 1-12ms. The FIRST one pays something else
+// entirely: `await import('@/app/api/ai/route')` reaches
+// lib/server/ai-request-context.ts -> lib/i18n/messages.ts, which statically
+// imports all ELEVEN catalogues — 6.6 MB of JSON, 13,778 keys — and parsing
+// them measures ~2.5s on its own, with the whole route import at 3.5-3.8s
+// against vitest's 5,000ms default. The handler itself returns in 6ms.
+//
+// So on a cold transform cache or a loaded machine the first case times out,
+// and it does NOT fail alone: vitest fails a timed-out case but does not
+// cancel its in-flight promise, so the abandoned POST finishes after
+// afterEach's clearAllMocks() and lands a getUserContext() call inside the
+// NEXT case — which is how "401s an invalid bearer token and never falls back
+// to cookies" came to see a cookie call the bearer path never makes. Two red
+// cases, one cause, and the second one accuses the wrong code.
+//
+// Raising the budget changes no assertion: every case still proves exactly
+// what it proved. The real fix is per-locale catalogue loading in
+// lib/i18n/messages.ts, which is a production cold-start cost and not only a
+// test one — recorded as PERF-001 in finalaudit.md rather than improvised
+// here, because 10 modules import that file and one of them is a client
+// component.
+vi.setConfig({ testTimeout: 20_000 });
+
 const conv: { single?: Row | null; readError?: unknown; upsertError?: unknown } = {};
 function client() {
   const c: Record<string, unknown> = {
@@ -78,6 +111,7 @@ beforeEach(() => {
   isAIConfigured.mockResolvedValue(true);
   rateLimit.mockReturnValue({ ok: true });
   rateLimitDb.mockResolvedValue({ ok: true });
+  assertAIAccess.mockResolvedValue({ ok: true, planLevel: 2, monthlyUsed: null, monthlyAllowance: null });
   refuseUnlessEntitled.mockResolvedValue(null);
   prepareAssistantTurn.mockResolvedValue({ ok: true, turn: { system: 's', messages: [], tools: [], provider: { model: 'm' } } });
   runAssistantTurn.mockResolvedValue({ content: 'Planned.', actions: [{ name: 'create_meal_plan_entry', ok: true, summary: 'Planned.' }], persisted: true, model: 'm' });
@@ -187,6 +221,42 @@ describe('POST /api/ai guards', () => {
     const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
     expect(res.status).toBe(429);
     expect(res.headers.get('retry-after')).toBe('12');
+    expect(prepareAssistantTurn).not.toHaveBeenCalled();
+  });
+
+  // The plan gate lives HERE and not only on /dashboard/assistant, because the
+  // Expo app posts to this route with a bearer token and never loads the page.
+  // A check that only the page performs is a check mobile walks past.
+  it('refuses a family over its monthly AI allowance, before touching the engine', async () => {
+    assertAIAccess.mockResolvedValue({
+      ok: false, status: 429, code: 'allowance_exceeded',
+      error: 'Your family has used its 10 AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.',
+    });
+    const { POST } = await import('@/app/api/ai/route');
+    const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.code).toBe('allowance_exceeded');
+    expect(body.error).toContain('10 AI requests');
+    expect(prepareAssistantTurn).not.toHaveBeenCalled();
+  });
+
+  it('asks about the assistant, not the concierge', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
+    expect(assertAIAccess).toHaveBeenCalled();
+    const [, opts] = assertAIAccess.mock.calls.at(-1) as [unknown, { featureKey?: string }];
+    expect(opts.featureKey).toBe('ai-assistant');
+  });
+
+  // An unreadable plan is not an unentitled family: assertAIAccess throws when
+  // it cannot resolve one, and refusing there would lock out someone who paid.
+  it('503s rather than refusing when the plan cannot be read', async () => {
+    assertAIAccess.mockRejectedValue(new Error('plan unreadable'));
+    const { POST } = await import('@/app/api/ai/route');
+    const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe('unavailable');
     expect(prepareAssistantTurn).not.toHaveBeenCalled();
   });
 

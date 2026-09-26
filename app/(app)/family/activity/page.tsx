@@ -5,8 +5,9 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { describeTrail, type TrailRow } from '@/lib/activity/trail';
-import { fmtRelative } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Activity' };
@@ -15,12 +16,24 @@ export const dynamic = 'force-dynamic';
 export default async function FamilyActivityPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtRelative } = await getFormat(tz);
   const supabase = await createServer();
 
   // `audit_logs.actor_id` is an auth user id, so the names come from the member
   // rows. The page selected `actor_id` from the start and never showed it —
   // "who changed what" was missing the who.
-  const [{ data: logs }, { data: members }] = await settleAll([
+  // settleAll delivers a transport failure as { data: null, error } — in the shape
+  // the caller is expected to handle. Its own header comment says so: "The
+  // caller's existing error handling then runs for transport failures too."
+  // There was none here, so a failed read rendered "No activity recorded yet"
+  // over the family's audit trail: the one screen whose whole purpose is to say
+  // what happened, saying nothing happened.
+  const [{ data: logs, error: logsError }, { data: members }] = await settleAll([
     supabase
       .from('audit_logs')
       .select('id, action, resource, resource_id, metadata, created_at, actor_id')
@@ -46,7 +59,7 @@ export default async function FamilyActivityPage() {
           <ul className="space-y-1">
             {lines.map((l) => (
               <li key={l.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-surface/40">
-                <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${l.byAssistant ? 'bg-brand-500/15' : 'bg-violet-500/15'}`}>
+                <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${l.byAssistant ? 'bg-brand/15' : 'bg-violet-500/15'}`}>
                   {l.byAssistant ? <Sparkles className="h-4 w-4 text-brand-text" /> : <FileEdit className="h-4 w-4 text-brand-text" />}
                 </div>
                 <span className="min-w-0 flex-1">
@@ -57,7 +70,9 @@ export default async function FamilyActivityPage() {
               </li>
             ))}
           </ul>
-        ) : <MiniEmpty icon={Activity} text={t('activity.noActivityRecordedYet')} />}
+        ) : logsError
+          ? <ErrorState message={t('activity.couldnTLoadTheActivityLog')} />
+          : <MiniEmpty icon={Activity} text={t('activity.noActivityRecordedYet')} />}
       </SectionCard>
     </div>
   );

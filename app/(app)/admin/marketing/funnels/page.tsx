@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createFunnel } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Funnels', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -50,7 +51,7 @@ export default async function FunnelsPage() {
         <form action={createFunnel} className="space-y-3 text-sm">
           <input name="name" required placeholder={t('adminMarketingFunnels.funnelName')} className={inputCls} />
           <textarea name="steps" rows={5} placeholder={t('adminMarketingFunnels.oneStepPerLineEG')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingFunnels.createFunnel')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingFunnels.createFunnel')}</SubmitButton>
         </form>
       </Card>
     </div>

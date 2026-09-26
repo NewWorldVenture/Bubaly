@@ -34,3 +34,9 @@ client_secret*.json
 # account was used. The route crawl is a documented workflow, so this file lands
 # in the working tree routinely; it must never be committed.
 cookies.json
+
+# Python bytecode. docs/audit/ holds scripts that are imported as modules as well
+# as run, and an untracked __pycache__/ beside them is one `git add -A` away from
+# being committed by someone who did not put it there.
+__pycache__/
+*.pyc

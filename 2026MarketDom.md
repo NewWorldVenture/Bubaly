@@ -398,11 +398,24 @@ awake, explains its own setup, and has a public /family-display page that is a
 compatibility list rather than a partnership claim.
 
 **Still open:** W7's second half, which needs the `public_stats()` change in
-§6 item 18. And a translation pass: the six non-English catalogues
-are missing 304 keys en-US has (mostly `pricingContent.*`, the older
-`security.*`, `visualMocks.*`, `ai.*`, `aiShowcase.*`) — those strings fall
-back to English for every other locale. That is a translation job, not code,
-and it belongs in its own PR.
+§6 item 18. That is the only remaining item, and it is owner-gated.
+
+**The translation pass this line used to name is DONE** — re-measured
+2026-09-20 rather than assumed, because a "still open" that has quietly closed
+sends the next reader to do work that already exists. All six non-English
+catalogues (`de-DE`, `es-ES`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`) now carry
+**all 13,778 keys `en-US` has — 0 missing**, against the 304 recorded here.
+
+Checked for the obvious way that number could lie, which is a catalogue padded
+with English to make the count come out: in the very groups this line called
+out, 0–8% of values are identical to `en-US`, and the ones that are identical
+are proper nouns. `pricingContent.after5Days` is *"After 5 days"* in `en-US`,
+*"Nach 5 Tagen"* in `de-DE`, *"Après 5 jours"* in `fr-FR`, *"Passados 5 dias"*
+in `pt-PT`. `ai.*` is 0% identical in all three sampled locales.
+
+The four catalogues that ARE empty — `en-GB`, `es-MX`, `es-US`, `fr-CA` — are
+`I18N-009` in `finalaudit.md`, deliberate and working as designed: the fallback
+chain resolves them to their base language. They are not part of this gap.
 
 ### What the adversarial review caught in #421
 

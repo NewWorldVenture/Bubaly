@@ -2,8 +2,16 @@
 // (Budget Planner, Bill Manager, Auto Pay, Due Reminders, Savings, Payments).
 // No Supabase/React. Amounts are dollars (numeric), matching the finance tables.
 
-export function usd(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount ?? 0);
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+import { localDayKey } from '@/lib/time/local-day';
+
+/**
+ * Dollars for the reader. The LOCALE is the reader's; the CURRENCY is the
+ * money's own and stays USD — a family's bills are billed in dollars whatever
+ * language the person looking at them reads.
+ */
+export function usd(amount: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(amount ?? 0);
 }
 
 export type DueStatus = 'paid' | 'overdue' | 'due_soon' | 'upcoming';
@@ -32,13 +40,21 @@ export const DUE_META: Record<DueStatus, { label: string; tint: string }> = {
 
 export type Period = 'weekly' | 'monthly' | 'yearly';
 
-/** ISO date (YYYY-MM-DD) for the start of the current budget period. */
+/**
+ * ISO date (YYYY-MM-DD) for the start of the current budget period, on the
+ * READER's calendar. `d` is built from local parts, so it must be read back out
+ * with local parts too: `toISOString()` re-expresses that local midnight at
+ * Greenwich, which east of Greenwich is the previous day (1 June 00:00 in Tokyo
+ * is 31 May 15:00Z). The key is compared against `transactions.date`, a DATE
+ * column that is already a calendar day, so a key one day early silently pulls
+ * the last day of the previous period into this period's spend.
+ */
 export function periodStart(period: Period, now: Date = new Date()): string {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (period === 'weekly') { d.setDate(d.getDate() - d.getDay()); }
   else if (period === 'monthly') { d.setDate(1); }
   else { d.setMonth(0, 1); }
-  return d.toISOString().slice(0, 10);
+  return localDayKey(d);
 }
 
 export interface TxnLike { type: string; category: string | null; amount: number; date: string }
@@ -62,8 +78,8 @@ export function pct(part: number, whole: number): number {
   return Math.max(0, Math.min(100, Math.round((part / whole) * 100)));
 }
 
-export function fmtDueDate(iso: string): string {
+export function fmtDueDate(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }

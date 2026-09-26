@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { SURVEY_TYPES, summarize, isSurveyType, type SurveyType } from '@/lib/marketing/surveys';
 import { createSurveyAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Surveys', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export default async function SurveysPage() {
             <input name="question" className={inputCls} placeholder={tr('adminMarketingSurveys.howLikelyAreYouToRecommend')} />
           </label>
           <div className="sm:col-span-2">
-            <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> {tr('adminMarketingSurveys.createSurvey')}</button>
+            <SubmitButton className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Plus className="h-4 w-4" /> {tr('adminMarketingSurveys.createSurvey')}</SubmitButton>
             <p className="mt-1 text-[11px] text-muted">{tr('adminMarketingSurveys.scaleAmpLabelsDefaultToThe')}</p>
           </div>
         </form>

@@ -7,18 +7,28 @@ const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relat
 
 describe('family media persistence boundaries', () => {
   it('uses collision-resistant client-side upload paths', () => {
-    // The randomUUID call these three used to make inline now lives in
-    // lib/storage/object-name.ts, because four OTHER modules were naming objects
-    // `${Date.now()}.${ext}` in the same public bucket. The assertion follows the
-    // subject rather than the old spelling: each uploader must route through a
-    // collision-resistant namer. tests/public-bucket-objects-are-unguessable.ts
-    // enforces this across every uploader and checks the namer behaviourally.
+    // This pinned the literal `crypto.randomUUID` in each component, which was
+    // the right invariant expressed as an implementation detail. Both
+    // family-media callers now build their path with familyMediaPath(), the one
+    // place that decides this — see tests/family-media-paths-are-not-guessable.ts
+    // for why it has to be unguessable rather than merely collision-resistant,
+    // and for the sweep that stops a seventh caller rolling its own again.
+    //
+    // The inline call itself now lives in lib/storage/object-name.ts, because
+    // four OTHER modules were naming objects `${Date.now()}.${ext}` in the same
+    // public bucket. So the assertion follows the subject rather than the old
+    // spelling: each uploader must route through a collision-resistant namer.
+    // tests/public-bucket-objects-are-unguessable.ts enforces that across every
+    // uploader and checks the namer behaviourally.
     const createMemory = read('components/memories/create-memory.tsx');
     const photosModule = read('components/modules/photos-module.tsx');
-    const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
+    expect(createMemory).toContain('familyMediaPath(');
+    expect(photosModule).toContain('familyMediaPath(');
 
-    expect(createMemory).toContain('familyMediaPath');
-    expect(photosModule).toContain('familyMediaPath');
+    // The marketplace uploads to a DIFFERENT bucket (marketplace-photos) and
+    // still rolls its own, so it keeps the original assertion — as does the
+    // namer the family-media callers now share.
+    const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
     expect(marketplaceUpload).toContain('crypto.randomUUID');
     expect(read('lib/storage/object-name.ts')).toContain('crypto.randomUUID');
   });

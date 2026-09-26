@@ -436,7 +436,7 @@ export function MealsModule() {
                       <div className="p-2">
                         <div className="truncate text-xs font-semibold">{r.name}</div>
                         <div className="mt-0.5 text-[10px] text-muted">
-                          {r.last_made_at ? new Date(r.last_made_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                          {r.last_made_at ? new Date(r.last_made_at).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : ''}
                         </div>
                       </div>
                     </div>

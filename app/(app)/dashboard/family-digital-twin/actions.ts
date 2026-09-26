@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getLocaleContext } from '@/lib/i18n/server';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -37,6 +38,8 @@ function periodStart(period: string, now: Date): string {
 
 export async function simulateDecisionAction(input: SimFormInput): Promise<SimResult> {
   const ctx = await requireUserContext();
+  // The impact copy carries amounts, so it is formatted for whoever asked.
+  const { locale } = await getLocaleContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
@@ -59,7 +62,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     }));
     return simulateDecision(
       { kind: 'commitment', memberName: input.memberName, title: input.title.trim(), startsAt: input.startsAt, durationMin: input.durationMin, weeks: input.weeks },
-      { memberEvents, budgets: [] },
+      { memberEvents, budgets: [], locale: locale.code },
     );
   }
 
@@ -86,7 +89,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
   }
   return simulateDecision(
     { kind: 'spend', label: input.label.trim() || input.category, category: input.category, amountCents },
-    { memberEvents: [], budgets },
+    { memberEvents: [], budgets, locale: locale.code },
   );
 }
 

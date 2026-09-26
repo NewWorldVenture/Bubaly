@@ -17,6 +17,10 @@ export default async function BriefingPage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/briefing');
   const supabase = await createServer();
+  // The family's zone. Both reads below key on the family's day: the index
+  // snapshots under it and bounds DATE columns with it, and the reasoning
+  // context builds the same snapshot.
+  const tz = ctx.active.family.timezone || 'UTC';
 
   // Both reads run together. The page used to await the operating-index read and
   // THEN the reasoning context, so parallelising them pays for the extra queries
@@ -38,11 +42,11 @@ export default async function BriefingPage() {
     // tests/operating-index-today-anchor.test.ts), and persists today's row — so
     // opening the brief is now what makes today's snapshot exist for every other
     // surface, instead of the brief being the one that reads a stale pair.
-    loadOperatingIndex(supabase, ctx.active.familyId),
+    loadOperatingIndex(supabase, ctx.active.familyId, tz),
     // R2: the briefing reasons over Knowledge Graph relationships (hub / ripple /
     // coverage). A failed read must remain visible because the relationship
     // section is derived from source-of-truth data.
-    loadFamilyContext(supabase, ctx.active.familyId),
+    loadFamilyContext(supabase, ctx.active.familyId, tz),
   ]);
 
   if (indexResult.status === 'rejected') {

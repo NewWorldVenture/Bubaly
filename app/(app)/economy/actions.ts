@@ -35,7 +35,11 @@ async function decisionResult(operation: string, message: string, data: unknown)
     out_of_stock: t('actions.thatRewardIsOutOf'),
     insufficient_tokens: 'They no longer have enough tokens.',
   };
-  return { ok: false, error: messages[String(result.reason)] ?? `Could not ${operation}.` };
+  // `operation` is a log label (see actionFailure). What a parent reads for an
+  // unrecognised reason is `message`, already translated by the caller: the
+  // English template here used to interpolate a catalogue KEY that no catalogue
+  // carried, so the toast read "Could not actions.decideTheRedemption."
+  return { ok: false, error: messages[String(result.reason)] ?? message };
 }
 
 /** Create a custom currency (parent only). */
@@ -180,7 +184,7 @@ export async function decideRedemptionAction(input: { redemptionId: string; appr
     p_note: input.note?.trim() || null,
   });
   if (error) return actionFailure('decide the redemption', t('economy.couldNotDecideTheRedemption'), error);
-  const result = await decisionResult(t('actions.decideTheRedemption'), t('economy.couldNotDecideTheRedemption'), data);
+  const result = await decisionResult('decide the redemption', t('economy.couldNotDecideTheRedemption'), data);
   if (!result.ok) return result;
 
   revalidatePath('/economy');

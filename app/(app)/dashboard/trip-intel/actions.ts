@@ -8,6 +8,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getFormat } from '@/lib/utils/format-server';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
 import { departureFromEstimate } from '@/lib/trips/drive-time';
@@ -94,7 +95,24 @@ export interface DeparturePlanInput {
   weatherSummary?: string | null;
 }
 
-/** Create the "🚗 Head out for X" calendar event at the leave-by time. */
+/**
+ * The head-out event's id, or the reason the calendar write was refused.
+ *
+ * A bare `string | null` could not carry both: null means "there is no event",
+ * and a refused UPDATE came back as that same null even though the event was
+ * still on the calendar — at the OLD leave-by. The caller wrote the null back
+ * over `departure_plans.reminder_event_id`, severing the link to a live event
+ * and leaving the next refresh to create a second one beside it.
+ */
+type HeadOutResult = { ok: true; id: string | null } | { ok: false; error: string };
+
+/**
+ * Create or update the "🚗 Head out for X" calendar event at the leave-by time.
+ *
+ * Fails closed, like the anniversary toggle in
+ * app/(app)/dashboard/relationship/actions.ts: the stored link is only changed
+ * once the calendar write has actually happened.
+ */
 async function upsertHeadOutEvent(
   supabase: Awaited<ReturnType<typeof createServer>>,
   opts: {
@@ -102,7 +120,7 @@ async function upsertHeadOutEvent(
     title: string; leaveByISO: string; location: string | null;
     description: string;
   },
-): Promise<string | null> {
+): Promise<HeadOutResult> {
   const endISO = new Date(new Date(opts.leaveByISO).getTime() + 5 * 60_000).toISOString();
   const fields = {
     title: `🚗 Head out for ${opts.title}`,
@@ -114,18 +132,22 @@ async function upsertHeadOutEvent(
   };
   if (opts.existingId) {
     const { error } = await supabase.from('calendar_events').update(fields).eq('id', opts.existingId).eq('family_id', opts.familyId);
-    if (error) return null;
-    return opts.existingId;
+    if (error) return { ok: false, error: describeDbError(error) };
+    return { ok: true, id: opts.existingId };
   }
   const { data, error } = await supabase
     .from('calendar_events').insert({ ...fields, family_id: opts.familyId, created_by: opts.userId }).select('id').maybeSingle();
-  if (error || !data) return null;
-  return data.id;
+  if (error) return { ok: false, error: describeDbError(error) };
+  return { ok: true, id: data?.id ?? null };
 }
 
 export async function saveDeparturePlanAction(input: DeparturePlanInput): Promise<Result<{ id: string; leaveBy: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The leave-by clock goes into a calendar event the family reads, so it takes
+  // THEIR locale. `toLocaleTimeString([], …)` here took the SERVER's — worse than
+  // the browser-locale sites, because a server has no reader at all (I18N-002).
+  const { fmtDate } = await getFormat();
   const supabase = await createServer();
 
   const title = input.title.trim();
@@ -145,11 +167,15 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
     source: 'manual',
   }, input.eventStart, new Date());
 
-  const reminderEventId = await upsertHeadOutEvent(supabase, {
+  const headOut = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: null,
     title, leaveByISO: plan.leaveByISO, location: input.origin ?? null,
-    description: `Leave by ${new Date(plan.leaveByISO).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} to reach ${input.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
+    description: `Leave by ${fmtDate(plan.leaveByISO, 'h:mm a')} to reach ${input.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
   });
+  // A refused calendar write is not "no event": the insert may well have landed,
+  // and saving the plan without the link would leave that event stranded and
+  // duplicated on the first refresh. Report it instead.
+  if (!headOut.ok) return { ok: false, error: headOut.error };
 
   const { data, error } = await supabase
     .from('departure_plans')
@@ -157,7 +183,7 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
       family_id: ctx.active.familyId,
       created_by: ctx.user.id,
       event_id: input.eventId ?? null,
-      reminder_event_id: reminderEventId,
+      reminder_event_id: headOut.id,
       title,
       origin: input.origin ?? null,
       origin_lat: input.originLat ?? null,
@@ -199,6 +225,10 @@ export async function refreshDeparturePlanAction(input: {
 }): Promise<Result<{ leaveBy: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The leave-by clock goes into a calendar event the family reads, so it takes
+  // THEIR locale. `toLocaleTimeString([], …)` here took the SERVER's — worse than
+  // the browser-locale sites, because a server has no reader at all (I18N-002).
+  const { fmtDate } = await getFormat();
   const supabase = await createServer();
 
   const { data: existing, error: fetchErr } = await supabase
@@ -218,11 +248,16 @@ export async function refreshDeparturePlanAction(input: {
     source: 'manual',
   }, existing.event_start, new Date());
 
-  const reminderEventId = await upsertHeadOutEvent(supabase, {
+  const headOut = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: existing.reminder_event_id,
     title: existing.title, leaveByISO: plan.leaveByISO, location: existing.origin,
-    description: `Updated: leave by ${new Date(plan.leaveByISO).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} to reach ${existing.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
+    description: `Updated: leave by ${fmtDate(plan.leaveByISO, 'h:mm a')} to reach ${existing.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
   });
+  // The calendar event is what the family actually reads. If it could not be
+  // moved it still says the OLD leave-by, so persisting the new one here would
+  // report success for two clocks that disagree — and writing the null back
+  // would cut the link to that event and duplicate it on the next refresh.
+  if (!headOut.ok) return { ok: false, error: headOut.error };
 
   const { error } = await supabase
     .from('departure_plans')
@@ -232,7 +267,7 @@ export async function refreshDeparturePlanAction(input: {
       weather_delay_minutes: input.weatherDelayMinutes,
       weather_summary: input.weatherSummary ?? null,
       leave_by: plan.leaveByISO,
-      reminder_event_id: reminderEventId,
+      reminder_event_id: headOut.id,
       last_checked_at: new Date().toISOString(),
     })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);

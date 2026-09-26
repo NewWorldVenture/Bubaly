@@ -28,7 +28,8 @@ async function ReadFailure() {
 export default async function FamilyReportsPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  const result = await gatherSignalsResult(ctx.active.familyId);
+  // The family's zone, not the server's: every count below is a day key.
+  const result = await gatherSignalsResult(ctx.active.familyId, ctx.active.family.timezone || 'UTC');
   if (result.error || !result.data) {
     console.error('[family-reports] required read failed', result.error);
     return <ReadFailure />;

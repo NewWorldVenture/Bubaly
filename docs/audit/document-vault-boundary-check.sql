@@ -65,15 +65,65 @@ begin
   if found then raise exception 'a teen moved a document out of the vault'; end if;
 
   -- 5. Nor can they hide one FROM the adults by moving it in.
-  refused := false;
+  --
+  -- This asserts the OUTCOME — did the column actually move? — rather than the
+  -- mechanism, and that is deliberate: a check on "was 42501 raised" is
+  -- satisfied by any refusal, including one from a missing grant or a broken
+  -- fixture, while a check on the stored value can only pass if the row really
+  -- did not change. It is the stronger of the two and needs no positive control.
+  --
+  -- The `begin … exception` block IS load-bearing and must stay: RLS refuses
+  -- this update with 42501, and without a handler that error propagates and
+  -- kills the probe before the outcome check below can run. Removing it was
+  -- tried and does exactly that.
+  --
+  -- What was dead is the ASSIGNMENT inside it. `refused := true` is clobbered
+  -- one line later by `select ... into refused`, so nothing ever read it, and
+  -- it made the handler look like the assertion when the assertion is the
+  -- column read. The block now swallows the refusal and says so, and the value
+  -- tested comes only from the table.
   begin
     update public.documents set is_secure = true where id = school_id;
-  exception when insufficient_privilege then refused := true;
+  exception when insufficient_privilege then
+    null;  -- expected; the assertion is the column read below, not this catch
   end;
   select is_secure into refused from public.documents where id = school_id;
   if refused then raise exception 'a teen hid a shared document in the vault'; end if;
 
   -- 6. And cannot file a new one straight into it.
+  --
+  -- POSITIVE CONTROL FIRST. Check 6 asserts a refusal, and a refusal is only
+  -- evidence about the VAULT if the same session can file an ordinary document.
+  -- Every setup insert above ran before the session switched to the teen, so
+  -- without this nothing proved the teen still holds INSERT on public.documents
+  -- or still satisfies `is_family_member(family_id)` — and `insufficient_
+  -- privilege` from a missing grant or a broken family scope would have read
+  -- exactly like the vault predicate doing its job. This audit has twice
+  -- recorded a refusal credited to the wrong cause; this is the guard against
+  -- the third time.
+  begin
+    insert into public.documents (family_id, title, category, storage_path, is_secure, created_by)
+    values (fam, 'Ordinary', 'other', fam || '/ordinary.pdf', false, teen_uid);
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then
+    -- Caught so the operator is told WHICH refusal this is. Without it the
+    -- raw 'permission denied for table documents' is accurate but reads like
+    -- the vault working, which is the confusion this control exists to end.
+    raise exception 'CONTROL FAILED: the teen was refused an ORDINARY document (%), so a refusal in check 6 would prove nothing about the vault — the session has no usable INSERT on public.documents at all', sqlerrm;
+  end;
+  if n <> 1 then
+    raise exception 'CONTROL FAILED: the teen filed no ORDINARY document and was not refused either, so check 6 below would prove nothing about the vault';
+  end if;
+
+  -- The control must leave the fixture exactly as it found it. The parent's
+  -- count below asserts 3 documents, and a control that quietly made it 4 would
+  -- trade one vacuous check for one false failure.
+  delete from public.documents where storage_path = fam || '/ordinary.pdf';
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'CONTROL FAILED: could not remove the ordinary document it just filed, so the fixture is no longer what the checks below assume';
+  end if;
+
   refused := false;
   begin
     insert into public.documents (family_id, title, category, storage_path, is_secure, created_by)

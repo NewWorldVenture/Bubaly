@@ -12,6 +12,7 @@ import {
   saveCaseStudyAction, deleteCaseStudyAction,
 } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Reputation & Trust', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function ReputationPage() {
           <input name="rating" type="number" min="1" max="5" placeholder={tr('adminMarketingReputation.rating15')} className={inputCls} />
           <textarea name="quote" required placeholder={tr('adminMarketingReputation.bubalyChangedHowOurFamily')} className={`${inputCls} h-auto py-2 sm:col-span-2 lg:col-span-3`} rows={2} />
           <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> {tr('adminMarketingReputation.publish')}</label>
-          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addTestimonial')}</button>
+          <SubmitButton className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addTestimonial')}</SubmitButton>
         </form>
         {tList.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">{tr('adminMarketingReputation.noTestimonialsYet')}</p>
@@ -73,12 +74,12 @@ export default async function ReputationPage() {
                     {t.is_published ? 'Live' : 'Draft'}
                   </span>
                   <form action={togglePublishTestimonialAction.bind(null, t.id, !t.is_published)}>
-                    <button type="submit" className="text-muted hover:text-fg" title={t.is_published ? 'Unpublish' : 'Publish'}>
+                    <SubmitButton className="text-muted hover:text-fg" title={t.is_published ? 'Unpublish' : 'Publish'}>
                       {t.is_published ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={deleteTestimonialAction.bind(null, t.id)}>
-                    <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
+                    <SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton>
                   </form>
                 </div>
               </div>
@@ -101,7 +102,7 @@ export default async function ReputationPage() {
             <textarea name="body" rows={6} className={`${inputCls} mt-1 h-auto py-2`} />
           </label>
           <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" className="h-4 w-4 accent-[var(--brand)]" /> {tr('adminMarketingReputation.publish')}</label>
-          <button type="submit" className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addCaseStudy')}</button>
+          <SubmitButton className={`${btnCls} sm:col-span-2 lg:col-span-1`}>{tr('adminMarketingReputation.addCaseStudy')}</SubmitButton>
         </form>
         {cList.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">{tr('adminMarketingReputation.noCaseStudiesYet')}</p>
@@ -128,7 +129,7 @@ export default async function ReputationPage() {
                           <label className="text-xs text-muted">{tr('customerStories.bodyLabel')}<textarea name="body" rows={6} defaultValue={c.body ?? ''} className={`${inputCls} mt-1 h-auto py-2`} /></label>
                           <label className="text-xs text-muted">{tr('adminMarketingReputation.result')}<input name="result_metric" defaultValue={c.result_metric ?? ''} className={`${inputCls} mt-1`} /></label>
                           <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" name="is_published" defaultChecked={c.is_published} />{tr('adminMarketingReputation.publish')}</label>
-                          <button type="submit" className={btnCls}>{tr('content.save')}</button>
+                          <SubmitButton className={btnCls}>{tr('content.save')}</SubmitButton>
                         </form>
                       </details>
                     </td>
@@ -138,7 +139,7 @@ export default async function ReputationPage() {
                     <td className="py-2 text-xs text-muted">{fmtDate(c.created_at)}</td>
                     <td className="py-2 text-right">
                       <form action={deleteCaseStudyAction.bind(null, c.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{tr('reputation.delete')}</button>
+                        <SubmitButton className="text-xs text-muted hover:text-rose-400">{tr('reputation.delete')}</SubmitButton>
                       </form>
                     </td>
                   </tr>

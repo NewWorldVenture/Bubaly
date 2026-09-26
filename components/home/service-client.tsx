@@ -57,7 +57,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
                   <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
                   <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
                   <td className="px-3 py-2">{r.next_due_on ? <Badge tone="warning">{fmtDate(r.next_due_on)}</Badge> : '—'}</td>
-                  <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await deleteServiceRecordAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
+                  <td className="px-3 py-2 text-right"><button aria-label={t('a11y.delete')} onClick={() => start(async () => { await deleteServiceRecordAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>
               ))}
             </tbody>

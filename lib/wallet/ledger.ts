@@ -7,6 +7,8 @@
 // of truth for allocation splits, balance computation, and goal forecasting so
 // the same logic runs on the server (writes) and client (display) identically.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+
 export type BucketKind = 'spend' | 'save' | 'give' | 'invest' | 'goal';
 export type Direction = 'credit' | 'debit';
 
@@ -123,11 +125,21 @@ export function weeksToGoal(savedCents: number, targetCents: number, weeklyCents
   return Math.ceil(remaining / weeklyCents);
 }
 
-/** Format integer cents as USD (whole dollars; cents when present). */
-export function formatCents(cents: number, currency = 'USD'): string {
+/**
+ * Format integer cents (whole dollars; cents when present).
+ *
+ * `currency` was already a caller's argument — eight tables carry a currency column —
+ * and only the LOCALE was pinned, so a German family read their child's balance as
+ * "$8,245.50" instead of "8.245,50 $". The currency still follows the money and the
+ * separators follow the reader: converting the currency would misstate an amount.
+ *
+ * The default stays en-US for the callers with no reader whose language is known —
+ * the Super Admin ledger pages, and lib/wallet/coach.ts's prompt text.
+ */
+export function formatCents(cents: number, currency = 'USD', locale: LocaleCode = 'en-US'): string {
   const dollars = cents / 100;
   const hasCents = cents % 100 !== 0;
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     style: 'currency', currency,
     minimumFractionDigits: hasCents ? 2 : 0,
     maximumFractionDigits: hasCents ? 2 : 0,

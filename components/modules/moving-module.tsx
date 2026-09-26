@@ -19,16 +19,18 @@ import { isMoveDate, moveDateContextKey, type MoveDateResult } from '@/lib/movin
 import type { Tables, MoveBoxStatus, MoveKind, MoveStatus, MoveTaskCategory } from '@/lib/database.types';
 import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
-  nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
+  nextBoxNumber, boxesByRoom, findInBoxes, money as moneyIn, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
 type Box = Tables<'move_boxes'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtLong = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+const fmtLongIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?.label ?? s;
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
@@ -39,7 +41,13 @@ export function MovingModule() {
 }
 
 export function MovingWorkspace() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const fmtLong = fmtLongIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
@@ -110,7 +118,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteTask(t: Task) {
-    if (!confirm(`Delete “${t.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.taskDeleted'));
@@ -125,7 +133,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteBox(b: Box) {
-    if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
+    if (!(await askConfirm({ title: tr('moving.deleteBoxQ', { number: b.box_number, label: b.label }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.boxDeleted'));
@@ -139,7 +147,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteMove(m: Move) {
-    if (!confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('moving.deleteMoveBody') }))) return;
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');
@@ -446,6 +454,8 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);

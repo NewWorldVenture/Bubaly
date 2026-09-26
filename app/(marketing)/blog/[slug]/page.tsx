@@ -261,7 +261,7 @@ export default async function BlogPostPage({ params }: Params) {
             )}
 
             {/* Article body */}
-            <div className="prose-family mt-8 space-y-5 pb-10">
+            <div className="mt-8 space-y-5 pb-10">
               {post.body.map((block, i) =>
                 block.type === 'h2' ? (
                   <h2

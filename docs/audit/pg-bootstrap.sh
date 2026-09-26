@@ -58,6 +58,29 @@ create or replace function auth.uid() returns uuid language sql stable as $f$ se
 create or replace function auth.role() returns text language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claim.role', true),''),'authenticated') $f$;
 create or replace function auth.email() returns text language sql stable as $f$ select nullif(current_setting('request.jwt.claim.email', true),'') $f$;
 create or replace function auth.jwt() returns jsonb language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb,'{}'::jsonb) $f$;
+-- Supabase ships `auth.mfa_factors`, and without it a step-up policy cannot even
+-- be CREATED: `create policy … not exists (select 1 from auth.mfa_factors …)`
+-- fails at 42P01, because Postgres resolves the relation at CREATE POLICY time.
+-- So the O-03 boundary — "aal2, OR this user has no enrolled factor", the mirror
+-- of `requireAal2` that does not lock out a family which never enrolled one —
+-- would be untestable here while replaying fine on a real project. Same reason
+-- storage.objects is replicated below, and the wrong direction for a harness.
+--
+-- This is a SHIM, not a replica. It models the three columns lib/auth/mfa.ts
+-- actually reads — `user_id`, and `factor_type = 'totp' and status = 'verified'`
+-- as its definition of an enrolled factor (mfa.ts:47) — and deliberately uses
+-- `text` rather than inventing Supabase's enum types, because a boundary that
+-- depended on more than those three would be depending on something this file
+-- cannot promise.
+create table if not exists auth.mfa_factors (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  friendly_name text,
+  factor_type  text not null default 'totp',
+  status       text not null default 'unverified',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now());
+create index if not exists mfa_factors_user_id_idx on auth.mfa_factors(user_id);
 do $$ begin create publication supabase_realtime; exception when duplicate_object then null; end $$;
 create table if not exists storage.buckets (id text primary key, name text not null, public boolean default false,
   file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());

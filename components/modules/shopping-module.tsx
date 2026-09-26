@@ -210,7 +210,7 @@ export function ShoppingModule() {
       <div className="flex w-full flex-col lg:w-56 xl:w-64 flex-shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">{t('shopping.myLists')}</h2>
-          <button onClick={() => setNewListOpen(true)}
+          <button aria-label={t('a11y.add')} onClick={() => setNewListOpen(true)}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand-text hover:bg-brand/25 transition">
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -277,7 +277,7 @@ export function ShoppingModule() {
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
-                  {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+                  {search && <button aria-label={t('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>
               </div>
             </div>

@@ -12,15 +12,38 @@ import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS
 
 type Result = { ok: boolean; error?: string };
 
+/**
+ * Answer of a shortcut-layout read. THREE outcomes, not two — because the caller
+ * composes and writes back the WHOLE visible array, so it must be able to tell
+ * "this member has no saved layout" from "we could not find out what their saved
+ * layout is". Spelling both `null` collapsed them, and the starter set shown for
+ * the second one was then saved over a real layout the read never managed to see.
+ *   { ok: true, keys: [...] } → their saved layout.
+ *   { ok: true, keys: null }  → read succeeded, nothing saved → never customized.
+ *   { ok: false, error }      → the read FAILED. Nothing is known. Do not guess.
+ */
+export type CaptureShortcutsRead =
+  | { ok: true; keys: string[] | null }
+  | { ok: false; error: string };
+
 /** The signed-in user's saved capture shortcut keys (raw — client sanitizes vs its catalog). */
-export async function loadCaptureShortcuts(): Promise<string[] | null> {
+export async function loadCaptureShortcuts(): Promise<CaptureShortcutsRead> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data } = await supabase.from('user_preferences')
+  // postgrest-js RESOLVES with { data: null, error } instead of throwing, so an
+  // unread error here arrives as a perfectly ordinary "no shortcuts saved".
+  const { data, error } = await supabase.from('user_preferences')
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
+  if (error) {
+    console.error('[capture/shortcuts] preferences read failed', error);
+    return { ok: false, error: error.message };
+  }
   const prefs = (data?.notification_prefs as Record<string, unknown> | null) ?? null;
   const saved = prefs?.[CAPTURE_SHORTCUTS_PREF_KEY];
-  return Array.isArray(saved) ? (saved as unknown[]).filter((v): v is string => typeof v === 'string') : null;
+  return {
+    ok: true,
+    keys: Array.isArray(saved) ? (saved as unknown[]).filter((v): v is string => typeof v === 'string') : null,
+  };
 }
 
 /** Persist the member's chosen shortcut layout (merged into notification_prefs). */
@@ -30,9 +53,17 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
   const keys = sanitizeShortcutKeys(input.keys, undefined, MAX_CAPTURE_SHORTCUTS);
   const supabase = await createServer();
 
-  // Read-merge-write so we never clobber other notification_prefs keys.
-  const { data: existing } = await supabase.from('user_preferences')
+  // Read-merge-write so we never clobber other notification_prefs keys. A read
+  // that FAILED is not an empty prefs blob: the upsert below replaces the WHOLE
+  // notification_prefs column, so merging into `{}` would erase App Lock, the
+  // Google Calendar token and every other key this member has set. Fail closed
+  // instead — the same guard the Google Calendar callback and App Lock use.
+  const { data: existing, error: readError } = await supabase.from('user_preferences')
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
+  if (readError) {
+    console.error('[capture/shortcuts] preferences read failed', readError);
+    return { ok: false, error: readError.message };
+  }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged = { ...prefs, [CAPTURE_SHORTCUTS_PREF_KEY]: keys };
 

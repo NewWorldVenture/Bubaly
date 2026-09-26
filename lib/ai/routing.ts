@@ -26,7 +26,7 @@ import {
   type AITask,
   type ModelCapabilities,
 } from '@/lib/ai/models';
-import { OpenAIProvider, type AIProvider } from '@/lib/ai/provider';
+import { OpenAIProvider, type AIProvider, withCompleteRetry } from '@/lib/ai/provider';
 import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -147,5 +147,7 @@ export async function resolveProviderForTask(task: AITask, options: ConfigReadOp
   if (isProviderStubEnabled()) return scriptedProvider();
   const stored = await readStoredConfig(options);
   const { model } = resolveModelForTask(task, { configured: stored.models?.[task] ?? null });
-  return new OpenAIProvider(model, stored.openaiKey || process.env.OPENAI_API_KEY || '');
+  // withCompleteRetry, NOT around scriptedProvider() above: the stub is what CI
+  // and e2e script, and wrapping it would put a retry loop around assertions.
+  return withCompleteRetry(new OpenAIProvider(model, stored.openaiKey || process.env.OPENAI_API_KEY || ''));
 }

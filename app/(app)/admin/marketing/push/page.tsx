@@ -12,6 +12,7 @@ import { pushConfigured } from '@/lib/server/push';
 import { summarizePush, canSendPush, canDeletePush, needsPushReview, pushDeliveryCounts, pushDeliveryPhase } from '@/lib/marketing/push';
 import { createPushCampaignAction, sendPushCampaignAction, deletePushCampaignAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Push', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -76,7 +77,7 @@ export default async function PushPage() {
           <input name="title" required placeholder={t('adminMarketingPush.title')} className={`${inputCls} lg:col-span-2`} />
           <input name="url" placeholder={t('adminMarketingPush.clickUrlEGPricing')} className={`${inputCls} lg:col-span-2`} />
           <input name="body" placeholder={t('adminMarketingPush.bodyText')} className={`${inputCls} lg:col-span-3`} />
-          <button type="submit" className={btnCls}>{t('adminMarketingPush.createDraft')}</button>
+          <SubmitButton className={btnCls}>{t('adminMarketingPush.createDraft')}</SubmitButton>
         </form>
       </Card>
 
@@ -106,12 +107,12 @@ export default async function PushPage() {
               <div className="flex shrink-0 items-center gap-3 text-sm">
                 {canSendPush(c.status, c.metadata) && (
                   <form action={sendPushCampaignAction.bind(null, c.id)}>
-                    <button type="submit" className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
-                      <Send className="h-3.5 w-3.5" />{' '}{t('push.send')}</button>
+                    <SubmitButton className="inline-flex items-center gap-1 font-semibold text-brand-text hover:underline">
+                      <Send className="h-3.5 w-3.5" />{' '}{t('push.send')}</SubmitButton>
                   </form>
                 )}
                 {canDeletePush(c.status, c.metadata) && <form action={deletePushCampaignAction.bind(null, c.id)}>
-                  <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('push.delete')}</button>
+                  <SubmitButton className="text-xs text-muted hover:text-rose-400">{t('push.delete')}</SubmitButton>
                 </form>}
               </div>
             </Card>

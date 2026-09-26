@@ -11,6 +11,7 @@ import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
 import { archiveContentAction, updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Content', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -83,21 +84,21 @@ export default async function ContentPage() {
                           <select name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
                             {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
                           </select>
-                          <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</button>
+                          <SubmitButton className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</SubmitButton>
                         </div>
                       </form>
                       {isBlog && canPublish && (
                         <form action={publishContentToBlogAction} className="mt-2">
                           <input type="hidden" name="id" value={it.id} />
-                          <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
-                            <Send className="h-3.5 w-3.5" />{' '}{t('content.publishToBlog')}</button>
+                          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90">
+                            <Send className="h-3.5 w-3.5" />{' '}{t('content.publishToBlog')}</SubmitButton>
                           <span className="ml-2 text-xs text-muted">{t('content.saveTheBodyFirstCreates')}</span>
                         </form>
                       )}
                     </details>
                     <form action={archiveContentAction} className="mt-2">
                       <input type="hidden" name="id" value={it.id} />
-                      <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.archive')}</button>
+                      <SubmitButton className="text-xs text-muted hover:text-rose-400">{t('content.archive')}</SubmitButton>
                     </form>
                   </Card>
                 );
@@ -122,7 +123,7 @@ export default async function ContentPage() {
                     <Badge tone={p.published ? 'success' : 'neutral'}>{p.published ? 'Live' : 'Draft'}</Badge>
                     {p.published && (
                       <form action={unpublishBlogPostAction.bind(null, p.slug)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{t('content.unpublish')}</button>
+                        <SubmitButton className="text-xs text-muted hover:text-rose-400">{t('content.unpublish')}</SubmitButton>
                       </form>
                     )}
                   </div>
@@ -140,7 +141,7 @@ export default async function ContentPage() {
           <select name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
           <input name="publish_at" type="date" className={inputCls} />
           <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">{t('adminMarketingContent.blogItemsWriteTheBodySet')} <code>/blog/&lt;slug&gt;</code>.</p>
       </Card>

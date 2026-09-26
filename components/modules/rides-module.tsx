@@ -24,7 +24,8 @@ import {
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Ride = Tables<'rides'>;
 
@@ -47,7 +48,9 @@ const blankRide = {
 };
 
 export function RidesModule() {
+  const locale = useLocale();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -128,7 +131,7 @@ export function RidesModule() {
   }
 
   async function remove(r: Ride) {
-    if (!confirm(`Delete the ride "${r.title}"?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('rides').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
@@ -148,7 +151,7 @@ export function RidesModule() {
   }
 
   const fmtDay = (key: string) =>
-    new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rides'} />;

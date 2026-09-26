@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBoundedRequestBytes } from '@/lib/server/bounded-request-body';
 import { clientIp, rateLimit } from '@/lib/server/rate-limit';
+import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { looksLikeAssistantToken } from '@/lib/assistant/link-token';
 import { classifyAssistantUtterance } from '@/lib/assistant/intent';
 import { ERROR_SPEECH } from '@/lib/assistant/answers';
@@ -32,8 +33,21 @@ const MAX_BODY_BYTES = 24 * 1024; // Alexa envelopes are chatty.
 //     which tells the person nothing; a spoken sentence tells them whether they
 //     need to link an account or try again later.
 export async function POST(req: NextRequest) {
-  const limited = rateLimit(`assistant-alexa:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
-  if (!limited.ok) return NextResponse.json(alexaSpeechResponse('Too many requests right now. Try again shortly.'));
+  // In-memory, and before anything touches the database. An unverified request
+  // must not reach it — the property tests/alexa-request-verification.test.ts
+  // pins, and which any durable, service-role-backed limiter placed here would
+  // break by writing a rate-limit row for a request whose signature has not
+  // been checked.
+  //
+  // This branch previously ran a durable half after verification but BEFORE the
+  // access token was read, so a request carrying no token still caused a
+  // service-role write. That placement is gone for good. A module-scope Map is
+  // per-lambda and the caller sets the number of lambdas by sending in
+  // parallel, so this one is a cheap pre-filter; the durable per-CALLER limit
+  // is after resolveAssistantLink, where there is a caller to key it on.
+  const tooMany = () => NextResponse.json(alexaSpeechResponse('Too many requests right now. Try again shortly.'));
+  const rateKey = `assistant-alexa:${clientIp(req.headers)}`;
+  if (!rateLimit(rateKey, { limit: 60, windowMs: 60_000 }).ok) return tooMany();
 
   // Bytes, not parsed JSON: the signature is over exactly what arrived. Parsing
   // and re-serialising would change whitespace and key order, and the signature
@@ -67,6 +81,21 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
   const link = await resolveAssistantLink(supabase, token);
   if (!link) return NextResponse.json(alexaSpeechResponse(ALEXA_NOT_LINKED_SPEECH));
+
+  // The durable half, keyed on the link rather than the IP, and deliberately
+  // placed after BOTH gates this route has — Amazon's signature and the access
+  // token. See the twin note in app/api/assistant/route.ts for why it cannot
+  // live at the top, and why it fails open.
+  //
+  // The limit is 60 here against the sibling's 30 because one spoken exchange
+  // can be several Alexa requests (a LaunchRequest, then the intent), where the
+  // token endpoint takes one POST per utterance.
+  const durable = await rateLimitDb(supabase, `assistant-alexa:${link.id}`, {
+    limit: 60, windowMs: 60_000, failOpen: true,
+  });
+  // Spoken, not a 429: a non-200 makes the device say "there was a problem with
+  // the requested skill's response", which tells the person nothing about why.
+  if (!durable.ok) return tooMany();
 
   const intent = classifyAssistantUtterance(translated.utterance, new Date(), link.timezone);
   try {

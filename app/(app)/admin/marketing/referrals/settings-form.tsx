@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ReferralConfig } from '@/lib/referrals/core';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export function ReferralSettingsForm({ config, action }: {
   config: ReferralConfig;
@@ -35,9 +36,9 @@ export function ReferralSettingsForm({ config, action }: {
         <input type="text" name="rewardLabel" defaultValue={config.rewardLabel}
           className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-3" />
       </label>
-      <button type="submit" className="w-full rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90">
+      <SubmitButton className="w-full rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90">
         {saved ? 'Saved ✓' : 'Save settings'}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

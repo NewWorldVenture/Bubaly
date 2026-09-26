@@ -48,10 +48,16 @@ describe('classifyTransition', () => {
 describe('timeAgo', () => {
   const now = new Date('2026-06-22T12:00:00Z');
   it('formats minutes/hours/days', () => {
-    expect(timeAgo('2026-06-22T11:59:40Z', now)).toBe('just now');
+    // "now" rather than "just now" — Intl's own sub-minute word.
+    expect(timeAgo('2026-06-22T11:59:40Z', now)).toBe('now');
     expect(timeAgo('2026-06-22T11:30:00Z', now)).toBe('30m ago');
     expect(timeAgo('2026-06-22T09:00:00Z', now)).toBe('3h ago');
     expect(timeAgo('2026-06-20T12:00:00Z', now)).toBe('2d ago');
+  });
+
+  it('follows the reader', () => {
+    expect(timeAgo('2026-06-22T11:30:00Z', now, 'de-DE')).toBe('vor 30 m');
+    expect(timeAgo('2026-06-20T12:00:00Z', now, 'nl-NL')).toBe('2 dgn geleden');
   });
 });
 

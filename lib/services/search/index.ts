@@ -80,9 +80,17 @@ export function likePattern(query: string): string {
   return `%${sanitizeQuery(query)}%`;
 }
 
-/** The query with wildcard and grammar characters neutralised, whitespace collapsed. */
+/**
+ * The query with wildcard and grammar characters neutralised, whitespace collapsed.
+ *
+ * `*` is in the class because PostgREST accepts it as a SPELLING OF `%` in a
+ * `like`/`ilike` value — it is not a SQL wildcard, which is why a class written
+ * against the LIKE grammar missed it. A search for `*` became `%%%%` and matched
+ * every row the caller could see, which is exactly the "quietly match far more
+ * than the person typed" this function exists to prevent.
+ */
 export function sanitizeQuery(query: string): string {
-  return query.replace(/[%_,()"\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  return query.replace(/[%_*,()"\\]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function orExpression(columns: string[], pattern: string): string {

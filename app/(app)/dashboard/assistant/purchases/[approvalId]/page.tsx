@@ -10,6 +10,7 @@ import { purchaseApprovalPath } from '@/lib/purchases/private-result';
 import { loadPrivatePurchaseAnswer } from '@/lib/services/purchases/private-result';
 import { isManager } from '@/lib/constants/roles';
 import { retryPurchaseAnswer } from './actions';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,7 +31,7 @@ export default async function PrivatePurchasePage({ params, searchParams }: {
   if (!result.ok && result.code === SERVICE_CODES.denied) notFound();
   const report = result.ok ? result.data : null;
   const failed = !result.ok || query.retry === 'failed';
-  const button = 'inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-surface-2';
+  const button = 'inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-elevated';
 
   return <section className="mx-auto max-w-3xl space-y-5 p-6">
     <h1 className="text-2xl font-semibold">{t('purchaseAdvice.privateTitle')}</h1>
@@ -41,7 +42,7 @@ export default async function PrivatePurchasePage({ params, searchParams }: {
     {report?.kind === 'declined' && <p className="text-muted">{t('purchaseAdvice.privateDeclined')}</p>}
     {report?.kind === 'retry' && <form action={retryPurchaseAnswer.bind(null, approvalId)}>
       {!failed && <p className="mb-4 text-muted">{t('purchaseAdvice.privateUnavailable')}</p>}
-      <button type="submit" className={button}>{t('purchaseAdvice.privateRetry')}</button>
+      <SubmitButton className={button}>{t('purchaseAdvice.privateRetry')}</SubmitButton>
     </form>}
     {(!report || report.kind === 'waiting') && <Link href={purchaseApprovalPath(approvalId)} className={button}>{t('purchaseAdvice.privateRefresh')}</Link>}
   </section>;

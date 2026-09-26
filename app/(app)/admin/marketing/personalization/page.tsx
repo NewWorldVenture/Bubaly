@@ -9,6 +9,7 @@ import type { Tables } from '@/lib/database.types';
 import type { AudienceMatch, PersonalizationVariant } from '@/lib/marketing/personalization';
 import { createRuleAction, toggleRuleStatusAction, deleteRuleAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -106,7 +107,7 @@ export default async function PersonalizationPage() {
               <option value="active">{t('adminMarketingPersonalization.active')}</option>
               <option value="paused">{t('adminMarketingPersonalization.paused')}</option>
             </select>
-            <button type="submit" className={btnCls}>{t('adminMarketingPersonalization.createRule')}</button>
+            <SubmitButton className={btnCls}>{t('adminMarketingPersonalization.createRule')}</SubmitButton>
           </div>
         </form>
       </Card>
@@ -136,12 +137,12 @@ export default async function PersonalizationPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <form action={toggleRuleStatusAction.bind(null, r.id, r.status !== 'active')}>
-                        <button type="submit" className="text-muted hover:text-fg" title={r.status === 'active' ? 'Pause' : 'Activate'}>
+                        <SubmitButton className="text-muted hover:text-fg" title={r.status === 'active' ? 'Pause' : 'Activate'}>
                           {r.status === 'active' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
+                        </SubmitButton>
                       </form>
                       <form action={deleteRuleAction.bind(null, r.id)}>
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
+                        <SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton>
                       </form>
                     </div>
                   </div>

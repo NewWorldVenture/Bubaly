@@ -10,7 +10,10 @@
 import { createContext, useContext, useMemo } from 'react';
 
 import { DEFAULT_LOCALE, localeOrDefault, type Locale } from '@/lib/i18n/locales';
-import { translate, type Messages } from '@/lib/i18n/messages';
+// From lib/i18n/translate, NOT lib/i18n/messages: this file is 'use client',
+// and messages.ts imports eleven JSON catalogues at module scope. Importing
+// translate from there put en-US in the client graph on every page.
+import { translate, type Messages } from '@/lib/i18n/translate';
 import type { LocaleSource } from '@/lib/i18n/resolve';
 
 type LocaleContextValue = {

@@ -9,7 +9,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
-import { fmtTime, fmtDate } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
@@ -36,6 +36,11 @@ export default async function CommandCenterPage() {
 
   const now = new Date();
   const tz = ctx.active.family.timezone || 'UTC';
+  // Bound to that same zone. These were the bare exports, which format in the
+  // runtime's zone, so a conflict at 15:00 in Los Angeles read "10:00 PM" to the
+  // family it belonged to. Binding them also puts the month names and the AM/PM
+  // into the reader's language, which the bare exports could never do.
+  const { fmtTime, fmtDate } = await getFormat(tz);
   const familyToday = dayKeyInTz(now, tz);
   const weekDays = Array.from({ length: 8 }, (_, index) => new Date(Date.parse(`${familyToday}T12:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10));
   const weekEnd = new Date(zonedDayBoundsMs(weekDays[7], tz).start);
@@ -53,15 +58,19 @@ export default async function CommandCenterPage() {
       .not('expires_at', 'is', null).gte('expires_at', now.toISOString()).lte('expires_at', in30.toISOString()),
   ]);
 
+  // The NAME is the family's half of the line and comes from the catalogue; the
+  // Postgres reason is the machine's half and cannot be translated by anything.
+  // They go to the banner as two fields rather than one joined string — see
+  // I18N-006 and components/ui/partial-read-banner.tsx.
   const readFailures = ([
-    ['members', membersResult],
-    ['events', eventsResult],
-    ['open chores', openChoresResult],
-    ['meal plans', mealPlansResult],
-    ['expiring docs', expiringDocsResult],
+    [t('dashboardCommandCenter.members'), membersResult],
+    [t('dashboardCommandCenter.events'), eventsResult],
+    [t('dashboardCommandCenter.openChores'), openChoresResult],
+    [t('dashboardCommandCenter.mealPlans'), mealPlansResult],
+    [t('dashboardCommandCenter.expiringDocs'), expiringDocsResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+    .map(([label, res]) => ({ label, detail: describeReadError(res.error) }));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -83,7 +92,7 @@ export default async function CommandCenterPage() {
   // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
   let change;
   try {
-    ({ change } = await loadOperatingIndex(supabase, familyId, now));
+    ({ change } = await loadOperatingIndex(supabase, familyId, tz, now));
   } catch (error) {
     // The recap is ONE section of this page. ChangeRecap requires a real
     // ChangeSummary, so rather than inventing an empty one that would render as
@@ -144,7 +153,7 @@ export default async function CommandCenterPage() {
 
   return (
     <div className="space-y-5">
-      <PartialReadBanner title={"Some data could not be loaded:"} failures={readFailures} />
+      <PartialReadBanner title={t('dashboardCommandCenter.someDataCouldNotBe')} failures={readFailures} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('dashboardCommandCenter.familyCommandCenter')}</h1>
         <p className="mt-1 text-sm text-muted">{t('dashboardCommandCenter.aLiveReadinessViewOfYour')}</p>

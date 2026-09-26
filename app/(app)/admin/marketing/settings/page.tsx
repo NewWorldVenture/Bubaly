@@ -9,6 +9,7 @@ import { saveSetting } from '../actions';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getAIConfigView, type AIConfigView } from '@/lib/ai/settings';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Settings', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export default async function MarketingSettingsPage() {
                 <label className="flex-1 text-sm">{s.label}
                   <input name="value" defaultValue={current?.text ?? ''} className={`mt-1 ${inputCls}`} />
                 </label>
-                <button className="h-10 shrink-0 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">{t('settings.save')}</button>
+                <SubmitButton className="h-10 shrink-0 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">{t('settings.save')}</SubmitButton>
               </form>
             );
           })}

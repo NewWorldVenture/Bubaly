@@ -8,6 +8,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { settleAll } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,16 +49,44 @@ export async function POST(req: Request) {
   const familyId = ctx.active.familyId;
 
   // Ground the answer in this family's own health data.
-  const [{ data: member }, { data: profile }, { data: meds }, { data: symptoms }] = await Promise.all([
-    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).maybeSingle() : Promise.resolve({ data: null }),
-    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).maybeSingle() : Promise.resolve({ data: null }),
+  //
+  // `memberId` arrives in the request body. Every read below therefore filters
+  // on family_id as well: RLS admits EVERY family the caller belongs to
+  // (`is_family_member(family_id)`), not the one this request is about, so a
+  // parent in two households could name a member of the other one and be
+  // answered about them. The medications read already scoped itself, which is
+  // what made the gap dangerous rather than merely wrong — three of the four
+  // reads crossed and the fourth did not, so the coach described that person's
+  // blood type, allergies, conditions and last ten symptoms while reporting
+  // "Active medications: none on file". A confident wrong answer about
+  // medication is worse on a health surface than a refusal.
+  const [
+    { data: member, error: memberError },
+    { data: profile, error: profileError },
+    { data: meds, error: medsError },
+    { data: symptoms, error: symptomsError },
+  ] = await settleAll([
+    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId
       ? supabase.from('medications').select('name, dosage, instructions').eq('family_id', familyId).eq('member_id', memberId).eq('is_active', true).limit(20)
       : supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('is_active', true).limit(20),
     memberId
-      ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).order('started_at', { ascending: false }).limit(10)
-      : Promise.resolve({ data: null }),
+      ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).eq('family_id', familyId).order('started_at', { ascending: false }).limit(10)
+      : Promise.resolve({ data: null, error: null }),
   ]);
+
+  // settleAll rather than Promise.all: a transport rejection would otherwise
+  // reject the batch and the grounding check below would never run at all.
+  //
+  // A refused read is not an empty medical record. Coaching over one silently
+  // drops the allergy, the condition or the medication the answer needed to
+  // account for, and nothing on the page says the grounding was incomplete.
+  const groundingError = memberError ?? profileError ?? medsError ?? symptomsError;
+  if (groundingError) {
+    console.error('[health-coach] grounding read failed; refusing to answer', { familyId, memberId }, groundingError);
+    return NextResponse.json({ error: t('coach.healthDataUnavailable') }, { status: 503 });
+  }
 
   const personLine = member?.display_name ? `Person: ${member.display_name}${member.birthday ? ` (DOB ${member.birthday})` : ''}` : 'Person: (not specified)';
   const profileLines = profile ? [

@@ -18,7 +18,7 @@
 
 \set FA '00000000-0000-4000-8000-0000000000f1'
 \set PARENT '00000000-0000-4000-8000-000000000001'
-\set KID '00000000-0000-4000-8000-0000000000c8'
+\set KID '00000000-0000-4000-8000-000000005b01'
 
 -- Provision a child member of the anchor family (idempotent).
 insert into auth.users (id, email) values (:'KID','kid-probe@example.com') on conflict do nothing;
@@ -45,7 +45,7 @@ do $$
 declare blocked boolean := false; sqlst text;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005b01', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   begin
     insert into public.wallet_transactions
@@ -80,7 +80,7 @@ declare
   t text; blocked boolean;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005b01', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   foreach t in array ledger loop
     -- A NOT NULL violation is accepted below as proof the write did not land,
@@ -109,7 +109,7 @@ do $$
 declare affected int;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005b01', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
 
   update public.wallet_audit_logs set detail='TAMPERED'
@@ -131,11 +131,11 @@ do $$
 declare ok boolean := false;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005b01', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   begin
     insert into public.wallet_audit_logs (family_id, actor_user_id, action, entity_type, detail)
-      values ('00000000-0000-4000-8000-0000000000f1','00000000-0000-4000-8000-0000000000c8',
+      values ('00000000-0000-4000-8000-0000000000f1','00000000-0000-4000-8000-000000005b01',
               'ai_coach_call','ai_wallet_coach','child append');
     ok := true;
   exception when others then ok := false; end;
@@ -199,7 +199,7 @@ begin
 
     blocked := false; st := null;
     perform set_config('role','authenticated', true);
-    perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);  -- the child
+    perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005b01', true);  -- the child
     perform set_config('request.jwt.claim.role','authenticated', true);
     begin
       insert into public.wallet_transactions

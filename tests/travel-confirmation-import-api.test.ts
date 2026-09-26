@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '@/app/api/vacations/confirmation-import/route';
 
 const mocks = vi.hoisted(() => ({
-  getContext: vi.fn(), getUser: vi.fn(), preview: vi.fn(), apply: vi.fn(),
+  getContext: vi.fn(), getUser: vi.fn(), preview: vi.fn(), apply: vi.fn(), gate: vi.fn(),
   admin: vi.fn(() => { throw new Error('Admin client is forbidden'); }),
   from: vi.fn(() => { throw new Error('Route must use the scoped service'); }),
 }));
@@ -15,6 +15,11 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/services/trips/confirmation-import', () => ({
   previewConfirmationImport: mocks.preview, applyConfirmationImport: mocks.apply,
 }));
+// The plan gate resolves the family's entitlement out of the database, which
+// this file's client deliberately refuses to serve. Stubbing the resolver — as
+// tests/api-ai-route does — keeps that refusal meaningful while still pinning
+// that the route asks, with which family and which feature.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: mocks.gate }));
 
 const FAMILY = '11111111-1111-4111-8111-111111111111';
 const MEMBER = '22222222-2222-4222-8222-222222222222';
@@ -69,6 +74,7 @@ beforeEach(() => {
   mocks.getContext.mockResolvedValue(context());
   mocks.preview.mockResolvedValue({ ok: true, data: fixture().result });
   mocks.apply.mockResolvedValue({ ok: false, error: 'Trip changed.', code: 'conflict' });
+  mocks.gate.mockResolvedValue(null);
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('No live providers'); }));
 });
 afterEach(() => {
@@ -108,6 +114,32 @@ describe('POST confirmation import', () => {
       vacationId: TRIP, source: f.body.source, fields: f.body.fields, expected: f.preview, requestId: REQUEST,
     });
     expect(mocks.preview).not.toHaveBeenCalled();
+  });
+
+  it('gates the trip feature on the active family before any service work', async () => {
+    // The page in front of this is `requireFeature('/dashboard/vacations')`, so
+    // the endpoint refuses on the same feature — see
+    // tests/insight-kinds-are-gated-like-their-pages, which derives the set of
+    // endpoints reachable from a paid page and fails on any that does not.
+    await POST(request(fixture().body));
+    expect(mocks.gate).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(), FAMILY, ['/dashboard/vacations'],
+    );
+  });
+
+  it('returns the plan refusal itself, privately, and does not import', async () => {
+    const { NextResponse } = await import('next/server');
+    mocks.gate.mockResolvedValue(
+      NextResponse.json({ error: 'This is part of Family Basic.', code: 'plan_required', needLevel: 1 }, { status: 403 }),
+    );
+    const f = fixture();
+    const response = await POST(request({ ...f.body, action: 'apply', expected: f.preview, requestId: REQUEST }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'plan_required' });
+    // A refusal is as family-specific as a preview: it must not be cacheable.
+    assertPrivate(response);
+    expect(mocks.preview).not.toHaveBeenCalled();
+    expect(mocks.apply).not.toHaveBeenCalled();
   });
 
   it.each(['familyId', 'memberId'])('denies a submitted %s different from active context', async (field) => {

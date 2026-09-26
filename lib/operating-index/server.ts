@@ -22,6 +22,7 @@ import {
 import { summarizeChange, type SnapshotView, type ChangeSummary } from './summary';
 import { orchestrate, type OrchestratorReport, type DayEvent, type OrchestratorItem } from './orchestrator';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { addDaysToDayKey, dayKeyInTz, zonedTimeMs } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
 
@@ -35,23 +36,71 @@ const AUTO_CONFIDENCE = 90;
 const NEEDS_LOCATION_LIST: EventCategory[] = ['appointment', 'sports', 'school', 'medication'];
 const NEEDS_LOCATION = new Set<string>(NEEDS_LOCATION_LIST);
 
-/** UTC calendar day (YYYY-MM-DD) this snapshot represents. */
-export function asOfDate(now: Date): string {
-  return now.toISOString().slice(0, 10);
+/**
+ * The FAMILY's calendar day (YYYY-MM-DD) this snapshot represents, which is
+ * what `family_operating_index.as_of_date` — a DATE column (0125) — means.
+ *
+ * It used to be `now.toISOString().slice(0, 10)`: the day at Greenwich. For a
+ * household in Los Angeles that is TOMORROW's key for the last seven hours of
+ * every evening, and the damage was not cosmetic. The 18:30 visit wrote the
+ * snapshot under tomorrow; the next morning found that row already present and
+ * upserted the new reading over it, so one of the two days was lost; and the
+ * "since yesterday" recap, anchored with `.lt('as_of_date', today)`, then
+ * diffed against the day before last.
+ *
+ * `tz` is required rather than defaulted because every caller has the family in
+ * hand. A silent 'UTC' default would put this straight back to answering
+ * Greenwich's question while looking converted.
+ */
+export function asOfDate(now: Date, tz: string): string {
+  return dayKeyInTz(now, tz);
 }
 
-/** Build the normalized household snapshot from live family-scoped data. */
-export async function buildSnapshot(supabase: DB, familyId: string, now: Date = new Date()): Promise<HouseholdSnapshot> {
+/**
+ * Build the normalized household snapshot from live family-scoped data.
+ *
+ * `tz` is the family's IANA zone — `ctx.active.family.timezone` on a page,
+ * `scope.tz` in a service — and it is what separates the two kinds of window
+ * below. Both kinds are here and they are NOT interchangeable:
+ *
+ *  - An INSTANT window bounds a timestamptz column. "Overdue" and "in the next
+ *    seven days" are measured from this moment, in no zone at all, so `nowIso`
+ *    and the rolling `in7`/`since7` bounds stay exactly as they were.
+ *  - A DAY KEY bounds a DATE column. A DATE already holds the family's day, so
+ *    the key it is compared against has to be the family's day as well —
+ *    `.toISOString().slice(0, 10)` answered Greenwich's, which is a different
+ *    day for 7 hours out of every 24 in Los Angeles and 10 in Tokyo.
+ */
+export async function buildSnapshot(supabase: DB, familyId: string, tz: string, now: Date = new Date()): Promise<HouseholdSnapshot> {
   const nowIso = now.toISOString();
   const in7 = new Date(now.getTime() + 7 * DAY_MS).toISOString();
-  const in14 = new Date(now.getTime() + 14 * DAY_MS).toISOString();
-  const in30 = new Date(now.getTime() + 30 * DAY_MS).toISOString();
-  const in14date = in14.slice(0, 10);
-  const in30date = in30.slice(0, 10);
   const since7 = new Date(now.getTime() - 7 * DAY_MS).toISOString();
 
-  // Financial windows: fetch this-year expenses so weekly/monthly/yearly budgets
+  // The DATE columns bounded below: `bills.due_date` (0006_..._school_sports.sql:98),
+  // `documents.expires_at` (0002_tables.sql:349) and `goals.target_date`
+  // (0002_tables.sql:375) are all declared `date`, not timestamptz.
+  //
+  // The horizons advance the KEY rather than the instant. `new Date(now + 30 *
+  // DAY_MS).toISOString().slice(0, 10)` is wrong twice over: it is Greenwich's
+  // day, and it is fixed-millisecond arithmetic across a local day that is 23
+  // or 25 hours long, so a 30-day horizon spanning a fall-back lands a day out.
+  // `addDaysToDayKey` never touches an instant, so no DST transition can move
+  // it.
+  const todayKey = asOfDate(now, tz);
+  const in14date = addDaysToDayKey(todayKey, 14);
+  const in30date = addDaysToDayKey(todayKey, 30);
+
+  // Financial window: fetch this-year expenses so weekly/monthly/yearly budgets
   // can all be evaluated; bounded by the row limit.
+  //
+  // This one bound stays UTC ON PURPOSE. It is the fetch floor for the budget
+  // periods `countOverspentBudgets` evaluates, and those period starts come
+  // from `lib/operating-index/inputs.ts`, which resolves them in UTC. The floor
+  // must never be later than the window it feeds, so the two have to move
+  // together or not at all — converting this half alone would make the fetch
+  // narrower than the window on the hours when the UTC year differs from the
+  // family's, and silently undercount a yearly budget. inputs.ts is its own
+  // conversion (it has a second caller, lib/intelligence/hard-signals.ts).
   const yearStart = `${now.getUTCFullYear()}-01-01`;
 
   const [
@@ -194,10 +243,22 @@ export interface OperatingIndexResult {
  * member + open-vote count (passed in) so nothing is recomputed.
  */
 async function buildOrchestratorReport(
-  supabase: DB, familyId: string, index: OperatingIndex, openVotes: number, now: Date,
+  supabase: DB, familyId: string, index: OperatingIndex, openVotes: number, tz: string, now: Date,
 ): Promise<OrchestratorReport> {
-  const startOfTomorrow = new Date(now); startOfTomorrow.setUTCHours(0, 0, 0, 0); startOfTomorrow.setUTCDate(startOfTomorrow.getUTCDate() + 1);
-  const startOfDayAfter = new Date(startOfTomorrow.getTime() + DAY_MS);
+  // Tomorrow on the FAMILY's wall clock. This was `setUTCHours(0, 0, 0, 0)`
+  // plus a day — Greenwich's tomorrow — so in Los Angeles the question "what's
+  // most likely to go wrong tomorrow?" was answered over a window running from
+  // 17:00 tomorrow to 17:00 the day after: it missed tomorrow's whole morning
+  // and school run, and reported the following evening's events as tomorrow's.
+  //
+  // Both bounds are resolved as real local midnights instead of one midnight
+  // plus DAY_MS, because the spring-forward day is 23 hours long and the
+  // fall-back day 25: adding a fixed day to a local midnight lands at 23:00 or
+  // 01:00, which either drops an hour of tomorrow or borrows one from the day
+  // after.
+  const tomorrowKey = addDaysToDayKey(asOfDate(now, tz), 1);
+  const startOfTomorrow = new Date(zonedTimeMs(tomorrowKey, 0, 0, tz));
+  const startOfDayAfter = new Date(zonedTimeMs(addDaysToDayKey(tomorrowKey, 1), 0, 0, tz));
   const nowIso = now.toISOString();
   const in14 = new Date(now.getTime() + 14 * DAY_MS).toISOString();
 
@@ -250,10 +311,13 @@ function suggestionPairs(raw: unknown): { id: string; title: string }[] {
  * day, upserted on re-render). Returns the index plus the prior snapshot's
  * composite for the trend arrow. Persistence failures never block the read.
  */
-export async function loadOperatingIndex(supabase: DB, familyId: string, now: Date = new Date()): Promise<OperatingIndexResult> {
-  const snapshot = await buildSnapshot(supabase, familyId, now);
+export async function loadOperatingIndex(supabase: DB, familyId: string, tz: string, now: Date = new Date()): Promise<OperatingIndexResult> {
+  const snapshot = await buildSnapshot(supabase, familyId, tz, now);
   const index = computeOperatingIndex(snapshot, now);
-  const today = asOfDate(now);
+  // One key, used three ways: the anchor for the prior read, the upsert key,
+  // and the `asOf` this returns. They have to be the same string, which is why
+  // it is computed once here rather than at each site.
+  const today = asOfDate(now, tz);
 
   // Prior snapshot (most recent day before today) for the trend + evening recap.
   const { data: recent, error: recentError } = await supabase
@@ -283,9 +347,12 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
   const change = summarizeChange(currentView, priorView);
 
   // The five orchestrator questions (pillar #1), reusing the snapshot's signals.
-  const orchestrator = await buildOrchestratorReport(supabase, familyId, index, snapshot.openVotes, now);
+  const orchestrator = await buildOrchestratorReport(supabase, familyId, index, snapshot.openVotes, tz, now);
 
-  // Idempotent upsert of today's snapshot.
+  // Idempotent upsert of today's snapshot — one row per family per FAMILY day.
+  // The key moving is the point: an evening visit west of Greenwich used to
+  // write tomorrow's row and then be overwritten by the morning's, so a family
+  // in Los Angeles could never accumulate two consecutive days to trend.
   try {
     await supabase.from('family_operating_index').upsert({
       family_id: familyId,

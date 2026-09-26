@@ -64,7 +64,7 @@ export function ConsentManager() {
     setPrefsOpen(false);
     // Durable server record + reconcile with the resolved state; then (re)fire
     // the analytics touch if the visitor just enabled analytics.
-    const resolved = (await postConsent(anonId, state, gpc, source)) ?? state;
+    const resolved = (await postConsent(state, gpc, source)) ?? state;
     writeLocalConsent(resolved, true);
     setDraft(resolved);
     void trackTouchOnce(anonId, resolved, gpc);

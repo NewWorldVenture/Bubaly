@@ -34,8 +34,17 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
     const b: Record<string, unknown> = {};
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
+    // PostgREST's `.range()` is inclusive at both ends, and a page that starts
+    // past the last row comes back EMPTY — which is the only signal that tells a
+    // paged read it has reached the end. A fake that ignored the window would
+    // hand `readAll` the same page forever, so model it.
+    let window: { from: number; to: number } | null = null;
+    const paged = (reply: Reply): Reply => (window && Array.isArray(reply.data)
+      ? { ...reply, data: reply.data.slice(window.from, window.to + 1) }
+      : reply);
     Object.assign(b, {
       select: chain, order: chain, limit: chain, or: chain,
+      range: (from: number, to: number) => { window = { from, to }; return b; },
       eq: filter, is: filter, in: filter,
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
@@ -48,7 +57,7 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
       delete: () => { call.kind = 'delete'; return b; },
       single: () => Promise.resolve(respond(call, index)),
       maybeSingle: () => Promise.resolve(respond(call, index)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call, index)),
+      then: (resolve: (value: Reply) => void) => resolve(paged(respond(call, index))),
     });
     return b;
   };

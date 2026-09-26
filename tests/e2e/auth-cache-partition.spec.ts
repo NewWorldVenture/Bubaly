@@ -39,7 +39,7 @@ function collect(filename: string): string {
 }
 const entries = Object.fromEntries([
   'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts', 'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
-  'components/app/app-context.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/app/app-context.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
 ].map(file => [file, collect(file)]));
 const origin = 'https://auth-cache-partition-fixture.invalid';
 const provider = 'https://partition-fixture.supabase.co';

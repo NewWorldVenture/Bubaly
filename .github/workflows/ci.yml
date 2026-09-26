@@ -76,6 +76,25 @@ jobs:
         env:
           TZ: America/Los_Angeles
 
+      # The same suite EAST of Greenwich. The two runs above are at and west of
+      # it, and that is not a stylistic gap — it is a blind spot with a sign.
+      # A module that builds a Date from LOCAL parts and reads the day back out
+      # with `toISOString().slice(0, 10)` re-expresses that moment at Greenwich,
+      # so the calendar day walks FORWARDS west of it and BACKWARDS east of it.
+      # Los Angeles catches the forward half. Nothing caught the backward half,
+      # and a full run at TZ=Asia/Tokyo failed 15 tests across 8 files that are
+      # green in both runs above: a budget period starting 31 May instead of
+      # 1 June, a marketplace return reported overdue on the day it was due, a
+      # trip exported to a calendar on the wrong days.
+      #
+      # Asia/Tokyo deliberately, not a DST zone: it is UTC+9 all year, so a
+      # failure here is unambiguously about the sign of the offset rather than
+      # about a transition. America/Los_Angeles above still carries the DST half.
+      - name: Unit tests (east of Greenwich)
+        run: npm test
+        env:
+          TZ: Asia/Tokyo
+
       # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
       # type-check and lint passes inside `next build` — they were a duplicate
       # of the two steps here, and the one worker that ran them peaked at

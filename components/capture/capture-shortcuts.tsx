@@ -114,27 +114,49 @@ export function useCaptureShortcuts(initialKeys?: string[] | null) {
       : DEFAULT_CAPTURE_SHORTCUTS.filter((k) => k in SHORTCUT_BY_KEY));
   // Guards the background load against overwriting an edit the user just made.
   const dirty = useRef(false);
+  // Is what's on screen the member's ACTUAL layout, or a starter set we GUESSED
+  // because we have not managed to read theirs yet? `persist` writes the whole
+  // visible array, so saving a guess replaces a layout we never saw — on every
+  // device they own. Confirmed by exactly three things: an SSR read that
+  // succeeded, a localStorage copy left by an earlier successful read on this
+  // device, or the background read below answering ok.
+  const confirmed = useRef(hasServerInitial);
 
   useEffect(() => {
     if (hasServerInitial) { writeCache(keys); return; }
     // Instant paint from cache, then reconcile with the server copy.
     const cached = readCache();
-    if (cached !== null && !dirty.current) setKeys(cached);
+    if (cached !== null && !dirty.current) { setKeys(cached); confirmed.current = true; }
     let active = true;
     loadCaptureShortcuts()
-      .then((saved) => {
-        if (!active || dirty.current || saved === null) return;
-        const resolved = sanitizeShortcutKeys(saved, CATALOG_KEYS, MAX_CAPTURE_SHORTCUTS);
+      .then((read) => {
+        if (!active) return;
+        // A failed read tells us nothing: keep the cache/starter set on screen so
+        // the grid is usable, but leave it UNCONFIRMED so it cannot be saved back.
+        if (!read.ok) return;
+        confirmed.current = true;
+        if (dirty.current || read.keys === null) return;
+        const resolved = sanitizeShortcutKeys(read.keys, CATALOG_KEYS, MAX_CAPTURE_SHORTCUTS);
         setKeys(resolved);
         writeCache(resolved);
       })
-      .catch(() => { /* offline — cache/defaults already shown */ });
+      .catch(() => { /* offline — cache/starter set shown, and still unconfirmed */ });
     return () => { active = false; };
     // Mount-only by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function persist(next: string[]) {
+    if (!confirmed.current) {
+      // We are looking at the starter six because their saved layout could not be
+      // read, not because they chose it. Writing this edit would replace their
+      // real shortcuts with defaults-plus-this-change everywhere. Refuse, say so,
+      // and change nothing — the grid stays as it was. There is no in-place
+      // retry: the read runs once, on mount, so every further tap is refused the
+      // same way until the page (or the Quick-capture modal) is opened again.
+      toastError(t('captureShortcuts.layoutUnavailable'));
+      return;
+    }
     dirty.current = true;
     const clean = sanitizeShortcutKeys(next, CATALOG_KEYS, MAX_CAPTURE_SHORTCUTS);
     setKeys(clean);

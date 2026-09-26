@@ -33,6 +33,43 @@ describe('A-08 wallet write-RLS probe is present and encodes its invariants', ()
 
   it('acts as an authenticated child via role + jwt claim (RLS is the gate)', () => {
     expect(sql).toContain("set_config('role','authenticated', true)");
-    expect(sql).toContain("set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true)");
+
+    // This used to pin the child's uuid as a LITERAL, and that made the case
+    // brittle about the wrong thing. The probe's ids had to change — it shared
+    // `…0000000000c8` with child-login-mapping-is-managers-only-check.sql,
+    // which commits its seed, so a SECOND run of the suite against one database
+    // failed on a foreign key (see tests/boundary-probes-are-rerunnable.test.ts
+    // for the whole shape). A rename that is correct should not fail a case
+    // whose subject is "RLS is the gate, not the application".
+    //
+    // So assert the PROPERTY instead: the probe declares a child via `\set KID`,
+    // seeds that id as a `child` family member, and hands the SAME id to
+    // `request.jwt.claim.sub`. A probe that seeds one child and impersonates a
+    // different uuid would prove nothing, and that is what this now catches.
+    const kid = /^\\set KID '([0-9a-f-]{36})'/m.exec(sql);
+    expect(kid, 'the probe no longer declares its child with \\set KID').not.toBeNull();
+    expect(sql, 'the child id must be seeded as a `child` family member')
+      .toContain(`:'KID', 'child'`);
+    expect(sql, 'the session must be opened AS the child the probe seeded')
+      .toContain(`set_config('request.jwt.claim.sub','${kid![1]}', true)`);
+
+    // And EVERY identity it assumes must be one it seeded. `toContain` above is
+    // satisfied by a single matching occurrence, and this probe opens a session
+    // five times — so on its own it would pass a file that impersonates the
+    // seeded child once and an unseeded uuid everywhere else. That is not a
+    // hypothetical: planting exactly that left the case green, which is how
+    // this second half came to exist.
+    const declared = new Set(
+      [...sql.matchAll(/^\\set [A-Z_]+ '([0-9a-f-]{36})'/gm)].map((m) => m[1]),
+    );
+    expect(declared.size, 'no \\set ids were parsed').toBeGreaterThan(1);
+    const assumed = [...sql.matchAll(/request\.jwt\.claim\.sub'\s*,\s*'([0-9a-f-]{36})'/g)]
+      .map((m) => m[1]);
+    expect(assumed.length, 'the probe assumes no identity at all').toBeGreaterThan(1);
+    expect(
+      [...new Set(assumed)].filter((id) => !declared.has(id)),
+      'the probe opens a session as a uuid it never declared with \\set, so nothing '
+        + 'establishes that identity is a member of the family under test',
+    ).toEqual([]);
   });
 });
