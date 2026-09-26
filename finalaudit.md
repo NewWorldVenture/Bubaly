@@ -25987,6 +25987,66 @@ impossible.
 All 19 now capture and log their error. None blocks its response: the point is
 a trace, which is the difference between degrading and vanishing.
 
+## C1-K-08 · MEDIUM · A page that could not read answered as if it had
+
+The server-page half of section C's "reads". `settleAll` turns a rejected read
+into `{ data: null, error }` so one unreachable table cannot cost a whole page —
+the right default. But 15 pages destructure only `data` and render
+`data ?? []`, which turns a failed read into a confident answer. Two of those
+answers are wrong rather than merely thin:
+
+- **`/dashboard/conflicts`** — `detectConflicts([])` is an empty list, which
+  the page renders as the **all-clear**. A conflict detector that could not
+  read the calendar must not say there are no clashes.
+- **`/dashboard/family-access`** (Kid Logins) — an unreadable `child_logins`
+  makes every child look as though they have *no* login, on the page whose
+  whole purpose is deciding who to give one to. A parent then creates a
+  second login for a username that is already taken.
+
+Both now stop with an `ErrorState` (messages in all seven locales), and the
+check is asserted to run *before* the detector / the roster is built — a check
+placed after would be decoration.
+
+The two guardian pages keep their documented degradation ("one unreachable
+table costs its own list, not the page") and gain the log they lacked. The
+other 11 are lists where empty-on-failure is an honest degradation; recorded,
+not changed.
+
+## C1-K-09 · Convergence after a week of `main`
+
+105 commits landed while this branch waited. In three files another session had
+fixed the same defect as this pass — each time **more** thoroughly — and the
+merge was resolved towards theirs:
+
+- **`lib/social/access.ts`** now *throws* `SocialAccessUnavailableError` rather
+  than returning `null`, so "could not check" is distinguishable from "not
+  allowed", and it requires a live membership row. **That closes the
+  stale-social-access question** this pass re-opened in C1-K-03's correction:
+  a removed member with a surviving explicit row now gets nothing.
+- **`voice-module`** routes both history writes through `recordVoiceHistory`,
+  which settles *and* catches and is called with `void`, so the capture is
+  neither lost nor delayed by its own log.
+- **`medications` / `rewards`** moved to `.select('id').single()` inside a
+  `mutate()` that throws on error — `.single()` turns zero rows into PGRST116 —
+  and adds a read-back confirmation. The guard here now accepts that form.
+
+Taking theirs wholesale for `medical-records-module` **dropped two fixes they
+did not have**: the row check on the `medical_profiles` upsert (the one that
+said "Profile saved" over unchanged allergies and emergency contacts) and
+`CardImage`'s rejection path. Both were re-applied on top. The lesson for the
+next merge: a comment-only conflict can sit on a file whose *other* hunks
+differ, and `--theirs` takes those too.
+
+Two of another session's tests had to move with the code, and both were
+re-calibrated afterwards so they are provably still live:
+`child-login-session-adoption`'s fake learned the throttle's predicated
+`insert`/`update` (a blind upsert there would bring back C1 finding 5's lost
+update), and still goes red if the store swallows a write failure.
+
+`finance-operation-sql`, red on two earlier heads of this branch, was not this
+branch's: a `pg_isready`-vs-`POSTGRES_DB` readiness race in the workflow, which
+`main` had already fixed and the merge carried in verbatim.
+
 ## Converged with another session on C1-K-01/03
 
 While this pass was running, another session found the **same class
