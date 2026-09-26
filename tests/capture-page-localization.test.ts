@@ -20,7 +20,9 @@ const locales: LocaleCode[] = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-
 beforeEach(() => {
   state.locale = 'en-US';
   state.auth.mockReset().mockResolvedValue({});
-  state.load.mockReset().mockResolvedValue(['calendar', 'tasks']);
+  // loadCaptureShortcuts answers a RESULT, not a bare array: a failed read has to
+  // be distinguishable from "nothing saved" (see the type's own comment).
+  state.load.mockReset().mockResolvedValue({ ok: true, keys: ['calendar', 'tasks'] });
 });
 
 describe('Capture page locale and server boundaries', () => {
@@ -40,6 +42,16 @@ describe('Capture page locale and server boundaries', () => {
     expect(state.auth).toHaveBeenCalledOnce();
     expect(state.load).toHaveBeenCalledOnce();
     expect(state.auth.mock.invocationCallOrder[0]).toBeLessThan(state.load.mock.invocationCallOrder[0]);
+  });
+
+  // A failed read must not reach the client as a confident answer. `null` is the
+  // component's "no answer yet" value: it sends the grid down its cache + retry
+  // path and keeps it from saving a guessed layout over the member's real one.
+  it('hands the client "no answer" — never an empty layout — when the read failed', async () => {
+    state.load.mockResolvedValue({ ok: false, error: 'canceling statement due to statement timeout' });
+    const html = renderToStaticMarkup(await CapturePage({}));
+    expect(html).toContain('data-shortcuts="null"');
+    expect(html).not.toContain('data-shortcuts="[]"');
   });
 
   it('preserves login redirects before reading the saved shortcut layout', async () => {

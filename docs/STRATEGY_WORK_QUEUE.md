@@ -185,14 +185,30 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 > * **16 LANDED with every clause met** — `S-01`, `S-02`, `S-03`, `S-04`,
 >   `S-06`, `S-07`, `S-08`, `S-09`, `S-10`, `S-11`, `S-12`, `S-13`, `S-16`,
 >   `S-17`, `S-18`, `S-19`. Each returned file-and-line evidence per clause.
-> * **`S-14` — 5 of 6.** The unmet clause asks for onboarding answers to land
->   with `family_facts.source = 'onboarding'`. The database refuses that value:
->   `family_facts_source_check` admits only
+> * **`S-14` — was 5 of 6, now 6 of 6, by correcting the clause rather than the
+>   code.** The clause asked for onboarding answers to land with
+>   `family_facts.source = 'onboarding'` *and* to be confirmed facts. The
+>   database refuses that value: `family_facts_source_check` admits only
 >   `('user','ai_conversation','ai_inferred','import')`. The feature is built —
 >   the memory gate, the confirmed lane and the provenance (in `notes`) are all
->   there and tested. This is a **clause-versus-schema** mismatch, recorded as
->   `SPEC-001` in `finalaudit.md`; closing it means amending the clause or
->   widening the constraint by migration, and §6 forbids an agent creating one.
+>   there and tested. Recorded as `SPEC-001` in `finalaudit.md` and closed by
+>   **amending the clause** to source `'user'` with an onboarding marker in
+>   `notes`, which is what `lib/onboarding/facts.ts` writes.
+>
+>   Widening the constraint is **not** a second way to close it, and saying so
+>   is the point of this entry. Two reasons, either one fatal. First, a widened
+>   CHECK is never reached: `MEMORY_SOURCES`
+>   (`lib/services/memory/index.ts:53-54`) refuses an unknown token in
+>   TypeScript before Postgres sees it. Second, and worse, the source token *is*
+>   the confirmed-lane selector (`:146`), so an `'onboarding'` fact would route
+>   to `family_playbook_suggestions` — the review inbox — which is the opposite
+>   of the confirmed facts the same clause demands in the same breath. The
+>   clause's own `asked_for=true` already **means** source `'user'`: that is the
+>   translation at `lib/ai/tools/memory.ts:127`, and `asked_for` was never a
+>   column. So the two halves of the clause were one knob set to two
+>   contradictory positions, and `'user'` is the only faithful reading of it.
+>   Guarded by
+>   `tests/the-strategy-queue-does-not-ask-for-a-memory-source-the-service-cannot-confirm.test.ts`.
 > * **`S-15` — was 4 of 5, now 5 of 5.** The unmet clause was a **real defect**,
 >   on a file `S-15` itself owns: the six platform tiles on `/admin/reports`
 >   rendered a failed read as `0`. Fixed and mutation-tested (`METRIC-001`).

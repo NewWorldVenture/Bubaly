@@ -11,13 +11,30 @@
 // nothing to accept, they already said it. Pure and DB-free: the server action
 // maps the result through `rememberFact`, and the mapping is tested here.
 //
-// PROVENANCE. The audit asked for `source: 'onboarding'`, which the database
-// will not take: `family_facts_source_check` (migration 0265) allows exactly
-// 'user' | 'ai_conversation' | 'ai_inferred' | 'import'. Widening it is a
-// migration, so the source stays 'user' — accurate, since a person typed every
-// one of these — and WHERE it came from is carried in the note, which is also
-// what the Family Memory UI shows. `ONBOARDING_FACT_NOTE` is the one string to
-// change when the CHECK is widened.
+// PROVENANCE. The strategy clause originally asked for `source: 'onboarding'`,
+// and 'user' looked like a stopgap forced by the schema —
+// `family_facts_source_check` (migration 0265) allows exactly
+// 'user' | 'ai_conversation' | 'ai_inferred' | 'import'. It is not a stopgap.
+// Widening that CHECK would not make 'onboarding' right, for two reasons that
+// have nothing to do with Postgres:
+//
+//   * `MEMORY_SOURCES` (lib/services/memory/index.ts:53-54) refuses an unknown
+//     token before the database is reached, so the migration alone changes
+//     nothing.
+//   * The source token IS the lane selector (`fromPerson`, same file :146).
+//     'user' and 'import' go to the confirmed lane; anything else goes to
+//     `family_playbook_suggestions`, the review inbox. An 'onboarding' source
+//     would therefore make these answers UNconfirmed — the opposite of what the
+//     clause wanted them to be.
+//
+// And the clause's own `asked_for=true` already means source 'user': that is
+// literally the translation the AI tool does (lib/ai/tools/memory.ts:127).
+// `asked_for` is a tool-layer boolean that derives the source, never a column.
+// So 'user' is the right answer and not a workaround, the clause has been
+// amended to say so (docs/STRATEGY_WORK_QUEUE.md, S-14), and WHERE the answer
+// came from is carried in the note — which is also what the Family Memory UI
+// shows. Guarded by
+// tests/the-strategy-queue-does-not-ask-for-a-memory-source-the-service-cannot-confirm.test.ts.
 
 import type { FactCategory } from '@/lib/memory/facts';
 import { FAMILY_GOALS } from './family';
@@ -26,8 +43,10 @@ import { FAMILY_GOALS } from './family';
 export const ONBOARDING_FACT_NOTE = 'Answered during onboarding';
 
 /**
- * The `family_facts.source` these are written with. Not 'onboarding': see the
- * header — the CHECK constraint has four values and adding one is a migration.
+ * The `family_facts.source` these are written with, and the reason they land in
+ * the confirmed lane at all: `rememberFact` reads this token to decide between
+ * `family_facts` and the review inbox. Not 'onboarding' — see the header, which
+ * is about why that value is wrong rather than merely unavailable.
  */
 export const ONBOARDING_FACT_SOURCE = 'user' as const;
 

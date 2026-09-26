@@ -12,15 +12,38 @@ import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS
 
 type Result = { ok: boolean; error?: string };
 
+/**
+ * Answer of a shortcut-layout read. THREE outcomes, not two — because the caller
+ * composes and writes back the WHOLE visible array, so it must be able to tell
+ * "this member has no saved layout" from "we could not find out what their saved
+ * layout is". Spelling both `null` collapsed them, and the starter set shown for
+ * the second one was then saved over a real layout the read never managed to see.
+ *   { ok: true, keys: [...] } → their saved layout.
+ *   { ok: true, keys: null }  → read succeeded, nothing saved → never customized.
+ *   { ok: false, error }      → the read FAILED. Nothing is known. Do not guess.
+ */
+export type CaptureShortcutsRead =
+  | { ok: true; keys: string[] | null }
+  | { ok: false; error: string };
+
 /** The signed-in user's saved capture shortcut keys (raw — client sanitizes vs its catalog). */
-export async function loadCaptureShortcuts(): Promise<string[] | null> {
+export async function loadCaptureShortcuts(): Promise<CaptureShortcutsRead> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data } = await supabase.from('user_preferences')
+  // postgrest-js RESOLVES with { data: null, error } instead of throwing, so an
+  // unread error here arrives as a perfectly ordinary "no shortcuts saved".
+  const { data, error } = await supabase.from('user_preferences')
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
+  if (error) {
+    console.error('[capture/shortcuts] preferences read failed', error);
+    return { ok: false, error: error.message };
+  }
   const prefs = (data?.notification_prefs as Record<string, unknown> | null) ?? null;
   const saved = prefs?.[CAPTURE_SHORTCUTS_PREF_KEY];
-  return Array.isArray(saved) ? (saved as unknown[]).filter((v): v is string => typeof v === 'string') : null;
+  return {
+    ok: true,
+    keys: Array.isArray(saved) ? (saved as unknown[]).filter((v): v is string => typeof v === 'string') : null,
+  };
 }
 
 /** Persist the member's chosen shortcut layout (merged into notification_prefs). */

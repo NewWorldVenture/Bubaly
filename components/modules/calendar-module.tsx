@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { localDayKey, localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
+import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
 type Event = Tables<'calendar_events'>;
 
@@ -928,15 +929,6 @@ export function CalendarModule() {
   );
 }
 
-/** ISO → the local `datetime-local` input format (YYYY-MM-DDTHH:mm). */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function NewEventModal({ existing, onClose, onSaved }: {
   existing?: Event | null; onClose: () => void; onSaved: () => void;
 }) {
@@ -979,8 +971,13 @@ function NewEventModal({ existing, onClose, onSaved }: {
       const recurrence = String(form.get('recurrence') ?? 'none');
       const fields = {
         title: parsed.data.title,
-        startsAt: parsed.data.starts_at,
-        endsAt: parsed.data.ends_at ?? null,
+        // The box holds a naive wall clock; `fromLocalInput` resolves it on the
+        // same clock the prefill above rendered it with, so Save on an untouched
+        // form stores the instant it opened with instead of re-applying this
+        // reader's offset. `eventSchema` already rejected a blank start, so the
+        // `?? ''` is for the type and cannot fire.
+        startsAt: fromLocalInput(parsed.data.starts_at) ?? '',
+        endsAt: fromLocalInput(parsed.data.ends_at) ?? null,
         category: parsed.data.category,
         location: parsed.data.location ?? null,
         description: parsed.data.description ?? null,

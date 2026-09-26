@@ -2176,3 +2176,57 @@ wallet debit." — this migration and `lib/wallet/server.ts` go together, which 
 the one ordering constraint on this row. The external signature and return shape
 of `debitSpendBucket` are unchanged, including the exact "Only $X available in
 Spend." sentence, so `app/(app)/wallet/actions.ts` is untouched.
+
+### `0343` makes "only a parent hands out an assistant key" true in the database — unapplied
+
+`0343_only_a_parent_mints_or_revokes_an_assistant_key.sql` (SRV-001 lead `m9`).
+An assistant key is a standing bearer grant over the household: whoever holds
+one can have `POST /api/assistant` read the family's calendar, tasks and
+shopping list aloud and, with the `capture` scope, write events, notes,
+groceries and to-dos back. The app says only a parent may hand one out —
+`canManage` in `app/(app)/dashboard/assistants/actions.ts` is `isAdmin(role)` —
+and `0283`'s own header says the same in words. `0283`'s policies said
+something else: they were written against `can_manage_family()`, which is
+`role in ('parent','adult')` (`0003`), rather than `is_family_admin()`, which
+is the parent-only predicate two definitions further down. And because both of
+the action's writes go through the service-role client, which is `BYPASSRLS`,
+the parent-only rule was a TypeScript `if` on the app's own path while
+`/rest/v1/assistant_links` stayed open to any member's JWT under the weaker
+predicate.
+
+So an **adult** — the one role on which the two predicates disagree — could,
+with their own browser client: mint a live key whose secret only they knew,
+stamped as the parent's; widen the parent's read-only kitchen speaker to one
+that writes; revoke a parent's key and then un-revoke it; or delete it, which
+cascades `assistant_link_events` and erases the "every use is recorded" trail
+the page promises. A child was already refused.
+
+**What closes it** is three `RESTRICTIVE` policies (insert, update, delete) on
+`is_family_admin(family_id)` — `0254`'s mechanism, as reaffirmed by `0306`,
+`0310`, `0322` and `0325` — so no permissive policy, present or added later,
+can grant past them. `SELECT` is deliberately untouched: members are meant to
+see that a speaker is connected. The migration ends with a block that raises if
+the three guards are not in force, rather than "applying" against a table
+still open to an adult.
+
+**Nothing legitimate breaks, and that was checked rather than assumed.** The
+only writers of `assistant_links` in the application are the two in
+`assistants/actions.ts` and the `last_used_at` touch in
+`lib/assistant/service.ts`, and all three run on the service-role client
+(`app/api/assistant/route.ts` builds its client with `createServiceClient()`),
+which bypasses RLS.
+
+**Evidence.** `tests/only-a-parent-mints-or-revokes-an-assistant-key.test.ts`
+replays every `create`/`drop policy` and `grant`/`revoke` on the table across
+the whole corpus and evaluates each request the way Postgres does — grant,
+then any permissive, then every restrictive — with the predicates parsed from
+the migration that defines them. It was **shown to fail before being trusted**:
+with the migration absent it is red (6 of 9), with it present green.
+
+**Two things this entry does not close, named so they are not assumed closed.**
+`0343` ships no `docs/audit/*-check.sql` probe yet, unlike `0340`-`0342`, so a
+production pre-flight cannot tell whether it ran; one is being written. And
+`resolveAssistantLink` (`lib/assistant/service.ts:54-60`) matches on the token
+alone — a key keeps working if the parent who minted it later leaves the family.
+Whether a key belongs to the person or to the household is a product question,
+and it is recorded here rather than decided.
