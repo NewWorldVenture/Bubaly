@@ -109,6 +109,12 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   const { data: assignment } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', familyId).maybeSingle();
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
+  // Proof is submitted by the child the chore is assigned to, or by a manager
+  // on their behalf. A sibling submitting on someone else's assignment could
+  // trigger an AI auto-approval (and its reward) or get it rejected with junk.
+  if (assignment.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.choreNotFound') };
+  }
   const { data: chore } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
   if (!chore) return { ok: false, error: t('actions.choreNotFound') };
 

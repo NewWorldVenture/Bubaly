@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T18:45:00Z
+- Last Updated: 2026-09-26T18:50:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 190
@@ -27285,6 +27285,18 @@ Fix, at both layers:
 `tests/only-the-two-parties-arrange-a-pickup.test.ts` (2/2; the refusal case
 fails with the actions reverted) and `docs/audit/marketplace-handoff-check.sql`
 (3 breaches before, 70/70 after) pin it. Marketplace suites pass (284/284).
+
+## C1-K-49 · MEDIUM · A sibling could submit proof on someone else's chore
+
+`submitProofAction` loaded the assignment by id (same family through RLS) but
+never compared its member to the caller. A sibling could therefore submit
+proof on another child's chore. That runs the AI verification and can
+auto-approve the chore, which pays its reward, or get it rejected with junk
+proof. It also uploads into the other child's proof folder. The action now
+requires the caller to be the assignee or a manager (a parent submitting on a
+young child's behalf). `tests/a-sibling-cannot-submit-your-chore-proof.test.ts`
+pins it: the sibling is refused before anything is written, and the test fails
+with the action reverted. Chore and mission suites pass (186/186).
 
 ## Swept clean · the API routes this file never named
 
