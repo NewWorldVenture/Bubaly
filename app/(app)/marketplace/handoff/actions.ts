@@ -37,7 +37,15 @@ async function loadOrderRole(orderId: string) {
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, status')
     .eq('id', orderId).eq('family_id', ctx.active.familyId).maybeSingle();
-  return { ctx, sb, order, orderError };
+  // Only the two people in the exchange arrange its pickup. Anyone else in the
+  // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
+  // so a sibling could propose, confirm - minting the hand-off code - or cancel
+  // someone else's pickup. 0346 enforces the same in RLS.
+  const me = ctx.active.member.id;
+  const role: 'buyer' | 'seller' | null = order
+    ? (order.seller_member === me ? 'seller' : order.buyer_member === me ? 'buyer' : null)
+    : null;
+  return { ctx, sb, order, orderError, role };
 }
 
 /** Propose (or re-propose) a pickup. Upserts the single handoff for the order. */
@@ -45,13 +53,13 @@ export async function proposeHandoffAction(input: {
   orderId: string; meetAtIso?: string | null; locationLabel: string; locationKind?: LocationKind; notes?: string;
 }): Promise<Result> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError } = await loadOrderRole(input.orderId);
+  const { ctx, sb, order, orderError, role } = await loadOrderRole(input.orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
   if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
   if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
 
-  const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
   const { error } = await sb.from('marketplace_handoffs').upsert({
     order_id: order.id, family_id: order.family_id, listing_id: order.listing_id,
     proposed_by: ctx.active.member.id, proposer_role: role,
@@ -69,16 +77,16 @@ export async function proposeHandoffAction(input: {
 /** The other party confirms the proposal → calendar event + hand-off code. */
 export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError } = await loadOrderRole(orderId);
+  const { ctx, sb, order, orderError, role } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
     .select('id, proposer_role, status, meet_at, location_label').eq('order_id', orderId).maybeSingle();
   if (handoffError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), handoffError);
   if (!handoff) return { ok: false, error: t('actions.noPickupToConfirm') };
   if (handoff.status !== 'proposed') return { ok: false, error: t('actions.thisPickupCanTBe') };
-  const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
   if (role === handoff.proposer_role) return { ok: false, error: t('actions.waitForTheOtherPerson') };
 
   const code = generateHandoffCode();
@@ -111,9 +119,10 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
 /** Cancel a proposed/confirmed pickup (either party). */
 export async function cancelHandoffAction(orderId: string): Promise<Result> {
   const t = await getTranslations();
-  const { sb, order, orderError } = await loadOrderRole(orderId);
+  const { sb, order, orderError, role } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
   const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
     .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
   if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);
