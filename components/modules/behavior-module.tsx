@@ -86,11 +86,18 @@ export function BehaviorModule() {
         points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
         occurred_at: new Date(form.occurred_at).toISOString(),
       };
-      const { error } = form.id
-        ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
-        : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
+      // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+      // not rewrite comes back `error: null` with nothing changed. See
+      // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+      // predicate bounds the write to one household and `.select('id')` makes
+      // the empty result an answer. An INSERT needs neither — RLS refuses one
+      // with an error instead of filtering it away.
+      const { data, error } = form.id
+        ? await supabase.from('behavior_logs').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
-      success(form.id ? 'Updated' : 'Logged');
+      if (!data || data.length === 0) return toastError(tr('actions.couldNotSaveThatRecord'));
+      success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
       setForm(null);
     } finally {
       setSaving(false);

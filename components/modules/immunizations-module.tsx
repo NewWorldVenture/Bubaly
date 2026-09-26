@@ -74,11 +74,21 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         lot_number: form.lot_number.trim() || null,
         notes: form.notes.trim() || null,
       };
-      const { error } = form.id
-        ? await supabase.from('immunizations').update(row).eq('id', form.id)
-        : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId });
+      // The SAME reasoning as `remove` below, which is the point worth recording:
+      // that fix landed on the DELETE and stopped one line short of the UPDATE in
+      // the same function. RLS filters both identically — 0323 makes this a Rule B
+      // table, a record of medical fact its subject may not rewrite — so an edit a
+      // member is not allowed to make comes back `error: null` with nothing
+      // changed, and "Record updated" was the answer either way. The family_id
+      // predicate bounds it to one household; `.select('id')` makes the empty
+      // result an answer. An INSERT needs neither: RLS REFUSES an insert with an
+      // error rather than filtering it away.
+      const { data, error } = form.id
+        ? await supabase.from('immunizations').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
-      success(form.id ? 'Record updated' : 'Immunization added');
+      if (!data || data.length === 0) return toastError(t('actions.couldNotSaveThatRecord'));
+      success(form.id ? t('immunizationsModule.recordUpdated') : t('immunizationsModule.immunizationAdded'));
       setForm(null);
     } finally {
       setSaving(false);

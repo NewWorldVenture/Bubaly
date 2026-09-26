@@ -196,12 +196,20 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     setLoading(true);
     const supabase = createClient();
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };
-    const { error: saveErr } = entry
-      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id)
-      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch });
+    // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+    // not rewrite comes back `error: null` with nothing changed. See
+    // 0331 makes a journal nobody
+    // else's, and tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+    // predicate bounds the write to one household and `.select('id')` makes
+    // the empty result an answer. An INSERT needs neither — RLS refuses one
+    // with an error instead of filtering it away.
+    const { data, error: saveErr } = entry
+      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id).eq('family_id', familyId).select('id')
+      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch }).select('id');
     setLoading(false);
     if (saveErr) return toastError(describeDbError(saveErr));
-    success(entry ? 'Entry saved' : 'Entry added');
+    if (!data || data.length === 0) return toastError(t('actions.couldNotSaveThatRecord'));
+    success(entry ? t('journalModule.entrySaved') : t('journalModule.entryAdded'));
     onSaved();
   }
 

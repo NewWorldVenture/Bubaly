@@ -67,15 +67,36 @@ function tsxFiles(dir: string): string[] {
   return out;
 }
 
-/** Call sites of `.delete()` on a gated table, with the 200 chars that follow. */
-function gatedDeletes(): { file: string; table: string; window: string }[] {
-  const hits: { file: string; table: string; window: string }[] = [];
+/**
+ * Call sites of a FILTERED write on a gated table, with the chars that follow.
+ *
+ * `.delete()` and `.update(` both, because RLS treats them identically and this
+ * guard originally covered only the first — which is exactly how three modules
+ * ended up with a fixed delete and an unfixed update IN THE SAME FUNCTION:
+ * immunizations-module, health-visits-module and health-module's symptom_logs
+ * each had `.delete().eq('family_id').select('id')` two lines below
+ * `.update(row).eq('id', form.id)`. The fix had been written down, cited a
+ * migration by number, and stopped one statement short. A guard scoped to one
+ * verb is what let that read as done.
+ *
+ * `.insert(` is deliberately NOT here: RLS REFUSES an insert with an error
+ * rather than filtering it away, so branching on `error` is correct there and
+ * demanding a readback would prove nothing.
+ */
+function gatedWrites(): { file: string; table: string; verb: string; window: string }[] {
+  const hits: { file: string; table: string; verb: string; window: string }[] = [];
   for (const file of tsxFiles(join(ROOT, 'components'))) {
     const src = readFileSync(file, 'utf8');
     for (const table of GATED) {
-      const re = new RegExp(`from\\('${table}'\\)[\\s\\S]{0,40}?\\.delete\\(\\)`, 'g');
-      for (const m of src.matchAll(re)) {
-        hits.push({ file: file.slice(ROOT.length + 1), table, window: src.slice(m.index, m.index + 320) });
+      for (const verb of ['delete\\(\\)', 'update\\(']) {
+        const re = new RegExp(`from\\('${table}'\\)[\\s\\S]{0,40}?\\.${verb}`, 'g');
+        for (const m of src.matchAll(re)) {
+          hits.push({
+            file: file.slice(ROOT.length + 1), table,
+            verb: verb.startsWith('delete') ? 'delete' : 'update',
+            window: src.slice(m.index, m.index + 320),
+          });
+        }
       }
     }
   }
@@ -83,19 +104,21 @@ function gatedDeletes(): { file: string; table: string; window: string }[] {
 }
 
 describe('a filtered delete is not a deletion', () => {
-  const deletes = gatedDeletes();
+  const deletes = gatedWrites();
 
   it('finds the call sites it claims to cover', () => {
     // Non-vacuity. A regex that stops matching turns this file into a pass over
     // nothing, which is the failure mode these guards exist to avoid.
-    expect(deletes.length, 'no gated deletes found in components/ — the matcher broke').toBeGreaterThanOrEqual(8);
+    expect(deletes.length, 'no gated writes found in components/ — the matcher broke').toBeGreaterThanOrEqual(8);
     expect(new Set(deletes.map((d) => d.file)).size).toBeGreaterThanOrEqual(5);
+    // Both verbs really are covered, so a future pass cannot quietly lose one.
+    expect(new Set(deletes.map((d) => d.verb))).toEqual(new Set(['delete', 'update']));
   });
 
-  it('every delete on a gated table asks which rows it removed', () => {
+  it('every write on a gated table asks which rows it touched', () => {
     const silent = deletes
       .filter((d) => !/\.select\(/.test(d.window))
-      .map((d) => `${d.file} — delete on ${d.table} without .select(), so a filtered write reads as a successful one`);
+      .map((d) => `${d.file} — ${d.verb} on ${d.table} without .select(), so a filtered write reads as a successful one`);
     expect(
       silent,
       'RLS filters these deletes rather than refusing them. Chain .select(\'id\').maybeSingle() '
@@ -103,10 +126,10 @@ describe('a filtered delete is not a deletion', () => {
     ).toEqual([]);
   });
 
-  it('every delete on a gated table is family-scoped, not left to RLS alone', () => {
+  it('every write on a gated table is family-scoped, not left to RLS alone', () => {
     const unscoped = deletes
       .filter((d) => !/\.eq\('family_id'/.test(d.window))
-      .map((d) => `${d.file} — delete on ${d.table} filters id alone and leaves tenancy to RLS`);
+      .map((d) => `${d.file} — ${d.verb} on ${d.table} filters id alone and leaves tenancy to RLS`);
     expect(unscoped, unscoped.join('\n')).toEqual([]);
   });
 

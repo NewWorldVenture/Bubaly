@@ -75,11 +75,16 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
         follow_up_date: form.follow_up_date || null,
         cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
       };
-      const { error } = form.id
-        ? await supabase.from('health_visits').update(row).eq('id', form.id)
-        : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
+      // See immunizations-module: the earlier fix reached the DELETE below and not
+      // this UPDATE, and RLS filters the two the same way. 0323 gives health_visits
+      // the same Rule B treatment, so a blocked edit answered `error: null` and was
+      // reported as saved.
+      const { data, error } = form.id
+        ? await supabase.from('health_visits').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
-      success(form.id ? 'Visit updated' : 'Visit added');
+      if (!data || data.length === 0) return toastError(t('actions.couldNotSaveThatRecord'));
+      success(form.id ? t('healthVisitsModule.visitUpdated') : t('healthVisitsModule.visitAdded'));
       setForm(null);
     } finally {
       setSaving(false);

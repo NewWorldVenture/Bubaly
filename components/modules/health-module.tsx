@@ -445,17 +445,34 @@ export function HealthModule() {
     setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
   }
 
+  // Both of these filtered by `id` alone and branched on `err`. RLS FILTERS an
+  // UPDATE or a DELETE rather than refusing it, so a row the caller may not touch
+  // comes back `error: null` with nothing changed — and 0307 gives symptom_logs
+  // Rule A, where a log about a member may be corrected by THAT member. Its own
+  // revert probe is "a child rewrote a sibling's symptom log", so a filtered write
+  // here is the live outcome rather than the theoretical one, and "Marked
+  // resolved" over an unchanged row is what the person was told.
+  //
+  // `family_id` bounds the write to one household and `.select('id')` makes the
+  // empty result an answer. The two are separate: a readback over an unscoped
+  // predicate reports success for a write that really did land, on another
+  // household's row.
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
+    const { data, error: err } = await sb.from('symptom_logs')
+      .update({ status: 'resolved', ended_at: new Date().toISOString() })
+      .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    if (!data || data.length === 0) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
     success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
+    const { data, error: err } = await sb.from('symptom_logs').delete()
+      .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    if (!data || data.length === 0) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
     success(tr('healthModule.symptomRemoved'));
   }
 

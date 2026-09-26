@@ -110,12 +110,19 @@ export function CareModule() {
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('care_log').update(fields).eq('id', form.id)
-      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
+    // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+    // not rewrite comes back `error: null` with nothing changed. See
+    // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+    // predicate bounds the write to one household and `.select('id')` makes
+    // the empty result an answer. An INSERT needs neither — RLS refuses one
+    // with an error instead of filtering it away.
+    const { data, error: err } = form.id
+      ? await sb.from('care_log').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
+      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success(form.id ? 'Entry updated' : 'Care logged');
+    if (!data || data.length === 0) { toastError(tr('actions.couldNotSaveThatRecord')); return; }
+    success(form.id ? tr('careModule.entryUpdated') : tr('careModule.careLogged'));
     setModalOpen(false);
   }
 

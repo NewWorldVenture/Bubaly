@@ -29091,3 +29091,75 @@ watching it name that action. 17,119 tests, 17,116 green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`; the three failures are this container's Node 22 against
 the declared 24.21.0. Lint exit 0, typecheck exit 0, i18n gate clean, catalogue
 integrity green across seven locales.
+
+---
+
+## Q52 — The guard was scoped to one verb, so the fix stopped one statement short
+
+The health modules, and a finding about the audit itself.
+
+`tests/a-filtered-delete-is-not-a-deletion.test.ts` covered `.delete()` on
+nineteen gated tables. It did not cover `.update(`. RLS treats the two
+**identically** — it filters both rather than refusing either — and the
+consequence was the same defect sitting two lines from its own fix, in the same
+function, three times over:
+
+```ts
+// immunizations-module.tsx, before
+const { error } = form.id
+  ? await supabase.from('immunizations').update(row).eq('id', form.id)   // ← no scope, no readback
+  : await supabase.from('immunizations').insert({ ...row, family_id: familyId, ... });
+...
+async function remove(id: string) {
+  // `.select('id')` is the whole point: RLS filters a DELETE rather than
+  // refusing it … 0323 makes immunizations a Rule B table …
+  const { data, error } = await createClient().from('immunizations').delete()
+    .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+```
+
+The reasoning was written down, cited the migration by number, explained why the
+subject of a medical record may not erase it — and then applied to the DELETE and
+not to the UPDATE, which the same policy filters for the same reason. A guard
+scoped to one verb is what let that read as finished.
+
+Widening it to `.update(` found **six** sites across five modules:
+
+| module | table | policy that bites |
+|---|---|---|
+| `immunizations-module` | `immunizations` | 0323 Rule B — the subject may not rewrite a medical fact |
+| `health-visits-module` | `health_visits` | 0323 Rule B |
+| `health-module` (`resolveSymptom`) | `symptom_logs` | 0307 Rule A — a log about a member is that member's to correct |
+| `health-module` (`deleteSymptom`) | `symptom_logs` | 0307 Rule A |
+| `behavior-module` | `behavior_logs` | 0330 — a behaviour note is its author's |
+| `care-module` | `care_log` | 0323 Rule B |
+| `journal-module` | `journal_entries` | 0331 — a journal is nobody else's |
+
+`symptom_logs` is the one worth naming: 0307's own revert probe is *"a child
+rewrote a sibling's symptom log"*, so a filtered write here is the **designed**
+outcome of a policy this audit shipped, not a theoretical one — and both the
+resolve and the delete reported success over a row they never touched.
+
+All seven now carry `.eq('family_id', …)` and `.select('id')`, and refuse on an
+empty result. The two are separate and both are needed: a readback over an
+unscoped predicate reports success for a write that really did land — on another
+household's row. `.insert(` is deliberately left alone, because RLS **refuses**
+an insert with an error rather than filtering it away, so branching on `error` is
+correct there and a readback would prove nothing.
+
+`.insert(` also now has that exclusion written into the guard, so the next pass
+does not add it for symmetry and start demanding a readback that means nothing.
+
+**And the same half-translated pattern as the locator, in all five modules.** The
+success toasts were English literals sitting beside `t(...)` calls: `'Record
+updated'`, `'Immunization added'`, `'Visit updated'`, `'Visit added'`,
+`'Updated'`, `'Logged'`, `'Entry updated'`, `'Care logged'`, `'Entry saved'`,
+`'Entry added'`. Eleven keys, seven locales. The pattern is consistent enough
+across locator and the health modules to be worth stating as a rule: **the paths
+a module was written for are translated, and the paths it falls back to are not.**
+
+**Verified:** the widened guard asserts both verbs are really covered
+(`new Set(verbs)` equals `{delete, update}`), so a future pass cannot quietly
+lose one; calibrated by removing the scope from `journal-module`'s update and
+watching it named by file and table. 17,116 of 17,119 green under both `TZ=UTC`
+and `TZ=America/Los_Angeles`, lint exit 0, typecheck exit 0, i18n gate clean
+across all eight declared surfaces.
