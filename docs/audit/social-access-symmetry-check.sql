@@ -68,7 +68,8 @@ insert into public.social_access_permissions (family_id, user_id, social_role, s
 --       public.is_family_admin(family_id)
 --         or public.social_has_permission(family_id, 'manage_access')
 --
---   * 0365_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql
+--   * AUTHZ-011's pending migration ("a child cannot lift the publish lock or
+--     link a document they cannot read", not yet landed when this was written)
 --     names the table only in a comment describing how social_has_permission
 --     resolves a role; it changes nothing here.
 --
