@@ -16,7 +16,7 @@ type Album = Tables<'family_albums'>;
 type Props = Record<string, unknown> & { children?: ReactNode; action?: ReactNode };
 const h = vi.hoisted(() => ({
   locale: 'en-US' as LocaleCode, slots: [] as unknown[], cursor: 0, tree: null as ReactNode,
-  photos: [] as Photo[], albums: [] as Album[], mutationError: null as unknown,
+  photos: [] as Photo[], albums: [] as Album[], mutationError: null as unknown, rowsMatched: true,
   photoInsertError: null as unknown, albumInsertError: null as unknown,
   success: vi.fn(), error: vi.fn(), refresh: vi.fn(), insert: vi.fn(), update: vi.fn(), eq: vi.fn(),
   upload: vi.fn(), remove: vi.fn(), bucket: vi.fn(), publicUrl: vi.fn(),
@@ -57,16 +57,25 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({
         data: h.photoInsertError ? null : { id: 'inserted-photo' }, error: h.photoInsertError,
       }) }) };
     },
+    // Every write confirms itself with .select('id') (Audit C1-S9-82). Under
+    // RLS a refused row is no error and zero rows: `rowsMatched: false` is that.
     update: (value: Record<string, unknown>) => {
       h.update(table, value);
-      return { eq: async (column: string, id: string) => {
+      return { eq: (column: string, id: string) => {
         h.eq(column, id);
-        if (!h.mutationError) h.photos = h.photos.map((p) => p.id === id ? { ...p, ...value } : p);
-        return { error: h.mutationError };
+        return { select: async () => {
+          if (h.mutationError) return { data: null, error: h.mutationError };
+          if (!h.rowsMatched) return { data: [], error: null };
+          h.photos = h.photos.map((p) => p.id === id ? { ...p, ...value } : p);
+          return { data: [{ id }], error: null };
+        } };
       } };
     },
-    delete: () => ({ eq: async (column: string, id: string) => {
-      h.eq(column, id); return { error: h.mutationError };
+    delete: () => ({ eq: (column: string, id: string) => {
+      h.eq(column, id);
+      return { select: async () => h.mutationError
+        ? { data: null, error: h.mutationError }
+        : { data: h.rowsMatched ? [{ id }] : [], error: null } };
     } }),
   }),
   storage: { from: (bucket: string) => {
@@ -148,7 +157,7 @@ function openUpload() { render(); clickText(t('photos.upload')); return render()
 
 beforeEach(() => {
   h.locale = 'en-US'; h.slots = []; h.cursor = 0; h.tree = null; h.photos = []; h.albums = [];
-  h.mutationError = null; h.photoInsertError = null; h.albumInsertError = null;
+  h.mutationError = null; h.rowsMatched = true; h.photoInsertError = null; h.albumInsertError = null;
   for (const mock of [h.success, h.error, h.refresh, h.insert, h.update, h.eq, h.upload, h.remove, h.bucket, h.publicUrl]) mock.mockReset();
   h.upload.mockImplementation(async (path: string) => ({ data: { path }, error: null }));
   h.remove.mockResolvedValue({ error: null });
@@ -190,6 +199,8 @@ describe.each(LOCALES)('Photos in %s', (locale) => {
     clickLabel(t('photosModule.addFavorite')); await flush();
     expect(h.update).toHaveBeenLastCalledWith('family_photos', { is_favorite: true });
     expect(h.eq).toHaveBeenLastCalledWith('id', 'photo-1');
+    // A favorite that landed says nothing went wrong (Audit C1-S9-82).
+    expect(h.error).not.toHaveBeenCalled();
     html = render(); expect(html).toContain(`aria-label="${escaped(t('photosModule.removeFavorite'))}"`);
     clickLabel(t('photosModule.showList'));
     html = render(); expect(html).toContain(`aria-label="${escaped(t('photosModule.removeFavorite'))}"`);
@@ -333,4 +344,26 @@ it('preserves row-first deletion and refuses storage removal or success after a 
   h.mutationError = null; clickLabel(t('photos.deletePhoto')); await flush();
   expect(h.remove).toHaveBeenLastCalledWith(['family-1/photos/photo-1.jpg']);
   expect(h.success).toHaveBeenLastCalledWith(t('photosModule.photoDeleted'));
+});
+
+it('a delete refused with no error and zero rows removes no file and claims nothing (Audit C1-S9-82)', async () => {
+  // "Only after the row is gone" needs the row to be gone. A refused delete
+  // used to go on to remove the file and say "Photo deleted".
+  h.photos = [photo()]; openAll();
+  clickNode(find((n) => n.type === 'div' && typeof n.props.onClick === 'function' && String(n.props.className).includes('break-inside-avoid'))); render();
+  h.rowsMatched = false;
+  clickLabel(t('photos.deletePhoto')); await flush();
+  expect(h.eq).toHaveBeenLastCalledWith('id', 'photo-1');
+  expect(h.remove).not.toHaveBeenCalled();
+  expect(h.success).not.toHaveBeenCalled();
+  expect(h.error).toHaveBeenLastCalledWith(t('errors.thatChangeWasNotSaved'));
+});
+
+it('a favorite refused with no error and zero rows says it was not saved (Audit C1-S9-82)', async () => {
+  h.photos = [photo()]; openAll();
+  h.rowsMatched = false;
+  clickLabel(t('photosModule.addFavorite')); await flush();
+  expect(h.update).toHaveBeenLastCalledWith('family_photos', { is_favorite: true });
+  expect(h.error).toHaveBeenLastCalledWith(t('errors.thatChangeWasNotSaved'));
+  expect(h.photos[0].is_favorite).toBe(false);
 });

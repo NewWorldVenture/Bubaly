@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -120,9 +120,12 @@ export function InboxModule() {
   async function markRead(comm: Comm) {
     if (comm.status !== 'unread') return;
     const supabase = createClient();
-    const { error: readError } = await settle(
-      supabase.from('family_communications').update({ status: 'read' }).eq('id', comm.id));
+    // Under RLS a refused row comes back with no error and zero rows; the
+    // refresh shows the truth, and this now says why. Audit C1-S9-82.
+    const { data: readRow, error: readError } = await settle(
+      supabase.from('family_communications').update({ status: 'read' }).eq('id', comm.id).select('id'));
     if (readError) console.error('[inbox] read receipt write failed', { message: readError.message });
+    else if (wroteNoRows(readRow)) console.error('[inbox] read receipt matched no row', { id: comm.id });
     void refreshComms();
   }
 
@@ -130,9 +133,12 @@ export function InboxModule() {
     if (busyId) return;
     setBusyId(comm.id);
     const supabase = createClient();
-    const { error } = await supabase.from('family_communications').update({ status: 'archived' }).eq('id', comm.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this
+    // used to report by closing the message as archived. Audit C1-S9-82.
+    const { data: archived, error } = await supabase.from('family_communications').update({ status: 'archived' }).eq('id', comm.id).select('id');
     setBusyId(null);
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(archived)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     if (selected?.id === comm.id) setSelected(null);
     void refreshComms();
   }
@@ -446,9 +452,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       // The toast below says the reply was logged to the thread. If this write
       // is dropped the thread never moves to 'replied', and the sentence is
       // wrong about the thing it is describing.
-      const { error: statusError } = await settle(
-        supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id));
+      // A refused row is no error and zero rows, which was as dropped as a
+      // failed write and said nothing. Audit C1-S9-82.
+      const { data: repliedRow, error: statusError } = await settle(
+        supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id).select('id'));
       if (statusError) console.error('[inbox] reply status write failed', { message: statusError.message });
+      else if (wroteNoRows(repliedRow)) console.error('[inbox] reply status matched no row', { id: comm.id });
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }

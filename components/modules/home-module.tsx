@@ -164,18 +164,21 @@ export function HomeModule() {
 
   async function completeTask(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('maintenance_tasks').update({
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: updated, error } = await supabase.from('maintenance_tasks').update({
       status: 'done', completed_at: new Date().toISOString(),
-    }).eq('id', id);
+    }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.taskCompleted'));
     void refreshTasks();
   }
 
   async function removeAsset(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets').delete().eq('id', id);
+    const { data: removed, error } = await supabase.from('home_assets').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
@@ -392,10 +395,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function saveDate() {
     setSavingDate(true);
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets')
-      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as saved. Audit C1-S9-82.
+    const { data: dated, error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id).select('id');
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(dated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }

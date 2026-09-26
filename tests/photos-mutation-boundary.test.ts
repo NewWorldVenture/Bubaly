@@ -15,7 +15,10 @@ const src = fs.readFileSync('components/modules/photos-module.tsx', 'utf8');
 describe('photos module mutations surface failures (A-05)', () => {
   it('deletePhoto deletes the DB row first, guards the error, and only then removes storage', () => {
     const fn = src.slice(src.indexOf('async function deletePhoto'), src.indexOf('async function updateCaption'));
-    expect(fn).toContain("const { error } = await supabase.from('family_photos').delete()");
+    // Re-pointed (Audit C1-S9-82): the row delete now also reads back what it
+    // removed (`const { data: x, error } =`); the property is that its error is
+    // bound and surfaced before storage is touched, which the lines below keep.
+    expect(fn).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await supabase\.from\('family_photos'\)\.delete\(\)/);
     expect(fn).toContain('if (error) { toastError(describeDbError(error)); return; }');
     // Row delete + its guard must precede both the storage removal and the success toast.
     expect(at(fn, '.delete()')).toBeLessThan(at(fn, ".storage.from('family-media').remove"));
@@ -24,10 +27,11 @@ describe('photos module mutations surface failures (A-05)', () => {
 
   it('toggleFavorite and updateCaption surface write errors instead of swallowing them', () => {
     const fav = src.slice(src.indexOf('async function toggleFavorite'), src.indexOf('async function deletePhoto'));
-    expect(fav).toContain('const { error } =');
+    // Re-pointed (Audit C1-S9-82): both writes now also read back the row.
+    expect(fav).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
     expect(fav).toContain('if (error) toastError(describeDbError(error));');
     const cap = src.slice(src.indexOf('async function updateCaption'));
-    expect(cap).toContain('const { error } =');
+    expect(cap).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
     expect(cap).toContain('if (error) toastError(describeDbError(error));');
   });
 });

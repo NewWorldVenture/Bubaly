@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -97,11 +97,13 @@ export function HomeworkModule() {
       status: form.status,
       completed_at: isDone ? new Date().toISOString() : null,
     };
-    const { error: err } = form.id
-      ? await sb.from('homework_assignments').update(fields).eq('id', form.id)
-      : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('homework_assignments').update(fields).eq('id', form.id).select('id')
+      : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Homework updated' : 'Homework added');
     setModalOpen(false);
   }
@@ -110,17 +112,19 @@ export function HomeworkModule() {
     const next = NEXT_STATUS[h.status];
     const isDone = next === 'done' || next === 'submitted';
     const sb = createClient();
-    const { error: err } = await sb.from('homework_assignments').update({
+    const { data: updated2, error: err } = await sb.from('homework_assignments').update({
       status: next, completed_at: isDone ? new Date().toISOString() : null,
-    }).eq('id', h.id);
+    }).eq('id', h.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function remove(h: Homework) {
     if (!confirm(`Delete "${h.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
+    const { data: removed, error: err } = await sb.from('homework_assignments').delete().eq('id', h.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('homeworkModule.homeworkDeleted'));
   }
 

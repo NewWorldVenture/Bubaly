@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at, between } from './helpers/source-order';
+import { at, between, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-77 — client modules that report a write they cannot see.
@@ -36,6 +36,14 @@ const FIXED = [
   'components/modules/voting-module.tsx',
   'components/modules/weekend-module.tsx',
   'components/modules/wishlists-module.tsx',
+  'components/modules/sleep-module.tsx',
+  'components/modules/photos-module.tsx',
+  'components/modules/notifications-module.tsx',
+  'components/modules/inbox-module.tsx',
+  'components/modules/homework-module.tsx',
+  'components/modules/home-module.tsx',
+  'components/modules/expenses-module.tsx',
+  'components/modules/routines-panel.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -123,6 +131,44 @@ describe('closet: every wear-count bump is confirmed before the outfit is called
     const src = readFileSync('components/modules/closet-module.tsx', 'utf8');
     expect(src).toContain(".update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id).select('id');");
     expect(at(src, 'if (results.some((r) => wroteNoRows(r.data)))')).toBeLessThan(at(src, "success(t('closetModule.loggedTodaySOutfit'))"));
+  });
+});
+
+describe('a row that licenses the next write is confirmed before it (C1-S9-82)', () => {
+  it('photos: the file is removed only after the row delete is confirmed', () => {
+    const src = readFileSync('components/modules/photos-module.tsx', 'utf8');
+    const fn = between(src, 'async function deletePhoto(', 'async function updateCaption(');
+    expect(fn).toContain(".from('family_photos').delete().eq('id', photo.id).select('id')");
+    expect(at(fn, 'if (wroteNoRows(removedRow))')).toBeLessThan(at(fn, ".storage.from('family-media').remove("));
+  });
+
+  it('routines: a template edit is confirmed before its steps are cleared and replaced', () => {
+    const src = readFileSync('components/modules/routines-panel.tsx', 'utf8');
+    const fn = bodyOf(src, 'async function save() {', '\n  }\n');
+    expect(at(fn, 'if (wroteNoRows(renamed))')).toBeLessThan(at(fn, ".from('routine_template_items').delete()"));
+    expect(at(fn, ".from('routine_template_items').delete()")).toBeLessThan(at(fn, ".from('routine_template_items').insert("));
+  });
+
+  it('expenses: a split rollback that matched nothing is logged, not silent', () => {
+    const src = readFileSync('components/modules/expenses-module.tsx', 'utf8');
+    expect(src).toContain(".from('expense_splits').delete().eq('id', split.id).select('id')");
+    expect(at(src, 'if (rollbackError)')).toBeLessThan(at(src, 'else if (wroteNoRows(rolledBack)) console.error('));
+  });
+
+  it('two writes stay unconfirmed on purpose, and say why', () => {
+    // Zero rows is a legitimate answer for both: nothing was unread, and a
+    // template with no steps written. Confirming them would refuse a success.
+    const notifications = readFileSync('components/modules/notifications-module.tsx', 'utf8');
+    const all = bodyOf(notifications, 'async function markAllRead() {', '\n  }\n');
+    expect(all).toContain(".update({ is_read: true })");
+    expect(all).not.toContain(".select(");
+    expect(all).toContain('Audit C1-S9-82');
+    const routines = readFileSync('components/modules/routines-panel.tsx', 'utf8');
+    const clear = at(routines, ".from('routine_template_items').delete()");
+    const clearLine = routines.slice(clear, routines.indexOf('\n', clear));
+    expect(clearLine).not.toContain('.select(');
+    const lead = routines.slice(0, clear).split('\n').slice(-12).join('\n');
+    expect(lead).toContain('Audit C1-S9-82');
   });
 });
 

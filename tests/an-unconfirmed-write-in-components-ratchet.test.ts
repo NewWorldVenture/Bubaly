@@ -27,7 +27,10 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // deliberate write — clearing the other primaries, where zero is ordinary)
 // → 93/52 (C1-S9-81: closet, relationship, messages, recipes, subscriptions,
 // voting, weekend, wishlists; three deliberate writes stay — two poll votes
-// keyed by member, one best-effort read-receipt fallback).
+// keyed by member, one best-effort read-receipt fallback) → 71/46 (C1-S9-82:
+// sleep, photos, notifications, inbox, homework, home, expenses, routines;
+// two deliberate writes stay — mark-all-read, where zero is "nothing unread",
+// and a routine's step clear, behind its confirmed template update).
 const BASELINE = new Map<string, number>([
   ['components/family/check-in-view.tsx', 1],
   ['components/family/driving-safety-view.tsx', 1],
@@ -47,28 +50,22 @@ const BASELINE = new Map<string, number>([
   ['components/modules/connections-module.tsx', 1],
   ['components/modules/contacts-module.tsx', 2],
   ['components/modules/decisions-module.tsx', 2],
-  ['components/modules/expenses-module.tsx', 3],
   ['components/modules/family-tree-module.tsx', 2],
-  ['components/modules/home-module.tsx', 3],
-  ['components/modules/homework-module.tsx', 3],
-  ['components/modules/inbox-module.tsx', 3],
   ['components/modules/insurance-module.tsx', 1],
   ['components/modules/journal-module.tsx', 2],
   ['components/modules/life-events-module.tsx', 1],
   ['components/modules/marketplace-module.tsx', 2],
   ['components/modules/meals-module.tsx', 2],
   ['components/modules/messages-module.tsx', 1],
-  ['components/modules/notifications-module.tsx', 3],
+  ['components/modules/notifications-module.tsx', 1],
   ['components/modules/pets-module.tsx', 2],
-  ['components/modules/photos-module.tsx', 3],
   ['components/modules/planning-module.tsx', 2],
   ['components/modules/reminders-module.tsx', 2],
-  ['components/modules/routines-panel.tsx', 3],
+  ['components/modules/routines-panel.tsx', 1],
   ['components/modules/screen-time-module.tsx', 2],
   ['components/modules/security-module.tsx', 2],
   ['components/modules/settings-module.tsx', 2],
   ['components/modules/shopping-module.tsx', 2],
-  ['components/modules/sleep-module.tsx', 3],
   ['components/modules/tax-vault-module.tsx', 1],
   ['components/modules/timetable-module.tsx', 2],
   ['components/modules/trip-memories-module.tsx', 1],
@@ -118,6 +115,6 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
 
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(93);
+    expect(total).toBe(71);
   });
 });

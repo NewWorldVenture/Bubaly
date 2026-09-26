@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -104,8 +104,11 @@ export function ExpensesModule() {
         // The delete's result is read, because that sentence is a promise this
         // code could not keep: a refused rollback leaves exactly the split with
         // no shares it says never happens, and said nothing.
-        const { error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id);
+        // A refused rollback is also no error and zero rows, which is the same
+        // orphan and said nothing either. Audit C1-S9-82.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).select('id');
         if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
+        else if (wroteNoRows(rolledBack)) console.error('[expenses] split rollback matched no row; a split without shares remains', { splitId: split.id });
         toastError(describeDbError(sErr));
         return;
       }
@@ -120,18 +123,21 @@ export function ExpensesModule() {
 
   function toggleSettled(s: Share) {
     return run(`settle:${s.id}`, async () => {
-      const { error } = await createClient().from('expense_split_shares')
+      // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
+      const { data: toggled, error } = await createClient().from('expense_split_shares')
         .update({ settled: !s.settled, settled_at: !s.settled ? new Date().toISOString() : null })
-        .eq('id', s.id);
+        .eq('id', s.id).select('id');
       if (error) throw error;
+      if (wroteNoRows(toggled)) toastError(tr('errors.thatChangeWasNotSaved'));
     });
   }
 
   function removeSplit(id: string) {
     if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
-      const { error } = await createClient().from('expense_splits').delete().eq('id', id);
+      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).select('id');
       if (error) throw error;
+      if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(tr('expensesModule.deleted'));
     });
   }

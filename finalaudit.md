@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-222 finding IDs from four workers and two parallel sessions; none of it was
+223 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 232 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 233 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35795,6 +35795,128 @@ files. **OPEN (LOW):** the closet wear-count lost update.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-82 — a photo deleted in the wrong order of evidence, and six more modules
+
+**Sleep, photos, notifications, inbox, homework, home, expenses and the routines
+panel: 22 writes.** These are the eight files that had three each in the
+components ratchet. As in the last four passes, a row refused under RLS came
+back with no error and zero rows. Each of these said "Night removed",
+"Archived", "Warranty date saved", "Deleted" or "Routine deleted" about it.
+Each now reads back the row it changed and says `errors.thatChangeWasNotSaved`
+when there is none.
+
+**Two of them license the next write, and are confirmed before it:**
+- **Photos, deleting a photo.** The module deletes the row first, on purpose:
+  its comment says the file goes "only after the row is gone", so a failed
+  delete "can never orphan a library row". But it checked only the error. A
+  refused delete (no error, zero rows) went on to remove the storage object
+  and say "Photo deleted".
+  - Today the bucket's delete policy (0216) and the table's (01080) use the
+    same family-membership rule, so a refused row means a refused file too:
+    Storage returns no error for removing nothing. The damage is the false
+    "Photo deleted", not a lost image.
+  - The ordering was still only as safe as those two policies being
+    identical. Zero rows now stops before storage is touched, and the
+    library refreshes.
+- **Routines, editing a template.** The template update licenses clearing and
+  re-inserting its steps. It is now confirmed first, so a refused edit no
+  longer says "saved".
+  - The step clear itself is **left unconfirmed on purpose**, with a comment.
+    Zero rows is a legitimate answer for a template whose steps were never
+    written. The items share the template's `is_family_member(family_id)`
+    policy (0122), which the confirmed update has just passed.
+
+**Two writes that only log now log the zero-row case too:**
+- the expense-split rollback (the code's own comment promised that a split
+  with no shares never remains, but a refused rollback was silent);
+- the inbox's "replied" status after logging a reply.
+
+The notifications and inbox read receipts do the same. Each surface refreshes
+to the truth anyway; the log now says why it did not move.
+
+**Mark-all-read stays unconfirmed on purpose.** It already said why: zero rows
+means nothing was unread. The comment now carries the audit ID, and the guard
+holds it that way.
+
+**Shapes the transformer could not do.** It converted 10 and reported 14:
+- settle-wrapped writes (4);
+- a statement between the write and its check (`setBusyId(null)`,
+  `setSavingDate(false)`);
+- the `throw`-inside-`run()` form (4);
+- the two follow-on chains.
+
+All were done by hand. None of the `run()` sites throws a translated message
+for `describeDbError` to re-read. That function pattern-matches message text
+("policy", "not allowed"), so each toasts and returns instead.
+
+**Pins, and the same miss as `C1-S9-81`, one step later.** Before any source
+changed, I grepped the vitest suite for tests naming these eight files. Five
+exact-statement pins were re-pointed ahead of the conversion (the
+thirty-third to thirty-seventh):
+- three in `photos-mutation-boundary`;
+- two in `sleep-module-write-boundary`.
+
+Each still holds its property: the error is bound and surfaced, and the row
+goes before storage. The routines `delErr` pin and the
+`a-deleted-file-is-really-deleted` storage pins are unchanged, because those
+statements did not change.
+
+The grep also listed **`photos-localization`**. It is a render test with a
+hand-written client whose `update().eq()` and `delete().eq()` resolve
+directly. That is the unconfirmed contract again, the same trap as the
+subscriptions mocks in `C1-S9-81`.
+- **What I missed.** I read that file for statement pins, not for its mock.
+  The `C1-S9-81` rule (`grep -l mockResolvedValue`) would not have flagged it
+  either, because the mock is an object literal. The first full run was red
+  on 8 of its cases.
+- **The rule now:** any test that imports the component AND mocks
+  `@/lib/supabase/client` gets its write mocks read before the source
+  changes.
+- **The fix.** The mock's `eq()` now returns the `.select('id')` step. A
+  `rowsMatched` switch models an RLS refusal: no error, zero rows, nothing
+  changed. Two new cases use it:
+  - **a refused delete** removes no file, says no "Photo deleted", and shows
+    `errors.thatChangeWasNotSaved`. This is the behavioural form of the
+    ordering guard below.
+  - **a refused favorite** says it was not saved and leaves the photo
+    unfavorited.
+- **A gap the mutations found.** "Fire the favorite check on a real row"
+  (over-tightening) first **survived**, because no case said a successful
+  favorite shows no error. That assertion was added, and it is red now.
+- 4 mutations on these cases, all red.
+
+**Guard.** `a-client-write-reads-what-it-changed` covers the eight files, plus:
+- photos: the zero-row check comes before the storage removal, scoped with
+  `between()` to `deletePhoto`. The upload handler removes a `family-media`
+  object earlier in the file, and an unscoped `at()` would find that one.
+- routines: the confirmed update comes before the step clear, and the clear
+  before the re-insert.
+- expenses: the rollback's zero-row log.
+- both deliberate writes stay unconfirmed and carry the audit ID.
+
+**10 distinct mutations on the source guards, all red** (14 with the render
+cases above):
+- the photo check dropped;
+- the photo check moved after the storage removal;
+- the template check dropped;
+- the step clear confirmed (over-tightening);
+- mark-all-read confirmed (over-tightening);
+- the rollback log dropped;
+- the inbox archive check dropped;
+- the home warranty check dropped;
+- the sleep routine check dropped;
+- a photos favorite reverted to unconfirmed (caught by the ratchet).
+
+My first "move" mutation only deleted the check, which repeated the first
+mutation. It was redone as a real move and is counted once.
+
+Components ratchet: **93/52 → 71/46.**
+
+**Status:** FIXED (22 writes; 2 deliberate). **OPEN (ratchet):** 71 across 46
+files.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -35864,8 +35986,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,457 passing / 17,460 across 1,370
-files.** (Re-run after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,471 passing / 17,474 across 1,370
+files.** (Re-run after `C1-S9-82`, whose first run was red on eight `photos-localization` cases whose hand-written mock modelled the unconfirmed write, and overlapped a mutation run, so it was not counted; 17,457 / 17,460 after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
@@ -35882,6 +36004,17 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Twenty-first run, on `038a3175` (run 36260734830): 1,293 passed, 3 failed, 0 flaky
+in 11.0m**, covering:
+- `C1-S9-78`: the concierge plan acceptance, confirmed on the client and read
+  back on the server;
+- `C1-S9-79`: the quote-acceptance chain;
+- `C1-S9-80`: six modules, including the career primary reorder, the declutter
+  session and the inventory move history.
+
+Only the known `phone-auth-http` cases fail. `C1-S9-81` (committed) and
+`C1-S9-82` (in progress) were held until it reported.
 
 **Twentieth run, on `1961c6c5` (run 36259043593): 1,293 passed, 3 failed, 0 flaky
 in 10.5m**, covering `C1-S9-76` (including the AI config throw and the AEO
