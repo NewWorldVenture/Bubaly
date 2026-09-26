@@ -209,7 +209,19 @@ describe('Supabase migration filename safety', () => {
     // Held by docs/audit/a-child-cannot-spend-the-same-dollar-twice-check.sql,
     // whose negative control replays the read-then-insert shape on the same
     // bucket and requires the overdraft to land.
-    expect(audit.nextVersion).toBe('0343');
+    //
+    // 0343_only_a_parent_mints_or_revokes_an_assistant_key.sql is an
+    // authorization finding in 0254's restrictive shape. 0283's own header said
+    // only a parent may create or revoke an assistant key, and its policies
+    // were written against can_manage_family() — parent OR adult — so an adult
+    // could mint a live bearer key over /rest/v1, widen a parent's read-only
+    // speaker, revoke and un-revoke it, or delete it and cascade away its
+    // usage trail. Three RESTRICTIVE guards on is_family_admin() for insert,
+    // update and delete; SELECT untouched. Held by
+    // tests/only-a-parent-mints-or-revokes-an-assistant-key.test.ts, which
+    // replays every policy and grant on the table and evaluates each request
+    // the way Postgres does; it goes red with the migration absent.
+    expect(audit.nextVersion).toBe('0344');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
