@@ -53,9 +53,13 @@ export async function materializePaperworkActionAction(input: {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { data: item } = await supabase
+  // A refused read returned here as silently as a missing item, so "Add to
+  // calendar" did nothing and said nothing; every other failure in this
+  // action throws. A missing item stays a quiet no-op. Audit C1-S9-73.
+  const { data: item, error: itemError } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (itemError) throw new Error(describeActionError(itemError, tr('actions.couldNotLoadThatDocument')));
   if (!item) return;
   if (isPaperworkExtractionPartial(item.meta)) throw new Error(tr('paperwork.partialExtractionWarning'));
 

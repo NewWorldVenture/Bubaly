@@ -46,6 +46,15 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
   const t = useTranslations();
   const [pending, start] = useTransition();
   const [override, setOverride] = useState(false);
+  // Both review actions used to return nothing, so a refused approval stopped
+  // the spinner and left the card as it was, with no word as to why. A parent
+  // cannot tell "still working" from "failed" without it. Audit C1-S9-73.
+  const [error, setError] = useState<string | null>(null);
+  const review = (act: typeof approveSubmissionAction, fd: FormData) => start(async () => {
+    setError(null);
+    const res = await act(fd);
+    if (!res.ok) setError(res.error);
+  });
   const isCash = item.rewardMode === 'fixed_cash' || item.rewardMode === 'ai_cash';
 
   return (
@@ -105,7 +114,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
 
       {/* Actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
-        <form action={(fd) => start(async () => { await approveSubmissionAction(fd); })}>
+        <form action={(fd) => review(approveSubmissionAction, fd)}>
           <input type="hidden" name="submission_id" value={item.submissionId} />
           {item.aiScore != null && <input type="hidden" name="score" value={item.aiScore} />}
           {override && (
@@ -117,7 +126,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
         </form>
         <button onClick={() => setOverride((o) => !o)} className="text-xs text-muted hover:text-fg">{override ? 'Use AI amount' : 'Adjust amount'}</button>
 
-        <form action={(fd) => start(async () => { await rejectSubmissionAction(fd); })} className="ml-auto flex items-center gap-2">
+        <form action={(fd) => review(rejectSubmissionAction, fd)} className="ml-auto flex items-center gap-2">
           <input type="hidden" name="submission_id" value={item.submissionId} />
           <button name="redo" value="1" disabled={pending} className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-3 text-sm font-medium text-muted hover:text-fg">
             <RotateCcw className="h-4 w-4" /> {t('missionsReviewCard.askToRedo')}
@@ -127,6 +136,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
           </button>
         </form>
       </div>
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
 }

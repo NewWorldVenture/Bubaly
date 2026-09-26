@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-213 finding IDs from four workers and two parallel sessions; none of it was
+214 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 223 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 224 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35182,6 +35182,101 @@ kind, a lost run record failing landed work, and the pre-check bailing.
 
 **Status:** FIXED.
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-73 — the actions that could not say they failed
+
+**The shape.** A server action typed `Promise<void>` can tell its caller
+nothing except by throwing. There are 39 in 14 files. All were triaged, and
+none was assumed:
+- **31 throw on failure.** 26 are marketing/admin actions (through
+  `marketingActionFailure`), plus paperwork (3) and contacts (2). A throw
+  reaches the error boundary: heavy, but visible. Their remaining bare
+  `return;` exits are for malformed input (a missing hidden id, or required
+  fields the form already enforces), for idempotency (already materialised, and
+  two optimistic-lock exits on push campaigns where a concurrent send already
+  won), or for absence. Those are left as they are, **except one**. Paperwork's
+  "Add to calendar" handled a *refused* item read as silently as a missing
+  item, while every other failure in that action throws. It now throws too.
+- **1 redirects** (`retryPurchaseAnswer`).
+- **1 is deliberately best-effort:** `stitchIdentityAction`, analytics identity
+  stitching, commented "never block auth".
+- **6 could not report a failure at all:** four in missions and two in
+  money-timeline. All six are fixed.
+
+**Missions: a different answer.** Twenty-one bare `return;` statements across
+approve, reject, dispute and create.
+- **Approve mints a wallet reward.** Any failure ended the spinner with the
+  card unchanged and no word: a refused read, a status move that matched
+  nothing, or a reward that threw and was rolled back.
+- **The plan builder** ran `await createChoreAction(fd); setAdded(...)`, so it
+  showed "Added ✓" either way. Every suggestion carries `points`, and
+  `createChoreAction` refuses pricing from a non-manager (the 0307 boundary).
+  So for a teen, *every* "Add" was refused and still marked added.
+- **The create form** (`<form action={createChoreAction}>`) defaults `points`
+  to 10, which is the same refusal for every non-manager submission. The form
+  cleared exactly as it does on success.
+- **The pricing guard's own comment** said it refused "rather than letting it
+  fail silently", while being a bare `return;` in a void action.
+- **A refused read was treated as a missing submission.** Both were silent;
+  now a refused read says "could not", and a missing submission says "no longer
+  open".
+
+**The fix.** The four actions return `MissionActionResult`. The review card
+shows the error (`role="alert"`). The plan builder marks an item added only
+once it is. The create form is a small client wrapper: it submits through
+`onSubmit`, keeps the parent's input on a refusal, resets only on success, and
+allows one submission in flight. Any signed-in member can reach
+`/missions/new` (the route is session-only), so the refusal is now named:
+*"Only a parent or guardian can set a chore's reward."* The new message is in
+the seven base catalogues.
+
+**Money-timeline: a smaller answer, made visible.** Both actions discarded
+their upsert results outright (`error` was not even bound), and the module
+called them as `void action()`. A refused dismissal vanished from the screen
+and came back on the next visit, and a failed refresh looked like one that
+found nothing new. Both actions now return `{ ok }`:
+- the module reverts its optimistic change and names the failure;
+- a rejected call is logged and treated as a failure, not dropped;
+- the refresh still writes past one failed row. That is asserted, because
+  stopping at the first failure would be an over-tightening.
+
+**A feature gap, recorded rather than built.** `disputeSubmissionAction` has
+**no caller**: no screen lets a child dispute a verdict. Yet the parent's review
+card, the missions page's Disputes count, and approval's dispute resolution all
+handle disputes that nothing can file. The action was converted anyway, so a
+future caller gets an honest answer. **OPEN** (Features/Flows): build the
+kid-side filing path, or remove the parent-side affordances.
+
+**A fourteenth exact-statement guard went red on an improvement.**
+`chore-approval-authz` pinned `if (!isManager(ctx.active.role)) return;`. It is
+re-pointed at the property: the gate *refuses* (a bare return or
+`{ ok: false`, never `{ ok: true`) and precedes `createServer()`. Two mutations
+prove it: a gate answering ok, and a gate moved after the client is created.
+Both go red.
+
+**My own instrument slips, caught:**
+- The ordering meta-guard refused a `slice(at(), at())` of mine. It now uses
+  `between()`, which fails on an empty slice.
+- My classification script for the 39 hit the short-slice hazard on multi-line
+  signatures (it opened at the parameter type's brace) and reported "no failure
+  signal" for three actions that throw. Reading them caught it.
+
+**The wider shape, sized for the next entry.** UI code has 17
+`void …Action(` calls. Some are deliberately best-effort telemetry. Several use
+`.then(...)` without a `.catch`, so an action that throws becomes an unhandled
+rejection. Their triage is `C1-S9-74`.
+
+**Guards:**
+- `a-mission-action-says-when-it-failed` (20 cases, including paperwork's read)
+- `a-money-insight-write-says-when-it-failed` (7 cases)
+- the re-pointed `chore-approval-authz` cases (2)
+
+**26 mutations, all red.** They include two over-tightenings (every
+non-manager refused, and the refresh stopping at the first failure), the gate
+moved after the client is created, and paperwork's read check moved after the
+absence check.
+
+**Status:** FIXED (missions, money-timeline). OPEN (dispute filing UI).
+
 ---
 
 ## What this pass did NOT establish
@@ -35253,8 +35348,9 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,364 passing / 17,367 across 1,363
-files.** (Re-run after `C1-S9-72`, whose first full run had a FOURTH failure —
+Status: ✅ PASS — `npx vitest run`: **17,391 passing / 17,394 across 1,365
+files.** (Re-run after `C1-S9-73` on its final tree — an earlier run overlapped
+a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
@@ -35270,6 +35366,11 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Sixteenth run, on `b7c4c2f9` (run 36254178211): 1,293 passed, 3 failed, 0 flaky
+in 9.1m**, covering `C1-S9-72`, with Typecheck/Lint/Test/Build, Database and
+Mobile green. Only the known `phone-auth-http` cases. `C1-S9-73` was held until
+it reported.
 
 **Fifteenth run, on `5abe1a0e` (run 36253020995): 1,293 passed, 3 failed, 0 flaky
 in 8.7m**, covering `C1-S9-70` and `-71`, with Typecheck/Lint/Test/Build,
