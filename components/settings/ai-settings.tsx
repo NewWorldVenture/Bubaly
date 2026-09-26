@@ -104,7 +104,16 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     const res = await saveAISettingsAction(patch);
     setSaving(null);
     if (res.ok) { setSettings(res.settings); success(t('aiSettings.saved')); }
-    else { toastError(res.error); const reload = await loadAISettingsAction(); if (reload.ok) setSettings(reload.settings); }
+    else {
+      toastError(res.error);
+      const reload = await loadAISettingsAction();
+      if (reload.ok) setSettings(reload.settings);
+      // The reload failed too, so nothing on this page is known any more — and
+      // the optimistic guess is still showing the change the database just
+      // refused. Stop answering rather than keep it: every control here edits
+      // from what the page shows.
+      else setLoadError(reload.error);
+    }
   }, [success, toastError, t]);
 
   if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;

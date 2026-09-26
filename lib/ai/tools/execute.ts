@@ -321,9 +321,15 @@ async function gate(
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
-  // What this household said Bubaly may do (0257). `getAISettings` answers the
-  // cautious defaults rather than failing, so a settings problem can only
-  // tighten the gate, never open it.
+  // What this household said Bubaly may do (0257). `getAISettings` is the
+  // forgiving read: when the row cannot be read it answers the DEFAULTS
+  // (Bubaly on, `execute`, memory on, no quiet hours) rather than failing. That
+  // is NOT a tightening — for a family that switched Bubaly off or dialled a
+  // category down, a failed read loosens this gate for as long as the failure
+  // lasts (see lib/services/ai-settings/index.ts). What still holds is
+  // `effectiveRisk`'s floor for the HIGH_STAKES domains (money, documents…) and
+  // the trust engine's own decision; whether this gate should fail closed
+  // instead is its own open question.
   const settings = await getAISettings(scope);
   const risk = effectiveRisk(settings, tool);
   const behavior = behaviorForDomain(settings, tool.domain);
