@@ -26275,6 +26275,53 @@ path, and it needs real DNS to verify, which this sandbox cannot exercise;
 practical reach from a serverless function is also low. So it is written down
 with the fix named rather than changed blind.
 
+## C1-K-13 · HIGH (conditional) · Super-admin is granted by the email claim alone — owner verification needed
+
+Found while hunting the *validate one form, use another* shape, and recorded
+rather than patched, because the facts that decide it are not in the repository.
+
+Super-admin is decided **purely by an email address**, in both places that grant it:
+
+- **code** — `isSuperAdminEmail(auth.user.email)` against a built-in allowlist
+  plus `SUPER_ADMIN_EMAILS` (`lib/constants/super-admins.ts`), used by
+  `lib/supabase/auth.ts`, `lib/auth/callback-server.ts`, `lib/server/ai-access.ts`
+  and others;
+- **database** — `public.is_super_admin()` (0008):
+  `WHERE email = lower(auth.jwt()->>'email')`.
+
+Neither binds the role to a user id or checks how the email was established. So
+the whole privilege rests on one assumption: that **no one can hold a session
+whose email is the allowlisted address unless they control that inbox.** Two
+things decide whether that holds, and neither is visible from the repo:
+
+1. **Password sign-up confirmation in the production project.**
+   `supabase/config.toml` sets `enable_signup = true` and does not set
+   `[auth.email] enable_confirmations` (which defaults off locally). If
+   production also has "Confirm email" off, Supabase **auto-confirms** at
+   sign-up — so anyone could register as the allowlisted address with any
+   password, receive a session, and be super-admin. *This only works while that
+   address is unregistered in the project*: sign-up with an existing email does
+   not create a second user. The owner almost certainly already has an account
+   in production, so the live risk is lowest there and highest on a fresh
+   preview or staging database.
+2. **How each OAuth provider asserts email.** Google, Microsoft and others are
+   wired up. A provider that returns an email it has not verified would carry
+   that email into the JWT.
+
+**Why no code change.** The obvious patch — require `email_confirmed_at` — does
+not close variant 1, because auto-confirm *sets* `email_confirmed_at`. And
+patching only the code path would leave `is_super_admin()` granting on the same
+claim; fixing that needs a migration, and migrations from 0296 on are inert in
+production (F-001). A half-fix here would read as closed and not be.
+
+**Owner actions, in order:**
+1. Confirm "Confirm email" is **on** in the production Supabase project (and in
+   every preview/staging project that shares this allowlist).
+2. Confirm the enabled OAuth providers only assert verified emails.
+3. Longer term, bind super-admin to **user ids** rather than emails, in both the
+   code allowlist and `super_admins`, so the role cannot follow an address to a
+   different account.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
