@@ -27420,6 +27420,19 @@ remainder are self-tracking or shared records (habits, sleep, workouts,
 wardrobe, wishlists, school and sports schedules). The health-record group is
 the open F-K05 / 0297 owner decision.
 
+## Follow-up · a member can push a notification with any text to another member
+
+`notifications` INSERT lets a family member address any member of their family
+(`user_id` in the family), with any `title` and `body`. Rows are pushed to the
+recipient's phone by the notification cron, looking like any Bubaly
+notification. The application's own writers build the text server-side, via
+`lib/services/notifications` `notify` and the locator, gift and vacation
+actions. Several of those run in the member's own session, so the INSERT
+policy cannot simply be closed. The fix is to route `notify` through the
+service role, then restrict member INSERT to `user_id = auth.uid()`. That is a
+multi-caller refactor, so it is recorded here rather than rushed. Read, update
+and delete are already recipient-scoped.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
