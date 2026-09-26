@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-221 finding IDs from four workers and two parallel sessions; none of it was
+222 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 231 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 232 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -35698,6 +35698,103 @@ clear (over-tightening), and a converted delete reverted. Components ratchet:
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CLIENT WRITES]` C1-S9-81 — eight more modules, and two render tests whose mocks agreed with the bug
+
+**Closet, relationship, messages, recipes, subscriptions, voting, weekend and
+wishlists: 33 writes.** Every one had the same fault as the last three passes.
+Under RLS a refused row comes back with no error and zero rows, and each of
+these reported that as done:
+- a saved subscription, relationship date, gift idea, recipe or wishlist item
+  that was never stored (the form closed on it);
+- a poll closed or deleted that was still open;
+- a pinned message or reaction that did not change;
+- a weekend source toggled that was still on.
+
+None licensed a second write the way C1-S9-80's three did, so this pass is the
+base class only. Each now reads back the row it changed and says
+`errors.thatChangeWasNotSaved` when there is none.
+
+**What the transformer learned, and two bugs `tsc` caught in it.** It now also
+converts:
+- the brace-return form `if (err) { toastError(…); return; }`;
+- the one-line else-success form `if (error) toastError(…); else success(…)`;
+- a last-statement `if (error) toastError(…)`;
+- ternaries whose condition is a property (`form.id`, `dateForm.id`).
+
+Two of its first outputs did not typecheck:
+- it bound `updated` in a messages handler that already had an `updated`;
+- it appended `.select('id')` *outside* a `settle(…)` wrapper in weekend.
+
+Both files were restored from git (they had no other changes) and redone. The
+tool now treats every identifier in the file as taken, and it refuses writes
+inside a wrapper, reporting them for hand-fixing instead.
+
+**Converted by hand:**
+- **Closet, logging an outfit.** The log licenses one wear-count bump per item,
+  run together in `Promise.all`. Each bump now reads back, and "Logged today's
+  outfit" is withheld if any matched nothing.
+- **Weekend:** the two feed writes inside `settle(…)`.
+- **Messages, deleting a message.** It is keyed by id *and* sender, which the
+  tool refuses on purpose. It is confirmed by hand, because zero rows there
+  means the message is still showing.
+
+**Three writes are left unconfirmed on purpose, each with a comment:**
+- **Voting (two):** un-voting and clearing a prior single-choice vote are keyed
+  by member and option, and zero rows is the ordinary case.
+- **Messages (one):** the read-receipt fallback loop, used when the RPC is
+  unavailable, is best-effort and already logged.
+
+**The first full run was red on two behavioural tests, and they are not
+re-pointed pins.** `subscription-candidates-ui` and
+`subscription-price-history-ui` render the subscriptions form with a mocked
+client. The mocks treated `insert()` / `.eq()` as the end of the chain, which
+is exactly the unconfirmed contract this pass removes.
+- Each mock now returns the `.select('id')` step with the row written. Each
+  test asserts the read-back, the success toast and that no error toast was
+  shown.
+- Each gained a zero-rows case: the draft stays open and the user sees "wasn't
+  saved".
+- Both ways were mutation-proven on each test: drop the check, and the
+  zero-rows case goes red; fire it on a real row, and the success case goes red.
+
+**The miss is mine.** Before pushing a component change I grep `tests/e2e` for
+the component, but not the vitest render tests. That grep is now part of the
+routine: `grep -l "modules/<name>-module'" tests | xargs grep -l mockResolvedValue`.
+
+**Two more exact-statement guards were re-pointed (the thirty-first and
+thirty-second).** The closet and recipes `…-module-write-boundary` tests pinned
+`const { error } =`. Both now accept the confirmed form
+`const { data: x, error } =`, still require the error to be bound and surfaced,
+and say so in the file.
+
+**Guard.** `a-client-write-reads-what-it-changed` covers the eight modules. Its
+accepted read forms gained `(b?.length ?? 0) !==`, `|| !b)` and `if (!b)`,
+because count reads and `.single()` absence reads were failing it falsely.
+There is a closet-specific case for the `Promise.all` bumps.
+
+**10 mutations, all red:**
+- six on the source guard: the closet bump unread; the weekend feed toggle
+  unread; the relationship profile unread; the subscriptions else-success form
+  unread; the recipes save unread; the settle-wrapped weekend delete
+  unconfirmed;
+- four on the two render tests.
+
+Components ratchet: **126/58 → 93/52.**
+
+**Observed, not fixed (smaller answer).** The closet wear-count bump is a
+read-modify-write: `wear_count: (current?.wear_count ?? 0) + 1` uses the
+count this tab last saw. Two members logging the same item at once, or a stale
+tab, lose an increment, so the count reads low. It does not report a failed
+write as done, so it is logged, not fixed.
+- **Recommended fix:** an increment in SQL (an RPC doing
+  `wear_count = wear_count + 1`), or derive the count from `outfit_logs`,
+  which already records `item_ids`.
+
+**Status:** FIXED (33 writes; 3 deliberate). **OPEN (ratchet):** 93 across 52
+files. **OPEN (LOW):** the closet wear-count lost update.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -35767,8 +35864,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,446 passing / 17,449 across 1,370
-files.** (Re-run after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
+Status: ✅ PASS — `npx vitest run`: **17,457 passing / 17,460 across 1,370
+files.** (Re-run after `C1-S9-81`, whose first run was red on two render tests whose mocks modelled the unconfirmed write; 17,446 / 17,449 after `C1-S9-80`, whose first run was red on one re-pointed guard; 17,437 / 17,440 after `C1-S9-79`, whose first run was red on three re-pointed guards; 17,433 / 17,436 after `C1-S9-78`; 17,428 / 17,431 after `C1-S9-77`; 17,413 / 17,416 after `C1-S9-76`; 17,407 / 17,410 after `C1-S9-75` and the referral fix; 17,397 / 17,400 after `C1-S9-74`; 17,391 / 17,394 after `C1-S9-73` on its final tree — an earlier run overlapped
 a source edit and was not counted; 17,364 / 17,367 after `C1-S9-72`, whose first full run had a FOURTH failure —
 the ordering meta-guard refusing my own bare-`indexOf` guard — fixed and re-run
 rather than carried over; 17,343 / 17,346 after `C1-S9-71`; 17,333 / 17,336 after `C1-S9-70`; 17,330 / 17,333 after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added

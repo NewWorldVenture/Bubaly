@@ -10,7 +10,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { toggleDateOnCalendarAction } from '@/app/(app)/dashboard/relationship/actions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -158,18 +158,22 @@ export function RelationshipModule() {
       member_id: dateForm.memberId || null, location: dateForm.location.trim() || null,
       notes: dateForm.notes.trim() || null, status: dateForm.status as RelationshipDateStatus,
     };
-    const { error: err } = dateForm.id
-      ? await sb.from('relationship_dates').update(fields).eq('id', dateForm.id)
-      : await sb.from('relationship_dates').insert({ ...fields, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: saved2, error: err } = dateForm.id
+      ? await sb.from('relationship_dates').update(fields).eq('id', dateForm.id).select('id')
+      : await sb.from('relationship_dates').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(dateForm.id ? 'Date updated' : 'Date added');
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
     if (!confirm(`Remove "${d.title}"?`)) return;
-    const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: removed, error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.removed'));
   }
   async function toggleCalendar(d: RDate) {
@@ -203,21 +207,24 @@ export function RelationshipModule() {
       reason: giftForm.reason.trim() || null, status: giftForm.status,
     };
     const sb = createClient();
-    const { error: err } = giftForm.id
-      ? await sb.from('relationship_gift_ideas').update(fields).eq('id', giftForm.id)
-      : await sb.from('relationship_gift_ideas').insert({ ...fields, family_id: familyId, created_by: userId, source: 'manual' });
+    const { data: saved3, error: err } = giftForm.id
+      ? await sb.from('relationship_gift_ideas').update(fields).eq('id', giftForm.id).select('id')
+      : await sb.from('relationship_gift_ideas').insert({ ...fields, family_id: familyId, created_by: userId, source: 'manual' }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved3)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(giftForm.id ? 'Gift updated' : 'Gift idea saved');
     setGiftModal(false);
   }
   async function setGiftStatus(g: Gift_, status: RelationshipGiftStatus) {
-    const { error: err } = await createClient().from('relationship_gift_ideas').update({ status }).eq('id', g.id);
+    const { data: updated, error: err } = await createClient().from('relationship_gift_ideas').update({ status }).eq('id', g.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function removeGift(g: Gift_) {
-    const { error: err } = await createClient().from('relationship_gift_ideas').delete().eq('id', g.id);
+    const { data: removed2, error: err } = await createClient().from('relationship_gift_ideas').delete().eq('id', g.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.removed'));
   }
   async function saveAiGift(idea: { title: string; reason: string; estimatedPrice: string | null }) {
@@ -261,11 +268,12 @@ export function RelationshipModule() {
       notes: pForm.notes.trim() || null,
     };
     const sb = createClient();
-    const { error: err } = profile
-      ? await sb.from('relationship_profile').update(fields).eq('id', profile.id)
-      : await sb.from('relationship_profile').insert({ ...fields, family_id: familyId, created_by: userId });
+    const { data: savedProfile, error: err } = profile
+      ? await sb.from('relationship_profile').update(fields).eq('id', profile.id).select('id')
+      : await sb.from('relationship_profile').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(savedProfile)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.preferencesSaved'));
     setProfileModal(false);
   }

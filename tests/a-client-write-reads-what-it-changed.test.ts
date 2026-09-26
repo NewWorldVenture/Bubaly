@@ -28,6 +28,14 @@ const FIXED = [
   'components/modules/inventory-module.tsx',
   'components/modules/language-module.tsx',
   'components/modules/watchlist-module.tsx',
+  'components/modules/closet-module.tsx',
+  'components/modules/relationship-module.tsx',
+  'components/modules/messages-module.tsx',
+  'components/modules/recipes-module.tsx',
+  'components/modules/subscriptions-module.tsx',
+  'components/modules/voting-module.tsx',
+  'components/modules/weekend-module.tsx',
+  'components/modules/wishlists-module.tsx',
 ];
 
 describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
@@ -36,8 +44,9 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     const bindings = [...src.matchAll(/const \{ data: (\w+), error(?:: \w+)? \} = [\s\S]{0,400}?\.select\('id'\)/g)].map((m) => m[1]);
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
-      // Read as "none", or — stricter — against an exact expected count.
-      const read = src.includes(`wroteNoRows(${b})`) ? `wroteNoRows(${b})` : `(${b}?.length ?? 0) !==`;
+      // Read as "none", against an exact expected count, or — for a
+      // `.single()` result — as absence (`|| !created`).
+      const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `|| !${b})`, `if (!${b})`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
       expect(src, `${b} is requested but never read`).toContain(read);
       // …and read AFTER it is bound, not in some earlier function.
       expect(at(src, `data: ${b}, error`)).toBeLessThan(at(src, read));
@@ -106,6 +115,14 @@ describe('a write that licenses the next one is confirmed before it (C1-S9-80)',
     // inventory_moves too, and an unscoped at() would find that one first.
     const form = src.slice(at(src, 'function MoveForm('));
     expect(at(form, 'if (wroteNoRows(moved))')).toBeLessThan(at(form, ".from('inventory_moves').insert("));
+  });
+});
+
+describe('closet: every wear-count bump is confirmed before the outfit is called logged (C1-S9-81)', () => {
+  it('each bump asks for its row, and a bump that matched nothing is reported', () => {
+    const src = readFileSync('components/modules/closet-module.tsx', 'utf8');
+    expect(src).toContain(".update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id).select('id');");
+    expect(at(src, 'if (results.some((r) => wroteNoRows(r.data)))')).toBeLessThan(at(src, "success(t('closetModule.loggedTodaySOutfit'))"));
   });
 });
 

@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -207,6 +207,8 @@ export function MessagesModule() {
       if (!rpcErr) return;
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
+        // Best-effort fallback for read receipts when the RPC is unavailable;
+        // logged, and deliberately not confirmed row by row. Audit C1-S9-81.
         const { error } = await settle(supabase.from('family_messages')
           .update({ read_by: [...(m.read_by ?? []), userId] })
           .eq('id', m.id));
@@ -486,22 +488,26 @@ export function MessagesModule() {
     // remove keys with empty arrays
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   function selectConversation(conv: Conversation) {

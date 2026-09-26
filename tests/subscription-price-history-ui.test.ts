@@ -10,7 +10,8 @@ import {
 
 type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
 const mocks = vi.hoisted(() => ({
-  slots: [] as unknown[], cursor: 0, createClient: vi.fn(), update: vi.fn(), eq: vi.fn(), fetch: vi.fn(),
+  slots: [] as unknown[], cursor: 0, createClient: vi.fn(), update: vi.fn(), eq: vi.fn(), selectUpdated: vi.fn(), fetch: vi.fn(),
+  toastSuccess: vi.fn(), toastError: vi.fn(),
   key: null as string | null, effects: [] as (() => void)[], cleanups: new Set<() => void>(),
   context: { familyId: 'family-a', userId: 'user-a', selfMember: { id: 'member-a', role: 'parent', is_active: true } },
   rows: [] as Record<string, unknown>[],
@@ -56,7 +57,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mocks.context }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: mocks.rows, loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: mocks.createClient }));
-vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mocks.toastSuccess, error: mocks.toastError }) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/modules/savings-coach-card', () => ({ SavingsCoachCard: () => null }));
 
@@ -122,7 +123,12 @@ beforeEach(() => {
   unmount();
   changeContext(context);
   mocks.rows = [{ id: subscription.id, family_id: 'family-a', name: subscription.name, cost_cents: 1500, cadence: 'monthly', category: 'Streaming', status: 'trial', next_charge: '2026-09-15', last_used: null, note: subscription.note }];
-  mocks.eq.mockReset().mockResolvedValue({ error: null });
+  // The save confirms its write with .select('id') (Audit C1-S9-81), so an
+  // update resolves through that step with the row it changed.
+  mocks.selectUpdated.mockReset().mockResolvedValue({ data: [{ id: subscription.id }], error: null });
+  mocks.eq.mockReset().mockReturnValue({ select: mocks.selectUpdated });
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
   mocks.update.mockReset().mockReturnValue({ eq: mocks.eq });
   mocks.createClient.mockReset().mockReturnValue({ from: (table: string) => {
     if (table !== 'subscriptions_tracked') throw new Error('Unexpected write target');
@@ -172,6 +178,24 @@ describe('reachable recorded charge history and explicit edit', () => {
     expect(mocks.update).toHaveBeenCalledOnce();
     expect(mocks.update).toHaveBeenCalledWith({ name: 'Example Media', cost_cents: 1750, cadence: 'monthly', category: 'Streaming', status: 'trial', next_charge: '2026-09-15', last_used: null, note: 'Keep this note' });
     expect(mocks.eq).toHaveBeenCalledWith('id', subscription.id);
+    expect(mocks.selectUpdated).toHaveBeenCalledWith('id');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated');
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the edit open and says so when the update matched no row (Audit C1-S9-81)', async () => {
+    // Under RLS a refused update comes back with no error and zero rows; this
+    // used to report "Updated" and close the form on a price that never moved.
+    mocks.selectUpdated.mockResolvedValue({ data: [], error: null });
+    const root = renderWorkspace();
+    (nodes(root).find((node) => node.type === SubscriptionPriceHistoryReview)!.props.onPrefill as (value: typeof charge) => void)(charge);
+    const draft = renderWorkspace();
+    const form = nodes(draft).find((node) => node.type === 'form')!;
+    await (form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("wasn't saved"));
+    expect(nodes(renderWorkspace()).some((node) => node.type === 'form')).toBe(true);
   });
 
   it('allows closing a selected-amount draft with no write', () => {

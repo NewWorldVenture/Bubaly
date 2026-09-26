@@ -5,7 +5,7 @@ import { RefreshCw, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-rea
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -75,26 +75,30 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
       note: form.note.trim() || null,
     };
     const supabase = createClient();
-    const { error } = form.id
-      ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id)
-      : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: saved, error } = form.id
+      ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id).select('id')
+      : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(form.id ? 'Updated' : 'Added');
     setForm(null);
   }
 
   async function markUsed(id: string) {
-    const { error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
-    const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
+    const { data: updated2, error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
-    const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.deleted'));
+    const { data: removed, error } = await createClient().from('subscriptions_tracked').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);

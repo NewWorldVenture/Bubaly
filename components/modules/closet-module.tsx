@@ -7,7 +7,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -120,11 +120,14 @@ export function ClosetModule() {
     if (error) { setBusy(false); return toastError(describeDbError(error)); }
     const results = await Promise.all(itemIds.map((id) => {
       const current = itemById.get(id);
-      return supabase.from('wardrobe_items').update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id);
+      return supabase.from('wardrobe_items').update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id).select('id');
     }));
     setBusy(false);
     const failed = results.find((r) => r.error);
     if (failed?.error) return toastError(describeDbError(failed.error));
+    // A wear-count bump that matched nothing is an item the log names but
+    // whose count did not move. Audit C1-S9-81.
+    if (results.some((r) => wroteNoRows(r.data))) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.loggedTodaySOutfit'));
   }
 
@@ -141,27 +144,32 @@ export function ClosetModule() {
   }
 
   async function setItemStatus(item: Item, status: WardrobeStatus) {
-    const { error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
   async function deleteItem(item: Item) {
     if (!confirm(`Remove ${item.name} from the closet?`)) return;
-    const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
+    const { data: removed, error } = await createClient().from('wardrobe_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.itemRemoved'));
   }
 
   async function toggleFavorite(outfit: Outfit) {
-    const { error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id);
+    const { data: updated2, error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteOutfit(outfit: Outfit) {
     if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
-    const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
+    const { data: removed2, error } = await createClient().from('outfits').delete().eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.outfitDeleted'));
   }
 
@@ -443,11 +451,12 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id)
-      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved, error } = item
+      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id).select('id')
+      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
