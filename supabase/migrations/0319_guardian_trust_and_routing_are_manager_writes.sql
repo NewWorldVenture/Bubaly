@@ -23,14 +23,14 @@
 -- user's own client — so managers keep every path they have today. Service-role
 -- writers (webhooks, the learning cron) bypass RLS and are unaffected.
 --
--- And one policy is dropped outright: "Service can insert
--- guardian_communications" was written for the service role but granted
--- INSERT to any family member. Every real insert runs as the service role,
--- which never needed it. What it did allow was a child forging call and message
--- history — the history the learning loop reads when it proposes that a caller
--- be trusted.
+-- guardian_communications is deliberately NOT changed. Its member INSERT
+-- ("Service can insert guardian_communications", which in fact admits any
+-- family member) is relied on by the signed-ingress design: the receipt and
+-- recovery E2E suites file member-written rows on purpose and prove that signed
+-- intake never trusts them. Whether members should be able to write that
+-- history at all is recorded in finalaudit.md for the owner.
 --
--- SELECT stays open to members on all four, as 0215 left it.
+-- SELECT stays open to members on all three, as 0215 left it.
 -- Pinned by docs/audit/guardian-manager-write-check.sql.
 
 do $$
@@ -51,8 +51,5 @@ begin
     execute format('create policy %I on public.%I for delete to authenticated using (public.can_manage_family(family_id))', t || '_delete', t);
   end loop;
 
-  if to_regclass('public.guardian_communications') is not null then
-    execute 'drop policy if exists "Service can insert guardian_communications" on public.guardian_communications';
-  end if;
 end
 $$;

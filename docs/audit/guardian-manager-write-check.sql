@@ -3,13 +3,14 @@
 -- Guardian's screening decisions come from four tables. 0215 made routing
 -- rules manager-only; 0319 does the same for caller trust (guardian_contacts),
 -- member routing profiles (guardian_member_profiles) and the learning queue
--- (guardian_suggestions), and drops a member INSERT on guardian_communications
--- that only the service role ever needed.
+-- (guardian_suggestions). guardian_communications keeps its member INSERT on
+-- purpose (the signed-ingress suites rely on member-written rows) and is not
+-- asserted here.
 --
 -- As a TEEN: every write must be refused. INSERT refusals raise; UPDATE and
 -- DELETE refusals raise nothing and match zero rows, so they are judged on row
 -- counts. As a PARENT: the same writes succeed (control). The teen can still
--- READ all four (control), as 0215 intended.
+-- READ them (control), as 0215 intended.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -64,11 +65,6 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise warning 'BREACH: a teen rewrote a Guardian suggestion (rows: %)', n; failures := failures + 1; end if;
 
-  begin
-    insert into public.guardian_communications (family_id, comm_type, direction) values (fam, 'call_inbound', 'inbound');
-    raise warning 'BREACH: a teen forged Guardian call history'; failures := failures + 1;
-  exception when insufficient_privilege then null;
-  end;
   reset role;
 
   -- ── as the PARENT (control) ──────────────────────────────────────────────
