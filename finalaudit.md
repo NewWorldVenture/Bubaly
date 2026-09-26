@@ -34744,6 +34744,14 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Tenth run, on `0601c5c3` (run 36246536606): 1,293 passed, 3 failed, 0 flaky in
+10.7m — back to steady state**, covering `C1-S9-59` through `C1-S9-62`, with
+Typecheck/Lint/Test/Build, Database and Mobile all green. The three failures are
+the known `phone-auth-http` cases. **The `marketing-public` pixel test passed**,
+so the service-worker fix recorded below held on the first CI run that carried
+it. `C1-S9-63` and `-64` were held locally until this run reported, then pushed
+together.
+
 **Ninth run, on `a33cfbe5` (run 36244848484) — NOT a clean re-confirmation:
 1,291 passed, 4 failed, 1 flaky in 10.3m.** The three `phone-auth-http` cases,
 plus **one new failure**: `[pixel] marketing-public.spec.ts › the mobile menu
