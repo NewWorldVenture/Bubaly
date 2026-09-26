@@ -5,9 +5,9 @@
 - Last Updated: 2026-09-26T14:20:00Z
 - Total Audit Items: 14038
 - Not Started: 13842
-- In Progress: 191
+- In Progress: 190
 - Passed: 0
-- Fixed + Passed: 4
+- Fixed + Passed: 5
 - Blocked: 0
 - Failed: 1
 - Overall Completion: 0.01%
@@ -100,7 +100,7 @@ PRODUCTION READY: NO
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003's DELETE bypass is repaired in the repository by migration 0318, not by the required-read guard; production needs the F-001 ledger repair.
+- AUTHZ-002: Repaired in the repository — the resolver requires successful reads (34/34), and the database half is verified and aligned (C1-K-23: migration 0322, social-permission-matrix probe and matrix test). AUTHZ-003's DELETE bypass is repaired by migration 0318. Both need the F-001 ledger repair to reach production.
 - AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
@@ -13542,7 +13542,7 @@ PRODUCTION READY: NO
 | SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
-| AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
+| AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🛠 FIXED + PASS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. 2026-09-26 (C1-K-23): the database half verified on the replayed schema — docs/audit/social-permission-matrix-check.sql proves an explicit role grants nothing to an inactive member and read_only restricts; migration 0322 aligns the SQL matrix with lib/social/roles.ts (admin no longer holds manage_access), pinned by social-permission-matrix-matches-the-database. Production needs the F-001 ledger repair. |
 | AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🛠 FIXED + PASS | Critical | Reproduced against the replayed schema (docs/audit/social-restriction-delete-check.sql): a `read_only` adult deleted their own row (1 row), resolved to `marketing_manager` and could publish. | Migration 0318 gives social_access_permissions DELETE the UPDATE predicate (is_family_admin or manage_access). The app never deletes these rows, so no legitimate path narrows. | Probe passes after 0318 (restriction holds; parent can still remove it); 0318 re-applies idempotently; 42/42 probes; migration audits and 41 migration-related test files pass. | Repository-verified 2026-09-26 (Pass C1-K). Production carries it only after the F-001 migration-ledger repair; deployed policy unverified. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -15889,7 +15889,7 @@ Actual pipeline with InMemorySupabase and a confirming provider fixture: concurr
 
 ### AUTHZ-002 — Social permissions must require successful active membership and explicit permission reads
 
-Status: 🔄 IN PROGRESS
+Status: 🛠 FIXED + PASS (repository; production pending F-001)
 Severity: Critical
 Route(s), components, actions, tables and providers: lib/social/access.ts; lib/social/roles.ts; social_access_permissions; family_members
 
@@ -15916,8 +15916,11 @@ Installed Supabase/actual resolver regression: 17 failing cases before repair, 3
 #### Evidence
 Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access.
 
+#### Database half (2026-09-26, Pass C1-K, C1-K-23)
+`docs/audit/social-permission-matrix-check.sql`, on the replayed schema: an explicit `owner` row grants nothing (not even view_feed) to a member who is no longer active; `read_only` restricts to view_feed; a parent can still manage access. It also found the one cell where the database and `lib/social/roles.ts` disagreed — SQL granted `admin` manage_access, which the social_access_permissions policies check — so a social admin could rewrite anyone's role and make themselves owner directly against the API. `0322_a_social_admin_cannot_manage_access.sql` aligns the cell; the probe fails 4 ways before and passes after (46/46 probes), and `tests/social-permission-matrix-matches-the-database.test.ts` compares every role × permission cell of the latest SQL definition with ROLE_PERMISSIONS (fails on `admin` without 0322).
+
 #### Final Status
-🔄 IN PROGRESS
+🛠 FIXED + PASS in the repository — JavaScript resolver (34/34) and database (probe + matrix test). Production needs the F-001 migration-ledger repair; deployed policy unverified.
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
@@ -21041,7 +21044,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-003: Read failure/loading/cache revalidation presentation is repaired and locally verified. Complete financial CRUD, role/tenant permission checks, persisted mutation readback and transaction pagination/totals remain separate open obligations.
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
-- AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003's DELETE bypass is repaired in the repository by migration 0318, not by the required-read guard; production needs the F-001 ledger repair.
+- AUTHZ-002: Repaired in the repository — the resolver requires successful reads (34/34), and the database half is verified and aligned (C1-K-23: migration 0322, social-permission-matrix probe and matrix test). AUTHZ-003's DELETE bypass is repaired by migration 0318. Both need the F-001 ledger repair to reach production.
 - AUTHZ-003: Repaired in the repository 2026-09-26 — migration 0318 gives social_access_permissions DELETE the UPDATE predicate, pinned by docs/audit/social-restriction-delete-check.sql (fails 3 ways before, passes after). Remaining: apply it to production, which needs the F-001 migration-ledger repair, and verify the deployed policy there before enabling live publishing for restricted household roles.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
@@ -26689,6 +26692,31 @@ fails 6 ways before and passes after; 45/45 probes.
 members' own sessions (`logAudit`, `logWalletAudit`). A forged entry cannot
 erase a real one any more, but making the trails service-only means moving
 those writers to the service role first.
+
+## C1-K-23 · HIGH · A social admin could hand out social access, including owner to themselves
+
+Closing AUTHZ-002 (Critical, IN PROGRESS) needed its database half verified.
+The social role matrix exists twice — `lib/social/roles.ts`, which the app
+enforces, and `social_has_permission`, which RLS enforces and whose comment says
+it mirrors the JS. They disagreed on one cell: JS `admin` excludes
+`manage_access`, SQL `admin` was `true`. `manage_access` is precisely what the
+`social_access_permissions` write policies check, so any member a parent had
+made a social `admin` could — directly against the API — rewrite anyone's
+social role, and promote themselves to `owner`. Measured on the replayed
+schema before the fix: the admin held manage_access, promoted themselves (1
+row) and rewrote another member's role (1 row). Parents are unaffected; they
+pass those policies through `is_family_admin`.
+
+`0322_a_social_admin_cannot_manage_access.sql` redefines the function with
+admin = everything except manage_access; nothing else changes.
+`docs/audit/social-permission-matrix-check.sql` also pins AUTHZ-002's database
+half (an explicit owner row grants nothing to an inactive member; read_only
+restricts) and fails 4 ways before 0322, passing after; 46/46 probes.
+`tests/social-permission-matrix-matches-the-database.test.ts` parses the latest
+SQL definition and compares all 9 roles × 11 permissions with
+`ROLE_PERMISSIONS`; without 0322 it fails on `admin` alone, which also shows
+the parser reads the other eight correctly. AUTHZ-002 moves to 🛠 FIXED + PASS
+in the repository.
 
 ## Swept clean · the API routes this file never named
 
