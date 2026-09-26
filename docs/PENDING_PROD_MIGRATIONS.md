@@ -2230,3 +2230,130 @@ production pre-flight cannot tell whether it ran; one is being written. And
 alone — a key keeps working if the parent who minted it later leaves the family.
 Whether a key belongs to the person or to the household is a product question,
 and it is recorded here rather than decided.
+
+### `0349` keeps one saved copy of a provider recipe per family — unapplied
+
+`0349_one_saved_copy_of_a_provider_recipe_per_family.sql` (SRV-001 lead
+`m31`). "Save to vault" in `app/(app)/dashboard/recipes/discover/actions.ts`
+de-duplicates by probing `(family_id, source_provider, source_recipe_id)`
+before it inserts. `0054` indexed that triple but never made it unique, so the
+probe is a best-effort look: two members tapping Save on the same TheMealDB
+recipe in the same second, or one member on a phone and a laptop, both probe
+empty and both insert, and the vault carries two identical cards from then on.
+A check in a server action is a check a second concurrent request steps
+straight over; only the database can close that window.
+
+**What closes it** is a partial unique index on the triple, `where
+source_recipe_id is not null and source_provider is not null and
+source_provider <> 'bubaly_ai'`. Partial on purpose:
+`app/api/recipes/transform/route.ts` writes several rows sharing `(family_id,
+'bubaly_ai', <vault recipe id>)`, one per AI variant of the same recipe, and a
+blanket index would refuse the second variant. Hand-typed recipes carry no
+source and are outside it too. On a database that already holds a duplicate
+pair the migration names the rows and stops, because collapsing them is a data
+decision: a stale copy may already be a meal-vote option or sit in a meal-plan
+slot.
+
+**Ships with its application half, and each half stands alone.** The action now
+reports a failed vault probe instead of reading it as "not saved yet", and saves
+under a category the vault accepts (`m31`). Until 0349 is applied, the race
+above can still produce a second card.
+
+**Evidence.**
+`docs/audit/a-family-vault-holds-one-saved-copy-of-a-provider-recipe-check.sql`
+runs its negative control first (a member's first save, a save with the recipe
+id flipped, and a second member saving a different recipe all land), then
+requires the second save of the same recipe, the second member's save of it,
+and an UPDATE that repoints a saved row onto it to be refused by
+`uq_family_recipes_source` by name. Without the migration it is red on the
+race assertion ("BOTH saves landed"); with the write grant revoked it is red on
+the control; with the right index under another name it is red on attribution.
+
+### `0352` stops a child clearing the household's money warnings — unapplied
+
+`0352_a_child_cannot_clear_the_households_money_warnings.sql` (SRV-001 lead
+`m26`). `money_timeline_insights` holds the Financial Copilot's advisories and,
+per row, whether the family has acknowledged or dismissed each one. `0168` gave
+all four commands to `is_family_member` (membership, not role), and nothing
+since has narrowed it: `0267` and `0275` list the finance tables by name, and
+this one is not on either list. The row is family-wide by construction
+(`unique (family_id, dedupe_key)`), so one write decides what the whole
+household sees. Replayed on a throwaway Postgres, a member with role `child`
+sent the exact upsert the Dismiss button sends and cleared the `urgent`
+low-balance advisory from the parents' page too, and a `guest` deleted the row
+outright. The page does not step a child up (`needsStepUp` is manager-only), and
+the module has no view of what was dismissed, so a parent could not see or undo
+it.
+
+**What closes it** is `insert`/`update`/`delete` re-created on
+`can_manage_family(family_id)`, plus the three `RESTRICTIVE` manager guards
+`0275` gives the finance group, a sweep of stray permissive write policies by
+their shape, and an end-state assertion that raises. `select` stays on
+`is_family_member`, for `0267`'s stated reason: a member reading the forecast is
+a product decision. `anon` loses its write grant on this one table (`0290`'s
+treatment).
+
+**Ships with its application half, and each half stands alone.** The actions in
+`app/(app)/dashboard/money-timeline/actions.ts` refuse a non-manager with a
+sentence rather than a bare policy error, validate the client's payload against
+`0168`'s own checks, and report a refused write instead of revalidating as if it
+had landed (`m27`). The module shows a child the forecast without the Dismiss
+buttons. Until 0352 is applied, `/rest/v1` still lets a child write.
+
+**Evidence.** Two probes, both run by CI's database job after replaying every
+migration. `docs/audit/a-child-cannot-clear-the-households-money-warnings-check.sql`
+fails with 11 named breaches on the `0168` state and passes after 0352 (applied
+twice). `docs/audit/only-a-parent-or-an-adult-clears-the-households-money-warnings-check.sql`
+runs its negative control first (a parent and an adult making the same writes
+must land) and went red on that control when the write grant was revoked with
+0352 in place.
+
+### `0360` takes a head-out reminder off the calendar with its departure plan — unapplied
+
+`0360_a_head_out_reminder_goes_with_its_departure_plan.sql` (SRV-001 lead
+`m41`). Smart Departure writes a "🚗 Head out for …" calendar event for each
+plan and links it from the plan (`departure_plans.reminder_event_id`); the link
+runs plan → event only. `00981` made `departure_plans.event_id` `ON DELETE
+CASCADE`, so deleting the event a plan was for — the calendar's Delete button,
+the bulk delete, the assistant's delete tool — deletes the plan and leaves its
+reminder on every member's calendar, where the daily notifications run turns it
+into a push and an email for a trip that no longer exists. With the plan gone,
+nothing in Trip Intel can move or remove it.
+
+**What closes it** is an `AFTER DELETE FOR EACH ROW` trigger on
+`departure_plans` that deletes the plan's reminder, fenced by `family_id =
+old.family_id`. It is `SECURITY INVOKER`: on the cascade path it fires as the
+member who deleted the event (measured on the replayed schema), so
+`calendar_events` RLS still decides what it may delete. Neither foreign key
+changes: deleting a reminder by hand still leaves its plan, which a refresh
+repairs.
+
+**Ships on its own.** The application does not call anything 0360 creates.
+The app-side halves of the same audit — a save that validates the plan's limits
+before writing the reminder and takes a just-written reminder back if the plan
+is refused (`m39`), and a Remove that fails closed on a failed read or a
+refused reminder delete (`m40`), both in `app/(app)/dashboard/trip-intel/actions.ts`
+— are live on merge. Until 0360 is applied, deleting the event a plan was for
+still strands its reminder.
+
+**Evidence.** `docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql`
+deletes the event as a signed-in member and requires the plan and its reminder
+gone, a same-titled hand-typed event untouched, the Remove button's order still
+working, and the family fence holding for an owner-level delete. It was **shown
+to fail before being trusted**: without 0360 it is red (the reminder stays), and
+with 0360's family term removed it is red (the other household's event is
+deleted); its own negative controls repeat both inside the transaction.
+`tests/a-head-out-reminder-never-outlives-its-departure-plan.test.ts` covers
+the application halves against a fake that enforces 00981's CHECKs and both
+foreign-key actions.
+
+**Not closed, named so they are not assumed closed.** Reminders already
+stranded in production are not swept — telling one from an event a person typed
+with the same title would be a guess. Notifications already created for one are
+not removed (`notifications.related_id` has no foreign key). And the save in
+`m39` is compensated, not atomic: if the request dies between writing the
+reminder and writing the plan, or the compensating delete also fails (logged,
+and the family is told), the reminder stays. Making it atomic means moving both
+writes into one database function that every save depends on, which cannot ship
+while production cannot take migrations.
+

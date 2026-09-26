@@ -141,6 +141,63 @@ async function upsertHeadOutEvent(
   return { ok: true, id: data?.id ?? null };
 }
 
+/**
+ * Take back a head-out event this request has just CREATED, because the plan
+ * that was to point at it was not written.
+ *
+ * Nothing else ever could. The link runs plan → event only, so without a plan
+ * row `deleteDeparturePlanAction` has no way to find the event, and the Trip
+ * Intel page hides "🚗 Head out" titles from its own list — the family would
+ * see an error while every member's calendar gained a "Leave by …" reminder
+ * that no plan stands behind, and a retry would add a second one beside it.
+ *
+ * Returns false when the event could NOT be removed, so the caller can say it
+ * is still on the calendar instead of implying that nothing was written. The
+ * caller then returns THAT message rather than the plan write's own error, so
+ * `planError` — why the plan was not written — is logged here beside the event
+ * id and the withdraw's error; otherwise the original cause would be lost.
+ *
+ * This is a compensating write, not a transaction. Two cases still leave the
+ * event behind: this delete failing too (logged, and the family is told), and
+ * the request dying between the event insert and the plan write, which no
+ * code in the request survives to repair. Closing that needs both writes in
+ * one database function, which every save would then depend on — and
+ * production cannot currently take migrations (docs/PENDING_PROD_MIGRATIONS.md,
+ * "Connectivity NO LONGER works"), so it would turn a rare orphan into every
+ * Smart Departure save failing.
+ */
+async function withdrawHeadOutEvent(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+  eventId: string,
+  planError: unknown,
+): Promise<boolean> {
+  const { error } = await supabase.from('calendar_events').delete().eq('id', eventId).eq('family_id', familyId);
+  if (error) {
+    console.error('[trip-intel] a head-out event with no plan behind it could not be withdrawn', {
+      eventId, familyId, planError, withdrawError: error,
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * The departure plan's own limits, mirrored from its table
+ * (00981_trip_intelligence.sql: `title` 1..200 characters, `prep_minutes`
+ * 0..240, `park_minutes` and `buffer_minutes` 0..120, all INTEGER).
+ *
+ * `calendar_events` has none of them, so a value only the plan refuses used to
+ * put the head-out event on the calendar and THEN fail the plan. The inputs'
+ * HTML `max` never stopped that: the planner modal renders no <form>, so the
+ * Save button's onClick runs with whatever was typed.
+ */
+const PLAN_LIMITS = { titleChars: 200, prepMinutes: 240, parkMinutes: 120, bufferMinutes: 120 } as const;
+
+function wholeMinutesWithin(value: number, max: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= max;
+}
+
 export async function saveDeparturePlanAction(input: DeparturePlanInput): Promise<Result<{ id: string; leaveBy: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
@@ -153,6 +210,19 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
   const title = input.title.trim();
   if (!title) return { ok: false, error: t('actions.aTitleIsRequired') };
   if (!input.eventStart) return { ok: false, error: t('actions.missingEventTime') };
+  // Asked BEFORE the head-out event is written, so a plan the table would refuse
+  // never puts anything on the family's calendar. `char_length` counts
+  // characters, not UTF-16 units, so an emoji in the event's name is one.
+  if (Array.from(title).length > PLAN_LIMITS.titleChars) {
+    return { ok: false, error: t('actions.departureTitleTooLong') };
+  }
+  if (
+    !wholeMinutesWithin(input.prepMinutes, PLAN_LIMITS.prepMinutes)
+    || !wholeMinutesWithin(input.parkMinutes, PLAN_LIMITS.parkMinutes)
+    || !wholeMinutesWithin(input.bufferMinutes, PLAN_LIMITS.bufferMinutes)
+  ) {
+    return { ok: false, error: t('actions.departureMinutesOutOfRange') };
+  }
 
   // Through the shared estimate → departure mapping (lib/trips/drive-time), the
   // same one Schedule Intelligence uses for the calendar card, so the leave-by
@@ -205,7 +275,19 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
     .select('id')
     .maybeSingle();
 
-  if (error) return { ok: false, error: describeDbError(error) };
+  if (error) {
+    // The head-out event above is already on the calendar, and without this
+    // plan nothing links to it. The limits checked earlier keep the common
+    // refusals from getting here; what is left — the source event deleted by
+    // someone else while the planner was open (the event_id foreign key), a
+    // dropped connection — still must not leave it behind. If the plan did in
+    // fact land, reminder_event_id's ON DELETE SET NULL clears its link and the
+    // next refresh writes a fresh event, so withdrawing is safe either way.
+    if (headOut.id && !(await withdrawHeadOutEvent(supabase, ctx.active.familyId, headOut.id, error))) {
+      return { ok: false, error: t('actions.headOutEventLeftOnCalendar') };
+    }
+    return { ok: false, error: describeDbError(error) };
+  }
   revalidatePath('/dashboard/trip-intel');
   revalidatePath('/dashboard/calendar');
   return { ok: true, data: { id: data!.id, leaveBy: plan.leaveByISO } };
@@ -272,7 +354,17 @@ export async function refreshDeparturePlanAction(input: {
     })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
 
-  if (error) return { ok: false, error: describeDbError(error) };
+  if (error) {
+    // A plan whose head-out event had been deleted from the calendar (the FK
+    // nulled its link) just had a NEW one created above. If the link to it was
+    // not written, nothing points at it and the next refresh adds another. An
+    // event this refresh only MOVED is left alone: it is still the plan's.
+    if (!existing.reminder_event_id && headOut.id
+      && !(await withdrawHeadOutEvent(supabase, ctx.active.familyId, headOut.id, error))) {
+      return { ok: false, error: t('actions.headOutEventLeftOnCalendar') };
+    }
+    return { ok: false, error: describeDbError(error) };
+  }
   revalidatePath('/dashboard/trip-intel');
   revalidatePath('/dashboard/calendar');
   return { ok: true, data: { leaveBy: plan.leaveByISO } };
@@ -282,11 +374,30 @@ export async function deleteDeparturePlanAction(input: { id: string }): Promise<
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  // Remove the linked head-out calendar event too.
-  const { data: existing } = await supabase
+  // Remove the linked head-out calendar event too — FIRST, and the plan only
+  // once it is gone. The plan row is the only thing that knows which event is
+  // its reminder (the link runs plan → event, and 00981's `reminder_event_id …
+  // ON DELETE SET NULL` acts only when the EVENT goes). Until migration 0360 is
+  // applied nothing in the database follows that link when the plan goes, so a
+  // plan deleted while its event stays leaves a "🚗 Head out" reminder on every
+  // member's calendar, and in the next notifications run, with nothing in Trip
+  // Intel left that could remove it. With 0360's AFTER DELETE trigger in place
+  // this order is still right: deleting the event first nulls the plan's link,
+  // so the trigger finds nothing left to do, and a refused event delete is
+  // reported here while the plan — and the way to retry — still exists.
+  //
+  // So a read that FAILED is not "this plan has no reminder": it used to fall
+  // through to the plan delete and report ok. Nor is a refused event delete a
+  // success. Either keeps the plan, and with it the way to try again. If the
+  // plan delete below is the step that fails, the event is already gone and
+  // the FK has cleared the link — the plan stays and a refresh re-creates it.
+  const { data: existing, error: readError } = await supabase
     .from('departure_plans').select('reminder_event_id').eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (readError) return { ok: false, error: describeDbError(readError) };
   if (existing?.reminder_event_id) {
-    await supabase.from('calendar_events').delete().eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId);
+    const { error: eventError } = await supabase
+      .from('calendar_events').delete().eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId);
+    if (eventError) return { ok: false, error: describeDbError(eventError) };
   }
   const { error } = await supabase
     .from('departure_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);

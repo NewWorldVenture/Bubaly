@@ -8,6 +8,9 @@
 // (when configured) can only ADD richer summaries on top, never replace this.
 // No Supabase / React imports; everything here is unit-tested.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
 export type PaperworkKind =
   | 'permission_slip' | 'school_notice' | 'medical_form' | 'sports'
   | 'bill_or_payment' | 'event_flyer' | 'receipt' | 'reservation' | 'other';
@@ -226,10 +229,16 @@ export function triagePaperwork(text: string, now: Date = new Date()): TriageRes
   const amount = extractAmount(text);
   const urgency = urgencyOf(dueOn, now);
 
+  // The stored RECORD, in the source language — see RECORD_LOCALE. Nothing a
+  // person reads prints this string: the two screens that show a summary (the
+  // Paperwork Inbox card and the household inbox queue) and the calendar event
+  // "Add to calendar" writes (app/(app)/dashboard/paperwork/actions.ts) all
+  // re-render it from the row with `paperworkSummary(paperworkSummaryFacts(row),
+  // reader)`. Only the reply drafter's model prompt still reads it as stored.
   const parts: string[] = [kindLabel(kind)];
   if (actions.length) parts.push(actions.map((a) => a.label.toLowerCase()).slice(0, 2).join(' + '));
   if (dueOn) parts.push(`due ${dueOn}`);
-  if (amount != null) parts.push(`$${amount % 1 === 0 ? amount : amount.toFixed(2)}`);
+  if (amount != null) parts.push(formatPaperworkAmount(amount, RECORD_LOCALE));
 
   return {
     kind,
@@ -240,4 +249,171 @@ export function triagePaperwork(text: string, now: Date = new Date()): TriageRes
     actions,
     urgency,
   };
+}
+
+// ── Money, and the summary as a READER sees it ──────────────────────────────
+//
+// I18N-003. The summary used to carry `$${amount}`: the dollar sign was TEXT and
+// `toFixed` has no locale, so a German reader got "$2768.40" where they write
+// "2.768,40 $". Localising that one number would not have been enough, because
+// it sat inside an English list ("Permission slip · sign and return · due …"),
+// so the whole line is rendered for the reader here, word and number alike.
+
+/**
+ * The currency of an extracted amount. `extractAmount` reads only figures the
+ * paper printed with a "$", and `paperwork_items` has no currency column, so
+ * the dollar on the page is the only currency there is to follow. The currency
+ * belongs to the MONEY; the reader's locale decides only how it is written.
+ */
+const PAPERWORK_CURRENCY = 'USD';
+
+/**
+ * The language the stored `summary` RECORD is written in — explicitly en-US,
+ * and not the locale of whoever happened to paste the paperwork.
+ *
+ * A row is written once and read by every member of the family. Two of its five
+ * writers are webhooks with nobody behind them (an inbound email's attachments,
+ * the Contact Center), and the other three (the paste action, the capture and
+ * link routes) are one member filing for everyone. There is no per-member or
+ * per-family locale column to look up either (I18N-001). So the record is kept
+ * in the source language, the same rule this audit applies to activity-ledger
+ * rows, and each screen that shows it re-renders it in its OWN reader's locale
+ * through `paperworkSummary` below.
+ */
+const RECORD_LOCALE: LocaleCode = 'en-US';
+
+/** An extracted dollar amount, written the way `locale` writes money. */
+export function formatPaperworkAmount(amount: number, locale: LocaleCode): string {
+  return formatCents(Math.round(amount * 100), PAPERWORK_CURRENCY, locale);
+}
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+/** Who is reading: their locale for the numbers, their catalogue for the words. */
+export type PaperworkReader = { locale: LocaleCode; t: Translate };
+
+const KIND_KEY: Record<PaperworkKind, string> = {
+  permission_slip: 'paperworkTriage.kindPermissionSlip',
+  school_notice: 'paperworkTriage.kindSchoolNotice',
+  medical_form: 'paperworkTriage.kindMedicalForm',
+  sports: 'paperworkTriage.kindSports',
+  bill_or_payment: 'paperworkTriage.kindBillOrPayment',
+  event_flyer: 'paperworkTriage.kindEventFlyer',
+  receipt: 'paperworkTriage.kindReceipt',
+  reservation: 'paperworkTriage.kindReservation',
+  other: 'paperworkTriage.kindOther',
+};
+
+/** An action on its own line: "Sign and return". */
+const ACTION_KEY: Record<PaperworkActionKind, string> = {
+  sign: 'paperworkTriage.actionSign',
+  pay: 'paperworkTriage.actionPay',
+  rsvp: 'paperworkTriage.actionRsvp',
+  schedule: 'paperworkTriage.actionSchedule',
+  provide: 'paperworkTriage.actionProvide',
+  review: 'paperworkTriage.actionReview',
+};
+
+/** The same action mid-summary: "… · sign and return + make the payment · …". */
+const SUMMARY_ACTION_KEY: Record<PaperworkActionKind, string> = {
+  sign: 'paperworkTriage.summarySign',
+  pay: 'paperworkTriage.summaryPay',
+  rsvp: 'paperworkTriage.summaryRsvp',
+  schedule: 'paperworkTriage.summarySchedule',
+  provide: 'paperworkTriage.summaryProvide',
+  review: 'paperworkTriage.summaryReview',
+};
+
+const has = <K extends string>(map: Record<K, string>, value: unknown): value is K =>
+  typeof value === 'string' && Object.prototype.hasOwnProperty.call(map, value);
+
+/**
+ * A kind's name in the reader's catalogue. Takes the stored column as it comes
+ * (a plain string); a value this build does not know reads as "Paperwork", the
+ * same fallback `kindLabel` gives.
+ */
+export function paperworkKindLabel(kind: string, reader: PaperworkReader): string {
+  return reader.t(has(KIND_KEY, kind) ? KIND_KEY[kind] : KIND_KEY.other);
+}
+
+/**
+ * An action's name in the reader's catalogue. A stored action whose kind this
+ * build does not know keeps the label it was stored with rather than being
+ * renamed to something it is not.
+ */
+export function paperworkActionLabel(
+  action: Pick<PaperworkAction, 'kind' | 'label'>,
+  reader: PaperworkReader,
+): string {
+  return has(ACTION_KEY, action.kind) ? reader.t(ACTION_KEY[action.kind]) : action.label;
+}
+
+/** Everything a summary is made of — each one a column the row already stores. */
+export type PaperworkSummaryFacts = {
+  kind: PaperworkKind;
+  actions: readonly { kind: PaperworkActionKind }[];
+  due_on: string | null;
+  amount: number | null;
+};
+
+/**
+ * Read the summary's facts back off a stored `paperwork_items` row.
+ *
+ * The FINER kind triage saw lives in `meta.triage_kind` (the column's CHECK
+ * admits only seven, so a receipt is stored as a payment); it is preferred so
+ * the reader's line names what the writer's line named.
+ */
+export function paperworkSummaryFacts(row: {
+  kind: string;
+  meta: unknown;
+  actions: unknown;
+  due_on: string | null;
+  amount: number | null;
+}): PaperworkSummaryFacts {
+  const meta = row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+    ? (row.meta as Record<string, unknown>)
+    : {};
+  const kind: PaperworkKind = has(KIND_KEY, meta.triage_kind) ? meta.triage_kind
+    : has(KIND_KEY, row.kind) ? row.kind
+    : 'other';
+  const actions = Array.isArray(row.actions)
+    ? row.actions.flatMap((a: unknown) => {
+      const actionKind = a && typeof a === 'object' ? (a as { kind?: unknown }).kind : undefined;
+      return has(ACTION_KEY, actionKind) ? [{ kind: actionKind }] : [];
+    })
+    : [];
+  return { kind, actions, due_on: row.due_on, amount: row.amount };
+}
+
+/**
+ * The one-line gist, in the READER's language with the money in the reader's
+ * format: a German reader gets "… · 2.768,40 $", an American one "… · $2,768.40".
+ * The locale is required — a default here is how a parameter nobody passes
+ * happens.
+ */
+export function paperworkSummary(facts: PaperworkSummaryFacts, reader: PaperworkReader): string {
+  const { t, locale } = reader;
+  const parts: string[] = [paperworkKindLabel(facts.kind, reader)];
+  if (facts.actions.length) {
+    parts.push(facts.actions.slice(0, 2).map((a) => t(SUMMARY_ACTION_KEY[a.kind])).join(' + '));
+  }
+  if (facts.due_on) parts.push(t('paperworkTriage.due', { date: facts.due_on }));
+  if (facts.amount != null) parts.push(formatPaperworkAmount(facts.amount, locale));
+  return parts.join(' · ');
+}
+
+/**
+ * One extracted action as its own line: "Make the payment · 12 $ · by 2026-03-03".
+ * A stored action whose kind this build does not know keeps the label it was
+ * stored with rather than being renamed to something it is not.
+ */
+export function paperworkActionLine(
+  action: Pick<PaperworkAction, 'kind' | 'label' | 'amount' | 'due_on'>,
+  reader: PaperworkReader,
+): string {
+  const { t, locale } = reader;
+  const parts: string[] = [paperworkActionLabel(action, reader)];
+  if (action.amount != null) parts.push(formatPaperworkAmount(action.amount, locale));
+  if (action.due_on) parts.push(t('paperworkTriage.by', { date: action.due_on }));
+  return parts.join(' · ');
 }

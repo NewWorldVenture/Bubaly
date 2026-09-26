@@ -49,8 +49,8 @@ import {
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
-import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { behaviorForDomain, DEFAULT_AI_SETTINGS, effectiveRisk } from '@/lib/ai/family-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { getTranslations } from '@/lib/i18n/server';
 import { getTool } from './registry';
 import type { ToolDefinition, ToolOutcome } from './types';
@@ -292,7 +292,9 @@ async function finalizeCall(
 type Gate =
   | { kind: 'allow' }
   | { kind: 'denied'; reason: string }
-  | { kind: 'pending'; approvalId: string | null; summary: string };
+  | { kind: 'pending'; approvalId: string | null; summary: string }
+  /** The gate could not read what it needs to decide, so nothing runs — and a retry may succeed. */
+  | { kind: 'unverified'; reason: string };
 
 /**
  * Everything between "the arguments are valid" and "the service may run".
@@ -321,19 +323,30 @@ async function gate(
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
-  // What this household said Bubaly may do (0257). `getAISettings` is the
-  // forgiving read: when the row cannot be read it answers the DEFAULTS
-  // (Bubaly on, `execute`, memory on, no quiet hours) rather than failing. That
-  // is NOT a tightening — for a family that switched Bubaly off or dialled a
-  // category down, a failed read loosens this gate for as long as the failure
-  // lasts (see lib/services/ai-settings/index.ts). What still holds is
-  // `effectiveRisk`'s floor for the HIGH_STAKES domains (money, documents…) and
-  // the trust engine's own decision; whether this gate should fail closed
-  // instead is its own open question.
-  const settings = await getAISettings(scope);
+  // What this household said Bubaly may do (0257), read STRICTLY. This used to
+  // be the forgiving read, which answers the DEFAULTS (Bubaly on, `execute`)
+  // when the row cannot be read — so for a family that had switched Bubaly
+  // off, a timeout on this one query switched it back on and the write below
+  // went ahead (SEC-009). Bubaly's own write now fails closed: nothing runs,
+  // and the outcome is a retryable error that says why, not a "switched off"
+  // the family never chose.
+  const read = await loadAISettings(scope);
+  const agentWrite = actorKind === 'ai_agent' && !tool.readOnly;
+  if (!read.ok && agentWrite) {
+    const t = await getTranslations();
+    return { kind: 'unverified', reason: t('aiSettings.readFailedNothingChanged') };
+  }
+  // Past this point a failed read is only possible for two callers the switch
+  // does not govern: a READ in a sensitive domain (Settings promises "requests
+  // still answer", and `riskToDecision`'s view rule takes neither tier nor
+  // dial), and a PERSON's own write replayed under an approver's authority
+  // (a member-filed approval). For the second, the family's per-tool tier and
+  // dial are unknown, so it is gated at the registry's own tier and the trust
+  // engine's decision — which is what a family with no overrides gets.
+  const settings = read.ok ? read.data : { familyId: scope.familyId, ...DEFAULT_AI_SETTINGS };
   const risk = effectiveRisk(settings, tool);
   const behavior = behaviorForDomain(settings, tool.domain);
-  if (!settings.enabled && actorKind === 'ai_agent' && !tool.readOnly) {
+  if (!settings.enabled && agentWrite) {
     // Switched off means switched off: no approval is opened, because there is
     // nothing for a parent to release — the family turned Bubaly's hands off.
     return { kind: 'denied', reason: 'Bubaly is switched off for this family in Settings → Bubaly AI.' };
@@ -637,6 +650,7 @@ export async function executeTool(
     };
   }
   if (gated.kind === 'denied') return { status: 'denied', reason: gated.reason, toolCallId: null };
+  if (gated.kind === 'unverified') return { status: 'error', error: gated.reason, retryable: true, toolCallId: null };
   if (gated.kind === 'pending') {
     return { status: 'pending_approval', approvalId: gated.approvalId, summary: gated.summary, toolCallId: null };
   }

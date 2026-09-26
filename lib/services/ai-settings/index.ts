@@ -1,25 +1,35 @@
 // Reading and writing the family's Bubaly settings (0257 `family_ai_settings`).
 //
-// There are TWO reads of the same row, because two kinds of caller need
+// There are TWO kinds of read of the same row, because two kinds of caller need
 // different answers when the read fails:
 //
-//  - `getAISettings` / `readAISettings` are the forgiving read the gate, the
-//    planner and the crons use on every execution. A missing row, or a read
-//    that fails because the table is not there yet in a partially migrated
-//    environment, both answer the DEFAULTS rather than an error, so a settings
-//    hiccup is never the reason a family's work stops. Be clear about what
-//    that costs: the defaults are the shipped behaviour (Bubaly on, `execute`,
-//    memory on, no quiet hours), NOT a tightening — for a family that switched
-//    something off or dialled a category down, a failed read loosens it for as
-//    long as the failure lasts.
+//  - `loadAISettings` / `loadAISettingsFor` are the STRICT read. A missing row
+//    is still the defaults — that is genuinely what applies to a family that
+//    never saved one — but a read that FAILED answers an error. Every caller
+//    that ENFORCES one of the family's opt-outs must use it and fail closed on
+//    that error, because the defaults are "Bubaly on, `execute`, memory on":
+//    handing them to an enforcing caller turned a family's "switch Bubaly off"
+//    or "don't remember" back on for as long as the failure lasted (SEC-009).
+//    The enforcing callers today: the tool gate (lib/ai/tools/execute.ts), the
+//    shared AI gate for chat, Magic Import and the school desk
+//    (lib/trust/ai-gate.ts), the routine cron
+//    (app/api/cron/family-routines/route.ts), the speaker capture
+//    (lib/assistant/service.ts), the concierge autopilot
+//    (app/(app)/dashboard/concierge/actions.ts), the memory write path
+//    (lib/services/memory), the memory recall tool and context slice
+//    (lib/ai/tools/memory.ts, lib/ai/context/slices/memory.ts) and onboarding's
+//    remembered answers (lib/onboarding/remember.ts). The settings page reads
+//    it too: the defaults are not this family's settings, and presenting them
+//    as if they were told a family that had switched Bubaly off that it was on.
 //
-//  - `loadAISettings` is the strict read for the page that SHOWS the settings
-//    to a family and lets a parent edit them. A missing row is still the
-//    defaults — that is genuinely what the gate enforces for that family — but
-//    a read that FAILED answers an error. The defaults are not this family's
-//    settings, and presenting them as if they were told a family that had
-//    switched Bubaly off that it was on; a parent who then changed one
-//    category wrote the invented empty map over every level they had set.
+//  - `getAISettings` is the FORGIVING read: a failed read answers the defaults.
+//    It is only for a caller whose answer SHAPES something that an enforcing
+//    caller checks again, or whose failure mode is a documented decision:
+//    the planner (the plan it shapes is executed through the tool gate, which
+//    re-reads strictly) and quiet hours in lib/services/notifications (fail
+//    open by decision: a late-night notice beats a lost one). A new caller that
+//    decides whether Bubaly may ACT, REMEMBER or USE what it remembers does not
+//    belong here.
 //
 // The write is the opposite: manager-only, validated field by field, and
 // stamped with who changed it. What a family may hand to an AI is exactly the
@@ -37,11 +47,6 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 
 type Row = Database['public']['Tables']['family_ai_settings']['Row'];
 
-/** The family's settings, or the defaults. Never fails: see the header. */
-export async function getAISettings(scope: ServiceScope): Promise<AISettings> {
-  return readAISettings(scope.db, scope.familyId);
-}
-
 type SettingsRead = { ok: true; settings: AISettings } | { ok: false; error: unknown };
 
 async function querySettings(db: ServiceScope['db'], familyId: string): Promise<SettingsRead> {
@@ -55,34 +60,42 @@ async function querySettings(db: ServiceScope['db'], familyId: string): Promise<
 }
 
 /**
- * The family's settings as the settings page shows them — or an error when
- * the read failed. See the header: this is the read that must not pass the
- * defaults off as the family's own answer.
+ * The family's settings, or the defaults when the read failed. See the header:
+ * ONLY for callers that shape rather than enforce — never for one that decides
+ * whether Bubaly may act, remember, or use what it remembers.
  */
-export async function loadAISettings(scope: ServiceScope): Promise<ServiceResult<AISettings>> {
+export async function getAISettings(scope: ServiceScope): Promise<AISettings> {
   const read = await querySettings(scope.db, scope.familyId);
   if (!read.ok) {
-    console.error('[service:ai-settings] read failed', read.error);
-    return fail(describeDbError(read.error, 'Could not load your Bubaly settings.'), { code: SERVICE_CODES.db });
+    console.error('[service:ai-settings] read failed; shaping with the defaults', read.error);
+    return { familyId: scope.familyId, ...DEFAULT_AI_SETTINGS };
   }
-  return ok(read.settings);
+  return read.settings;
 }
 
 /**
- * The forgiving read (`getAISettings`'s) for callers that hold a client and a family id but no
- * `ServiceScope` — the chat assistant's trust wrapper, which gates the tools a
- * family actually talks to and needs to know whether Bubaly is switched on.
+ * The family's settings — or an error when the read failed. See the header:
+ * this is the read that must not pass the defaults off as the family's own
+ * answer, and the one every caller enforcing an opt-out uses.
  */
-export async function readAISettings(
+export async function loadAISettings(scope: ServiceScope): Promise<ServiceResult<AISettings>> {
+  return loadAISettingsFor(scope.db, scope.familyId);
+}
+
+/**
+ * `loadAISettings` for callers that hold a client and a family id but no
+ * `ServiceScope` — the shared AI gate and the speaker assistant.
+ */
+export async function loadAISettingsFor(
   db: ServiceScope['db'],
   familyId: string,
-): Promise<AISettings> {
+): Promise<ServiceResult<AISettings>> {
   const read = await querySettings(db, familyId);
   if (!read.ok) {
-    console.error('[service:ai-settings] read failed; using defaults', read.error);
-    return { familyId, ...DEFAULT_AI_SETTINGS };
+    console.error('[service:ai-settings] read failed', read.error);
+    return fail(describeDbError(read.error, 'Could not load your Bubaly settings.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  return read.settings;
+  return ok(read.settings);
 }
 
 export type AISettingsPatch = {

@@ -18,7 +18,7 @@
 // members SELECT only, so paperwork and log rows are merged at READ time and
 // keep living in their own tables.
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ErrorState } from '@/components/ui/states';
@@ -31,9 +31,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function InboxPage() {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const ctx = await requireFeature('/dashboard/inbox');
   const supabase = await createServer();
-  const queue = await loadInboxQueue(supabase, ctx.active.familyId);
+  // The queue's paperwork snippets carry money; they are written for this reader.
+  const queue = await loadInboxQueue(supabase, ctx.active.familyId, { locale: locale.code, t });
 
   if (queue.allFailed) {
     return <ErrorState message={t('inbox.couldNotLoadTheHouseholdInbox')} />;

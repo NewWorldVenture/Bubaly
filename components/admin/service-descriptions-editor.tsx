@@ -40,22 +40,46 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
     return acc;
   }, {} as Record<string, number>)).length;
 
-  async function persist(key: string, description: string) {
+  // `intent` only chooses the feedback (toast, Save-button tick); the settled
+  // state always comes from the server. Resolves true when the write landed.
+  async function persist(key: string, description: string, intent: 'save' | 'reset' = 'save'): Promise<boolean> {
     setBusy(key);
     const res = await saveServiceDescriptionAction({ key, description });
     setBusy(null);
-    if (!res.ok) { toastError(res.error); return; }
-    setSaved((s) => ({ ...s, [key]: description }));
-    setValues((v) => ({ ...v, [key]: description }));
-    setJustSaved(key);
-    setTimeout(() => setJustSaved((k) => (k === key ? null : k)), 1500);
-    success(t('serviceDescriptionsEditor.descriptionSaved'));
+    if (!res.ok) {
+      // Surfaced, never swallowed. The box keeps what it holds: on a failed save
+      // that is what the admin typed; resetToDefault() undoes its own optimism.
+      toastError(res.error);
+      return false;
+    }
+    // Settle to the description that is now IN EFFECT (res.description), never to
+    // the string we sent. Sending '' means "drop the override", and what the app
+    // then serves is the shipped default — so settling to '' used to leave the row
+    // blank and still badged CUSTOM, with Save disabled ('' vs ''), until a reload.
+    // Same reason the raw argument is wrong on a save: the server trims and caps it.
+    setSaved((s) => ({ ...s, [key]: res.description }));
+    setValues((v) => ({ ...v, [key]: res.description }));
+    if (intent === 'save') {
+      setJustSaved(key);
+      setTimeout(() => setJustSaved((k) => (k === key ? null : k)), 1500);
+    } else {
+      // The Save button's "Saved" tick belongs to a save. A reset reports itself
+      // in its own toast, and must not inherit a tick left by a save just before.
+      setJustSaved((k) => (k === key ? null : k));
+    }
+    success(t(intent === 'reset' ? 'serviceDescriptionsEditor.descriptionReset' : 'serviceDescriptionsEditor.descriptionSaved'));
+    return true;
   }
 
-  function resetToDefault(key: string) {
+  async function resetToDefault(key: string) {
     const def = SERVICE_DESCRIPTIONS[key] ?? '';
-    setValues((v) => ({ ...v, [key]: def }));
-    void persist(key, ''); // empty → server drops the override → falls back to default
+    const inBox = values[key] ?? '';
+    setValues((v) => ({ ...v, [key]: def })); // optimistic; persist() settles from the server
+    const applied = await persist(key, '', 'reset'); // empty → server drops the override → falls back to default
+    // Refused: nothing was applied, so the box goes back to exactly what it held
+    // when Reset was clicked — unsaved typing included, as a failed save keeps
+    // it — unless the admin has typed over the optimistic default since.
+    if (!applied) setValues((v) => (v[key] === def ? { ...v, [key]: inBox } : v));
   }
 
   return (

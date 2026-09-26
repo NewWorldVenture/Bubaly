@@ -5,7 +5,7 @@
 // the next events and assembles a coordinated, one-tap prep bundle per moment
 // (leave-by, packing, snacks, weather, budget, photos), remembering what's done.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -31,7 +31,7 @@ import { reminderTimeFor } from '@/lib/moments/reminders';
 import { groupMoments } from '@/lib/moments/grouping';
 import { summarizeMoments } from '@/lib/moments/summary';
 import {
-  loadMomentPrep, setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
+  setMomentPrepDoneAction, createMomentReminderAction, addMomentGroceryAction,
   removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -51,7 +51,7 @@ const CAT_LABEL: Record<MomentCategory, string> = {
   school: 'School', outdoors: 'Outdoors', general: 'Coming up',
 };
 
-export function MomentsView({ departures, departuresFailed = false }: {
+export function MomentsView({ departures, departuresFailed = false, savedTicks, prepFailed = false }: {
   /**
    * M8: composed leave-by per event id, from the family's saved departure
    * plans (lib/schedule/intelligence via the page). Replaces the per-category
@@ -60,6 +60,18 @@ export function MomentsView({ departures, departuresFailed = false }: {
   departures?: Record<string, MomentDeparture> | null;
   /** The page could not read the saved plans — say so, with a retry, rather than show buffers as the whole truth. */
   departuresFailed?: boolean;
+  /**
+   * The member's saved prep ticks per event id, read on the server
+   * (loadMomentPrep). Not called `prep`: each moment's built bundle below is.
+   */
+  savedTicks?: Record<string, string[]> | null;
+  /**
+   * The prep read failed. Unticked is then a GUESS, not an answer: showing it as
+   * `0/N` and "N need prep" tells the family to redo prep they already did, and
+   * a tap cannot even know whether it is ticking or unticking the step. So say
+   * it, and write nothing until the read succeeds.
+   */
+  prepFailed?: boolean;
 } = {}) {
   const t = useTranslations();
   // The date follows the reader and the words come from the catalogue.
@@ -77,14 +89,21 @@ export function MomentsView({ departures, departuresFailed = false }: {
       .order('starts_at', { ascending: true }).limit(8),
   });
 
-  const [done, setDone] = useState<Record<string, string[]>>({});
+  // What this session has tapped, LAYERED OVER the server's answer rather than
+  // copied from it once: `router.refresh()` (the retry below, and any other
+  // refresh) re-renders this component with new `savedTicks` while keeping its
+  // state, so a state snapshot taken at mount would keep showing 0/N after a
+  // retry that actually succeeded. `savedTicks` can still be OLDER than the
+  // database — a back/forward navigation re-mounts this page from Next's router
+  // cache without refetching — which is why a tap saves only the one step it
+  // names (setMomentPrepDoneAction merges it server-side) and never this list.
+  const [taps, setTaps] = useState<Record<string, string[]>>({});
+  const done = useMemo(() => ({ ...(savedTicks ?? {}), ...taps }), [savedTicks, taps]);
   const [pending, setPending] = useState<Set<string>>(new Set()); // `${eventId}:${itemId}` in flight
   // Real forecast for the family's default location — so weather-sensitive moments
   // say exactly what to pack ("Rain likely 70% — umbrellas") instead of a generic
   // "check the forecast". Shared with the Home banner via the same hook.
   const wxByDate = useDefaultForecast(familyId);
-
-  useEffect(() => { loadMomentPrep().then(setDone).catch(() => { /* first-paint best effort */ }); }, []);
 
   // Real calendar events + synthetic upcoming-birthday moments, merged by time.
   // Birthdays live on family_members (not the calendar), so this is the only place
@@ -106,12 +125,16 @@ export function MomentsView({ departures, departuresFailed = false }: {
   const summary = useMemo(() => summarizeMoments(moments, done, clashes), [moments, done, clashes]);
 
   async function toggle(eventId: string, itemId: string) {
+    // `done` is empty because the read failed, not because nothing is ticked, so
+    // "is this step done?" — and with it which way this tap goes — is unknown.
+    if (prepFailed) return toastError(t('momentsView.couldNotLoadYourPrepSteps'));
     const current = done[eventId] ?? [];
-    const next = current.includes(itemId) ? current.filter((i) => i !== itemId) : [...current, itemId];
-    const prev = done;
-    setDone({ ...done, [eventId]: next });
-    const res = await setMomentPrepDoneAction({ eventId, doneIds: next });
-    if (!res.ok) { setDone(prev); toastError(res.error ?? 'Could not save'); }
+    const nowDone = !current.includes(itemId);
+    const next = nowDone ? [...current, itemId] : current.filter((i) => i !== itemId);
+    const prev = taps;
+    setTaps({ ...taps, [eventId]: next });
+    const res = await setMomentPrepDoneAction({ eventId, stepId: itemId, done: nowDone });
+    if (!res.ok) { setTaps(prev); toastError(res.error ?? 'Could not save'); }
   }
 
   async function addToList(event: MomentEvent, item: PrepItem) {
@@ -128,14 +151,15 @@ export function MomentsView({ departures, departuresFailed = false }: {
         onClick: () => {
           void removeMomentGroceryAction({ ids }).then((r) => {
             if (!r.ok) toastError(r.error ?? 'Could not undo');
-            else if ((done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+            else if (!prepFailed && (done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
           });
         },
       });
     } else {
       success(t('momentsView.alreadyOnYourList'));
     }
-    if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+    // The items really were added; the tick is the part we must not guess at.
+    if (!prepFailed && !(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
   async function remind(event: MomentEvent, item: PrepItem, leaveByISO: string | null) {
@@ -151,7 +175,7 @@ export function MomentsView({ departures, departuresFailed = false }: {
     setPending((p) => { const n = new Set(p); n.delete(key); return n; });
     if (!res.ok) return toastError(res.error ?? 'Could not set reminder');
     success(t('momentsView.reminderSet'));
-    if (!(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+    if (!prepFailed && !(done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
   }
 
   return (
@@ -169,13 +193,22 @@ export function MomentsView({ departures, departuresFailed = false }: {
         </p>
       )}
 
+      {prepFailed && (
+        <p role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>{t('momentsView.couldNotLoadYourPrepSteps')}</span>
+          <button type="button" onClick={() => router.refresh()} className="font-semibold underline underline-offset-2">{t('momentsView.tryAgain')}</button>
+        </p>
+      )}
+
       {!loading && moments.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
           <span className="rounded-full bg-elevated px-2.5 py-1 text-muted">{summary.total} upcoming</span>
-          {summary.needPrep > 0 && (
+          {/* Counted from `done`, so they are unknown — not zero — when the read failed. */}
+          {!prepFailed && summary.needPrep > 0 && (
             <span className="rounded-full bg-brand/15 px-2.5 py-1 text-brand-text">{summary.needPrep} {t('moments.needPrep')}</span>
           )}
-          {summary.ready > 0 && (
+          {!prepFailed && summary.ready > 0 && (
             <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-500">{summary.ready} ready</span>
           )}
           {summary.conflicts > 0 && (
@@ -231,9 +264,12 @@ export function MomentsView({ departures, departuresFailed = false }: {
                       </p>
                     ) : null}
                   </div>
-                  <span className={cn('shrink-0 text-xs font-semibold tabular-nums', allReady ? 'text-emerald-400' : 'text-muted')}>
-                    {allReady ? 'Ready' : `${complete}/${total}`}
-                  </span>
+                  {/* No count at all while the ticks are unknown: "0/5" would be a claim. */}
+                  {!prepFailed && (
+                    <span className={cn('shrink-0 text-xs font-semibold tabular-nums', allReady ? 'text-emerald-400' : 'text-muted')}>
+                      {allReady ? 'Ready' : `${complete}/${total}`}
+                    </span>
+                  )}
                 </div>
 
                 <ul className="space-y-1.5">
@@ -252,10 +288,16 @@ export function MomentsView({ departures, departuresFailed = false }: {
                         <button
                           type="button"
                           onClick={() => toggle(event.id, item.id)}
-                          aria-pressed={isDone}
-                          aria-label={isDone ? `Mark "${label}" not done` : `Mark "${label}" done`}
-                          className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition',
-                            isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border text-transparent hover:border-brand')}
+                          // While the ticks are unknown the box states nothing:
+                          // aria-pressed="false" and "Mark … done" would each say
+                          // "not done" to a screen reader, the claim the hidden
+                          // count no longer makes. Dashed, dimmed and inert instead.
+                          aria-pressed={prepFailed ? undefined : isDone}
+                          disabled={prepFailed}
+                          aria-label={prepFailed ? label : isDone ? `Mark "${label}" not done` : `Mark "${label}" done`}
+                          className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition disabled:opacity-50',
+                            prepFailed ? 'border-dashed border-border text-transparent'
+                              : isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border text-transparent hover:border-brand')}
                         >
                           <Check className="h-3.5 w-3.5" />
                         </button>
