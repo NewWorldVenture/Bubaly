@@ -26661,6 +26661,29 @@ member, so a member can forge financial audit entries (and pad the AI meter).
 Every writer uses the member's own session (`logWalletAudit`), so closing it
 means moving those writes to the service role first.
 
+## C1-K-22 · MEDIUM · Three audit trails that the people they record could rewrite
+
+Following C1-K-19's forgeable sync history, a scan of every audit- and log-
+shaped table's live policies. Most `*_logs` tables are family content (sleep,
+workouts, habits) where member writes are the feature. Three are genuine
+audit trails that any member could **edit or erase** directly against the API:
+`social_audit_logs` (the trail behind social-access changes; 0034's generic
+loop gave it member UPDATE and DELETE), `vacation_audit_logs` and
+`sync_change_logs` (both member FOR ALL). Measured on the replayed schema: a
+teen rewrote and erased a row in each — 6 breaches.
+
+`0321_an_audit_trail_is_append_only.sql` leaves members SELECT and INSERT and
+removes UPDATE and DELETE. No application code updates or deletes any of them,
+family deletion reaches them by foreign-key cascade (which RLS does not gate),
+and the service role is unaffected. `docs/audit/audit-trail-append-only-check.sql`
+fails 6 ways before and passes after; 45/45 probes.
+
+**Recorded, not changed:** members can still INSERT into these three and into
+`audit_logs` and `wallet_audit_logs`, because the app writes those trails from
+members' own sessions (`logAudit`, `logWalletAudit`). A forged entry cannot
+erase a real one any more, but making the trails service-only means moving
+those writers to the service role first.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
