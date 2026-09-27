@@ -402,9 +402,10 @@ describe('the Food Health Score words its budget line for its reader', () => {
 
 // ── Chores ───────────────────────────────────────────────────────────────────
 describe("a chore's cash reward reads in the kid's and the parent's own format", () => {
+  // Assignment ids are uuids; the page answers not-found for anything else (B12).
   it('the kid submit page shows the German amount, not "$2768.50", and no "up to"', async () => {
     const db = createInMemorySupabase<DB>();
-    db.seed('chore_assignments', [{ id: 'a1', family_id: 'f1', chore_id: 'c1', member_id: 'm1', status: 'todo' }]);
+    db.seed('chore_assignments', [{ id: 'a1a1a1a1-0000-4000-8000-000000000001', family_id: 'f1', chore_id: 'c1', member_id: 'm1', status: 'todo' }]);
     db.seed('chores', [{
       id: 'c1', family_id: 'f1', title: 'Wash the car', icon: '🚗', reward_mode: 'fixed_cash', cash_cents: 276850,
       points: null, points_min: null, points_max: null, cash_min_cents: null, cash_max_cents: null,
@@ -413,7 +414,7 @@ describe("a chore's cash reward reads in the kid's and the parent's own format",
     h.db = db;
     const render = async (code: LocaleCode) => {
       h.locale = code;
-      return renderToStaticMarkup(await SubmitProofPage({ params: Promise.resolve({ assignmentId: 'a1' }) }));
+      return renderToStaticMarkup(await SubmitProofPage({ params: Promise.resolve({ assignmentId: 'a1a1a1a1-0000-4000-8000-000000000001' }) }));
     };
     const german = await render('de-DE');
     expectGerman(german);

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
+import { isUuid } from '@/lib/utils/validation';
 import { parseFormFields } from '@/lib/marketing/forms';
 import { Section, SectionHeading } from '@/components/marketing/sections';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
@@ -12,6 +13,10 @@ export const dynamic = 'force-dynamic';
 // Marketing forms have no client RLS policies, so we read them with the
 // service-role client. Only active, non-deleted forms are publicly servable.
 async function getForm(id: string) {
+  // A form id is a uuid; anything else names no form. Handed to the query it
+  // made Postgres refuse (22P02), which the throw below turned into a 500 on a
+  // mistyped /f/ link. Page audit B12.
+  if (!isUuid(id)) return null;
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('marketing_forms')
