@@ -45706,6 +45706,37 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][I18N]` C1-S9-108 — public pages a German reader met in English, and two titles that ran off a phone
+
+**File/path:**
+- `components/marketing/cta.tsx`, `components/marketing/legal.tsx`
+- `app/(marketing)/ai/page.tsx`, `app/(marketing)/privacy/page.tsx`
+- `app/reviews/new/page.tsx`
+- seven catalogues
+
+**Problem.** Found by rendering every page in German with `scripts/page-audit-crawl.mjs --locale de-DE`, which reports visible text containing two or more English function words. The i18n gate had called these surfaces clean because the copy sat where it does not look:
+- **Closing call to action.** Every marketing page that used it with its defaults (`/`, `/faq`, `/privacy`, `/terms`, `/cookies`, `/acceptable-use`) ended on an English paragraph. The defaults lived in a parameter list.
+- **`/ai`.** Its call-to-action subtitle was an English JSX attribute.
+- **`/privacy`.** Two paragraphs of the policy were English literals inside an array of catalogue keys.
+- **`/reviews/new`.** When no custom copy was saved, the review request fell back to English defaults.
+- **Two legal titles.** At 390 px in German, "Datenschutzerklärung" and "Nutzungsbedingungen" are single words wider than the screen. They pushed `/privacy` 59 px and `/terms` 68 px sideways.
+
+**Fix.**
+- The CTA defaults are catalogue keys, and so is the `/ai` subtitle.
+- The two privacy paragraphs are keys, in the policy's formal register.
+- The review page falls back to translated defaults.
+- The legal title hyphenates by the page's `lang` and breaks as a fallback. 0 px overflow on all four legal pages in German.
+- Eight keys in seven catalogues.
+- `tests/a-public-page-reads-in-the-readers-language.test.ts` pins each fix.
+
+**Not fixed here (OPEN, content).** Some text is database content, not interface copy:
+- **FAQ answers.** The FAQ blocks on `/`, `/ai` and the other public pages come from `marketing_aeo_questions`. Migration `0279` translates only some of them, so the rest render in English. `scripts/translate-aeo-questions.mjs` exists for this and needs a translation run.
+- **Blog posts.** They are English articles. That is a content decision, not a defect in a page.
+
+**Status:** FIXED (interface copy and overflow). The AEO question translations are OPEN, as content.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

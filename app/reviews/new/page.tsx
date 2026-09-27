@@ -40,11 +40,11 @@ export default async function NewReviewPage() {
         <ReviewForm
           // Seeder text in the settings row reads as the product talking to a
           // customer; each field falls back to the default instead.
-          headline={realTextOr(s?.request_headline, DEFAULT_REPUTATION.request_headline)}
-          message={realTextOr(s?.request_message, DEFAULT_REPUTATION.request_message)}
+          headline={realTextOr(s?.request_headline, t('reviewsNew.defaultHeadline'))}
+          message={realTextOr(s?.request_message, t('reviewsNew.defaultMessage'))}
           minPublicRating={s?.min_public_rating ?? DEFAULT_REPUTATION.min_public_rating}
-          thankYouHigh={realTextOr(s?.thank_you_high, DEFAULT_REPUTATION.thank_you_high)}
-          thankYouLow={realTextOr(s?.thank_you_low, DEFAULT_REPUTATION.thank_you_low)}
+          thankYouHigh={realTextOr(s?.thank_you_high, t('reviewsNew.defaultThankYouHigh'))}
+          thankYouLow={realTextOr(s?.thank_you_low, t('reviewsNew.defaultThankYouLow'))}
           publicLinks={publicLinks}
         />
       </div>
