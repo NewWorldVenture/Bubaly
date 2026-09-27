@@ -8,7 +8,7 @@ import { ratingSummary } from '@/lib/marketplace/trust';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Reviews · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Reviews · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 function Stars({ n }: { n: number }) {

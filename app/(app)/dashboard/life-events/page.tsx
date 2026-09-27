@@ -5,7 +5,7 @@ import { LifeEventsModule } from '@/components/modules/life-events-module';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
 import { settleAll } from '@/lib/supabase/settle';
 
-export const metadata: Metadata = { title: 'Life & Milestones | Bubaly' };
+export const metadata: Metadata = { title: 'Life & Milestones' };
 export const dynamic = 'force-dynamic';
 
 /** School events whose title reads like the start of a term or a school year. */

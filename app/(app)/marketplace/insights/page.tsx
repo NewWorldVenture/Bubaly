@@ -11,7 +11,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Pulse · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Pulse · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const kindLabel = (k: string) => KIND_LABELS[k as ListingKind] ?? k;

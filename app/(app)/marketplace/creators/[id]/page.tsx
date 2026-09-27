@@ -19,7 +19,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Storefront · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Storefront · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {

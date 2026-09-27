@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireFeature } from '@/lib/supabase/auth';
 import { CareModule } from '@/components/modules/care-module';
 
-export const metadata: Metadata = { title: 'Care Log | Bubaly' };
+export const metadata: Metadata = { title: 'Care Log' };
 
 export default async function CarePage() {
   await requireFeature('/dashboard/care');

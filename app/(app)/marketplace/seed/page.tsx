@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { MarketplaceSeedScreen } from '@/components/marketplace/seed-screen';
 
-export const metadata: Metadata = { title: 'Seed Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Seed Marketplace' };
 
 export default async function MarketplaceSeedPage() {
   await requireUserContext();

@@ -7,7 +7,7 @@ import { ErrorState } from '@/components/ui/states';
 import { Zap, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Routing Rules · AI Call Guardian · Bubaly' };
+export const metadata: Metadata = { title: 'Routing Rules · AI Call Guardian' };
 export const dynamic = 'force-dynamic';
 
 export default async function RulesPage() {

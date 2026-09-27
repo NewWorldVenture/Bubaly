@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const BASE = '/marketplace';

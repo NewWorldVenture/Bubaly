@@ -29,7 +29,7 @@ import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 
-export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Listing · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {

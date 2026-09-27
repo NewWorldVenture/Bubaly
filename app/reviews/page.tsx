@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { ratingStats, PUBLIC_STATUSES, stars } from '@/lib/marketing/reviews';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Reviews · Bubaly' };
+export const metadata: Metadata = { title: 'Reviews' };
 export const dynamic = 'force-dynamic';
 
 export default async function ReviewsWallPage() {
