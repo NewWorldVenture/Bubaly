@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27T00:05:00Z
+- Last Updated: 2026-09-27T00:10:00Z
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**.
 - Total Audit Items: 14075 — **+4 in Pass BU**: SEC-007 (raised by the review of the SEC-006 fix) and SEC-008 (raised by the SEC-007 fix), each re-read against its routes before being recorded; SEC-009 (an opt-out a family set comes back on whenever the settings read fails — found by the `m35` fixer, re-read at every call site); and I18N-010 (a `t()` key no catalogue carries — found by three separate reviewers, measured tree-wide, fixed with a guard). **+33 the pass before**: SEC-006, TIME-010, SRV-001, TIME-009, CONC-001, DOC-002, AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005, METRIC-001, SPEC-001, SPEC-002, IMPORT-001, AUTH-004, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-009, AUDIT-010, TIME-001, TIME-002, TIME-003, TIME-004, TIME-005, TIME-006, TIME-007, TIME-008, AUDIT-011
 - Not Started: 13838
@@ -31205,6 +31205,28 @@ Of the other tables that name a member and are still member-writable, the
 remainder are self-tracking or shared records (habits, sleep, workouts,
 wardrobe, wishlists, school and sports schedules). The health-record group is
 the open F-K05 / 0297 owner decision.
+
+## Release · #579 merged to `main` at 671c5f6a and live on www.bubaly.com
+
+PR #579 (Pass C1-K plus the trust fail-safes) merged to `main` as `671c5f6a`
+on 2026-09-27 00:00Z. Merge was done only after every check on the PR head
+`ebb95528` passed, including Database (391-migration replay, all probes) and
+the full E2E matrix, and after re-fetching `main` (unchanged at `7e54596d`, so
+no other bot's work was bypassed). `GET https://www.bubaly.com/api/build-info`
+answered `{"revision":"671c5f6a66a2a8b562fe0a9d6d7acf13203a2fdf"}` at
+2026-09-27T00:04:54Z: the application code is in production.
+
+**The database half is NOT in production.** The owner's "Supabase production
+migrations" workflow ran on the push and failed exactly as it did on
+`533554be` and `7e54596d`: the ledger lists every migration from 0177 onward
+as pending, and 0177_remove_synthetic_auth_users.sql is cancelled by the
+statement timeout (SQLSTATE 57014) after its dependent-row cleanup, so nothing
+after it is applied. This is the historical blocker already recorded for the
+2026-09-19 rollout (F-001 / F5: operator-owned). No agent applied or retried
+anything against production. Until an operator repairs the ledger and gets
+0177 through, migrations 0178–0380 — including every C1-K boundary — are inert
+in production, and the boundaries they close are held only by the application
+code that shipped. The "Supabase Preview" check fails on the same statement.
 
 ## Merge with main 533554be · two audits that closed the same holes
 
