@@ -942,7 +942,7 @@ export async function decide(
  * The fourth reader is the run executor, which performs `plan_steps` rows and
  * run-gated `tool` rows: lib/ai/runs/executor.ts `approvedArgsFor` derives
  * what it runs through the same `effectiveArgsOf`, so a value written to the
- * column directly cannot reach a tool from that side either. (0388 also
+ * column directly cannot reach a tool from that side either. (0389 also
  * freezes `edited_payload` once the row is decided.) The tool's own
  * `safeParse` runs inside `executeTool` on that path, so it is not repeated
  * here.

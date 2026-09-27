@@ -302,7 +302,14 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
-    // 0388_a_decision_once_made_stays_made.sql (SRV-001, the m7+m8 residual)
+    // 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql narrows a
+    // member session's INSERT on notifications to rows addressed to the
+    // member themselves; notify() writes everyone else's with the service
+    // role. Held by docs/audit/notification-authorship-check.sql (re-
+    // controlled) and tests/a-notification-for-someone-else-is-written-by-
+    // bubaly.test.ts.
+    //
+    // 0389_a_decision_once_made_stays_made.sql (SRV-001, the m7+m8 residual)
     // adds the fourth trigger on approval_requests: once status leaves
     // 'pending', status, approvals, edited_payload, decided_by and decided_at
     // are frozen, and payload — the ask the votes are votes on — cannot change
@@ -311,7 +318,7 @@ describe('Supabase migration filename safety', () => {
     // two-parents-check.sql (the re-open, the declined→approved flip, the
     // post-decision edit and the payload rewrite refused; the stamps landing).
     //
-    // 0389_a_queued_run_keeps_the_gate_it_was_born_with.sql (the same residual)
+    // 0390_a_queued_run_keeps_the_gate_it_was_born_with.sql (the same residual)
     // pins family_automation_runs.metadata: once approval_id or plan_id is set
     // it cannot be removed or changed by an RLS-subject caller. The
     // load-bearing half is in the concierge action, which now resolves the
@@ -319,7 +326,7 @@ describe('Supabase migration filename safety', () => {
     // run's metadata. Held by docs/audit/automation-runs-pin-what-a-member-
     // may-queue-check.sql.
     //
-    expect(audit.nextVersion).toBe('0390');
+    expect(audit.nextVersion).toBe('0391');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

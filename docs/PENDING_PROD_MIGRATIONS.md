@@ -2688,9 +2688,9 @@ cannot read the document. No writer upserts this table. `vacation_flights` and
 this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
 writes either column or follows it today.
 
-### `0388` makes a decision, once made, stay made — unapplied
+### `0389` makes a decision, once made, stay made — unapplied
 
-`0388_a_decision_once_made_stays_made.sql` (SRV-001, the residual the m7+m8
+`0389_a_decision_once_made_stays_made.sql` (SRV-001, the residual the m7+m8
 re-review recorded: "a rejection is not final in the database"). 0381 put the
 approval model into the database — a vote is the voter's own, a move INTO
 approved/modified needs the yeses the row's model asks for, the rule columns
@@ -2723,12 +2723,12 @@ Replay-safe (`create or replace`, `drop trigger if exists` before `create`).
 now derives what it runs through the same `effectiveArgsOf` the approval card
 and `decide()` use (`approvedArgsFor` in `lib/ai/runs/executor.ts`), so a value
 written to `edited_payload` directly cannot reach a tool from that side either.
-Until 0388 is applied, a manager with the browser session can still re-open or
+Until 0389 is applied, a manager with the browser session can still re-open or
 flip a decided request over `/rest/v1`.
 
 **Evidence.** `docs/audit/two-parents-means-two-parents-check.sql`, extended:
 the re-open of a declined two-parent row, the declined `single` → approved flip
-in one PATCH (passes 0381's A and B; only 0388 refuses), the un-expire, the
+in one PATCH (passes 0381's A and B; only 0389 refuses), the un-expire, the
 approved → rejected reversal, the post-decision edit and the payload rewrite on
 a pending row are each refused by the named trigger; the execution stamp on a
 DECLINED row and the existing stamps LAND; the negative control drops ONLY
@@ -2736,9 +2736,9 @@ DECLINED row and the existing stamps LAND; the negative control drops ONLY
 requires the flip and the re-open to land. `tests/a-decision-once-made-stays-made.test.ts`
 reads the migration for the exact rule and the probe for its cases.
 
-### `0389` keeps a queued run's gate where the server put it — unapplied
+### `0390` keeps a queued run's gate where the server put it — unapplied
 
-`0389_a_queued_run_keeps_the_gate_it_was_born_with.sql` (SRV-001, the residual
+`0390_a_queued_run_keeps_the_gate_it_was_born_with.sql` (SRV-001, the residual
 "an adult can PATCH `family_automation_runs.metadata` to drop `approval_id`").
 When an accepted concierge plan lands on the family's "ask first" dial, the
 action files an approval and a `family_automation_runs` row whose
@@ -2753,7 +2753,7 @@ row with no approval at all, so a pin on UPDATE alone could never be the fix.
 
 **What closes it** is in the ACTION, live on merge: `executeQueuedRunAction`
 and `dismissQueuedRunAction` resolve the governing approval from
-`approval_requests` by the plan it names (`payload->>'plan_id'`, which 0388
+`approval_requests` by the plan it names (`payload->>'plan_id'`, which 0389
 freezes) and never from the run's metadata; a run that claims an approval
 Bubaly cannot find, or whose approval is already decided, does nothing and
 says so (three sentences, seven locales). **What this migration does** is keep

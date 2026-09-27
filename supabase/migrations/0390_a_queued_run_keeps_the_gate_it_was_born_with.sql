@@ -1,4 +1,4 @@
--- Bubaly :: 0389 - a queued run keeps the gate it was born with
+-- Bubaly :: 0390 - a queued run keeps the gate it was born with
 --
 -- When an accepted concierge plan lands on the family's "ask first" dial,
 -- app/(app)/dashboard/concierge/actions.ts planAcceptedAction files an
@@ -36,7 +36,7 @@
 --
 -- The load-bearing fix is in the ACTION, not here: executeQueuedRunAction and
 -- dismissQueuedRunAction now resolve the governing approval from
--- `approval_requests` by the plan it names (`payload->>'plan_id'`, which 0388
+-- `approval_requests` by the plan it names (`payload->>'plan_id'`, which 0389
 -- pins for the life of the row) and never from the run's metadata. That is
 -- necessary because a pin on UPDATE cannot close the other door: 0255/0329 let
 -- a MANAGER insert a fresh run row (state 'queued', `status` defaulting to
@@ -96,14 +96,14 @@ begin
 
   if (old.metadata ->> 'approval_id') is not null
      and (new.metadata ->> 'approval_id') is distinct from (old.metadata ->> 'approval_id') then
-    raise exception 'a queued run keeps the approval it was born with (0389): approval_id % -> %',
+    raise exception 'a queued run keeps the approval it was born with (0390): approval_id % -> %',
       old.metadata ->> 'approval_id', coalesce(new.metadata ->> 'approval_id', '<removed>')
       using errcode = '42501';
   end if;
 
   if (old.metadata ->> 'plan_id') is not null
      and (new.metadata ->> 'plan_id') is distinct from (old.metadata ->> 'plan_id') then
-    raise exception 'a queued run keeps the plan it was born with (0389): plan_id % -> %',
+    raise exception 'a queued run keeps the plan it was born with (0390): plan_id % -> %',
       old.metadata ->> 'plan_id', coalesce(new.metadata ->> 'plan_id', '<removed>')
       using errcode = '42501';
   end if;
@@ -113,7 +113,7 @@ end;
 $$;
 
 comment on function public.automation_run_gate_is_pinned() is
-  'BEFORE UPDATE on family_automation_runs, for callers subject to RLS: metadata->>approval_id and metadata->>plan_id, once non-null, cannot be removed or changed. The Autopilot panel''s "Do it" resolves its approval from approval_requests, not from here; this keeps the server-written cache honest (0389).';
+  'BEFORE UPDATE on family_automation_runs, for callers subject to RLS: metadata->>approval_id and metadata->>plan_id, once non-null, cannot be removed or changed. The Autopilot panel''s "Do it" resolves its approval from approval_requests, not from here; this keeps the server-written cache honest (0390).';
 
 revoke all on function public.automation_run_gate_is_pinned() from public, anon, authenticated;
 
@@ -134,7 +134,7 @@ begin
       and t.tgname = 'family_automation_runs_gate_is_pinned'
       and not t.tgisinternal
   ) then
-    raise exception '0389: family_automation_runs_gate_is_pinned was not created';
+    raise exception '0390: family_automation_runs_gate_is_pinned was not created';
   end if;
 
   -- 0251 owns UPDATE and 0329 owns the INSERT guard; this file narrows a
@@ -144,18 +144,18 @@ begin
     where schemaname = 'public' and tablename = 'family_automation_runs'
       and policyname = 'family_automation_runs_update' and cmd = 'UPDATE'
   ) then
-    raise exception '0389: 0251''s family_automation_runs_update policy is missing';
+    raise exception '0390: 0251''s family_automation_runs_update policy is missing';
   end if;
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'family_automation_runs'
       and policyname = 'family_automation_runs_manager_insert_guard' and permissive = 'RESTRICTIVE'
   ) then
-    raise exception '0389: 0329''s restrictive insert guard is missing';
+    raise exception '0390: 0329''s restrictive insert guard is missing';
   end if;
 
   if has_function_privilege('anon', 'public.automation_run_gate_is_pinned()', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.automation_run_gate_is_pinned()', 'EXECUTE') then
-    raise exception '0389: automation_run_gate_is_pinned is executable by a client role';
+    raise exception '0390: automation_run_gate_is_pinned is executable by a client role';
   end if;
 end $$;

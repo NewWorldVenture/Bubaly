@@ -13,7 +13,7 @@
 // pending on the other parent's card, describing work already done.
 //
 // Now the governing approval is resolved from `approval_requests` by the plan
-// it names (`payload->>'plan_id'`, which 0388 freezes), and the run's metadata
+// it names (`payload->>'plan_id'`, which 0389 freezes), and the run's metadata
 // decides nothing. Every assertion here is on what the family ends up with:
 // which rows exist in calendar_events / family_reminders, what the approval
 // row says, and whether the vote was recorded.
@@ -260,14 +260,14 @@ describe('Dismiss on a scrubbed run', () => {
 
 // The action-level rule is the boundary here because a manager may also INSERT
 // a run row without the key (see the case above), which no UPDATE pin can
-// reach. 0389 is the other half: on the rows the SERVER wrote, the gate a run
+// reach. 0390 is the other half: on the rows the SERVER wrote, the gate a run
 // was born with cannot be scrubbed, so the panel's line and the dismiss path
 // describe the vote that exists. Proven live by
 // docs/audit/automation-runs-pin-what-a-member-may-queue-check.sql.
-describe('the server-written cache is pinned too (0389)', () => {
+describe('the server-written cache is pinned too (0390)', () => {
   const file = (() => {
     const names = readdirSync('supabase/migrations').filter((f) => /_a_queued_run_keeps_the_gate_it_was_born_with\.sql$/.test(f));
-    expect(names.length, 'the 0389 metadata-pin migration must exist').toBe(1);
+    expect(names.length, 'the 0390 metadata-pin migration must exist').toBe(1);
     return { name: names[0], sql: readFileSync(`supabase/migrations/${names[0]}`, 'utf8') };
   })();
   const statements = file.sql.replace(/--[^\n]*/g, '');
@@ -293,6 +293,6 @@ describe('the server-written cache is pinned too (0389)', () => {
     expect(probe).toContain('pointed a queued run at a different approval');
     expect(probe).toContain('could not add an unrelated key to a queued run');
     expect(probe).toContain('drop trigger if exists family_automation_runs_gate_is_pinned on public.family_automation_runs;');
-    expect(probe).toContain("with 0389''s trigger removed the manager''s scrub of approval_id touched");
+    expect(probe).toContain("with 0390''s trigger removed the manager''s scrub of approval_id touched");
   });
 });

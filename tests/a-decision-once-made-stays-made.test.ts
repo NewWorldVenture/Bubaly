@@ -21,7 +21,7 @@
 // The application never does any of this: `openForDecision` refuses a decision
 // on a non-pending row with "This request was already decided." and every
 // status writer (`flipStatus`, the expiry sweep, run cancellation) predicates on
-// `status = 'pending'`. 0388 makes the database say the same.
+// `status = 'pending'`. 0389 makes the database say the same.
 //
 // The live proof is docs/audit/two-parents-means-two-parents-check.sql, run in
 // CI against a replayed Postgres. The cases here are the source half: they pin
@@ -132,12 +132,12 @@ describe('the application treats a decision as terminal', () => {
 
 // The rule above lives in a server action, and `approval_requests` is reachable
 // with the signed-in browser session. What makes a "no" final for a PATCH is
-// 0388, and what proves 0388 is the probe. These cases read the SQL for the
+// 0389, and what proves 0389 is the probe. These cases read the SQL for the
 // exact rule and the probe for its negative control.
-describe('the database keeps a decision, not only the action (0388)', () => {
+describe('the database keeps a decision, not only the action (0389)', () => {
   const file = (() => {
     const names = readdirSync('supabase/migrations').filter((f) => /_a_decision_once_made_stays_made\.sql$/.test(f));
-    expect(names.length, 'the 0388 decision-is-final migration must exist').toBe(1);
+    expect(names.length, 'the 0389 decision-is-final migration must exist').toBe(1);
     return { name: names[0], sql: readFileSync(`supabase/migrations/${names[0]}`, 'utf8') };
   })();
   // Comments stripped: the header discusses policies and roles in prose.
@@ -210,6 +210,6 @@ describe('the database keeps a decision, not only the action (0388)', () => {
     const theirs = probe.indexOf('drop trigger if exists approval_requests_decision_is_earned on public.approval_requests;');
     expect(mine).toBeGreaterThan(-1);
     expect(theirs).toBeGreaterThan(mine);
-    expect(probe).toContain("with 0388''s trigger removed the adult''s rejected->approved flip touched");
+    expect(probe).toContain("with 0389''s trigger removed the adult''s rejected->approved flip touched");
   });
 });

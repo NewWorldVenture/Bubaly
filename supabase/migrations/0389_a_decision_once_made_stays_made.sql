@@ -1,4 +1,4 @@
--- Bubaly :: 0388 - a decision once made stays made
+-- Bubaly :: 0389 - a decision once made stays made
 --
 -- 0381 put the family's approval model into the database: a vote is the
 -- voter's own (rule A), a move INTO approved/modified needs the yeses the row's
@@ -126,14 +126,14 @@ begin
 
   -- E. The ask is what the votes are votes on.
   if new.payload is distinct from old.payload then
-    raise exception 'the request an approval was filed with cannot be rewritten (0388)'
+    raise exception 'the request an approval was filed with cannot be rewritten (0389)'
       using errcode = '42501';
   end if;
 
   -- D. A decided row is a record.
   if old.status is distinct from 'pending' then
     if new.status is distinct from old.status then
-      raise exception 'an approval that was % is decided and cannot be moved to % (0388)',
+      raise exception 'an approval that was % is decided and cannot be moved to % (0389)',
         old.status, coalesce(new.status, 'null')
         using errcode = '42501';
     end if;
@@ -141,7 +141,7 @@ begin
        or new.edited_payload is distinct from old.edited_payload
        or new.decided_by is distinct from old.decided_by
        or new.decided_at is distinct from old.decided_at then
-      raise exception 'an approval that was % is decided; its votes, its edit and its decider cannot change (0388)',
+      raise exception 'an approval that was % is decided; its votes, its edit and its decider cannot change (0389)',
         old.status
         using errcode = '42501';
     end if;
@@ -152,7 +152,7 @@ end;
 $$;
 
 comment on function public.approval_decision_is_final() is
-  'BEFORE UPDATE on approval_requests, for callers subject to RLS: payload never changes after insert, and once status is not pending, status/approvals/edited_payload/decided_by/decided_at are frozen. The application never moves a row out of a decided status (every status writer predicates on pending); this makes the database say the same (0388).';
+  'BEFORE UPDATE on approval_requests, for callers subject to RLS: payload never changes after insert, and once status is not pending, status/approvals/edited_payload/decided_by/decided_at are frozen. The application never moves a row out of a decided status (every status writer predicates on pending); this makes the database say the same (0389).';
 
 revoke all on function public.approval_decision_is_final() from public, anon, authenticated;
 
@@ -175,7 +175,7 @@ begin
       and t.tgname = 'approval_requests_decision_is_final'
       and not t.tgisinternal
   ) then
-    raise exception '0388: approval_requests_decision_is_final was not created';
+    raise exception '0389: approval_requests_decision_is_final was not created';
   end if;
 
   -- 0381's rules must survive intact: this file adds a fourth, it replaces none.
@@ -186,11 +186,11 @@ begin
     select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
     where c.relname = 'approval_requests' and t.tgname = 'approval_requests_rule_is_immutable'
   ) then
-    raise exception '0388: 0381''s triggers are missing from approval_requests';
+    raise exception '0389: 0381''s triggers are missing from approval_requests';
   end if;
 
   if has_function_privilege('anon', 'public.approval_decision_is_final()', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.approval_decision_is_final()', 'EXECUTE') then
-    raise exception '0388: approval_decision_is_final is executable by a client role';
+    raise exception '0389: approval_decision_is_final is executable by a client role';
   end if;
 end $$;

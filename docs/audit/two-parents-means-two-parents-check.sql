@@ -34,7 +34,7 @@
 --   8. the server (service role) is not newly refused a status write;
 --   9. NEGATIVE CONTROL: drop ONLY 0381's decision trigger and require the
 --      adult's bare flip AND the forged-votes flip to succeed again.
---  10. (0388) a decision once made stays made: a manager cannot re-open a
+--  10. (0389) a decision once made stays made: a manager cannot re-open a
 --      DECLINED row by taking the "no" away, cannot move a declined 'single'
 --      row to approved on their own yes in one PATCH (0381's A and B both pass
 --      that write), cannot un-expire a row, cannot reverse an approval, cannot
@@ -42,7 +42,7 @@
 --      `payload` on a PENDING row between the first yes and the second, and
 --      cannot re-open a row decided before 0381; while the execution stamp on
 --      a DECLINED row (decide()'s error path) still lands;
---  11. NEGATIVE CONTROL for 0388: drop ONLY its trigger, leave 0381's two in
+--  11. NEGATIVE CONTROL for 0389: drop ONLY its trigger, leave 0381's two in
 --      place, and require the rejected->approved flip and the re-open to land.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
@@ -103,7 +103,7 @@ declare
   reject_r  uuid;   -- a two-parent row an adult declines
   server_r  uuid;   -- a row the service role closes
   legacy    uuid;   -- decided before 0381, with no votes at all
-  single_no uuid;   -- a 'single' row an adult declines, then tries to un-decline (0388)
+  single_no uuid;   -- a 'single' row an adult declines, then tries to un-decline (0389)
 begin
   select id into mum_m   from public.family_members where family_id = fam and user_id = mum_u;
   select id into dad_m   from public.family_members where family_id = fam and user_id = dad_u;
@@ -224,7 +224,7 @@ begin
     failures := array_append(failures, format('an ADULT''s "no" was refused: %s %s', sqlstate, sqlerrm));
   end;
 
-  -- 5c. And a "no" on a single-approver row — the row 10b and the 0388
+  -- 5c. And a "no" on a single-approver row — the row 10b and the 0389
   --     negative control then try to un-decline.
   begin
     update public.approval_requests
@@ -332,7 +332,7 @@ begin
   end;
   perform set_config('role','postgres', true);
 
-  -- ── 10. A decision once made stays made (0388) ──────────────────────────
+  -- ── 10. A decision once made stays made (0389) ──────────────────────────
   -- Every row below is already decided (or, for 10g, still pending). 0381
   -- gates only the way INTO a decision; these are the ways OUT of one, each of
   -- which `approval_requests_decide` let a manager take with one PATCH.
@@ -352,7 +352,7 @@ begin
 
   -- 10b. Flip a declined 'single' row straight to approved on their own yes.
   --      A passes (one vote, their own) and B passes (one manager satisfies
-  --      'single'); only 0388 stands between this write and the executor.
+  --      'single'); only 0389 stands between this write and the executor.
   begin
     update public.approval_requests
        set status = 'approved', decided_by = nan_m, decided_at = now(),
@@ -378,7 +378,7 @@ begin
        set executed_at = now(), execution_result = 'error: Bubaly could not work out what this approval would do'
      where id = reject_r;
     get diagnostics n = row_count;
-    if n <> 1 then failures := array_append(failures, format('stampExecution could not stamp a DECLINED row (%s rows) — 0388 froze more than the decision', n)); end if;
+    if n <> 1 then failures := array_append(failures, format('stampExecution could not stamp a DECLINED row (%s rows) — 0389 froze more than the decision', n)); end if;
   exception when others then
     failures := array_append(failures, format('a stamp on a declined row was refused: %s %s', sqlstate, sqlerrm));
   end;
@@ -440,8 +440,8 @@ begin
     failures := array_append(failures, 'anon may EXECUTE approval_votes_satisfy');
   end if;
 
-  -- ── Negative control for 0388: prove this probe can SEE that defect ────
-  -- Drop ONLY 0388's trigger, leaving 0381's two in place, and require the
+  -- ── Negative control for 0389: prove this probe can SEE that defect ────
+  -- Drop ONLY 0389's trigger, leaving 0381's two in place, and require the
   -- adult's one-PATCH flip of a DECLINED single-approver row and the re-open
   -- of a declined two-parent row to land — exactly what 0381 alone permitted.
   -- The outer rollback restores it.
@@ -455,19 +455,19 @@ begin
    where id = single_no;
   get diagnostics n = row_count;
   if n <> 1 then
-    failures := array_append(failures, format('with 0388''s trigger removed the adult''s rejected->approved flip touched %s row(s) — that defect did not reproduce, so 10b proves nothing', n));
+    failures := array_append(failures, format('with 0389''s trigger removed the adult''s rejected->approved flip touched %s row(s) — that defect did not reproduce, so 10b proves nothing', n));
   end if;
   update public.approval_requests
      set status = 'pending', approvals = '[]'::jsonb, decided_by = null, decided_at = null
    where id = reject_r;
   get diagnostics n = row_count;
   if n <> 1 then
-    failures := array_append(failures, format('with 0388''s trigger removed the adult''s re-open of a declined row touched %s row(s) — the defect did not reproduce', n));
+    failures := array_append(failures, format('with 0389''s trigger removed the adult''s re-open of a declined row touched %s row(s) — the defect did not reproduce', n));
   end if;
   perform set_config('role','postgres', true);
   select status into st from public.approval_requests where id = single_no;
   if st is distinct from 'approved' then
-    failures := array_append(failures, format('with 0388''s trigger removed the declined single row ended at %L, not approved — the negative control did not reproduce the flip', st));
+    failures := array_append(failures, format('with 0389''s trigger removed the declined single row ended at %L, not approved — the negative control did not reproduce the flip', st));
   end if;
 
   -- ── Negative control: prove this probe can SEE the defect ──────────────
@@ -496,7 +496,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'"Two parents" is not a rule the database keeps:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0381 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips; 0388: a declined, approved, expired or pre-0381 row cannot be re-opened, reversed or re-edited and a pending ask cannot be rewritten, while a stamp on a declined row lands, and its negative control reproduced the rejected->approved flip and the re-open)';
+  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0381 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips; 0389: a declined, approved, expired or pre-0381 row cannot be re-opened, reversed or re-edited and a pending ask cannot be rewritten, while a stamp on a declined row lands, and its negative control reproduced the rejected->approved flip and the re-open)';
 end $$;
 
 rollback;
