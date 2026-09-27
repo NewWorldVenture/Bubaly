@@ -307,6 +307,14 @@ describe('no delivery-contract read is left unbounded', () => {
     // missing allergy row is not read as unknown — it is read as "no allergy".
     { file: 'lib/services/groceries/index.ts', table: 'family_facts', why: 'a missing allergy row puts the allergen on the shopping list' },
     { file: 'lib/services/meals/index.ts', table: 'family_facts', why: 'feeds the "ALLERGIES (never serve)" line the planner is given' },
+    // The other five of F-008's six crons. Each stopped at the 1,000th row and
+    // reported a clean run; readAll fixed all six, but only chore-reminders was
+    // pinned here, so any of these could go back to a bare read unnoticed.
+    { file: 'app/api/cron/weekly-digest/route.ts', table: 'families', why: 'the family past #1,000 gets no digest (F-008)' },
+    { file: 'app/api/cron/notifications/route.ts', table: 'families', why: 'the family past #1,000 gets no notifications (F-008)' },
+    { file: 'app/api/cron/push-scan/route.ts', table: 'families', why: 'the family past #1,000 is never scanned for push (F-008)' },
+    { file: 'app/api/cron/calendar-feeds/route.ts', table: 'calendar_feeds', why: 'the feed past #1,000 never syncs (F-008)' },
+    { file: 'app/api/cron/checkout-abandoned/route.ts', table: 'checkout_sessions', why: 'the checkout past #1,000 is never followed up (F-008)' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
