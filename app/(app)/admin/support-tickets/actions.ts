@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { isSuperAdmin } from '@/lib/supabase/auth';
+import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { describeActionError } from '@/lib/supabase/errors';
 import { emailSchema } from '@/lib/validation';
 import type { Database } from '@/lib/database.types';
@@ -61,6 +61,21 @@ export async function closeTicketAction(ticketId: string): Promise<ActionResult>
   return updateTicket(ticketId, {
     status: 'closed', closed_at: new Date().toISOString(),
   }, 'close that ticket', t('supportTickets.couldNotCloseThatTicket'));
+}
+
+/**
+ * The ticket menu's "Assign agent" had no handler and there was no action for
+ * it. Assigning to the admin who pressed it is the one assignment that needs
+ * no agent picker, and it is the common case. Audit C1-S9-105.
+ */
+export async function assignTicketToMeAction(ticketId: string): Promise<ActionResult> {
+  const t = await getTranslations();
+  const user = await getUser();
+  if (!user) return { ok: false, error: t('actions.notAuthorized') };
+  const name = (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) || user.email || null;
+  return updateTicket(ticketId, {
+    assigned_agent_id: user.id, assigned_agent_name: name,
+  }, 'assign that ticket', t('supportTickets.couldNotAssignThatTicket'));
 }
 
 export async function reopenTicketAction(ticketId: string): Promise<ActionResult> {

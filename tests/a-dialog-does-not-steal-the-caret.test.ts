@@ -37,6 +37,9 @@ vi.mock('react', async (original) => ({
     return mocks.slots[i];
   },
   useId: () => 'id',
+  // `Modal` portals only once hydrated (useHydrated, C1-S9-96). A client render
+  // after hydration reads the CLIENT snapshot, which is the render modelled here.
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useContext: () => ({ locale: { code: 'en-US' }, source: 'default', t: (k: string) => k }),
   useEffect: (fn: () => void | (() => void), deps?: readonly unknown[]) => {
     mocks.effects.push({ run: fn as () => undefined | (() => void), deps: deps ?? [] });

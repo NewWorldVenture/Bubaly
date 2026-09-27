@@ -37,7 +37,11 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
   it('delegates its dialog behaviour to the shared hook', () => {
     // One implementation, not two. Modal keeping a private copy is how the
     // behaviour became unavailable to everything that needed a different shell.
-    expect(SRC).toMatch(/useDialogBehavior\(dialogRef, open, \{ onClose \}\)/);
+    // The portal and its effects must share the hydrated visibility boundary.
+    // Otherwise an initially-open SSR dialog can attach after the effect ran.
+    expect(SRC).toMatch(/const shown = open && hydrated/);
+    expect(SRC).toMatch(/useDialogBehavior\(dialogRef, shown, \{ onClose \}\)/);
+    expect(SRC).toMatch(/if \(!shown\) return null/);
     expect(SRC).toMatch(/from '@\/lib\/a11y\/use-dialog-behavior'/);
   });
 

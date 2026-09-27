@@ -10,8 +10,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Heart } from 'lucide-react';
 import { formatLikeCount } from '@/lib/blog/engagement';
 import { cn } from '@/lib/utils/cn';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function HeartButton({ slug, className }: { slug: string; className?: string }) {
+  const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
   const [saved, setSaved] = useState(false);
@@ -83,8 +85,8 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
   }, [busy, authed, saved, count, slug, goSignIn]);
 
   const label = authed === false
-    ? 'Sign in to save this article'
-    : saved ? 'Remove this article from your saved list' : 'Save this article';
+    ? t('blogHeartButton.signInToSaveThisArticle')
+    : saved ? t('blogHeartButton.removeFromSaved') : t('blogHeartButton.saveThisArticle');
 
   return (
     <button
@@ -92,7 +94,7 @@ export function HeartButton({ slug, className }: { slug: string; className?: str
       onClick={toggle}
       aria-pressed={saved}
       aria-label={label}
-      title={authed === false ? 'Sign in to save' : undefined}
+      title={authed === false ? t('blogHeartButton.signInToSave') : undefined}
       className={cn(
         // ~36px on desktop; grows to the 44px minimum tap target on touch — this
         // is the article's primary Save affordance (WCAG 2.5.5 / Apple HIG).

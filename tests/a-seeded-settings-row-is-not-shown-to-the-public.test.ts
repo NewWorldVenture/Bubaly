@@ -32,8 +32,15 @@ describe('seeder text in a settings row is not shown to the public', () => {
 
   it('the public review page routes every text field through the fallback', () => {
     const page = readFileSync('app/reviews/new/page.tsx', 'utf8');
-    for (const field of ['request_headline', 'request_message', 'thank_you_high', 'thank_you_low']) {
-      expect(page, field).toMatch(new RegExp(`realTextOr\\(s\\?\\.${field}, DEFAULT_REPUTATION\\.${field}\\)`));
+    // The fallback is now translated; every potentially seeded field must
+    // still pass through the real seeder filter before reaching the form.
+    for (const [field, key] of [
+      ['request_headline', 'defaultHeadline'],
+      ['request_message', 'defaultMessage'],
+      ['thank_you_high', 'defaultThankYouHigh'],
+      ['thank_you_low', 'defaultThankYouLow'],
+    ]) {
+      expect(page, field).toContain(`realTextOr(s?.${field}, t('reviewsNew.${key}'))`);
     }
   });
 });

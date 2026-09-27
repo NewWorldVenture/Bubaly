@@ -58,6 +58,13 @@ vi.mock('@/lib/ai/actions', () => ({
   ],
   runAction: (...args: unknown[]) => runAction(...args),
 }));
+// The turn's `ai_requests` row is a `feature` request, which server code files
+// on the ledger (service) client since P-10 — a member's client is refused it by
+// 0255. The same fake stands in for both, so the payload is still asserted.
+vi.mock('@/lib/supabase/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/supabase/server')>()),
+  createServiceClient: () => supabase,
+}));
 
 import {
   buildAssistantSystemPrompt, createAssistantStream, finalizeAssistantContent, persistAssistantTurn,
@@ -191,8 +198,11 @@ describe('runAssistantTurn (JSON transport)', () => {
       requested_by: input.userId,
       conversation_id: input.conversationId,
       feature: 'assistant.turn',
-      request_text: 'Plan tacos for Saturday',
+      // A fixed label, never what was typed: every active family member can
+      // read `ai_requests` (0250), and the message is the person's own.
+      request_text: 'Assistant turn',
     });
+    expect(JSON.stringify(requestInsert!.rows)).not.toContain('Plan tacos for Saturday');
     const rows = messageInsert!.rows as Row[];
     expect(rows[0]).toMatchObject({ role: 'user', content: 'Plan tacos for Saturday', conversation_id: input.conversationId });
     expect(rows[1]).toMatchObject({ role: 'assistant', content: 'I’ve done part of that. Could not create the chore.' });
@@ -234,7 +244,8 @@ describe('createAssistantStream (SSE transport)', () => {
     // family reporting "it stops halfway" can be told which transport they were
     // on — the two fail in different ways.
     expect(inserts.find((i) => i.table === 'ai_requests')?.rows)
-      .toMatchObject({ feature: 'assistant.stream', conversation_id: input.conversationId });
+      .toMatchObject({ feature: 'assistant.stream', conversation_id: input.conversationId, request_text: 'Assistant stream' });
+    expect(JSON.stringify(inserts.find((i) => i.table === 'ai_requests')?.rows)).not.toContain(input.message);
   });
 
   it('falls back to a non-streaming run when the stream dies before any text', async () => {
@@ -323,5 +334,39 @@ describe('helpers', () => {
     const res = await persistAssistantTurn(supabase, { familyId: 'fam-1', conversationId: 'c', message: 'm', assistantContent: 'a', actions: [], model: 'x' });
     expect(res).toEqual({ ok: true });
     expect(updates[0].patch).toEqual({ model: 'x' });
+  });
+});
+
+// P-10 review: once feature rows were filed at all, `request_text` became
+// readable by the whole household (0250's SELECT). What a person types to the
+// assistant reaches the model and their own conversation, never that row.
+describe('what was typed stays out of the request ledger', () => {
+  const PRIVATE = 'zq-private-phrase-7731 about my divorce lawyer';
+  const privateInput = { ...input, message: PRIVATE };
+
+  it('the JSON turn: the model gets the message, the ledger row does not', async () => {
+    provider.runTools.mockResolvedValueOnce({ text: 'Noted.', actions: [] });
+    const prepared = await prepareAssistantTurn(privateInput);
+    if (!prepared.ok) throw new Error('prepare failed');
+    await runAssistantTurn(privateInput, prepared.turn);
+    expect(JSON.stringify(provider.runTools.mock.calls.at(-1))).toContain(PRIVATE);
+    const request = inserts.find((i) => i.table === 'ai_requests');
+    expect(request, 'the turn must open a request row').toBeTruthy();
+    expect(JSON.stringify(request!.rows)).not.toContain('zq-private-phrase-7731');
+    const messages = inserts.find((i) => i.table === 'ai_messages')!.rows as Row[];
+    expect(messages[0]).toMatchObject({ role: 'user', content: PRIVATE });
+  });
+
+  it('the stream: the model gets the message, the ledger row does not', async () => {
+    provider.runToolsStream.mockImplementationOnce(async function* () {
+      yield { type: 'delta', text: 'Noted.' };
+    });
+    const prepared = await prepareAssistantTurn(privateInput);
+    if (!prepared.ok) throw new Error('prepare failed');
+    await readSse(createAssistantStream(privateInput, prepared.turn));
+    expect(JSON.stringify(provider.runToolsStream.mock.calls.at(-1))).toContain(PRIVATE);
+    const request = inserts.find((i) => i.table === 'ai_requests');
+    expect(request, 'the stream must open a request row').toBeTruthy();
+    expect(JSON.stringify(request!.rows)).not.toContain('zq-private-phrase-7731');
   });
 });

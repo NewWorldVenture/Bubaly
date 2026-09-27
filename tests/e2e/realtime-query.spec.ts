@@ -90,7 +90,7 @@ test.beforeEach(async ({ page }) => {
       'auth.cacheSessionChanged': 'Your session changed. Please wait while the app updates.',
       'auth.cacheFamilyMismatch': 'This family does not match your current account context.' };
     const mocks = {
-      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: window.React, '@/lib/supabase/client': { createClient: () => db },
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => ({ accessToken: session.access_token }) }, react: window.React, '@/lib/supabase/client': { createClient: () => db },
       '@/components/i18n/locale-provider': { useTranslations: () => key => cacheMessages[key] ?? key } };
     const modules = {};
     function load(id) {

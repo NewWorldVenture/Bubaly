@@ -285,7 +285,7 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
     // product, and not something to copy into a second table.
     draft = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: 'paperwork.draft-reply', text: `Draft a reply to ${kindLabel(item.kind as PaperworkKind)}` },
+      { feature: 'paperwork.draft-reply', text: 'Draft a reply' },
       async (obs) => {
         const provider = await resolveProvider();
         const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 400 });

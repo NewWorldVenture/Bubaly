@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
+import { isSuperAdmin } from '@/lib/supabase/auth';
 
 type DB = SupabaseClient<Database>;
 
@@ -46,6 +47,23 @@ export async function refuseUnlessEntitled(
         { status: 503 },
       );
     }
+  }
+
+  // A super administrator passes, exactly as `requireFeature` lets them onto
+  // the page (a feature switched Off included), so previewing a feature works
+  // past its first fetch. Before this the page let them in and every endpoint
+  // behind it answered 403, and the screens showed that as their own result —
+  // Autopilot's "100% the day runs smoothly" over a scan that never ran.
+  // Asked only once the family has been refused, so an entitled request pays
+  // nothing for it. Audit C1-S9-98.
+  try {
+    if (await isSuperAdmin(db)) return null;
+  } catch (error) {
+    console.error('[route-feature-gate] account read failed', { hrefs, error });
+    return NextResponse.json(
+      { error: 'Bubaly could not confirm your plan right now. Try again in a moment.', code: 'unavailable' },
+      { status: 503 },
+    );
   }
 
   if (outcomes.every((o) => o.reason === 'off')) {
