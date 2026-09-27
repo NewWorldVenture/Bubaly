@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { createServer } from '@/lib/supabase/server';
 import { exchangeGoogleCode, googleCalendarRedirectUri, type GoogleToken } from '@/lib/google';
+import { canStoreGoogleToken, encodeGoogleToken } from '@/lib/google-token-storage';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 
 // Google redirects here after the user grants calendar access. Exchanges the code
 // for tokens and stores them on the SESSION user's user_preferences.
@@ -54,30 +56,29 @@ export async function GET(req: NextRequest) {
     // values Google compares are produced by one function, not two.
     const token: GoogleToken = await exchangeGoogleCode(code, googleCalendarRedirectUri(origin));
 
-    // A PostgREST call RESOLVES with { data, error } — it does not throw — so
-    // the catch below cannot see either of these failing. Both are read.
-    //
-    // The read matters more than it looks. This upsert writes the WHOLE
-    // notification_prefs object, so falling back to `{}` on a refused read does
-    // not just lose the token: it overwrites every other notification
-    // preference this user has set. A transient read failure would quietly
-    // reset their settings as a side effect of connecting a calendar.
-    const { data: prefs, error: readError } = await supabase
-      .from('user_preferences')
-      .select('notification_prefs')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (readError) {
-      console.error('Google Calendar callback: preferences read failed', readError);
+    // Encrypted before it touches the column, because this row's policies are
+    // `user_id = auth.uid()` for SELECT as well as UPDATE — the browser can
+    // read it. Fail closed if there is no key: a connection that silently
+    // stores a refresh token in the clear is worse than one that did not
+    // connect, and the failure is loud here rather than invisible forever.
+    // Audit C3-S5-02.
+    if (!canStoreGoogleToken()) {
+      console.error('Google Calendar callback: SYNC_TOKEN_KEY is not set, refusing to store a token in plaintext');
       return redirect('error');
     }
-
-    const existing = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
-    const merged = { ...existing, googleCalendarToken: token };
-
-    const { error: writeError } = await supabase
-      .from('user_preferences')
-      .upsert({ user_id: userId, notification_prefs: merged }, { onConflict: 'user_id' });
+    // Only the token changes, merged onto the row as it is at write time, with
+    // a compare-and-set (SRV-001 l7). A PostgREST call RESOLVES with
+    // { data, error } rather than throwing, so the catch below cannot see a
+    // failure; mergeNotificationPrefs reads both. A read that failed writes
+    // nothing: merging into `{}` would overwrite every other preference this
+    // user has set as a side effect of connecting a calendar.
+    const written = await mergeNotificationPrefs(supabase, userId,
+      (prefs) => ({ ...prefs, googleCalendarToken: encodeGoogleToken(token) }));
+    if (!written.ok && written.reason === 'read_failed') {
+      console.error('Google Calendar callback: preferences read failed', written.error);
+      return redirect('error');
+    }
+    const writeError = written.ok ? null : (written.error ?? written.reason);
     if (writeError) {
       // Without this the user is told the calendar is connected while no token
       // was stored — every later sync then fails for a reason the screen denies.

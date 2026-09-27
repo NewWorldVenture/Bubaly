@@ -72,7 +72,7 @@ export function PlaybookModule() {
     setBusyId(null);
     if (!res.ok) { toastError(res.error ?? 'Could not save'); return; }
     refresh();
-    success(t('playbook.savedToKnowledgeBase', { label: s.label }));
+    success(t('modules.savedToKnowledgeBase', { label: s.label }));
   }
 
   async function onDismiss(s: Suggestion) {

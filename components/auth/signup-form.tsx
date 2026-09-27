@@ -30,6 +30,11 @@ export function SignupForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  // False until the form has mounted: the entry buttons below are server markup
+  // with no handler before hydration, and their handlers refuse an unmounted
+  // form, so a tap that early was silently lost. Holding them disabled makes the
+  // wait visible instead.
+  const [ready, setReady] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
@@ -53,10 +58,21 @@ export function SignupForm() {
   useLayoutEffect(() => { currentIntent.current = intent; }, [intent]);
   useLayoutEffect(() => {
     mounted.current = true;
+    setReady(true);
     return () => { mounted.current = false; };
   }, []);
   useEffect(() => {
-    if (referralCode) void rememberReferralCodeAction(referralCode).catch(() => {});
+    if (!referralCode) return;
+    // For an OAuth signup this cookie is the ONLY carrier of the referral (the
+    // email path also writes it into auth metadata), and the form says
+    // "Referral code noted" either way. A failed save was swallowed whole —
+    // both a refusal and a failed call. It stays ONE best-effort call (the
+    // contract tests/e2e/signup-boundaries.spec.ts holds; a retry briefly added
+    // here broke it), and both failures are now logged, not dropped.
+    // Audit C1-S9-74.
+    void rememberReferralCodeAction(referralCode)
+      .then((res) => { if (!res.ok) console.warn('[signup] referral code was not remembered for an OAuth signup'); })
+      .catch((error: unknown) => console.warn('[signup] referral code could not be remembered for an OAuth signup', error));
   }, [referralCode]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -198,6 +214,7 @@ export function SignupForm() {
         <div className="space-y-3">
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className={authButtonClass}
           >
@@ -205,6 +222,7 @@ export function SignupForm() {
           </button>
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowEmail(true); }}
             className={authButtonClass}
           >
@@ -212,6 +230,7 @@ export function SignupForm() {
           </button>
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
           >

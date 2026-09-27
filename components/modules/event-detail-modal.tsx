@@ -185,7 +185,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
                   {t('eventDetailModal.keep')}
                 </button>
                 <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
-                  className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60">
+                  className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-danger-fg transition hover:opacity-90 disabled:opacity-60">
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
               </>

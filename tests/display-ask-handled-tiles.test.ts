@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 
 // AskBubaly (mounted by the ask tile) uses the app router. On the real display
 // that router is there — the shell is client-only (`ssr: false`) and runs in the
@@ -46,7 +47,7 @@ function base(over: Partial<DisplayData> = {}): DisplayData {
 }
 
 function render(data: DisplayData, tiles: Tile[]) {
-  return renderToStaticMarkup(
+  return renderTranslated(
     React.createElement(ToastProvider, null,
       React.createElement(DisplayShell, {
         initialTiles: tiles,
@@ -113,7 +114,7 @@ describe('the ask tile files a request — it does not act', () => {
     // AskBubaly is the only submit path, and it posts to /api/ai/requests via
     // submitAIRequest. The display adds no second route and no direct write.
     const ask = readFileSync('components/concierge/ask-bubaly.tsx', 'utf8');
-    expect(ask).toContain('submitAIRequest');
+    expect(ask).toContain('submitAIRequest(');
     expect(source).not.toMatch(/fetch\(|supabase|\.insert\(|\.upsert\(/);
   });
 

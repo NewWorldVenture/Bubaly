@@ -456,8 +456,13 @@ declare
   failures   text[] := '{}';
 begin
   for t, expected in
-    select * from (values ('symptom_logs', 'symptom_logs_all'),
-                          ('behavior_logs', 'Members manage behavior_logs')) as v(t, p)
+    -- The READ policy each table's zeroes are attributed to. These were 0088's
+    -- `symptom_logs_all` and 00730's `Members manage behavior_logs`, both FOR
+    -- ALL; the audit branch's 0430 and 0436 split each into per-verb policies
+    -- so writes could be narrowed, and the read half kept exactly this USING
+    -- under its own name. The attribution is the same predicate, re-derived.
+    select * from (values ('symptom_logs', 'symptom_logs_read'),
+                          ('behavior_logs', 'behavior_logs_select')) as v(t, p)
   loop
     if not exists (select 1 from pg_class c where c.oid = ('public.' || t)::regclass
                      and c.relrowsecurity and not c.relforcerowsecurity) then
@@ -476,13 +481,11 @@ begin
     -- read half is behavior_logs_select, USING is_family_member(family_id)
     -- exactly as before, so the same predicate is credited under its new name.
     select replace(p.qual, 'public.', '') into got_qual from pg_policies p
-     where p.schemaname = 'public' and p.tablename = t
-       and p.permissive = 'PERMISSIVE'
-       and ((p.policyname = expected and p.cmd = 'ALL')
-            or (t = 'behavior_logs' and p.policyname = 'behavior_logs_select' and p.cmd = 'SELECT'))
+     where p.schemaname = 'public' and p.tablename = t and p.policyname = expected
+       and p.permissive = 'PERMISSIVE' and p.cmd in ('SELECT', 'ALL')
        and 'authenticated' = any (p.roles::text[]);
     if got_qual is null then
-      failures := array_append(failures, format('%s: no permissive FOR ALL policy named %L granted to authenticated — the policy the header cites has been dropped, renamed or re-scoped; re-derive the attribution', t, expected));
+      failures := array_append(failures, format('%s: no permissive SELECT-covering policy named %L granted to authenticated — the policy the header cites has been dropped, renamed or re-scoped; re-derive the attribution', t, expected));
     elsif got_qual <> 'is_family_member(family_id)' then
       failures := array_append(failures, format('%s: %L now reads USING (%s), not is_family_member(family_id) — the zeroes above are attributed to a predicate that is no longer the one in force', t, expected, got_qual));
     end if;
@@ -508,7 +511,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception 'K-01 attribution UNPINNED (the boundary held above, but not for the reason this file credits): %', array_to_string(failures, ' | ');
   end if;
-  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (FOR ALL, or 0377''s behavior_logs_select), USING is_family_member(family_id) exactly, no restrictive SELECT policy on either, and the predicate is still 0003''s security-definer three-column test';
+  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (this branch''s symptom_logs_read and 0377''s behavior_logs_select, both per-command), USING is_family_member(family_id) exactly, no restrictive SELECT policy on either, and the predicate is 0003''s';
 end $$;
 
 -- Leave the database exactly as it was found: every row above, and the grant,

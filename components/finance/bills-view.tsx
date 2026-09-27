@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Bill = Tables<'bills'>;
@@ -60,21 +60,21 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).select('id');
-    if (error) { toastError(error.message); return; }
+    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).eq('family_id', familyId).select('id');
+    if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(next === 'paid' ? 'Marked paid' : 'Reopened');
   }
   async function toggleAutopay(b: Bill) {
-    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).select('id');
-    if (error) { toastError(error.message); return; }
+    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).eq('family_id', familyId).select('id');
+    if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
     if (!confirm(t('billsView.deleteThisBill'))) return;
-    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).select('id');
-    if (error) { toastError(error.message); return; }
+    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('billsView.deleted'));
   }
@@ -177,7 +177,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
       status: 'upcoming', created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('billsView.billAdded'));
     onClose();
   }

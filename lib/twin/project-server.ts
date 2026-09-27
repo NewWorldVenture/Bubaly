@@ -12,6 +12,7 @@ import {
   type TwinSnapshot,
 } from './project';
 import { readAll } from '@/lib/supabase/read-all';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -174,7 +175,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     const { error: entErr } = await sb.from('graph_entities').upsert(entityRows, { onConflict: 'family_id,ref_table,ref_id' });
     if (entErr) {
       console.error('[twin] graph_entities upsert failed', entErr);
-      return { ok: false, error: entErr.message, entities: 0, edges: 0 };
+      return { ok: false, error: describeActionError(entErr), entities: 0, edges: 0 };
     }
   }
 
@@ -189,7 +190,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     .not('ref_id', 'is', null).order('id').range(from, to));
   if (readErr) {
     console.error('[twin] graph_entities read failed', readErr);
-    return { ok: false, error: readErr.message, entities: 0, edges: 0 };
+    return { ok: false, error: describeActionError(readErr), entities: 0, edges: 0 };
   }
 
   // Prune: a node whose source row is gone (an event that fell out of the
@@ -217,10 +218,13 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
 
   const stale = stalePrunableEntityIds(idRows ?? [], projection, coveredRefTables);
   if (stale.length) {
+    // Rows deliberately not checked: these ids were read just above, so fewer
+    // matching means some were already deleted — the prune's goal either way.
+    // Audit C1-S9-69.
     const { error: pruneErr } = await sb.from('graph_entities').delete().eq('family_id', familyId).in('id', stale);
     if (pruneErr) {
       console.error('[twin] graph_entities prune failed', pruneErr);
-      return { ok: false, error: pruneErr.message, entities: 0, edges: 0 };
+      return { ok: false, error: describeActionError(pruneErr), entities: 0, edges: 0 };
     }
   }
   const pruned = new Set(stale);
@@ -249,7 +253,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     const { error: edgeErr } = await sb.from('graph_edges').upsert(edgeRows, { onConflict: 'family_id,source_id,target_id,relation' });
     if (edgeErr) {
       console.error('[twin] graph_edges upsert failed', edgeErr);
-      return { ok: false, error: edgeErr.message, entities: 0, edges: 0 };
+      return { ok: false, error: describeActionError(edgeErr), entities: 0, edges: 0 };
     }
   }
 
@@ -282,7 +286,7 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     .order('id').range(from, to));
   if (edgeReadErr) {
     console.error('[twin] graph_edges read failed', edgeReadErr);
-    return { ok: false, error: edgeReadErr.message, entities: 0, edges: 0 };
+    return { ok: false, error: describeActionError(edgeReadErr), entities: 0, edges: 0 };
   }
 
   const staleEdges = (edgeIdRows ?? []).filter((e) => {
@@ -296,10 +300,13 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
   }).map((e) => e.id);
 
   if (staleEdges.length) {
+    // Rows deliberately not checked, as with the node prune above: zero rows
+    // means those edges are already gone, which is the prune's goal either
+    // way. Audit C1-S9-89.
     const { error: edgePruneErr } = await sb.from('graph_edges').delete().eq('family_id', familyId).in('id', staleEdges);
     if (edgePruneErr) {
       console.error('[twin] graph_edges prune failed', edgePruneErr);
-      return { ok: false, error: edgePruneErr.message, entities: 0, edges: 0 };
+      return { ok: false, error: describeActionError(edgePruneErr), entities: 0, edges: 0 };
     }
   }
 

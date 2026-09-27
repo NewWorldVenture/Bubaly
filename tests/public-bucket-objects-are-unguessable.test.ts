@@ -31,10 +31,10 @@ const sources = [...walk('components'), ...walk('app'), ...walk('lib')];
 
 /**
  * Buckets whose SELECT policy is `bucket_id = '<id>'` with no scoping — plus
- * `feedback-attachments`, which 0394 closed (F-E05) and which stays here on
+ * `feedback-attachments`, which 0450 closed (F-E05) and which stays here on
  * purpose. The rule these names enforce is right whether or not the bucket is
  * open: an object name is the last thing standing if a policy is ever loosened
- * again, and it was the ONLY thing standing until 0394. Dropping a bucket from
+ * again, and it was the ONLY thing standing until 0450. Dropping a bucket from
  * this list the moment it is secured is how a requirement quietly stops
  * applying to the next upload written into it.
  */

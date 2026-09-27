@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
 import { SOCIAL_PLATFORMS, type SocialLinks } from '@/lib/marketing/social-links';
 import {
@@ -38,8 +38,11 @@ export type SaveSocialLinksResult =
  */
 export async function saveSocialLinksAction(formData: FormData): Promise<SaveSocialLinksResult> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.forbidden') };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.forbidden') };
+  }
+  const { user } = gate;
 
   const expectedRevision = String(formData.get('revision') ?? '').trim();
   if (!expectedRevision) {

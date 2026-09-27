@@ -10,6 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { PLATFORMS } from '@/lib/social/capabilities';
 import {
   CADENCES, isValidTimezone, nextRunAfterClaim, parseTimesOfDay, parseVariants, stoppingCondition, withinWindow,
@@ -120,13 +121,22 @@ export async function createRecurringAdAction(formData: FormData): Promise<Actio
 }
 
 export async function setRecurringAdStatusAction(id: string, status: 'active' | 'paused'): Promise<ActionResult> {
+  const t = await getTranslations();
   const gate = await requireAdmin();
   if ('error' in gate) return { ok: false, error: gate.error };
   const supabase = createServiceClient();
 
   const { data: row, error: readError } = await supabase
     .from('marketing_recurring_ads').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
-  if (readError || !row) return { ok: false, error: 'That campaign could not be found.' };
+  // A read that FAILED is not "that campaign could not be found". On Pause, the
+  // operator saw a card that says Active, was told it was gone, and the cron
+  // then posted on schedule; and nothing reached the logs, so an outage and a
+  // deletion looked the same afterwards (SRV-001 l0).
+  if (readError) {
+    console.error('[recurring-ads] status change read failed', id, readError);
+    return { ok: false, error: t('campaigns.couldNotLoadThisMarketing') };
+  }
+  if (!row) return { ok: false, error: 'That campaign could not be found.' };
 
   // Resuming recomputes the next run from NOW. Keeping the stored one would
   // make a campaign paused over a holiday fire the moment it came back, for a
@@ -141,12 +151,17 @@ export async function setRecurringAdStatusAction(id: string, status: 'active' | 
     return { ok: false, error: 'This campaign has no future run left. Edit its schedule or end date.' };
   }
 
-  const { error } = await supabase
+  // `.is('deleted_at', null)` repeats the read's filter on the WRITE, so a
+  // campaign removed between the two is not quietly resumed — and `.select('id')`
+  // is what makes that predicate mean anything. "Campaign resumed." on zero rows
+  // leaves a paused campaign showing as active, with a next_run_at nobody set.
+  // Audit C1-S9-59.
+  const { data: changed, error } = await supabase
     .from('marketing_recurring_ads')
     .update({ status, next_run_at: nextRun?.toISOString() ?? null, updated_by: gate.userId })
-    .eq('id', id);
-  if (error) {
-    console.error('[recurring-ads] status change failed', error);
+    .eq('id', id).is('deleted_at', null).select('id');
+  if (error || wroteNoRows(changed)) {
+    console.error('[recurring-ads] status change failed', error ?? 'no rows updated');
     return { ok: false, error: 'Could not change this campaign.' };
   }
   revalidatePath(PAGE);
@@ -159,12 +174,18 @@ export async function deleteRecurringAdAction(id: string): Promise<ActionResult>
   const supabase = createServiceClient();
   // Soft delete + cleared next run: the run ledger stays readable as history,
   // and the due index stops seeing it.
-  const { error } = await supabase
+  // No prior read here, so `.select('id')` is the only thing standing between a
+  // missing id and "Campaign removed." — and a campaign reported removed while
+  // its next_run_at still stands goes on posting to the family's channels.
+  // Filtered on id alone on purpose: re-removing an already-removed campaign
+  // rewrites the same soft-delete columns and is meant to stay idempotent.
+  // Audit C1-S9-59.
+  const { data: removed, error } = await supabase
     .from('marketing_recurring_ads')
     .update({ deleted_at: new Date().toISOString(), next_run_at: null, status: 'paused', updated_by: gate.userId })
-    .eq('id', id);
-  if (error) {
-    console.error('[recurring-ads] delete failed', error);
+    .eq('id', id).select('id');
+  if (error || wroteNoRows(removed)) {
+    console.error('[recurring-ads] delete failed', error ?? 'no rows updated');
     return { ok: false, error: 'Could not remove this campaign.' };
   }
   revalidatePath(PAGE);
@@ -186,7 +207,13 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
 
   const { data: row, error: readError } = await supabase
     .from('marketing_recurring_ads').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
-  if (readError || !row) return { ok: false, error: 'That campaign could not be found.' };
+  // As in setRecurringAdStatusAction: a read that failed is not a missing
+  // campaign, and it is logged (SRV-001 l0).
+  if (readError) {
+    console.error('[recurring-ads] run now read failed', id, readError);
+    return { ok: false, error: t('campaigns.couldNotLoadThisMarketing') };
+  }
+  if (!row) return { ok: false, error: 'That campaign could not be found.' };
   const ad = row as unknown as AdRow;
   const now = new Date();
 

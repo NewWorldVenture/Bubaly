@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -136,8 +137,8 @@ describe('the money boundary is reported as state, not as provenance', () => {
     // And checks it FIRST: a later branch would be shadowed by the clean-looking
     // "no ungated write" case, which is exactly how this stays invisible.
     const verdict = BOUNDARY.slice(BOUNDARY.indexOf('case\n'), BOUNDARY.indexOf('end as verdict'));
-    expect(verdict.indexOf('RLS DISABLED')).toBeLessThan(verdict.indexOf('manager-gated'));
-    expect(verdict.indexOf('RLS DISABLED')).toBeLessThan(verdict.indexOf('non-manager can write'));
+    expect(at(verdict, 'RLS DISABLED')).toBeLessThan(at(verdict, 'manager-gated'));
+    expect(at(verdict, 'RLS DISABLED')).toBeLessThan(at(verdict, 'non-manager can write'));
   });
 
   // A table with RLS on and no write policy denies writes; that is closed, and

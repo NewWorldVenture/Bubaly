@@ -39,7 +39,10 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join('app', '(app)', 'admin');
 
 /** Gates that end the search: each refuses a non-super-admin by itself. */
-const KNOWN_GATES = ['isSuperAdmin', 'requireMarketingAdmin', 'isSuperAdminEmail'];
+// superAdminGate (lib/auth/super-admin-gate.ts) is main's shared wrapper: it
+// calls isSuperAdmin and fails closed, answering 'unavailable' when the check
+// itself cannot complete.
+const KNOWN_GATES = ['isSuperAdmin', 'requireMarketingAdmin', 'isSuperAdminEmail', 'superAdminGate'];
 
 const USE_SERVER = /^\s*(['"])use server\1\s*;?\s*$/m;
 

@@ -21,7 +21,7 @@
 --
 -- A third rule: inside a definer function current_user is the OWNER. A caller
 -- check written against current_user refuses everyone — marketplace_close_auction
--- did exactly that from 0185 until 0402, so no auction ever closed.
+-- did exactly that from 0185 until 0457, so no auction ever closed.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 

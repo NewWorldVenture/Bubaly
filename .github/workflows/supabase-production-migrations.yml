@@ -11,6 +11,10 @@ on:
       - 'supabase/migrations/**'
       - 'scripts/audit-migration-versions.mjs'
       - 'scripts/audit-supabase-schema.mjs'
+      # The gate that catches "a query naming a column or table the release does
+      # not create", per the step below. Editing it alone used to leave
+      # production unverified by the fixed gate until the next migration push.
+      - 'scripts/audit-supabase-queries.mjs'
       - 'scripts/audit-production-migration-state.mjs'
       - 'scripts/backfill-marketing-asset-provenance.mjs'
       - 'scripts/backfill-marketing-image-provenance.mjs'
@@ -20,6 +24,7 @@ on:
       - 'scripts/verify-marketing-public-access.mjs'
       - 'scripts/verify-marketing-assets-remote.mjs'
       - 'scripts/verify-marketing-coverage-remote.mjs'
+      - 'scripts/verify-marketing-runtime-remote.mjs'
 
 permissions:
   contents: read

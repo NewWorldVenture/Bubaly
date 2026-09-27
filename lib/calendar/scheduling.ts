@@ -1,3 +1,4 @@
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 // Pure calendar scheduling engine — no I/O, fully unit-tested. Powers the AI
 // "find a time everyone is free" feature. The context lens is supported by the
 // engine via the optional in-memory `context` event property; it needs no DB
@@ -36,7 +37,7 @@ export type BusyEvent = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Convert events into busy intervals, optionally filtered to certain contexts. */
-export function busyIntervals(events: BusyEvent[], contexts?: CalendarContext[]): Interval[] {
+export function busyIntervals(events: BusyEvent[], contexts: CalendarContext[] | undefined, tz: string): Interval[] {
   const out: Interval[] = [];
   for (const e of events) {
     if (contexts && contexts.length > 0 && !contexts.includes((e.context ?? 'family'))) continue;
@@ -44,12 +45,14 @@ export function busyIntervals(events: BusyEvent[], contexts?: CalendarContext[])
     if (Number.isNaN(start)) continue;
     let end: number;
     if (e.all_day) {
-      // All-day events block the whole local day.
-      const d = new Date(start);
-      d.setHours(0, 0, 0, 0);
-      const dayStart = d.getTime();
-      end = dayStart + DAY_MS;
-      out.push({ start: dayStart, end });
+      // All-day events block the whole local day — the FAMILY's, not the host's.
+      // `setHours(0, 0, 0, 0)` put the block on the server's day, so on a UTC
+      // host a Californian family's all-day event blocked 17:00 the previous
+      // afternoon to 17:00 that day. `zonedDayBoundsMs` also keeps the block a
+      // real local day across the 23- and 25-hour DST days, which `+ DAY_MS`
+      // would not.
+      const bounds = zonedDayBoundsMs(dayKeyInTz(new Date(start), tz), tz);
+      out.push({ start: bounds.start, end: bounds.end });
       continue;
     }
     const rawEnd = e.ends_at ? new Date(e.ends_at).getTime() : start + 30 * 60 * 1000;
@@ -89,16 +92,35 @@ export function freeGaps(busy: Interval[], windowStart: number, windowEnd: numbe
 
 export type WorkingHours = { startHour: number; endHour: number }; // local hours, e.g. 9–17
 
-/** Clip a gap to the working-hours window of each day it spans. */
-function clipToWorkingHours(gap: Interval, hours: WorkingHours): Interval[] {
+/**
+ * Clip a gap to the working-hours window of each day it spans, in the FAMILY's
+ * zone.
+ *
+ * This was the sharpest instance of the server-midnight defect in the
+ * repository. `WorkingHours` is documented as "local hours, e.g. 9–17" and
+ * `setHours(hours.startHour, ...)` applied them on the HOST — so on a UTC host
+ * a Californian family's 9–17 working window was proposed as 09:00–17:00 UTC,
+ * which is 01:00–09:00 for them. The AI schedule route suggested meetings in the
+ * middle of the night and called the actual working day busy.
+ *
+ * Iterating by day KEY rather than `+= DAY_MS` matters for the same reason it
+ * does above: adding 24 hours across a DST boundary lands an hour off the local
+ * midnight and drags every subsequent day with it.
+ */
+function clipToWorkingHours(gap: Interval, hours: WorkingHours, tz: string): Interval[] {
   const out: Interval[] = [];
-  const startDay = new Date(gap.start); startDay.setHours(0, 0, 0, 0);
-  for (let d = startDay.getTime(); d < gap.end; d += DAY_MS) {
-    const dayOpen = new Date(d); dayOpen.setHours(hours.startHour, 0, 0, 0);
-    const dayClose = new Date(d); dayClose.setHours(hours.endHour, 0, 0, 0);
-    const s = Math.max(gap.start, dayOpen.getTime());
-    const e = Math.min(gap.end, dayClose.getTime());
+  let dayKey = dayKeyInTz(new Date(gap.start), tz);
+  // Bounded like `dayKeysBetween` in lib/services/scope.ts: a search window is
+  // days or weeks, and a bound means a bug here cannot become a hung request.
+  for (let guard = 0; guard < 400; guard += 1) {
+    const day = zonedDayBoundsMs(dayKey, tz);
+    if (day.start >= gap.end) break;
+    const open = zonedTimeMs(dayKey, hours.startHour, 0, tz);
+    const close = zonedTimeMs(dayKey, hours.endHour, 0, tz);
+    const s = Math.max(gap.start, open);
+    const e = Math.min(gap.end, close);
     if (e > s) out.push({ start: s, end: e });
+    dayKey = addDaysToDayKey(dayKey, 1);
   }
   return out;
 }
@@ -107,6 +129,9 @@ export type SlotOptions = {
   windowStart: number;
   windowEnd: number;
   durationMin: number;
+  /** The family's IANA zone. Required: `workingHours` and all-day blocking are
+   *  both LOCAL concepts, and a default here would silently mean the host. */
+  tz: string;
   workingHours?: WorkingHours;
   /** Only consider these contexts as "busy" (default: all). */
   contexts?: CalendarContext[];
@@ -123,9 +148,9 @@ export type SlotOptions = {
 export function findFreeSlots(allEvents: BusyEvent[], opts: SlotOptions): Interval[] {
   const durationMs = opts.durationMin * 60 * 1000;
   const granMs = (opts.granularityMin ?? 15) * 60 * 1000;
-  const busy = busyIntervals(allEvents, opts.contexts);
+  const busy = busyIntervals(allEvents, opts.contexts, opts.tz);
   let gaps = freeGaps(busy, opts.windowStart, opts.windowEnd);
-  if (opts.workingHours) gaps = gaps.flatMap((g) => clipToWorkingHours(g, opts.workingHours!));
+  if (opts.workingHours) gaps = gaps.flatMap((g) => clipToWorkingHours(g, opts.workingHours!, opts.tz));
 
   const slots: Interval[] = [];
   const now = Date.now();

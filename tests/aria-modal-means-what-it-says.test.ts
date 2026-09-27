@@ -109,7 +109,12 @@ describe('the photo lightbox does not strand a keyboard (F-D01)', () => {
   it('offers a keyboard way between photos', () => {
     // Trapping focus and then offering no keyboard path to the next photo
     // swaps one dead end for another.
-    expect(src).toMatch(/e\.key === 'ArrowLeft'/);
-    expect(src).toMatch(/e\.key === 'ArrowRight'/);
+    // The step is galleryStep's (lib/ui/gallery.ts, clamped at both ends and
+    // tested in tests/a-photo-you-can-open-is-a-photo-you-can-leave.test.ts);
+    // the module has to hand it the key while the viewer is open.
+    expect(src).toMatch(/galleryStep\(i, e\.key, photos\.length\)/);
+    const gallery = readFileSync('lib/ui/gallery.ts', 'utf8');
+    expect(gallery).toMatch(/key === 'ArrowLeft'/);
+    expect(gallery).toMatch(/key === 'ArrowRight'/);
   });
 });

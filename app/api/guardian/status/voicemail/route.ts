@@ -3,11 +3,8 @@
 // Updates the communication record and notifies the family.
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables, type GuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup } from '@/lib/guardian/twilio';
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
@@ -20,14 +17,6 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 export const runtime = 'nodejs';
 
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
-// The legacy Guardian adapter erases query results to an overloaded from()
-// return type. Keep this route's actual table schema through bounded queries.
-type VoicemailDatabase = Database & { public: { Tables: { guardian_communications: {
-  Row: GuardianTables['guardian_communications'];
-  Insert: Partial<GuardianTables['guardian_communications']>;
-  Update: Partial<GuardianTables['guardian_communications']>;
-  Relationships: [];
-} } } };
 
 export async function POST(req: NextRequest) {
   const tr = await getTranslations();
@@ -71,8 +60,9 @@ export async function POST(req: NextRequest) {
       headers: { 'content-type': 'application/xml' },
     });
   }
-  const db = withGuardianTables(supabase) as SupabaseClient<VoicemailDatabase>;
-  const gFrom = (t: 'guardian_communications') => db.from(t);
+  // guardian_communications is declared in database.types.ts, so the bounded
+  // queries below keep the column types without a re-declared local schema.
+  const gFrom = (t: 'guardian_communications') => supabase.from(t);
 
   try {
     // A failed or missing required read cannot be treated as an unknown caller.
@@ -89,7 +79,7 @@ export async function POST(req: NextRequest) {
     };
 
     const recording = {
-      status: 'handled',
+      status: 'handled' as const,
       call_recording_url: recordingUrl,
       call_duration_secs: recordingDuration,
       body: transcriptionText,
@@ -100,6 +90,8 @@ export async function POST(req: NextRequest) {
     };
     await requireGuardianVoicemailLease(supabase, claim.lease, signal);
     // Reconcile a lost update response by reading the same permanent row.
+    // That exact READBACK below is this write's confirmation — stricter than a
+    // row count, which is why it asks no `.select()`. Audit C1-S9-69.
     try {
       await smsStep(signal, current => gFrom('guardian_communications').update(recording)
         .eq('id', commId).eq('family_id', typedComm.family_id).retry(false).abortSignal(current));

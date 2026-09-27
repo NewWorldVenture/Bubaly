@@ -51,7 +51,7 @@ describe('scheduled callback authorization', () => {
       expect(source, file).not.toContain('Bearer ${process.env.CRON_SECRET}');
     }
     const welcome = readFileSync('app/api/email/welcome/route.ts', 'utf8');
-    expect(welcome).toContain('hasInternalSecret');
+    expect(welcome).toContain('hasInternalSecret(');
     expect(welcome).toMatch(/401/);
     expect(welcome).not.toContain('process.env.INTERNAL_SECRET');
   });

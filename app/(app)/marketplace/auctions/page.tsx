@@ -49,7 +49,7 @@ export default async function AuctionsPage() {
   const now = new Date();
 
   // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
-  // Through readWithReserveView: this has to render on a database 0397 has not
+  // Through readWithReserveView: this has to render on a database 0452 has not
   // reached yet as well as one it has (lib/marketplace/reserve-view.ts).
   const { data, error } = await readWithReserveView<Row[]>(
     `id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, auction_starts_at, auction_ends_at`,

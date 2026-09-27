@@ -5,7 +5,7 @@ import { FolderLock, Plus, Trash2, Download, FileText } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -85,9 +85,17 @@ export function TaxVaultModule() {
   async function remove(d: TaxDoc) {
     if (!confirm(t('taxVaultModule.deleteThisDocument'))) return;
     const supabase = createClient();
-    if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
-    const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
-    if (error) toastError(describeDbError(error)); else success(t('taxVaultModule.deleted'));
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (d.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(supabase, d.storage_path);
+      if (storageError) return toastError(storageError);
+    }
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await supabase.from('tax_documents').delete().eq('id', d.id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('taxVaultModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

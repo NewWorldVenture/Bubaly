@@ -1,5 +1,5 @@
 // I18N-003 — money values whose currency symbol is a LITERAL. Fifty-one when
-// this pin was written; eight now, and the ceiling below may only fall.
+// this pin was written; five now, and the ceiling below may only fall.
 //
 // THE DEFECT, and why the locale ratchet is blind to it.
 // tests/hardcoded-locales-only-go-down.test.ts counts `'en-US'` in a formatter
@@ -46,17 +46,34 @@
 // negotiations, the price coach, price history, saved searches, the assistant
 // and the fifteen marketplace pages and panels that render them
 // (tests/a-german-bidder-reads-marketplace-money-in-their-own-format.test.ts,
-// tests/a-german-family-types-marketplace-money-beside-a-trailing-unit.test.ts).
-// `node scripts/audit-hand-written-currency.mjs` lists the eight that remain, by
-// file and line: the vacation AI route, the approval card, the concierge digest,
-// the CRM, the approval reminders, the purchase advisor, the gifts service and
-// the trips service. A ceiling left at 51 over a count of 8 would have let
-// forty-three NEW hand-written symbols in without a word, so SITES is the count,
+// tests/a-german-family-types-marketplace-money-beside-a-trailing-unit.test.ts);
+// the approval card's last fallback (tests/a-german-parent-reads-what-an-
+// approval-costs-in-their-own-format.test.ts); and the concierge digest's record
+// and the approval reminders, whose sentences now come from the catalogue with
+// the amount formatted by Intl — though the reminders are still STORED in
+// English for every manager until a per-recipient locale exists (I18N-001), so
+// they are groundwork, not a conversion (tests/a-money-approval-reminder-is-
+// worded-from-the-catalogue-and-still-stored-in-english.test.ts).
+//
+// `node scripts/audit-hand-written-currency.mjs` lists the five that remain, and
+// none of them is text a family reads:
+//   - app/api/vacations/ai/route.ts:130 — the trip budget in the user message to
+//     the model (so is :305, in the system prompt, which the scanner does not
+//     count); model-read, out of this row's scope by its own rule;
+//   - lib/purchases/advisor.ts, lib/relationship/gifts.ts and
+//     lib/services/trips/index.ts — prompt material handed to a model, likewise
+//     out of scope;
+//   - lib/marketing/crm.ts — the Super Admin console, and the positive control
+//     below REQUIRES it to stay counted.
+// The scanner's structural exemption covers lib/ai/** and app/api/ai/** only, so
+// these four model-read sites stay in the count rather than being hidden. A
+// ceiling left at 51 over a count of 5 would have let forty-six NEW hand-written
+// symbols in without a word, so SITES is the count,
 // not the history, and every unit that lands lowers it.
 import { describe, expect, it } from 'vitest';
 import { findHandWrittenCurrency } from '../scripts/audit-hand-written-currency.mjs';
 
-const SITES = 8;
+const SITES = 5;
 
 describe('a currency symbol written as a literal', () => {
   const found = findHandWrittenCurrency() as { file: string; line: number }[];

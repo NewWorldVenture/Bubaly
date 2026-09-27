@@ -9,6 +9,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS } from '@/lib/capture/shortcuts';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
@@ -54,22 +55,17 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
   const keys = sanitizeShortcutKeys(input.keys, undefined, MAX_CAPTURE_SHORTCUTS);
   const supabase = await createServer();
 
-  // Read-merge-write so we never clobber other notification_prefs keys. A read
-  // that FAILED is not an empty prefs blob: the upsert below replaces the WHOLE
-  // notification_prefs column, so merging into `{}` would erase App Lock, the
-  // Google Calendar token and every other key this member has set. Fail closed
-  // instead — the same guard the Google Calendar callback and App Lock use.
-  const { data: existing, error: readError } = await supabase.from('user_preferences')
-    .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
-  if (readError) {
-    console.error('[capture/shortcuts] preferences read failed', readError);
-    return { ok: false, error: describeActionError(readError) };
+  // Only this key changes, merged onto the row as it is at write time and
+  // written with a compare-and-set, so an App Lock or Google change made
+  // meanwhile is not put back (SRV-001 l7). A read that FAILED is still not an
+  // empty blob — nothing is written, since merging into `{}` would erase App
+  // Lock, the Google Calendar token and every other key this member has set.
+  const saved = await mergeNotificationPrefs(supabase, ctx.user.id,
+    (prefs) => ({ ...prefs, [CAPTURE_SHORTCUTS_PREF_KEY]: keys }));
+  if (!saved.ok) {
+    if (saved.reason === 'read_failed') console.error('[capture/shortcuts] preferences read failed', saved.error);
+    else console.error('[capture/shortcuts] preferences write failed', saved.reason, saved.error);
+    return { ok: false, error: describeActionError(saved.error) };
   }
-  const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const merged = { ...prefs, [CAPTURE_SHORTCUTS_PREF_KEY]: keys };
-
-  const { error } = await supabase.from('user_preferences')
-    .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

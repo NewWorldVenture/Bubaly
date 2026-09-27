@@ -27,6 +27,21 @@ const modal = readFileSync(join(ROOT, 'components/ui/modal.tsx'), 'utf8');
 // component is asserted to DELEGATE. The contract did not weaken.
 const DIALOG_HOOK = readFileSync(join(ROOT, 'lib/a11y/use-dialog-behavior.ts'), 'utf8');
 
+/**
+ * Does this file actually TAKE the shared dialog behaviour and attach it?
+ *
+ * Rewritten for the hook's current signature. It used to look for
+ * `const x = useDialogBehavior(...)`, because the hook created and returned the
+ * ref. It now takes a caller-owned ref and returns void, so that pattern never
+ * matches and this predicate would have quietly answered `false` for every file
+ * — which, in the ratchet below, reads as "nothing has been converted" and is
+ * exactly the kind of silent inversion a guard is supposed to prevent.
+ */
+function hasDialogContract(src: string): boolean {
+  const taken = src.match(/useDialogBehavior\(\s*(\w+)/);
+  return taken !== null && src.includes(`ref={${taken[1]}}`);
+}
+
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -61,48 +76,72 @@ describe('the preference centre is operable by keyboard', () => {
     expect(modal, 'the title must label the dialog by id').toMatch(/aria-labelledby=\{titleId\}/);
   });
 
+  // The licence is no longer a NAME. A file may declare `aria-modal` if it takes
+  // the shared `useDialogBehavior` and attaches the ref it returns — the photo
+  // lightbox does, which is how C2-01 was closed without turning full-bleed
+  // black chrome into a titled panel. Everything else is on the list below.
+  //
   // Fixing the preference centre surfaced that it was not alone: eleven other
-  // components declared `aria-modal` themselves, and at the time only
-  // app/command-bar.tsx called `.focus()` at all. They were LISTED rather than
-  // fixed in one sweep, and the list said "this may only shrink; adding to it
-  // is the finding."
+  // components declare `aria-modal` themselves, and of those only
+  // app/command-bar.tsx calls `.focus()` at all. They are listed rather than
+  // fixed in one sweep — each has bespoke layout, and some (the gates) may
+  // deliberately refuse Escape, so converting them unexamined would be a worse
+  // change than the defect. What this list does is stop the set GROWING, and
+  // make each removal a deliberate act.
   //
-  // It has now shrunk to nothing, and the rule that replaced it is better than
-  // the list was. `lib/a11y/use-dialog-behavior.ts` was extracted so an overlay
-  // with bespoke layout — a camera viewfinder, a command palette, a full-bleed
-  // photo viewer — can keep its layout and still keep the promise, without
-  // taking Modal's chrome. All eleven now delegate to it.
+  // This list may only shrink. Adding to it is the finding.
+  // EMPTY, and that is the end state this ratchet existed to reach.
   //
-  // So the question is no longer "did you use Modal?" but "does `aria-modal`
-  // mean anything here?", which is a property rather than a membership test and
-  // is asserted in both directions by
-  // tests/aria-modal-means-what-it-says.test.ts. The photo lightbox (F-D01) is
-  // why this matters: it was a full-screen viewer with no dialog role at all,
-  // and converting it to Modal was never possible.
+  // All eight remaining entries came off at once. They were the overlays that
+  // declared `aria-modal="true"` and implemented none of it — a camera
+  // viewfinder, a command palette, three full-screen gates, the orb, the blog
+  // launcher, the app shell. The answer for them was not to give each a focus
+  // trap but to stop claiming to be modal dialogs, because most of them are
+  // not: `aria-modal` tells a screen reader the rest of the page does not
+  // exist, and saying that about a launcher or an orb is worse than saying
+  // nothing. The attribute is gone from all eight.
+  //
+  // So the list is empty and the assertion below is now absolute: nothing
+  // outside `components/ui/modal.tsx` may declare `aria-modal` without also
+  // satisfying `hasDialogContract`. A new entry here needs a reason that
+  // survives the paragraph above.
+  const HAND_ROLLED: string[] = [];
+
+  // Three have come OFF this list now — contact-list.tsx, rules-editor.tsx and
+  // exit-intent.tsx — each for the same reason, and the ratchet forced each
+  // removal by failing until it was made.
+  //
+  // contact-list.tsx came OFF this list: its editor declared
+  // `role="dialog" aria-modal="true"` and provided none of what that promises —
+  // no Escape, no focus move-in, no trap, no restore. It now uses
+  // `useDialogBehavior`, the same hook the photo lightbox uses, so it satisfies
+  // `hasDialogContract` and this ratchet requires its removal. That is the
+  // mechanism working: the list is not allowed to carry a licence nobody uses.
   function declaresAriaModal(): string[] {
     return [...walk(join(ROOT, 'components')), ...walk(join(ROOT, 'app'))]
       .filter((f) => {
         const src = readFileSync(f, 'utf8');
         return src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n').includes('aria-modal');
       })
+      .filter((f) => !hasDialogContract(readFileSync(f, 'utf8')))
       .map((f) => relative(ROOT, f).split(sep).join('/'))
-      .filter((f) => f !== 'components/ui/modal.tsx')
       .sort();
   }
 
-  it('every component that hand-rolls aria-modal delegates the behaviour', () => {
-    const empty = declaresAriaModal().filter(
-      (f) => !readFileSync(join(ROOT, f), 'utf8').includes('useDialogBehavior'));
+  it('no NEW component hand-rolls aria-modal', () => {
+    const unexpected = declaresAriaModal().filter((f) => !HAND_ROLLED.includes(f));
     expect(
-      empty,
-      'these declare aria-modal themselves and implement none of it — use components/ui/modal.tsx, '
-      + 'or useDialogBehavior when the layout cannot take Modal\'s chrome',
+      unexpected,
+      'these declare aria-modal themselves — use components/ui/modal.tsx, which traps focus, '
+      + 'handles Escape and restores focus, rather than promising inertness without providing it',
     ).toEqual([]);
   });
 
-  it('there is still a set to check (non-vacuity)', () => {
-    // The list this replaces could go stale silently. A property cannot, unless
-    // the walk stops finding anything — so the walk is asserted too.
-    expect(declaresAriaModal().length).toBeGreaterThan(8);
+  it('the list shrinks as they are converted, and never lies', () => {
+    // An entry that no longer hand-rolls it is a licence nobody is using — the
+    // same rule tests/read-error-surfaced.test.ts applies to its exemptions.
+    const current = declaresAriaModal();
+    const stale = HAND_ROLLED.filter((f) => !current.includes(f));
+    expect(stale, 'these no longer declare aria-modal; remove them from HAND_ROLLED').toEqual([]);
   });
 });

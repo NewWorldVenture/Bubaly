@@ -51,7 +51,7 @@ const SERVICE_FACTORY = /^(createServiceClient|createServiceRoleClient|createAdm
 /** Callables that establish who is acting, or refuse when they may not. */
 const GUARDS = new Set([
   'requireUserContext', 'requireUser', 'requireFamilyContext', 'requireFamily', 'requireMember',
-  'requireParent', 'requireAuth', 'requireSession', 'requireSuperAdmin', 'assertSuperAdmin',
+  'requireParent', 'requireAuth', 'requireSession', 'requireSuperAdmin', 'assertSuperAdmin', 'superAdminGate',
   'isSuperAdmin', 'requireAdmin', 'assertAdmin', 'getSessionUser', 'getCurrentUser',
   'requireGuardian', 'assertFamilyMember', 'assertParent', 'requireChild', 'requireOwner',
   'assertOwner', 'requireActor', 'requireManager', 'assertManager', 'verifyOnboardingOwner',
@@ -75,8 +75,6 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
     'public gift page; the unguessable link token IS the authorization, pledges are written pending a parent approval, and pending pledges per link are capped',
   'app/(auth)/actions.ts:childSignInAction':
     'a sign-in cannot require a session; throttled per username via child_login_throttle so a 4-digit PIN cannot be enumerated',
-  'app/(app)/dashboard/inbox/actions.ts:inboxRequestText':
-    'not an endpoint in the meaningful sense — a pure string composer over its own arguments, exported only so a test can pin it without a database. It reads nothing and writes nothing',
 };
 
 type Action = {
@@ -256,7 +254,7 @@ describe('authenticating a caller does not decide which family they may touch', 
   // id from its caller and hands it to the service client is therefore only as
   // safe as its own gate — and the only gate that legitimately reaches across
   // families is super admin.
-  const SUPER_ADMIN = new Set(['assertSuperAdmin', 'requireSuperAdmin', 'isSuperAdmin']);
+  const SUPER_ADMIN = new Set(['assertSuperAdmin', 'requireSuperAdmin', 'isSuperAdmin', 'superAdminGate']);
 
   it('a service-client family key from the caller is super-admin gated', () => {
     const offenders: string[] = [];

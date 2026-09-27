@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
 import { ErrorState } from '@/components/ui/states';
 import { Users, ArrowLeft } from 'lucide-react';
@@ -19,7 +18,6 @@ export default async function ContactsPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   // The trust graph decides which callers reach a child. "0 contacts" and an
   // empty list on a failed read says the family has trusted nobody, which is a
@@ -36,7 +34,7 @@ export default async function ContactsPage() {
     // The `as ReturnType<typeof supabase.from>` cast erases the row type, so
     // settle's inference has nothing to carry through — the shape is named here
     // instead. The page already re-casts at the consumption site below.
-    settle<{ data: unknown[] | null; error: { message: string } | null }>((db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+    settle<{ data: unknown[] | null; error: { message: string } | null }>(supabase.from('guardian_contacts')
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
       .order('name', { ascending: true })),

@@ -166,10 +166,12 @@ export function HomeModule() {
 
   async function completeTask(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('maintenance_tasks').update({
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: updated, error } = await supabase.from('maintenance_tasks').update({
       status: 'done', completed_at: new Date().toISOString(),
-    }).eq('id', id);
+    }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.taskCompleted'));
     void refreshTasks();
   }
@@ -177,8 +179,13 @@ export function HomeModule() {
   async function removeAsset(id: string) {
     if (!(await askConfirm({ title: tr('home.deleteAssetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets').delete().eq('id', id);
+    // Family-scoped, and read back: 0336 makes this table manager-written, and
+    // RLS FILTERS a delete rather than refusing it, so a refused one answered
+    // `error: null` and the toast said the asset was gone while it stayed.
+    const { data: removed, error } = await supabase.from('home_assets').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
@@ -396,10 +403,13 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function saveDate() {
     setSavingDate(true);
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets')
-      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
+    const { data: saved, error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null })
+      .eq('id', asset.id).eq('family_id', asset.family_id).select('id');
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
+    // A filtered update (0336: managers only) is not a saved date.
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }
@@ -426,7 +436,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     });
     setUploading(false);
     if (insertError) {
-      await removeFamilyDocument(supabase, path);
+      // Rollback: the row never landed, so a surviving object is referenced by
+      // nothing. Lower stakes than removeFile's case — the user is already
+      // being told this failed — but a leaked object is still a leaked object,
+      // so it is named rather than swallowed. Audit C4-S4-09.
+      const { error: rollbackError } = await removeFamilyDocument(supabase, path);
+      if (rollbackError) console.error('[home-module] upload rollback left an object behind', { path }, rollbackError);
       return toastError(describeDbError(insertError));
     }
     success(manual ? tr('homeModule.manualSaved') : tr('homeModule.warrantyDocumentSaved'));
@@ -445,16 +460,23 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     if (!(await askConfirm({ title: tr('home.deleteFileQ'), body: tr('confirm.cannotBeUndone') }))) return;
     setRemovingId(doc.id);
     const supabase = createClient();
-    // SEC-015: the storage object goes FIRST, and the row stays if it did not
-    // go. `document_object_is_restricted` hides a secure file by finding its
-    // row, so a deleted row over a surviving object makes the file readable by
-    // every family member.
-    // A row delete the database refuses still leaves a row pointing at a file
-    // that is gone; verifying it makes that visible rather than reporting it as
-    // done. The ordering is recorded in audit/claude-1.md.
-    const removed = await removeFamilyDocument(supabase, doc.storage_path);
-    if (removed.error) { setRemovingId(null); return toastError(tr('errors.thatChangeWasNotSaved')); }
-    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
+    const { error: storageError } = await removeFamilyDocument(supabase, doc.storage_path);
+    if (storageError) {
+      setRemovingId(null);
+      return toastError(storageError);
+    }
+    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).eq('family_id', familyId).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));

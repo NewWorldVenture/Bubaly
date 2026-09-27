@@ -17,7 +17,7 @@ describe('Marketplace and Feedback action boundaries', () => {
   it('does not return raw database messages to callers', () => {
     for (const file of actionFiles) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).toContain('describeActionError');
+      expect(source, file).toContain('describeActionError(');
       expect(source, file).not.toMatch(/return \{ ok: false, error: [^\n}]*\.message/);
     }
   });

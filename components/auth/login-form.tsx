@@ -149,9 +149,14 @@ export function LoginForm() {
         </div>
       ) : (
       <>
-      {/* Phone-first: the number is the primary way in, then Google. */}
+      {/* Phone-first: the number is the primary way in, then Google. Held
+          disabled until the form has mounted, like the email fieldset below:
+          before then the button is server markup with no handler (or a
+          handler whose retirePasswordAttempt() refuses an unmounted form), so
+          a tap on a slow phone was silently dropped and nothing happened. */}
       <button
         type="button"
+        disabled={!ready}
         onClick={() => { if (retirePasswordAttempt()) setShowPhone(true); }}
         className={`mt-6 ${authButtonClass}`}
       >

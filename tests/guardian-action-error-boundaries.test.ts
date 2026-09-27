@@ -6,14 +6,14 @@ const migration = readFileSync('supabase/migrations/0198_guardian_suggestion_rev
 
 describe('Guardian safety action boundaries', () => {
   it('sanitizes database failures and checks safety-state writes', () => {
-    expect(actions).toContain('describeActionError');
+    expect(actions).toContain('describeActionError(');
     expect(actions).not.toMatch(/error:\s*[^\n]*\.message/);
     expect(actions).toContain("if (clashError) return actionFailure('check Guardian phone assignments', t('guardian.couldNotCheckGuardianPhoneAssignments'), clashError);");
     // Audit writes are best-effort and go through the service-role helper
     // (guardian_audit_log is SELECT-only for members; the parent's session
     // can't INSERT — see PLA-0617), logging failures rather than throwing.
     expect(actions).toContain("if (error) console.error('[guardian-audit] write was not logged', error);");
-    expect(actions).toContain('withGuardianTables(createServiceClient())');
+    expect(actions).toContain('const svc = createServiceClient();');
     expect(actions).toContain("supabase.rpc('guardian_review_suggestion'");
   });
 

@@ -1,7 +1,7 @@
 // Google OAuth helpers for Calendar integration
 
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -75,7 +75,7 @@ export function getGoogleOAuthUrl(state: string, origin: string): string {
  * googleCalendarRedirectUri per flow, not two that can disagree.
  */
 export async function exchangeGoogleCode(code: string, redirectUri: string): Promise<GoogleToken> {
-  const res = await fetchExternal(GOOGLE_TOKEN_URL, {
+  const res = await fetchWithDeadline(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -124,7 +124,7 @@ export function isGoogleReconnectRequired(error: unknown): boolean {
 }
 
 export async function refreshGoogleToken(refreshToken: string): Promise<GoogleToken> {
-  const res = await fetchExternal(GOOGLE_TOKEN_URL, {
+  const res = await fetchWithDeadline(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -168,7 +168,7 @@ export async function fetchGoogleCalendarEvents(accessToken: string, timeMin: st
     orderBy: 'startTime',
     maxResults: '250',
   });
-  const res = await fetchExternal(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
+  const res = await fetchWithDeadline(`${GOOGLE_CALENDAR_URL}/calendars/primary/events?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   }, 15_000);
   if (!res.ok) throw new Error(`Google Calendar API error: ${res.status}`);

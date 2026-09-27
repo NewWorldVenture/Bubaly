@@ -19,31 +19,15 @@ const SET_HOURS_MIDNIGHT = /\.setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;
 /**
  * Server-side files that still compute a day boundary in the host's zone.
  *
- * The first group is pure relative-day arithmetic: each takes `now` as a
- * parameter, subtracts two midnights and answers a whole number of days, and
- * each is shared with client components where the host IS the family. The
- * correction for those belongs at the server call sites that hand them a
- * host-zone `now` — changing the helper would break every browser caller.
- *
- * The second group is a daily rate-limit bucket, where "today" decides when an
- * AI quota resets. Moving it to the family's zone is a quota-behaviour change
- * rather than a display correction, so it is a decision, not a fix.
+ * There were two larger groups here: relative-day helpers shared with the
+ * client (dueLabel, daysUntil and friends) and four AI daily-quota buckets.
+ * Both moved to family day keys on the audit branch before it met main, so the
+ * three that remain are each deliberate for the reason given on its line.
  */
 const DECLARED: Record<string, string> = {
-  // ── relative-day helpers, parameterised on `now`, shared with the client ──
-  'lib/chores/dashboard.ts': 'dueLabel: subtracts two midnights for Overdue/Today/Tomorrow; both sides share a zone, so the difference is stable. Fix belongs at the server callers.',
-  'lib/marketplace/returns.ts': 'daysUntilDue: whole-day difference to a return date. Same shape.',
-  'lib/pantry/logic.ts': 'daysUntil: whole-day difference to a best-by date. Same shape.',
-  'lib/relationship/dates.ts': 'whole-day difference to an anniversary. Same shape.',
-  'lib/routines/detect.ts': 'day bucketing while detecting a repeating routine from history.',
-  'lib/home/home-data.ts': 'the home surface\'s day window.',
-  'lib/calendar/scheduling.ts': 'free-slot search: day bounds for the gaps it proposes.',
+  // ── one half of an explicit LOCAL/UTC pair, and a history bucketer ───────
   'lib/capture/parse.ts': 'LOCAL_OPS, one half of an explicit LOCAL/UTC ops pair the caller chooses between (opsFor). Deliberate, and named.',
-  // ── a daily quota bucket, not a display of a day ─────────────────────────
-  'app/api/ai/invest/route.ts': 'start of the day an AI daily limit counts from.',
-  'app/api/ai/relationship/route.ts': 'start of the day an AI daily limit counts from.',
-  'app/api/ai/wallet/route.ts': 'start of the day an AI daily limit counts from.',
-  'app/api/ai/wallet/child/[childId]/route.ts': 'start of the day an AI daily limit counts from.',
+  'lib/routines/detect.ts': 'day bucketing while detecting a repeating routine from history.',
   // ── the replacement's own fallback ───────────────────────────────────────
   'lib/time/zoned.ts': 'startOfLocalDay\'s fallback for an unusable zone — it must land exactly on the old behaviour rather than throw.',
 };
@@ -78,7 +62,11 @@ describe('a day boundary computed on the server is the family\'s day', () => {
   it('finds both kinds of file (non-vacuity)', () => {
     // A scan that silently stopped matching would satisfy every case below.
     expect(client.length).toBeGreaterThan(4);
-    expect(server.length).toBeGreaterThan(4);
+    // Three, not more: the relative-day helpers and the four AI quota buckets
+    // that were declared here moved to family day keys on the audit branch
+    // (tests/server-midnight-is-not-the-familys-midnight.test.ts tracks the
+    // same set), and came off this list when the two met on main.
+    expect(server.length).toBeGreaterThanOrEqual(3);
   });
 
   it('has no undeclared server-side host-zone day boundary', () => {

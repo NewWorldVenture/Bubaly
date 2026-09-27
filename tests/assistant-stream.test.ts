@@ -90,7 +90,8 @@ function fakeDb(opts: { approval?: Row | null; approvalError?: unknown } = {}) {
       order: () => chain,
       limit: () => chain,
       insert: (rows: Row[]) => { inserts.push({ table, rows }); return Promise.resolve({ error: null }); },
-      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      // As in assistant-engine.test: a real builder takes `.select()` too (C1-S9-66).
+      update: () => ({ eq: () => ({ select: () => Promise.resolve({ data: [{ id: 'row' }], error: null }), then: (onF: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: 'row' }], error: null }).then(onF) }) }),
       maybeSingle: () => {
         reads.push({ table, filters });
         if (table === 'approval_requests') return Promise.resolve({ data: opts.approvalError ? null : opts.approval ?? null, error: opts.approvalError ?? null });

@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../lib/database.types';
-import { withGuardianTables } from '../../lib/supabase/guardian-tables';
 import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 const INGRESS_TOKEN = 'ci-only-guardian-signed-ingress-fixture';
@@ -52,7 +51,7 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
     requireSyntheticConfiguration();
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
     if (!serviceKey || !anonKey) throw new Error('Guardian recovery E2E needs disposable backend configuration.');
-    const admin = client(origin, serviceKey), guardian = withGuardianTables(admin);
+    const admin = client(origin, serviceKey), guardian = admin;
     const sid = `SM${randomUUID().replaceAll('-', '')}`, untrustedSid = `SM${randomUUID().replaceAll('-', '')}`;
     let account: OwnedAccount | undefined;
     let manager: OwnedAccount | undefined;
@@ -85,7 +84,7 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       const commId = pendingComm.data!.id;
       const notifications = () => admin.from('notifications').select('*').eq('family_id', familyId).eq('related_id', commId).order('id');
 
-      // A child cannot write Guardian call history at all (0398: screening is the
+      // A child cannot write Guardian call history at all (0453: screening is the
       // parents' decision), and a row that exists without recovery authority is
       // never recovered.
       const lastManager = await admin.from('family_members').update({ role: 'child' }).eq('id', memberId).eq('family_id', familyId).select('id');
@@ -107,10 +106,10 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
         id: untrustedId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
         from_number: params.From, to_number: params.To, body: 'Unverified member-written message',
         twilio_sms_sid: untrustedSid, status: 'screening',
-      };
-      const childWrite = await withGuardianTables(child).from('guardian_communications').insert(untrustedRow).select('id');
+      } as const;
+      const childWrite = await child.from('guardian_communications').insert(untrustedRow).select('id');
       expect(childWrite.error?.code, 'A child cannot write Guardian call history').toBe('42501');
-      // A row written before 0398, or by any path that is not the signed intake,
+      // A row written before 0453, or by any path that is not the signed intake,
       // carries no recovery authority. Seed one so the sweep's refusal is measured.
       const untrusted = await guardian.from('guardian_communications').insert(untrustedRow).select('id');
       expect(!untrusted.error && untrusted.data?.length === 1, 'Seed a communication with no recovery authority').toBe(true);

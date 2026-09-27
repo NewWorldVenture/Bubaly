@@ -225,6 +225,25 @@ export function CalendarModule() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
   const [memberMenu, setMemberMenu] = useState(false);
+
+  // Escape closes either filter menu.
+  //
+  // This is the keyboard half of the click-outside scrim below. The scrim is a
+  // mouse affordance and is `aria-hidden`, which is honest — but `aria-hidden`
+  // also silences the two lint rules that were pointing at it, so without this
+  // the menus would have had NO keyboard dismissal at all and nothing left to
+  // say so. A keyboard user could open one and then only get out of it by
+  // choosing something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!catMenu && !memberMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setCatMenu(false);
+      setMemberMenu(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [catMenu, memberMenu]);
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   // Per-member / per-category visibility (the image's Calendars + Show toggles).
   const [hiddenMembers, setHiddenMembers] = useState<Set<string>>(new Set());
@@ -393,7 +412,7 @@ export function CalendarModule() {
         return;
       }
       if (json.error) throw new Error(json.error);
-      success(tr('calendar.syncedEventsCount', { count: json.synced ?? 0 })); void refresh();
+      success(tr('modules.syncedEvents', { count: json.synced ?? 0 })); void refresh();
     } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }
@@ -568,7 +587,12 @@ export function CalendarModule() {
                 </button>
                 {catMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
+                    {/* A click-outside scrim, not a control: there is nothing here to
+                        activate, so it gets no role and no tab stop — an invisible
+                        full-screen layer in the tab order would be worse than the
+                        mouse-only dismiss it replaces. The keyboard equivalent is
+                        Escape, handled on the menu itself. */}
+                    <div aria-hidden className="fixed inset-0 z-10" onClick={() => setCatMenu(false)} />
                     <div className="absolute right-0 z-20 mt-1 max-h-64 w-44 overflow-y-auto rounded-xl border border-border bg-elevated shadow-lg">
                       {(['all', 'general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const).map(c => (
                         <button key={c} onClick={() => { setFilterCategory(c); setCatMenu(false); }}
@@ -591,7 +615,12 @@ export function CalendarModule() {
                 </button>
                 {memberMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
+                    {/* A click-outside scrim, not a control: there is nothing here to
+                        activate, so it gets no role and no tab stop — an invisible
+                        full-screen layer in the tab order would be worse than the
+                        mouse-only dismiss it replaces. The keyboard equivalent is
+                        Escape, handled on the menu itself. */}
+                    <div aria-hidden className="fixed inset-0 z-10" onClick={() => setMemberMenu(false)} />
                     <div className="absolute right-0 z-20 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-border bg-elevated p-1.5 shadow-lg">
                       <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{tr('calendar.calendars')}</p>
                       {calendarRows.map((row) => {

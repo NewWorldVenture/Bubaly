@@ -40,8 +40,8 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0353 takes network consent and
-    // affiliate commissions out of members' hands. Stating it rather than deriving it is
+    // Bumped whenever a migration lands — 0418 pins what the one public bucket
+    // accepts. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
     //
@@ -309,60 +309,183 @@ describe('Supabase migration filename safety', () => {
     // controlled) and tests/a-notification-for-someone-else-is-written-by-
     // bubaly.test.ts.
     //
-    // 0389_a_definer_function_reaches_its_extensions.sql pins
-    // marketplace_create_circle's search_path to `public, extensions`, because
-    // pgcrypto lives in `extensions` and the function raised 42883 on every call
-    // from 0176 on. Ported from the claude/logged-in-pages-supabase-7q6vtf audit
-    // branch, where it was numbered 0318 before main claimed that number.
+    // 0389_a_decision_once_made_stays_made.sql (SRV-001, the m7+m8 residual)
+    // adds the fourth trigger on approval_requests: once status leaves
+    // 'pending', status, approvals, edited_payload, decided_by and decided_at
+    // are frozen, and payload — the ask the votes are votes on — cannot change
+    // for the life of the row; the execution stamps still land. RLS-subject
+    // callers only, like 0381's rules. Held by docs/audit/two-parents-means-
+    // two-parents-check.sql (the re-open, the declined→approved flip, the
+    // post-decision edit and the payload rewrite refused; the stamps landing).
     //
-    // 0390_an_approved_investment_can_actually_be_approved.sql casts the
-    // ledger direction in invest_decide_order: a CASE over two literals is
-    // `text`, which does not cast to the enum, so every APPROVAL raised 42804
-    // from 0196 on while rejection worked. Ported from the same branch (0321).
+    // 0390_a_queued_run_keeps_the_gate_it_was_born_with.sql (the same residual)
+    // pins family_automation_runs.metadata: once approval_id or plan_id is set
+    // it cannot be removed or changed by an RLS-subject caller. The
+    // load-bearing half is in the concierge action, which now resolves the
+    // governing approval from approval_requests by plan and never from the
+    // run's metadata. Held by docs/audit/automation-runs-pin-what-a-member-
+    // may-queue-check.sql.
     //
-    // 0391_a_single_choice_poll_takes_one_vote.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0322 before main claimed that number.
+    // 0391_a_password_alone_does_not_open_the_familys_vault.sql (O-03) gives
+    // the document area's step-up its database counterpart on the four vault
+    // tables written only behind it — family_credentials, household_info,
+    // tax_documents, paperwork_items: RESTRICTIVE guards on
+    // `session_cleared_step_up() or not can_manage_family(family_id)`, the
+    // rule needsStepUp applies (a manager must have cleared the code; anyone
+    // else is left to the table's own policies), with SELECT guarded on the
+    // three secret tables. documents and its bucket stay open. Held by
+    // docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql.
     //
-    // 0392_a_family_timezone_is_a_zone_that_exists.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0323 before main claimed that number.
+    // 0406–0418, less 0412, 0413 and 0417, are the audit branch's (PR #556):
+    // ten files, and the FIFTH time that branch's numbers have moved. They sat
+    // at 0300/0304–0309, then 0318–0330, then 0361–0370, and main claimed each
+    // range while they waited — the last time with the C1-K pass above, which
+    // is the collision this pin surfaced on the merge that brought it in. The
+    // order is theirs, unchanged: 0406 social tokens service-role only; 0407
+    // no TRUNCATE for the public roles; 0408 household secrets; 0409–0411 the
+    // marketplace parties, reviews and review deletes; 0414 health records;
+    // 0415 the paperwork stamp; 0416 the private journal; 0418 the public
+    // bucket's MIME allowlist. The slots are the ones an earlier close-out of
+    // the same branch had already replayed and probed against this tree with
+    // all thirteen files at 0406–0418, so the ten keep those and the three
+    // gaps are the three the branch DROPPED on its own merge with main (Audit
+    // C1-S9-89): its social-restriction DELETE policy duplicated 0319 here,
+    // less its `to authenticated`; its location policies are superseded by
+    // 0335, and stacking them broke 0335's own negative control; and its
+    // behaviour/care-log policy contradicted 0338's probe on whether a child
+    // may log behaviour — recorded in finalaudit.md for the owner to decide
+    // rather than settled by whichever merge came last. 0381–0388 went to
+    // the paragraphs above (#581, #584) after that block was picked, and
+    // 0389–0405 stay free, spoken for by other in-flight branches at the time;
+    // a number below the one pinned is still free to land.
     //
-    // 0393_a_stored_credential_is_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0324 before main claimed that number.
+    // 0406 puts the OAuth token store (social_account_tokens) back behind the
+    // service role — 0034 created it deny-all and said never to add a policy,
+    // and 0297 added four on the premise that "every policy was
+    // is_family_member" when there were none (C3-S5-01). 0407 revokes TRUNCATE
+    // from anon and authenticated across public: RLS is never consulted for
+    // TRUNCATE, so `using (false)` did not stop it, and Supabase's default
+    // privileges had handed both roles TRUNCATE on the marketing spine and both
+    // credential stores (C3-S3-02, C3-S5-09). 0408 makes household_info's
+    // `is_sensitive` flag reach RLS — wifi keys and alarm codes were masked by
+    // an eye toggle over a row every child's browser already held.
     //
-    // 0394_a_feedback_screenshot_is_not_world_readable.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0325 before main claimed that number.
+    // 0409 makes the marketplace's party columns immutable with a BEFORE UPDATE
+    // trigger: 0154's UPDATE policies checked the row you started with, and
+    // `with check (is_family_member)` let a buyer make themselves the seller of
+    // record on their own completed order. 0410 scopes marketplace_reviews,
+    // _saves and _follows UPDATE to the author (the SUBJECT of a one-star
+    // review was rewriting its rating) and replaces 0409's table-branching
+    // trigger function with a generic one that takes its column list from the
+    // trigger definition. 0411 is the same fix for DELETE on the four
+    // per-member marketplace tables — deleting a review is rewriting it —
+    // with the author, a manager who is not the review's subject, and the
+    // listing owner (for offers) kept.
     //
-    // 0395_the_vaults_ask_for_the_second_factor.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0326 before main claimed that number.
+    // 0414 adds restrictive manager guards to immunizations and health_visits
+    // — the two health tables 0309 named the class for and stopped short of —
+    // in 0254's mechanism and 0309's shape; medication_doses stays open as
+    // 0309 left it. 0415 adds paperwork_stamp_action(): stamping one paperwork
+    // action used to rewrite the WHOLE `actions` array from a copy read
+    // earlier, so "Add to calendar" followed by "Remind me" erased the first
+    // stamp and the retap created a second event; one element via jsonb_set,
+    // refusing an element already stamped, SECURITY INVOKER so RLS is
+    // unchanged. 0416 makes journal_entries' `is_private` mean what it says on
+    // SELECT — self, or a family MANAGER once the owner marks an entry not
+    // private, which is 0364's owner-or-manager rule and what
+    // docs/audit/private-journal-check.sql pins: a sibling never reads another
+    // member's entry — and gives family_insurance_policies the manager-gated
+    // writes its twin insurance_policies always had. 0418 pins
+    // `allowed_mime_types` on the one PUBLIC bucket that accepted anything
+    // (family-media), read off the six upload modules' own `accept` lists, so
+    // an SVG or HTML upload is no longer a page hosted on the project's own
+    // Supabase domain (F-E03's cheap half, which the LB-009 deferral was never
+    // meant to cover).
     //
-    // 0396_a_chore_proof_belongs_to_whose_chore_it_is.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0327 before main claimed that number.
+    // 0419_a_departed_parent_keeps_no_assistant_key.sql (SRV-001 l12) retires
+    // the assistant keys of a parent who leaves the family: an AFTER UPDATE
+    // (is_active, role, user_id, family_id) OR DELETE trigger on family_members
+    // stamps revoked_at on the old (family, user) pair's live keys whenever
+    // that pair no longer has an active parent row, SECURITY DEFINER because
+    // 0343 refuses the remover (possibly an adult) writes on assistant_links,
+    // plus a backfill for keys already orphaned. The application half,
+    // resolveAssistantLink requiring an active parent owner, holds without it.
+    // Held by docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql.
     //
-    // 0397_a_proxy_bid_ceiling_is_secret.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0328 before main claimed that number.
+    // 0420_only_a_released_app_installs.sql (SRV-001 l8) adds two RESTRICTIVE
+    // policies on family_app_installs, INSERT (WITH CHECK) and UPDATE (USING
+    // and WITH CHECK), that require the app to be published or beta; 0165's install policies were
+    // membership alone, so a member could install a coming-soon or retired app
+    // over /rest/v1. DELETE stays open, so a stranded install can always be
+    // removed. Held by docs/audit/only-a-released-app-installs-check.sql.
     //
-    // 0398_guardian_screening_is_the_parents_decision.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0330 before main claimed that number.
+    // 0426-0443 are PR #548's block, and it has moved twice. The branch
+    // numbered it 0318-0338 against a main that stopped at 0317; main then
+    // landed its own 0318-0360, and the author moved the block to 0361-0382 on
+    // merging main at 7e54596d. main then landed 0344-0380 (#579, the C1-K
+    // pass) and 0381-0387 (#581), so the block collided again, all of it this
+    // time, and it moved as one block, in order and by name, into the range
+    // this PR was assigned: 0361->0426, 0362->0427, 0363->0428, 0365->0429,
+    // 0366->0430, 0367->0431, 0369->0432, 0370->0433, 0371->0434,
+    // 0372->0435, 0373->0436, 0374->0437, 0375->0438, 0378->0439,
+    // 0379->0440, 0380->0441, 0381->0442, 0382->0443. Above main's newest
+    // rather than into any gap below it, because a version below the newest
+    // one applied is not what `supabase db push` applies without being told
+    // to. What the survivors touch: policy predicates (0426), reward prices
+    // (0428), subscriptions and billing_customers (0429), nine health tables
+    // (0430), a guardian_phone unique index (0432), marketplace deal terms
+    // (0433), medications (0434), grades and screen-time limits (0435),
+    // medical_profiles reads + family_allergies() (0438), a reward balance
+    // trigger (0439), push_deliveries (0440), the Resend counter (0441) and
+    // independence_milestones (0442).
     //
-    // 0399_onboarding_resumes_only_your_own_family.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0331 before main claimed that number.
+    // 0443_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
+    // and ensure_default_todo_list: get-or-create of a family's DEFAULT list as
+    // one operation under a per-family advisory lock (DATA-007), SECURITY
+    // INVOKER so RLS decides exactly what it decided before. Held by
+    // docs/audit/a-family-gets-one-default-list-check.sql, which races two
+    // sessions against it and against a lock-less copy.
     //
-    // 0400_decided_concierge_runs_leave_needs_you.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0332 before main claimed that number.
+    // 0427, 0431, 0436 AND 0437 ARE PERMANENTLY UNUSED, and that is recorded
+    // rather than renumbered, for the reason given for 0334 and 0337 above.
+    // Each was the branch's fix for a subject #579 had since closed, and each
+    // is shown by a probe going red with the file put back on the replayed
+    // chain, not by comparing names: 0427 (driving scores) is main's 0365, a
+    // trip is a manager's to erase (driving-score-write-boundary-check); 0431
+    // (safety check-ins, whose locator half 0335 had already taken) is main's
+    // 0379 (locator-write-boundary-check, step 6: with it a child files a
+    // check-in naming nobody); 0436 (behaviour-note authorship) is main's 0377
+    // (access-record-write-boundary-check); 0437 (journals) is main's 0364
+    // (main's private-journal-check). Laid over main's, each replaced or
+    // widened the rule main's guards stand on. The author had already dropped
+    // four more the same way on the first merge (numbered 0364, 0368, 0376 and
+    // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
+    // those never took a number in this range, and the numbers they held then
+    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
     //
-    // 0401_service_only_functions_are_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0333 before main claimed that number.
+    // 0446-0458 are the claude/logged-in-pages-supabase-7q6vtf audit branch's,
+    // ported onto main (PORT-001). They were 0318-0336 on that branch and
+    // 0389-0404 on the port until main's #583 took 0389-0391 and 0406-0445;
+    // they moved as one block, in order, above main's newest. Three were
+    // dropped rather than renumbered, because main now carries the same rule:
+    // the port's 0393 (the OAuth token store is service-role only) is main's
+    // 0406, its 0395 (the vaults ask for the second factor) is main's 0391, and
+    // its 0404 (a removed member's profile visibility) is main's 0426, which
+    // installs the identical policy. What the thirteen touch:
     //
-    // 0402_an_auction_can_close.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0334 before main claimed that number.
-    //
-    // 0403_only_the_server_links_a_login_to_a_member.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0335 before main claimed that number.
-    //
-    // 0404_removing_a_member_ends_profile_visibility.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
-    // where it was 0336 before main claimed that number.
-    //
-    expect(audit.nextVersion).toBe('0405');
+    // 0446 pins marketplace_create_circle's search_path to `public, extensions`
+    // (pgcrypto lives in `extensions`; 42883 on every call from 0176 on).
+    // 0447 casts the ledger direction in invest_decide_order (every APPROVAL
+    // raised 42804 from 0196 on while rejection worked). 0448 makes a
+    // single-choice poll take one vote. 0449 refuses a family timezone the
+    // server does not know. 0450 makes the feedback-attachments bucket
+    // private. 0451 ties a chore dispute to the child whose chore it is. 0452
+    // hides a proxy bid's ceiling from rival bidders. 0453 makes Guardian call
+    // history a manager's write. 0454 lets onboarding resume only your own
+    // family. 0455 backfills `state` on concierge runs already decided. 0456
+    // takes two server-only functions away from client roles. 0457 lets an
+    // auction close. 0458 lets only the server link a login to a member row.
+    expect(audit.nextVersion).toBe('0459');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

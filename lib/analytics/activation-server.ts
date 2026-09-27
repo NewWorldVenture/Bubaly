@@ -25,7 +25,8 @@ export async function recordActivationServer(opts: {
     if (existing && existing.length) return;
 
     const ms = opts.signupAtIso ? Math.max(0, Date.now() - Date.parse(opts.signupAtIso)) : null;
-    await supabase.from('activation_events').insert({
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: activationEventsWriteError } = await supabase.from('activation_events').insert({
       user_id: opts.userId,
       family_id: opts.familyId,
       session_id: opts.familyId,
@@ -33,6 +34,7 @@ export async function recordActivationServer(opts: {
       session_index: sessionIndexFromMs(ms),
       ms_since_signup: ms,
     });
+    if (activationEventsWriteError) console.error('[activation] activation_events insert failed', activationEventsWriteError);
   } catch {
     /* telemetry never blocks the action */
   }

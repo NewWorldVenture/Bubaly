@@ -37,7 +37,7 @@ import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 // carries the send, with a retry and a 503 instead of a swallowed catch. The
 // decision did not move; the import did, so it is not re-added here.
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
-import { secretsMatch } from '@/lib/server/secret-compare';
+import { secretEquals } from '@/lib/server/secret-equals';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,12 +47,20 @@ const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
   if (!secret) return process.env.NODE_ENV !== 'production';
-  // Header first. The query-string form stays because it is what an inbound-email
-  // provider that cannot set custom headers has to use, and the runbook documents
-  // it — but a secret in a URL lands in proxy and CDN logs, so the header is the
-  // one to prefer when a provider supports it (F-E06, accepted and documented).
-  const provided = req.headers.get('x-inbound-secret') ?? new URL(req.url).searchParams.get('key');
-  return secretsMatch(provided, secret);
+  const header = req.headers.get('x-inbound-secret');
+  const query = new URL(req.url).searchParams.get('key');
+  // The query-string form still works, because the provider's webhook is
+  // configured outside this repository and silently breaking inbound mail is
+  // worse than the leak. It is not silent either way: a secret in a URL is
+  // written to every access log, proxy log, and Referer along the path, so
+  // taking that route says so, once per request, in the operator's own logs.
+  // Removing it is an operator action — see docs. Audit C3-S5-08 (F-E06).
+  if (!header && query) {
+    console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header');
+  }
+  const provided = header ?? query;
+  // Constant-time, by HMAC digest (lib/server/secret-equals). Audit C3-S5-08.
+  return secretEquals(provided, secret);
 }
 
 // Pull the fields we need from either a parsed form or a JSON body.

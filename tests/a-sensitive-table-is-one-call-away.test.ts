@@ -10,11 +10,12 @@ import { isSensitiveTable, SENSITIVE_TABLE_NAMES } from '@/lib/ai/context/policy
 // narrow column a plan legitimately needs". That projection is the actual
 // control, and nothing checked it.
 //
-// Measured: six of the fourteen slices can reach nine deny-listed tables
-// through their imports. Every one is safe today, for one of two reasons:
+// Measured: six of the fourteen slices could reach nine deny-listed tables
+// through their imports (three and five since the allergy reads moved to the
+// `family_allergies` RPC). Every one is safe today, for one of two reasons:
 //
 //   - it is projected narrowly before anything reaches the model
-//     (medical_profiles -> allergies; documents -> id, for a count;
+//     (documents -> id, for a count;
 //     financial_accounts -> a COUNT of overdrawn accounts, never a figure;
 //     family_messages -> conversation_id and read_by, never a body), or
 //   - the slice never calls the function that reads it.
@@ -77,12 +78,9 @@ const BASELINE: Record<string, { table: string; why: 'projected' | 'not-called';
     { table: 'documents', why: 'projected', note: 'the slice maps to id/title/category/expiresAt/member/isSecure; lines carry title, category, member, expiry — never contents, never a storage path' },
     { table: 'vacation_documents', why: 'not-called', note: 'exported by the same documents service module; the slice calls listDocuments and expiringBefore only' },
   ],
-  'food.ts': [
-    { table: 'medical_profiles', why: 'projected', note: "select('member_id, allergies') — the projection the policy comment names explicitly" },
-  ],
-  'shopping.ts': [
-    { table: 'medical_profiles', why: 'projected', note: "select('allergies') — one column, so a grocery list can avoid what somebody reacts to" },
-  ],
+  // 'food.ts' and 'shopping.ts' came off: the meals and grocery services read
+  // allergies through the `family_allergies` RPC now (main, merged after #583),
+  // so neither slice's closure reads medical_profiles at all.
   'proactive.ts': [
     { table: 'documents', why: 'projected', note: "select('id') for a count of documents expiring within 30 days" },
     { table: 'financial_accounts', why: 'projected', note: "select('id, balance') filtered to overdrawn non-credit accounts, then reduced to `accountsRes.data?.length` — a count reaches the model, never a balance" },

@@ -46,7 +46,7 @@ set client_min_messages = warning;
 do $probe$
 declare
   r        record;
-  -- `feedback-attachments` came off this list with 0394 (F-E05). It is the
+  -- `feedback-attachments` came off this list with 0450 (F-E05). It is the
   -- first of the four to make the trip, and the trip is the point: the probe
   -- reported DECLARATION STALE the moment the flag flipped, which is exactly
   -- the prompt to go and check that the consumers really had moved. They had

@@ -79,7 +79,10 @@ function subscribersClient(opts: {
       },
       then: (onFulfilled: (v: unknown) => unknown) => {
         if (mode === 'update') writes.push({ kind: 'update', payload, id });
-        return Promise.resolve({ data: null, error: opts.updateError ?? null }).then(onFulfilled);
+        // The re-activation reads back its row (`.select('id')`, Audit C1-S9-62,
+        // merged in C1-S9-89): a landed update answers with it, a refused one with none.
+        const data = mode === 'update' && !opts.updateError ? [{ id }] : null;
+        return Promise.resolve({ data, error: opts.updateError ?? null }).then(onFulfilled);
       },
     };
     return chain;

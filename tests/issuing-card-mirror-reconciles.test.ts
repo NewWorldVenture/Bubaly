@@ -156,6 +156,11 @@ describe('the money webhook actually routes the card events', () => {
     const src = readFileSync('lib/stripe/issuing.ts', 'utf8');
     const discarded = /\n  await supabase\n    \.from\('stripe_issuing_cards'\)\n    \.update\(/.test(src);
     expect(discarded, 'a mirror write is back to discarding its result').toBe(false);
-    expect((src.match(/const \{ error \} = await supabase\s*\n\s*\.from\('stripe_issuing_cards'\)/g) ?? []).length).toBe(2);
+    // Re-pointed under C1-S9-64 from the exact `const { error }`, which went red
+    // when both writes also began asking for their row. The intent — neither
+    // mirror write discards its result — is any destructure that keeps `error`.
+    // Anchored on `.update(`: widening the destructure also admitted a READ from
+    // the same table, which the exact form had excluded only by accident.
+    expect((src.match(/const \{[^}]*\berror\b[^}]*\} = await supabase\s*\n\s*\.from\('stripe_issuing_cards'\)\s*\n\s*\.update\(/g) ?? []).length).toBe(2);
   });
 });

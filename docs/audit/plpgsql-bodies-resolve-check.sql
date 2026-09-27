@@ -8,12 +8,12 @@
 --
 --   marketplace_create_circle  pinned `search_path = public` while calling
 --                              gen_random_bytes, which lives in `extensions`
---                              → 42883 on every call since 0176 (fixed in 0389)
+--                              → 42883 on every call since 0176 (fixed in 0446)
 --
 --   invest_decide_order        wrote `direction` from a CASE over two string
 --                              literals, which is `text` and does not cast to
 --                              wallet_txn_direction
---                              → 42804 on every APPROVAL since 0196 (fixed in 0390)
+--                              → 42804 on every APPROVAL since 0196 (fixed in 0447)
 --
 -- Both hid behind an early return — a membership check, a reject branch — so a
 -- probe calling the function with dummy arguments would have reported success
@@ -58,7 +58,7 @@ begin
 
   -- ── ordinary functions ───────────────────────────────────────────────────
   for r in
-    select p.oid, p.proname
+    select p.oid, p.proname, p.prosrc as src
       from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
       join pg_language l on l.oid = p.prolang
@@ -71,6 +71,21 @@ begin
     for msg in
       select m from plpgsql_check_function(r.oid, fatal_errors => false) as m
     loop
+      -- Dynamic SQL is checked at run time, not here. plpgsql_check reports an
+      -- `EXECUTE format('update … set %1$I = …', p_field)` as a "column" named
+      -- after the format string itself: it cannot know the identifier the
+      -- caller will pass. apply_resend_campaign_counter() (0441) is written
+      -- exactly this way, and was run on the replayed catalogue: two calls for
+      -- one event counted it once. The exemption is for that shape only: the
+      -- reported "column" must carry a format() placeholder (`%`, which no
+      -- identifier here contains) and be the text of a format() string in the
+      -- same body, so a real missing column at an EXECUTE is still reported.
+      if msg like 'error:42703:%:EXECUTE:column "%" does not exist'
+         and substring(msg from 'column "([^"]+)"') like '%\%%'
+         and position('execute format(' in lower(r.src)) > 0
+         and position(substring(msg from 'column "([^"]+)"') in r.src) > 0 then
+        continue;
+      end if;
       if msg like 'error:%' then
         raise warning 'UNRESOLVABLE: %() — %', r.proname, msg;
         failures := failures + 1;

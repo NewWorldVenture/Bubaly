@@ -150,7 +150,24 @@ export async function saveMarketingTemplate(formData: FormData): Promise<void> {
   // Generation reads the ACTIVE default (platform.ts). Clearing the current one
   // is only right when this row is about to take its place: ticking the box on a
   // draft must not leave the page type with no template at all.
+  // Which template generation uses right now, so a save that fails after the
+  // clear can hand the page type its default back (SRV-001 l3). The clear has
+  // to come first — uq_mkt_default_template_per_type (0237) refuses a second
+  // active default — and the two are separate requests, so without this a
+  // failed save left the type with NO default and every regeneration fell back
+  // to the generic prompt. An atomic RPC would close the last window (both
+  // writes failing); this closes the ordinary one without a migration.
+  let previousDefaultId: string | null = null;
   if (edited.is_default && storedStatus === 'active') {
+    const { data: prior, error: priorError } = await supabase.from('marketing_content_templates')
+      .select('id').eq('page_type', pageType).eq('status', 'active').eq('is_default', true).maybeSingle();
+    if (priorError) marketingActionFailure('prepare the default marketing template', priorError);
+    previousDefaultId = prior?.id ?? null;
+    // Deliberately NOT confirmed: this clears whichever template WAS the default
+    // for the page type, and when none was, zero rows is exactly right. The
+    // write that matters — the save below — is confirmed. Invisible to the
+    // write ratchet until C1-S9-61, as the first statement in its block.
+    // Audit C1-S9-61.
     const { error: clearDefaultError } = await supabase.from('marketing_content_templates')
       .update({ is_default: false, updated_by: actorId })
       .eq('page_type', pageType).eq('status', 'active');
@@ -162,7 +179,16 @@ export async function saveMarketingTemplate(formData: FormData): Promise<void> {
       ...edited, defaults, schema: { fields: ['title', 'summary', 'body', 'seo', 'aeo'] }, status: 'active', created_by: actorId,
     }).select('id').maybeSingle();
   const { data, error } = await query;
-  if (error || !data) marketingActionFailure('save the marketing template', error ?? new Error('The template was not returned.'));
+  if (error || !data) {
+    if (previousDefaultId) {
+      const { data: restored, error: restoreError } = await supabase.from('marketing_content_templates')
+        .update({ is_default: true, updated_by: actorId }).eq('id', previousDefaultId).eq('page_type', pageType).select('id');
+      if (restoreError || !restored?.length) {
+        console.error('[marketing-template] the save failed and the previous default could not be restored; this page type has no default template', { pageType, previousDefaultId, restoreError: restoreError ?? 'no row was restored' });
+      }
+    }
+    marketingActionFailure('save the marketing template', error ?? new Error('The template was not returned.'));
+  }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: id ? 'update' : 'create', resource: 'marketing_content_template', resourceId: data.id });
   revalidatePath('/admin/marketing/platform');
 }

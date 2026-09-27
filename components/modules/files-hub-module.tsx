@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { parseISO } from 'date-fns';
 import {
   Upload, Search, Download, Trash2, Star, Lock, LockOpen, Cloud, Share2,
@@ -72,6 +73,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [sortOpen, setSortOpen] = useState(false);
+  useDismissOnEscape(sortOpen, () => setSortOpen(false));
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -110,18 +112,22 @@ export function FilesHubModule({ view }: { view: FileView }) {
     if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
-    // SEC-015: the storage object goes FIRST, and the row stays if it did not
-    // go. `document_object_is_restricted` hides a secure file by finding its
-    // row, so a deleted row over a surviving object makes the file readable by
-    // every family member.
-    // A row delete the database refuses still leaves a row pointing at a file
-    // that is gone; verifying it makes that visible rather than reporting it as
-    // done. The ordering is recorded in audit/claude-1.md.
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
     if (d.storage_path) {
-      const removed = await removeFamilyDocument(sb, d.storage_path);
-      if (removed.error) { setBusy(null); return toastError(t('filesHubModule.deleteFailed')); }
+      const { error: storageError } = await removeFamilyDocument(sb, d.storage_path);
+      if (storageError) { setBusy(null); return toastError(storageError); }
     }
-    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -134,7 +140,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
     setBusy(id);
     // `is_secure` moves a file between the shared area and the vault — a toggle
     // that silently did nothing leaves it where it was, reported as moved.
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.moveFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -143,7 +149,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
 
   async function toggleFavorite(id: string) {
     const d = byId.get(id); if (!d) return;
-    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).select('id');
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).eq('family_id', familyId).select('id');
     if (err) return toastError(t('filesHubModule.updateFailed'));
     if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     refresh();
@@ -244,7 +250,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
           <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>{t('filesHub.sort')} <ChevronDown className="h-3.5 w-3.5" /></Button>
           {sortOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+              {/* Presentational; the keyboard path is Escape, bound above. */}
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                  <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
                 {([['recent', 'filesHubModule.sortRecent'], ['name', 'filesHubModule.sortName'], ['size', 'filesHubModule.sortLargest']] as const).map(([k, labelKey]) => (
                   <button key={k} onClick={() => { setSort(k); setSortOpen(false); }}

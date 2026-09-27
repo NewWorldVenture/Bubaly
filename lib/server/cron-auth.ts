@@ -1,3 +1,4 @@
+
 /**
  * Fail-closed authorization for scheduled and internal server callbacks.
  * Missing secrets must never turn into a valid literal such as "Bearer undefined".

@@ -1,4 +1,4 @@
--- A family manager cannot link someone else's login to a member row. (SEC-025, migration 0403)
+-- A family manager cannot link someone else's login to a member row. (SEC-025, migration 0458)
 --
 -- `family_members.user_id` is what makes a row a person's membership. The RLS
 -- policies let a family's parent or adult insert and update member rows in

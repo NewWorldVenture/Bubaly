@@ -7,7 +7,7 @@ import { MessageSquare, Send, CornerDownRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { ErrorState } from '@/components/ui/states';
 import { Button } from '@/components/ui/button';
@@ -117,11 +117,14 @@ function AnswerForm({ question, answererId, onAnswered, onError }: {
     e.preventDefault();
     if (!answer.trim()) return;
     setBusy(true);
-    const { error } = await createClient().from('marketplace_questions')
+    // Under RLS a refused row comes back with no error and zero rows, and the
+    // answer was reported as posted. Audit C1-S9-84.
+    const { data: answered, error } = await createClient().from('marketplace_questions')
       .update({ answer: answer.trim(), answered_at: new Date().toISOString(), answered_by: answererId })
-      .eq('id', question.id);
+      .eq('id', question.id).select('id');
     setBusy(false);
     if (error) { onError(describeDbError(error)); return; }
+    if (wroteNoRows(answered)) { onError(t('errors.thatChangeWasNotSaved')); return; }
     onAnswered();
   }
   return (

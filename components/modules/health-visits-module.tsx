@@ -3,9 +3,10 @@
 import { useMemo, useState } from 'react';
 import { Stethoscope, Plus, Pencil, Trash2, CalendarClock, MapPin, AlertCircle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -26,7 +27,11 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
+  // 0414 makes the database refuse a non-manager write on this table. The
+  // controls follow it, the way medications-module.tsx already does — a button
+  // that renders and then fails is worse than one that was never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -34,6 +39,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     table: 'health_visits', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('health_visits').select('*').eq('family_id', familyId),
   });
+
+  const [saving, setSaving] = useState(false);
 
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
@@ -49,32 +56,56 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      title: form.title.trim(),
-      provider_name: form.provider_name.trim() || null,
-      location: form.location.trim() || null,
-      visit_date: form.visit_date,
-      reason: form.reason.trim() || null,
-      outcome: form.outcome.trim() || null,
-      follow_up_date: form.follow_up_date || null,
-      cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
-    };
-    const { error } = form.id
-      ? await supabase.from('health_visits').update(row).eq('id', form.id)
-      : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Visit updated' : 'Visit added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        title: form.title.trim(),
+        provider_name: form.provider_name.trim() || null,
+        location: form.location.trim() || null,
+        visit_date: form.visit_date,
+        reason: form.reason.trim() || null,
+        outcome: form.outcome.trim() || null,
+        follow_up_date: form.follow_up_date || null,
+        cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
+      };
+      // See immunizations-module: the earlier fix reached the DELETE below and not
+      // this UPDATE, and RLS filters the two the same way. 0430 gives health_visits
+      // the same Rule B treatment, so a blocked edit answered `error: null` and was
+      // reported as saved.
+      const { data, error } = form.id
+        ? await supabase.from('health_visits').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
+      success(form.id ? t('healthVisitsModule.visitUpdated') : t('healthVisitsModule.visitAdded'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
-    const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
+    // See immunizations-module: RLS filters a DELETE instead of refusing it, so
+    // without `.select('id')` a blocked removal is indistinguishable from a
+    // successful one. 0430 gives health_visits the same Rule B treatment.
+    const { data, error } = await createClient().from('health_visits').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
+    if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(data)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {
@@ -97,7 +128,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>
+          {canEdit && <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>}
         </div>
       </div>
 
@@ -143,10 +174,12 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                     </div>
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
-                  <div className="flex shrink-0 gap-1">
-                    <button aria-label={t('a11y.edit')} onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button aria-label={t('a11y.delete')} onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 gap-1">
+                      <button aria-label={t('a11y.edit')} onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button aria-label={t('a11y.delete')} onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  )}
                 </div>
               </li>
             );
@@ -186,7 +219,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
             <Field label={t('healthVisits.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('healthVisits.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add visit'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add visit'}</Button>
             </div>
           </form>
         </Modal>

@@ -64,6 +64,11 @@ vi.mock('@/lib/i18n/server', () => ({
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
+// The paperwork actions gate on the session's assurance level (0391 / O-03);
+// the in-memory client has no `auth.mfa` to read it from, and an unreadable
+// level fails closed. The words a member reads are the question here, so this
+// session is one that already cleared step-up.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/supabase/auth', () => {
   const ctx = {
     user: { id: 'user-1' },
@@ -85,9 +90,15 @@ vi.mock('@/app/(app)/dashboard/inbox/actions', () => ({ handleInboxMessageAction
 
 const { PaperworkModule } = await import('@/components/modules/paperwork-module');
 const { default: InboxPage } = await import('@/app/(app)/dashboard/inbox/page');
-const { paperworkInsertRow, materializePaperworkActionAction } = await vi.importActual<
+const { materializePaperworkActionAction } = await vi.importActual<
   typeof import('@/app/(app)/dashboard/paperwork/actions')
 >('@/app/(app)/dashboard/paperwork/actions');
+// The paste action's row builder lives in lib/paperwork/triage.ts: a pure helper
+// exported from a 'use server' module is a public endpoint (C1-S7-02), so the
+// audit branch moved it there (merged with main in Audit C1-S9-89).
+const { paperworkInsertRow } = await vi.importActual<
+  typeof import('@/lib/paperwork/triage')
+>('@/lib/paperwork/triage');
 
 /** Intl separates number and symbol (and French thousands) with no-break spaces; compare the words. */
 const plain = (s: string) => s.replace(/[  ]/g, ' ');

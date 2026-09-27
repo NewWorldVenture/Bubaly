@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { openOnKey } from '@/lib/ui/a11y';
 import { Target, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -199,7 +200,7 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
     if (!title) return toastError(t('goalsModule.titleIsRequired'));
-    if (title.length > 120) return toastError('Title is too long (max 120 characters)');
+    if (title.length > 120) return toastError(t('validation.titleTooLong', { max: 120 }));
     const targetDate = String(form.get('target_date') ?? '') || null;
     if (!goal && targetDate && new Date(targetDate) < new Date(new Date().toDateString())) {
       return toastError(t('goalsModule.pickATargetDateIn'));

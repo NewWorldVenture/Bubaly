@@ -21,11 +21,32 @@ import { describeActionError } from '@/lib/supabase/errors';
  */
 
 const RAW = /error:\s*[\w$]*(?:[Ee]rr|[Ee]rror)\??\.message\b/;
-const ALLOWED = new Map([
-  // Admin-only analytics tile: shows its own query failure to the operator
-  // debugging it, and never to a family.
-  ['app/(app)/admin/marketing/visitor-intelligence/page.tsx', 'admin diagnostics'],
-]);
+// The one exception this used to carry — the admin visitor-intelligence tile —
+// now describes its error too, so the list is empty and stays honest by being
+// empty.
+const ALLOWED = new Map<string, string>([]);
+
+/**
+ * Line numbers inside a `console.*(…)` call. A log payload is where the raw
+ * text belongs; the object form spans lines (`console.error('[x] failed', {\n
+ * id, error: err.message,\n })`), so a same-line check alone mistook the
+ * middle of a log for a response.
+ */
+function logLines(source: string): Set<number> {
+  const inside = new Set<number>();
+  for (const m of source.matchAll(/\bconsole\.(?:error|warn|log|info|debug)\s*\(/g)) {
+    let depth = 0;
+    let end = m.index!;
+    for (let i = m.index! + m[0].length - 1; i < source.length; i++) {
+      if (source[i] === '(') depth++;
+      else if (source[i] === ')' && --depth === 0) { end = i; break; }
+    }
+    const first = source.slice(0, m.index!).split('\n').length;
+    const last = source.slice(0, end).split('\n').length;
+    for (let n = first; n <= last; n++) inside.add(n);
+  }
+  return inside;
+}
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -36,9 +57,20 @@ function files(dir: string): string[] {
 }
 
 describe('server code under app/ answers with a described error, not the database\'s text', () => {
-  const findings = files('app').flatMap((file) => readFileSync(file, 'utf8').split('\n')
-    .map((line, i) => ({ file, line: i + 1, text: line.trim() }))
-    .filter(({ text }) => RAW.test(text) && !text.includes('console.')));
+  const findings = files('app').flatMap((file) => {
+    const source = readFileSync(file, 'utf8');
+    const logs = logLines(source);
+    return source.split('\n')
+      .map((line, i) => ({ file, line: i + 1, text: line.trim() }))
+      .filter(({ line, text }) => RAW.test(text) && !text.includes('console.') && !logs.has(line));
+  });
+
+  it('does not count a multi-line log payload as a response', () => {
+    const src = "console.error('[x] failed', {\n  id,\n  error: err.message,\n});\nreturn { ok: false, error: err.message };";
+    const logs = logLines(src);
+    expect(logs.has(3)).toBe(true);
+    expect(logs.has(5)).toBe(false);
+  });
 
   it('recognises the shape it is looking for (non-vacuity)', () => {
     expect(RAW.test("if (error) return { ok: false, error: error.message };")).toBe(true);

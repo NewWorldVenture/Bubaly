@@ -122,7 +122,30 @@ function fakeClient() {
     chain.then = (...args: unknown[]) => settled().then(...(args as [never, never]));
     return chain;
   };
-  return { from: builder };
+  /**
+   * 0443's `ensure_default_grocery_list`, which the grocery service now calls
+   * before it falls back to read-then-insert (DATA-007). It does the same list
+   * read under the caller's RLS and the same insert, inside one lock, so it is
+   * modelled over the SAME state the `grocery_lists` read above answers from: a
+   * refused read comes back as the function's error and creates nothing, a read
+   * that never completed rejects, an existing list is returned, and only a
+   * family that genuinely has none gets one — recorded in `inserts` because the
+   * function's INSERT is a write this action caused.
+   */
+  const rpc = (fn: string, args: Record<string, unknown>) => {
+    if (fn !== 'ensure_default_grocery_list') {
+      return Promise.resolve({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${fn}` } });
+    }
+    const result = reads.values.grocery_lists;
+    if (result === 'reject') return Promise.reject(new Error('CONNECT_TIMEOUT'));
+    if (result?.error) return Promise.resolve({ data: null, error: result.error });
+    const existing = (result?.data as { id?: string } | null | undefined)?.id;
+    if (existing) return Promise.resolve({ data: existing, error: null });
+    const values = { family_id: args.p_family_id, name: args.p_name, created_by: args.p_created_by };
+    inserts.push({ table: 'grocery_lists', values });
+    return Promise.resolve({ data: (insertAnswer('grocery_lists', values).data as { id: string }).id, error: null });
+  };
+  return { from: builder, rpc };
 }
 
 vi.mock('@/lib/supabase/auth', () => ({

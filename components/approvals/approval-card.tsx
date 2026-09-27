@@ -29,6 +29,7 @@ import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data'
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 
 /** A context slice in the family's words; the raw name when it is not one we ship. */
 function sliceLabelOf(slice: string, t: (key: string) => string): string {
@@ -42,17 +43,28 @@ export type ApprovalCardResult =
 
 type Busy = 'approving' | 'declining' | 'editing' | null;
 
-export function formatAmount(
-  cents: number | null | undefined,
-  currency = 'USD',
-  locale: LocaleCode = 'en-US',
-): string | null {
+/**
+ * The cost a parent is being asked to authorise, in the reader's own format.
+ *
+ * Delegates to the shared formatter (lib/wallet/ledger.ts formatCents), so the
+ * symbol sits where the reader's locale puts it and the separators are theirs:
+ * "$2,768.50" for an en-US reader, "2.768,50 $" for a de-DE one. Whole amounts
+ * drop the cents.
+ *
+ * Both parameters are REQUIRED (I18N-003). This used to default to 'USD' and
+ * 'en-US', and to fall back to `$${(cents / 100).toFixed(2)}` when Intl threw:
+ * a hand-written American dollar with no locale at all. A default locale is the
+ * parameter nobody passes, and the fallback wrote the symbol as text, so both
+ * are gone — the card passes the provider's locale, and a currency code Intl
+ * cannot format is an error rather than a silent "$".
+ *
+ * The currency is the MONEY's, not the reader's. approval_requests carries
+ * amount_cents and no currency column, so the card passes 'USD' explicitly: a
+ * German parent authorising dollars reads "2.768,50 $", not a converted euro.
+ */
+export function formatAmount(cents: number | null | undefined, currency: string, locale: LocaleCode): string | null {
   if (cents == null) return null;
-  try {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
-  } catch {
-    return `$${(cents / 100).toFixed(2)}`;
-  }
+  return formatCents(cents, currency, locale);
 }
 
 const formatWhenIn = (locale: LocaleCode) => (iso: string | null | undefined): string | null => {

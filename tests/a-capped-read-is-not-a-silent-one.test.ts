@@ -232,7 +232,7 @@ describe('a capped read is not a silent one', () => {
     // being produced. This is the one assertion about the helper itself.
     const src = readFileSync('lib/supabase/read-all.ts', 'utf8');
     expect(src).toContain('const probe = ceiling + 1');
-    expect(src).toMatch(/options\.max !== undefined/);
+    expect(src).toMatch(/options\.max [!=]== undefined/);
     expect(src).toContain('PREFIX, not the whole set');
   });
 });

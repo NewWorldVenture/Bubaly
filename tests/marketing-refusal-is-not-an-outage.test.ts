@@ -104,23 +104,22 @@ describe('the sibling email-send route', () => {
 
 describe('the refusal carries its own identity', () => {
   it('is a distinguishable type, not a sentence to be searched', async () => {
-    const { MarketingAuthorizationError, isMarketingAuthorizationError } =
-      await import('@/lib/marketing/admin');
-    expect(isMarketingAuthorizationError(new MarketingAuthorizationError('forbidden', 'nope'))).toBe(true);
-    expect(isMarketingAuthorizationError(new Error('You do not have permission to manage marketing settings.'))).toBe(false);
+    const { MarketingAuthError, isMarketingAuthError } = await import('@/lib/marketing/admin');
+    expect(isMarketingAuthError(new MarketingAuthError(403, 'nope'))).toBe(true);
+    expect(isMarketingAuthError(new Error('You do not have permission to manage marketing settings.'))).toBe(false);
     // A provider fault that happens to contain the old keywords must not be
     // mistaken for a refusal — that is the failure mode in reverse.
-    expect(isMarketingAuthorizationError(new Error('Provider rejected: sign in to your OpenAI account'))).toBe(false);
+    expect(isMarketingAuthError(new Error('Provider rejected: sign in to your OpenAI account'))).toBe(false);
   });
 
-  it('is thrown with the reason that maps to the status', async () => {
-    const { requireMarketingAdmin, isMarketingAuthorizationError } = await import('@/lib/marketing/admin');
+  it('is thrown with the status it deserves', async () => {
+    const { requireMarketingAdmin, isMarketingAuthError } = await import('@/lib/marketing/admin');
     getUser.mockResolvedValue(null);
     await expect(requireMarketingAdmin()).rejects.toSatisfy(
-      (e: unknown) => isMarketingAuthorizationError(e) && e.reason === 'unauthenticated');
+      (e: unknown) => isMarketingAuthError(e) && e.status === 401);
     getUser.mockResolvedValue({ id: 'u1', email: 'a@b.test' });
     isSuperAdmin.mockResolvedValue(false);
     await expect(requireMarketingAdmin()).rejects.toSatisfy(
-      (e: unknown) => isMarketingAuthorizationError(e) && e.reason === 'forbidden');
+      (e: unknown) => isMarketingAuthError(e) && e.status === 403);
   });
 });

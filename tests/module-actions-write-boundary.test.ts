@@ -9,22 +9,50 @@ const createServer = vi.fn();
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: () => requireUserContext() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: () => createServer() }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+// The paperwork actions gate on the session's assurance level (0391 / O-03,
+// tests/a-password-alone-does-not-open-the-familys-vault.test.ts). The
+// write-result contract under test HERE is the same whatever that level is,
+// and the write client above has no `auth.mfa` to read it from — an unreadable
+// level fails closed — so the verdict is "allow" throughout this file.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 
 // A write client whose insert/update/delete terminal awaits resolve to the
-// configured result. update()/delete() return a chain awaitable after .eq().eq().
-function writeClient(result: { error: unknown }) {
+// configured result. update()/delete() return a chain awaitable after .eq().eq(),
+// and now after .select() too.
+//
+// `data` is no longer hardcoded null. Once a write asks for `.select()`,
+// PostgREST returns the affected rows, so "succeeded and returned nothing" is a
+// shape the real client cannot produce for a write that matched something — and
+// a fake that produces it makes every confirmed write look like a no-op. The
+// same class of fake-vs-reality gap as C1-S9-26, found the same way: a fix went
+// in and the fake, not the code, was what broke. Pass `rows: []` to model the
+// case the confirmation exists for — a write that matched nothing. C1-S9-46.
+function writeClient(result: { error: unknown; rows?: unknown[] }) {
+  const rows = result.error ? null : (result.rows ?? [{ id: 'row-1' }]);
+  const settle = (onF: (v: { data: unknown; error: unknown }) => unknown) =>
+    Promise.resolve({ data: rows, error: result.error }).then(onF);
   const eqChain: Record<string, unknown> = {
     eq: () => eqChain,
-    then: (onF: (v: { data: null; error: unknown }) => unknown) => Promise.resolve({ data: null, error: result.error }).then(onF),
+    select: () => eqChain,
+    then: settle,
   };
   return {
     from: () => ({
-      insert: () => Promise.resolve({ data: null, error: result.error }),
+      insert: () => Promise.resolve({ data: rows, error: result.error }),
       update: () => eqChain,
       delete: () => eqChain,
     }),
   };
 }
+
+// Imported once, at collection time. Importing inside each case put the cold
+// transform of an action module's whole graph inside the FIRST case's 5 s
+// timeout — measured at 3.3 s for this file alone, and past 5 s (a red
+// saveVehicleAction) under a loaded machine. The mocks above are hoisted, so
+// these bind to them exactly as the per-case imports did.
+const { saveVehicleAction, deleteVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
+const { addPaperworkAction, setPaperworkStatusAction } = await import('@/app/(app)/dashboard/paperwork/actions');
+const { logInteractionAction, deleteInteractionAction } = await import('@/app/(app)/dashboard/contacts/[id]/actions');
 
 function fd(entries: Record<string, string>): FormData {
   const f = new FormData();
@@ -41,17 +69,36 @@ describe('module CRUD write boundaries', () => {
   describe('auto', () => {
     it('saveVehicleAction throws when the insert fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'rls denied' } }));
-      const { saveVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
       await expect(saveVehicleAction(fd({ nickname: 'Van' }))).rejects.toThrow();
     });
     it('saveVehicleAction resolves on success', async () => {
       createServer.mockResolvedValue(writeClient({ error: null }));
+      await expect(saveVehicleAction(fd({ nickname: 'Van' }))).resolves.toBeUndefined();
+    });
+    it('saveVehicleAction throws when the update matched no rows (C1-S9-46)', async () => {
+      // The case the confirmation exists for, driven through the fake rather
+      // than asserted against the source: no error, and nothing changed. Before
+      // C1-S9-46 this resolved, and the form told the family their vehicle was
+      // saved. An id is passed so this takes the UPDATE branch — the insert
+      // branch cannot match zero rows and is deliberately not gated.
+      createServer.mockResolvedValue(writeClient({ error: null, rows: [] }));
+      const { saveVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
+      await expect(saveVehicleAction(fd({ id: 'v-1', nickname: 'Van' }))).rejects.toThrow();
+    });
+    it('saveVehicleAction still resolves for an INSERT that returns no rows', async () => {
+      // No id, so this inserts. An insert either inserts or errors, so gating it
+      // on returned rows would invent a failure the database cannot produce.
+      createServer.mockResolvedValue(writeClient({ error: null, rows: [] }));
       const { saveVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
       await expect(saveVehicleAction(fd({ nickname: 'Van' }))).resolves.toBeUndefined();
     });
+    it('deleteVehicleAction throws when the soft-delete matched no rows (C1-S9-46)', async () => {
+      createServer.mockResolvedValue(writeClient({ error: null, rows: [] }));
+      const { deleteVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
+      await expect(deleteVehicleAction('v-1')).rejects.toThrow();
+    });
     it('deleteVehicleAction throws when the soft-delete fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'permission denied' } }));
-      const { deleteVehicleAction } = await import('@/app/(app)/dashboard/auto/actions');
       await expect(deleteVehicleAction('v-1')).rejects.toThrow();
     });
   });
@@ -59,25 +106,34 @@ describe('module CRUD write boundaries', () => {
   describe('paperwork', () => {
     it('addPaperworkAction throws when the insert fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'insert failed' } }));
-      const { addPaperworkAction } = await import('@/app/(app)/dashboard/paperwork/actions');
       await expect(addPaperworkAction(fd({ text: 'Field trip permission slip due Friday' }))).rejects.toThrow();
     });
     it('setPaperworkStatusAction throws when the status update fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'update failed' } }));
-      const { setPaperworkStatusAction } = await import('@/app/(app)/dashboard/paperwork/actions');
       await expect(setPaperworkStatusAction({ itemId: 'i-1', status: 'done' })).rejects.toThrow();
+    });
+    it('setPaperworkStatusAction does not report success when the update changed no row', async () => {
+      // No error and no row back: what Postgres answers when a restrictive
+      // policy filters the UPDATE. `{ ok: true }` here was the silent success.
+      createServer.mockResolvedValue(writeClient({ error: null, rows: [] }));
+      expect(await setPaperworkStatusAction({ itemId: 'i-1', status: 'done' })).toEqual({
+        ok: false,
+        error: "That change wasn't saved — you may not have permission. Refresh and try again.",
+      });
+    });
+    it('setPaperworkStatusAction reports success when the row came back', async () => {
+      createServer.mockResolvedValue(writeClient({ error: null, rows: [{ id: 'i-1' }] }));
+      expect(await setPaperworkStatusAction({ itemId: 'i-1', status: 'done' })).toEqual({ ok: true });
     });
   });
 
   describe('contacts', () => {
     it('logInteractionAction throws when the insert fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'insert failed' } }));
-      const { logInteractionAction } = await import('@/app/(app)/dashboard/contacts/[id]/actions');
       await expect(logInteractionAction(fd({ contact_id: 'c-1', title: 'Coffee' }))).rejects.toThrow();
     });
     it('deleteInteractionAction throws when the delete fails', async () => {
       createServer.mockResolvedValue(writeClient({ error: { message: 'delete failed' } }));
-      const { deleteInteractionAction } = await import('@/app/(app)/dashboard/contacts/[id]/actions');
       await expect(deleteInteractionAction({ id: 'x-1', contactId: 'c-1' })).rejects.toThrow();
     });
   });

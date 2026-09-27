@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { removeFamilyDocument } from '@/lib/storage/documents';
 import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 // SEC-015. The `documents` storage policy hides a secure-vault file from a
 // non-manager through `document_object_is_restricted(name)`, which works by
@@ -79,12 +80,15 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
 
   it('reports a transport error rather than swallowing it', async () => {
     const result = await removeFamilyDocument(client({ data: null, error: { message: 'network timeout' } }, { data: [], error: null }), KEY);
-    expect(result.error).toBe('network timeout');
+    // Reported, and described: the text may reach the family (SEC-023).
+    expect(result.error).toBe(describeActionError({ message: 'network timeout' }));
+    expect(result.error).not.toBe('network timeout');
   });
 
   it('treats an unreadable listing as unconfirmed rather than as absent', async () => {
     const result = await removeFamilyDocument(client({ data: [], error: null }, { data: null, error: { message: 'permission denied' } }), KEY);
-    expect(result.error).toBe('permission denied');
+    expect(result.error).toBe(describeActionError({ message: 'permission denied' }));
+    expect(result.error).not.toBe('permission denied');
   });
 
   it('compares the name exactly, because `search` is a prefix match', async () => {
@@ -117,7 +121,7 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
       expect(removeAt, `${file}: the object must be removed before the row`).toBeLessThan(deleteAt);
       // Between the two there must be a guard that returns.
       const between = source.slice(removeAt, deleteAt);
-      expect(between, `${file}: the removal result is not checked before the row delete`).toMatch(/\.error\)?\s*\)?\s*\{?[^}]*return/);
+      expect(between, `${file}: the removal result is not checked before the row delete`).toMatch(/(?:\.error\)?|\bstorageError\))\s*\)?\s*\{?[^}]*return/);
     }
   });
 

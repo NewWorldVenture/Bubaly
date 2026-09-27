@@ -347,7 +347,7 @@ export default async function AdminDashboardPage() {
               <h2 className="flex items-center gap-2 text-base font-semibold">
                 <Bell className="h-4 w-4 text-muted" /> {tr('admin.notifications')}
                 {unreadNotes > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-danger-fg">
                     {unreadNotes > 99 ? '99+' : unreadNotes}
                   </span>
                 )}

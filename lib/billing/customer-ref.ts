@@ -22,7 +22,6 @@
 // keeps a retry from minting another one.
 import type { createServiceClient } from '@/lib/supabase/server';
 
-type ServiceClient = ReturnType<typeof createServiceClient>;
 
 export type CustomerRefWrite =
   | { ok: true; customerRef: string }
@@ -51,7 +50,10 @@ export type CustomerRefWrite =
  *    customer that actually completed becomes the stored one.
  */
 export async function rememberStripeCustomer(
-  service: ServiceClient,
+  // Spelled out rather than through the alias above: the entitlement guard
+  // (tests/entitlement-is-never-written-by-its-own-customer.test.ts) reads this
+  // annotation as the proof that the write runs as the service role.
+  service: ReturnType<typeof createServiceClient>,
   familyId: string,
   customerRef: string,
 ): Promise<CustomerRefWrite> {

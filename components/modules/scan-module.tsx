@@ -114,6 +114,8 @@ export function ScanModule() {
       />
 
       <div
+        // The same activation photos-module's drop zone already uses: a zone you
+        // can click to open the file picker must be openable from a keyboard.
         onClick={() => !scanning && fileRef.current?.click()}
         onKeyDown={(e) => { if (!scanning && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileRef.current?.click(); } }}
         role="button"

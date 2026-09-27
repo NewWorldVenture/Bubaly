@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // Which AI surfaces leave a record, and which are still silent.
 //
 // §33: "a failure in the chat assistant or the daily brief is invisible after
@@ -164,7 +165,7 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     // And the fallback that drops the narrative sits after it, so the wrapper
     // has already recorded by the time the route decides to answer 200 anyway.
     expect(src.indexOf('recommendations = null; // fall back'))
-      .toBeGreaterThan(src.indexOf('obs.used('));
+      .toBeGreaterThan(at(src, 'obs.used('));
   });
 
   it('the assistant engine observes both transports, and the stream from inside', () => {
@@ -321,14 +322,14 @@ describe('§33 the surfaces a family would ask about are observed', () => {
 
 describe('what is deliberately NOT adopted', () => {
   it('leaves the admin AI-engine connectivity test alone, with a reason', () => {
-    // `app/(app)/admin/ai/actions.ts` authenticates with getUser() + isSuperAdmin()
+    // `app/(app)/admin/ai/actions.ts` authenticates with superAdminGate() (getUser + isSuperAdmin)
     // and never resolves a family at all — it exists to answer "does the
     // configured key work?". There is no `familyId` to build a scope from, and
     // billing a connectivity check to whichever family happens to be first would
     // be worse than not recording it. Same class as /api/ai/gift.
     const src = readFileSync('app/(app)/admin/ai/actions.ts', 'utf8');
     expect(src).not.toContain('withAiRequest(');
-    expect(src).toContain('isSuperAdmin()');
+    expect(src).toContain('superAdminGate()');
     expect(src, 'it has no family context to attribute a row to').not.toContain('requireUserContext');
   });
 

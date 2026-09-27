@@ -6,7 +6,7 @@
 // reveal. Fully wired: realtime read, create/update, soft-delete, search,
 // category filter, favorite, empty/error/loading states, toasts, confirms.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { firstName } from '@/lib/utils/format';
 import {
   Wifi, Globe, Mail, CreditCard, KeyRound, Tv, AppWindow, BadgeCheck, Lock,
@@ -55,6 +55,21 @@ export function PasswordsModule() {
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [menuId, setMenuId] = useState<string | null>(null);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(menuId !== null)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuId]);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<Form>(blankForm);
   const [formSecretShown, setFormSecretShown] = useState(false);
@@ -124,7 +139,7 @@ export function PasswordsModule() {
     // update/delete, so it matches nothing and succeeds. `.select('id')` asks
     // for the rows back, which is the only way to tell.
     const { data: rows, error: err } = form.id
-      ? await sb.from('family_credentials').update(payload).eq('id', form.id).select('id')
+      ? await sb.from('family_credentials').update(payload).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('family_credentials').insert({ ...payload, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -135,7 +150,7 @@ export function PasswordsModule() {
 
   async function toggleFavorite(c: Credential) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('family_credentials').update({ is_favorite: !c.is_favorite }).eq('id', c.id).select('id');
+    const { data: rows, error: err } = await sb.from('family_credentials').update({ is_favorite: !c.is_favorite }).eq('id', c.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     refresh();
@@ -147,7 +162,7 @@ export function PasswordsModule() {
     // A SOFT delete: a refused one leaves the credential in the vault while the
     // toast says it is gone, which is the worst version of this for a password.
     const { data: rows, error: err } = await sb.from('family_credentials')
-      .update({ deleted_at: new Date().toISOString() }).eq('id', c.id).select('id');
+      .update({ deleted_at: new Date().toISOString() }).eq('id', c.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('passwordsModule.entryDeleted')); refresh();

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isKnownServiceKey } from '@/lib/services/descriptions-server';
 import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
@@ -29,7 +29,10 @@ const MAX_LEN = 400;
  */
 export async function saveServiceDescriptionAction({ key, description }: { key: string; description: string }): Promise<ActionResult> {
   const t = await getTranslations();
-  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.notAuthorized') };
+  }
   if (!isKnownServiceKey(key)) return { ok: false, error: t('actions.unknownService') };
 
   const trimmed = (description ?? '').trim().slice(0, MAX_LEN);
@@ -38,6 +41,11 @@ export async function saveServiceDescriptionAction({ key, description }: { key: 
   try {
     // Empty or same-as-default → remove the override (fall back to the code default).
     if (!trimmed || trimmed === SERVICE_DESCRIPTIONS[key]) {
+      // Deliberately NOT gated on rows. "Reset to default" on a service nobody
+      // ever overrode matches nothing, and that IS the outcome asked for — the
+      // description is the code default either way. Confirming it would fail the
+      // button for every service in its shipped state, which is most of them.
+      // Audit C1-S9-60.
       const { error } = await supabase.from('service_descriptions').delete().eq('service_key', key);
       if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotResetThatDescription')) };
       revalidatePath('/admin/services');
@@ -45,7 +53,7 @@ export async function saveServiceDescriptionAction({ key, description }: { key: 
       return { ok: true, description: SERVICE_DESCRIPTIONS[key] ?? '' };
     }
 
-    const updatedBy = (await getUser())?.id ?? null;
+    const updatedBy = gate.user.id;
     const { error } = await supabase
       .from('service_descriptions')
       .upsert({ service_key: key, description: trimmed, updated_by: updatedBy }, { onConflict: 'service_key' });

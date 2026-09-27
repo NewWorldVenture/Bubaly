@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { labelledGroup } from '@/lib/ui/a11y';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { getSocialAccess } from '@/lib/social/access';
@@ -57,20 +58,30 @@ export default async function SocialSettingsPage() {
         <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialSettings.workspaceSettings')}</h2>
         <form action={updateSettingsAction} className="space-y-3">
           <div>
-            <label htmlFor="settings-f1" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultTimezone')}</label>
-            <input id="settings-f1" name="default_timezone" defaultValue={settings?.default_timezone ?? 'UTC'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="social-default-timezone" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultTimezone')}</label>
+            <input id="social-default-timezone" name="default_timezone" defaultValue={settings?.default_timezone ?? 'UTC'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label htmlFor="settings-f2" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.aiTone')}</label>
-            <input id="settings-f2" name="ai_tone" defaultValue={settings?.ai_tone ?? 'friendly'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="social-ai-tone" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.aiTone')}</label>
+            <input id="social-ai-tone" name="ai_tone" defaultValue={settings?.ai_tone ?? 'friendly'} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <label htmlFor="settings-f3" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.signatureAppendedOnSupportedPlatforms')}</label>
-            <input id="settings-f3" name="signature" defaultValue={settings?.signature ?? ''} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+            <label htmlFor="social-signature" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.signatureAppendedOnSupportedPlatforms')}</label>
+            <input id="social-signature" name="signature" defaultValue={settings?.signature ?? ''} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           </div>
           <div>
-            <span id="settings-f4" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultPlatforms')}</span>
-            <div role="group" aria-labelledby="settings-f4" className="flex flex-wrap gap-2">
+            {/* A caption over a row of checkboxes names nothing on its own. The
+                inner labels each wrap their own checkbox and are already correct;
+                this points a group at the caption above them. Literal ids rather
+                than useId because this is a SERVER component — the form renders
+                once per page, so they are stable and unique.
+
+                A <span> rather than a <label>, matching the worked example in
+                components/guardian/rules-editor.tsx: a <label> is for ONE form
+                control, and this names a set. `aria-labelledby` accepts any
+                element, so the caption stays a caption. */}
+            <span id="social-default-platforms" className="mb-1 block text-xs font-medium text-muted">{t('dashboardSocialSettings.defaultPlatforms')}</span>
+            <div {...labelledGroup('social-default-platforms')} className="flex flex-wrap gap-2">
               {PLATFORMS.map((p) => (
                 <label key={p} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">
                   <input type="checkbox" name="default_platforms" value={p} defaultChecked={defaultPlatforms.has(p)} />
@@ -102,7 +113,9 @@ export default async function SocialSettingsPage() {
                 <input type="hidden" name="user_id" value={m.user_id} />
                 <span className="min-w-0 flex-1 truncate text-sm">{m.display_name ?? 'Member'}</span>
                 {!explicit && <Badge tone="neutral" title={t('settings.defaultByHouseholdRole')}>default</Badge>}
-                <select aria-label={t('fieldName.socialRole')} name="social_role" defaultValue={effective} disabled={!canManage} className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
+                <select name="social_role" defaultValue={effective} disabled={!canManage}
+                  aria-label={t('dashboardSocialSettings.socialRoleFor', { name: m.display_name ?? 'Member' })}
+                  className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
                   {SOCIAL_ROLES.map((r) => <option key={r} value={r}>{SOCIAL_ROLE_LABELS[r]}</option>)}
                 </select>
                 <button disabled={!canManage} className="rounded-lg bg-elevated px-2 py-1 text-xs font-medium disabled:opacity-50">Set</button>

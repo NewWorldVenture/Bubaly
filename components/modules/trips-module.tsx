@@ -125,7 +125,7 @@ export function TripsModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = tripForm.id
-      ? await sb.from('trips').update(fields).eq('id', tripForm.id).select('id')
+      ? await sb.from('trips').update(fields).eq('id', tripForm.id).eq('family_id', familyId).select('id')
       : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSavingTrip(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -136,7 +136,7 @@ export function TripsModule() {
   async function removeTrip(t: Trip) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('trips.deleteTripBody') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).select('id');
+    const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('tripsModule.tripDeleted'));
@@ -166,13 +166,13 @@ export function TripsModule() {
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
+    const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function removeItem(it: TripItem) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).select('id');
+    const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }

@@ -187,8 +187,10 @@ describe('an upsert names a conflict target that can fire (DATA-014)', () => {
   });
 
   it('found the upsert call sites to judge', () => {
-    // Guards against a walk that quietly matches nothing.
-    expect(sites.length).toBeGreaterThanOrEqual(130);
+    // Guards against a walk that quietly matches nothing. 125, not 130: the three
+    // billing_customers upserts (checkout, change-plan, the Stripe webhook) are
+    // one call now, inside lib/billing/customer-ref.ts, which owns the target.
+    expect(sites.length).toBeGreaterThanOrEqual(125);
   });
 
   it('every upsert either names its target or supplies the primary key', () => {

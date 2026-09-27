@@ -66,7 +66,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     dataWarnings.push(label);
   };
 
-  // Through readWithReserveView so the page renders whether or not 0397 has
+  // Through readWithReserveView so the page renders whether or not 0452 has
   // reached this database (lib/marketplace/reserve-view.ts).
   const { data: listing, error: listingError } = await readWithReserveView<ListingRow>(
     `id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id`,

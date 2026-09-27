@@ -45,7 +45,7 @@ create schema if not exists auth; create schema if not exists storage; create sc
 -- `marketplace_create_circle` is `security definer` and pinned
 -- `set search_path = public` while calling `gen_random_bytes`. On a real
 -- Supabase project that raises 42883 on every call, and creating a sharing
--- circle was dead from 0176 until 0389. `docs/audit/circle-join-code-check.sql`
+-- circle was dead from 0176 until 0446. `docs/audit/circle-join-code-check.sql`
 -- calls that function and asserts it works — the probe was correct, it ran on
 -- every pull request, and it PASSED, because on a CI database with pgcrypto in
 -- `public` the broken function resolves fine. Measured, with the pre-0388

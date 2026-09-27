@@ -17,7 +17,7 @@ import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
 // its English copy, which passed only on that fallback and mounted the
 // component in a way the product never does. Shadowing the import fixes every
 // call site at once and changes no assertion.
-import { withLocale } from './helpers/render-translated';
+import { withLocale, renderTranslated } from './helpers/render-translated';
 const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 import { getMessages, translate } from '@/lib/i18n/messages';
 
@@ -52,7 +52,7 @@ const row = {
 };
 
 function render(node: React.ReactElement) {
-  return renderToStaticMarkup(React.createElement(ToastProvider, null, node));
+  return renderTranslated(React.createElement(ToastProvider, null, node));
 }
 
 describe('ApprovalCard', () => {
@@ -199,9 +199,9 @@ describe('formatting', () => {
     expect(formatExpiry('2026-09-08T12:00:00Z', en, now)).toBe('Expires in 3 days');
     expect(formatExpiry('2026-09-01T12:00:00Z', en, now)).toBe('Expired');
     expect(formatExpiry(null, en, now)).toBeNull();
-    expect(formatAmount(4200)).toBe('$42');
-    expect(formatAmount(1050)).toBe('$10.50');
-    expect(formatAmount(null)).toBeNull();
+    expect(formatAmount(4200, 'USD', 'en-US')).toBe('$42');
+    expect(formatAmount(1050, 'USD', 'en-US')).toBe('$10.50');
+    expect(formatAmount(null, 'USD', 'en-US')).toBeNull();
   });
 
   // The approval card shows an amount a parent is being asked to authorise, and it
@@ -217,8 +217,8 @@ describe('formatting', () => {
     // An explicit currency is honoured rather than swapped for the locale's own.
     expect(formatAmount(1050, 'EUR', 'de-DE')).toBe('10,50\u00a0€');
     expect(formatAmount(1050, 'EUR', 'en-US')).toBe('€10.50');
-    // And the default is still en-US, which is what the un-localised callers and
-    // the crons rely on.
-    expect(formatAmount(1050)).toBe(formatAmount(1050, 'USD', 'en-US'));
+    // There is no default locale any more: the card passes the provider's, and a
+    // caller that has none is a type error (I18N-003). What each reader sees is
+    // pinned in tests/a-german-parent-reads-what-an-approval-costs-in-their-own-format.test.ts.
   });
 });

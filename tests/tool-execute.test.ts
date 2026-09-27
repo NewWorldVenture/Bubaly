@@ -17,6 +17,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 const ledgerHolder = vi.hoisted(() => ({ client: null as SupabaseClient<Database> | null }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -58,7 +63,7 @@ function makeDb(respond: (call: Call) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  return { db: { from, rpc: missingDefaultListRpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 type LedgerRow = Record<string, unknown> & { id: string; state: string; attempt: number; idempotency_key: string; family_id: string };

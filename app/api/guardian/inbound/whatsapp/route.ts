@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
@@ -38,7 +37,11 @@ export async function POST(req: NextRequest) {
   const body = params.Body ?? '';
   const smsSid = params.SmsSid ?? params.MessageSid ?? null;
 
-  if (!isValidGuardianEventId(smsSid) || body.length > 4096) {
+  // `To` is the Guardian number the message reached, and it is the ONLY thing
+  // that resolves which family this belongs to. Without it the profile lookup
+  // matches nothing and the callback is consumed anyway — so refuse it here,
+  // before the claim, rather than after.
+  if (!isValidGuardianEventId(smsSid) || !to || body.length > 4096) {
     return new NextResponse('Invalid callback', { status: 400 });
   }
 
@@ -49,15 +52,26 @@ export async function POST(req: NextRequest) {
   // asks it to come back. Silence is the one answer that loses the event.
   if (claim === 'unavailable') return new NextResponse('', { status: 503 });
   if (claim !== 'claimed') return new NextResponse('', { status: 200 });
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Find which family member this Guardian number belongs to.
-  const { data: memberProfile } = await gFrom('guardian_member_profiles')
+  const { data: memberProfile, error: profileError } = await supabase.from('guardian_member_profiles')
     .select('id, family_id, member_id, default_mode_suspected_spam, default_mode_blocked, default_mode_unknown')
     .eq('guardian_phone', to)
     .eq('is_active', true)
     .maybeSingle();
+
+  // A FAILED lookup is not an unknown number. `maybeSingle()` answers
+  // `data: null` plus PGRST116 when MORE THAN ONE profile holds this number —
+  // which is exactly the state 0310's unique index exists to prevent, and which
+  // a production database may already be in, because 0310 reports duplicates
+  // rather than choosing which household loses its number. Dropping the error
+  // turned that into "we do not know this number", and marked the message handled and answered 200, so nothing was ever retried. Answering 5xx
+  // instead leaves the event unconsumed so Twilio retries it, and puts the
+  // reason somewhere a person can find.
+  if (profileError) {
+    console.error('[guardian-whatsapp] Guardian number lookup failed', { to, error: profileError });
+    return new NextResponse('', { status: 503 });
+  }
 
   if (!memberProfile) {
     await markGuardianCallbackProcessed(supabase, smsSid);
@@ -85,7 +99,17 @@ export async function POST(req: NextRequest) {
   const scamResult = await detectScamWithAI(body, from, `Family ID: ${familyId}`);
 
   // Create communication record.
-  const { data: comm } = await gFrom('guardian_communications').insert({
+  //
+  // The voice twin of this (`inbound/voice/route.ts`) has the same defect and
+  // the same reasoning: a dropped error means the message is delivered but
+  // never recorded, so the family's guardian history — including the scam
+  // verdict just computed above — silently loses the entry. Here it also
+  // reaches the notification below as `relatedId: comm?.id ?? null`, so the
+  // family gets an alert that links back to nothing.
+  //
+  // Not fatal to the message, which must still be delivered, so it degrades
+  // loudly rather than failing. Audit C1-S9-39.
+  const { data: comm, error: commError } = await supabase.from('guardian_communications').insert({
     family_id: familyId,
     member_id: memberId,
     contact_id: decision.contactId,
@@ -104,13 +128,26 @@ export async function POST(req: NextRequest) {
     scam_confidence: scamResult.confidence,
     twilio_sms_sid: smsSid,
     status: scamResult.isScam && scamResult.confidence >= 80 ? 'blocked' : 'received',
-  }).select('id').single();
+  }).select('id').maybeSingle();
+
+  if (commError) {
+    console.error('[guardian/inbound/whatsapp] could not record the communication; message continues unlogged', {
+      familyId, smsSid, error: commError.message,
+    });
+  }
 
   // Update contact last-contact timestamp.
   if (decision.contactId) {
-    await gFrom('guardian_contacts')
+    const { error: touchError } = await supabase.from('guardian_contacts')
       .update({ last_contact_at: new Date().toISOString() })
       .eq('id', decision.contactId);
+    // Cosmetic on its own, but "last heard from" is one of the signals a parent
+    // uses to judge a contact, so a stale one is a quiet wrong answer.
+    if (touchError) {
+      console.error('[guardian/inbound/whatsapp] could not touch the contact', {
+        contactId: decision.contactId, error: touchError.message,
+      });
+    }
   }
 
   // Blocked / high-confidence spam — silently discard.

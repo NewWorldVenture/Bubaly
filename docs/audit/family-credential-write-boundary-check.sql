@@ -178,11 +178,24 @@ begin
   perform set_config('role','postgres', true);
 
   -- ── The three write verbs must carry ONE condition ──────────────────────
+  -- 0391's four RESTRICTIVE step-up guards (family_credentials_step_up_*_guard,
+  -- `session_cleared_step_up() or not can_manage_family(family_id)`) are
+  -- excluded here and in the restore check below: they decide WHETHER a
+  -- manager's session is strong enough, not WHO, and nobody in this fixture
+  -- has an authenticator, so they answer true for child and parent alike and
+  -- are transparent to every assertion in this file. They are excluded by WHAT
+  -- THEY ARE — RESTRICTIVE (which can only narrow) AND calling
+  -- session_cleared_step_up() — never by name, so a PERMISSIVE policy, however
+  -- it is named, still counts here. Their own probe is
+  -- a-password-alone-does-not-open-the-familys-vault-check.sql.
   select count(distinct expr) into n from (
     select coalesce(pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)) as expr
     from pg_policy p join pg_class c on c.oid = p.polrelid
     join pg_namespace ns on ns.oid = c.relnamespace
     where ns.nspname = 'public' and c.relname = 'family_credentials' and p.polcmd in ('a','w','d')
+      and not (not p.polpermissive
+               and concat(pg_get_expr(p.polqual, p.polrelid), ' ', pg_get_expr(p.polwithcheck, p.polrelid))
+                   like '%session\_cleared\_step\_up()%')
   ) e;
   if n <> 1 then
     failures := array_append(failures, format('the three write policies carry %s different conditions; tightening one and forgetting another is how this started', n));
@@ -228,7 +241,7 @@ begin
   -- statements above: a control that succeeded because RLS was off, or because
   -- some policy here reads `true`, is a control that cannot fail.
   --
-  -- PERMISSIVE policies only. 0395 adds a RESTRICTIVE step-up guard,
+  -- PERMISSIVE policies only. 0391 adds a RESTRICTIVE step-up guard,
   -- `session_cleared_step_up()`, which this fixture's child passes — they have
   -- no verified factor, so the rule does not ask them for one — and so it cannot
   -- be what refused them. Any OTHER restrictive policy could be, and is counted
@@ -240,9 +253,9 @@ begin
     from pg_policy p join pg_class c on c.oid = p.polrelid
     join pg_namespace ns on ns.oid = c.relnamespace
    where ns.nspname = 'public' and c.relname = 'family_credentials'
-     and (p.polpermissive
-          or coalesce(pg_get_expr(p.polqual, p.polrelid), '') <> 'session_cleared_step_up()'
-          or coalesce(pg_get_expr(p.polwithcheck, p.polrelid), 'session_cleared_step_up()') <> 'session_cleared_step_up()');
+     and not (not p.polpermissive
+              and concat(pg_get_expr(p.polqual, p.polrelid), ' ', pg_get_expr(p.polwithcheck, p.polrelid))
+                  like '%session\_cleared\_step\_up()%');
   if policy_n <> 4 or loose <> 0 then
     failures := array_append(failures, format(
       'CONTROL FAILED: after restoring 0119 the table carries %s policies of which %s do not read is_family_member(family_id) — the control below would not be measuring the role clause',

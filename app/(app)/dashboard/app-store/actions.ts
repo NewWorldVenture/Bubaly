@@ -6,21 +6,43 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 const PATH = '/dashboard/app-store';
+/** family_apps.status values a family may install (0165's CHECK; 0420). */
+const INSTALLABLE = new Set(['published', 'beta']);
 
 export async function installAppAction(appId: string): Promise<Result> {
   const t = await getTranslations();
   if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { error } = await sb.from('family_app_installs').upsert({
+  // Only a published or beta app installs. The catalogue page drew no Install
+  // button for a coming-soon app, and that was the whole rule: this action
+  // upserted any app id it was handed, and an app installed that way showed
+  // "Unavailable" with no way to remove it (SRV-001 l8). 0420 holds the same
+  // rule in the database. The status is read strictly — a read that failed is
+  // not "installable".
+  const { data: app, error: appError } = await sb.from('family_apps')
+    .select('status').eq('id', appId).maybeSingle();
+  if (appError) return { ok: false, error: t('actions.couldNotInstallThatApp') };
+  if (!app || !INSTALLABLE.has((app as { status: string }).status)) {
+    return { ok: false, error: t('actions.thatAppIsNotAvailableToInstallYet') };
+  }
+  // PostgREST returns affected rows only when asked, so without `.select()`
+  // `data` is null whether one row was written or none was. `InstallButton`
+  // holds its state in `useState(initial)`, which is read once at mount and
+  // ignores the re-rendered server props that `revalidatePath` produces — so it
+  // rolls back ONLY on `ok: false`. A silent no-op therefore leaves the button
+  // permanently disagreeing with the database until a full page reload.
+  // Audit C1-S9-33.
+  const { data: installed, error } = await sb.from('family_app_installs').upsert({
     family_id: ctx.active.familyId, app_id: appId, installed_by: ctx.active.member.id,
     enabled: true, created_by: ctx.user.id,
-  }, { onConflict: 'family_id,app_id' });
+  }, { onConflict: 'family_id,app_id' }).select('app_id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(installed)) return { ok: false, error: t('actions.couldNotInstallThatApp') };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -30,9 +52,10 @@ export async function uninstallAppAction(appId: string): Promise<Result> {
   if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { error } = await sb.from('family_app_installs').delete()
-    .eq('family_id', ctx.active.familyId).eq('app_id', appId);
+  const { data: removed, error } = await sb.from('family_app_installs').delete()
+    .eq('family_id', ctx.active.familyId).eq('app_id', appId).select('app_id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotRemoveThatApp') };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -42,9 +65,10 @@ export async function toggleAppAction(appId: string, enabled: boolean): Promise<
   if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { error } = await sb.from('family_app_installs').update({ enabled })
-    .eq('family_id', ctx.active.familyId).eq('app_id', appId);
+  const { data: toggled, error } = await sb.from('family_app_installs').update({ enabled })
+    .eq('family_id', ctx.active.familyId).eq('app_id', appId).select('app_id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatApp') };
   revalidatePath(PATH);
   return { ok: true };
 }

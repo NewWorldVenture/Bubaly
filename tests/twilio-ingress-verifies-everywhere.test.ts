@@ -75,10 +75,15 @@ describe('the URL a Twilio signature is checked against', () => {
     }))).toEqual([`https://first.test${PATH}`, `https://one.test${PATH}`]);
   });
 
-  it('offers nothing rather than a half-built URL when neither source is present', async () => {
+  it('offers the site\'s own address rather than a half-built URL when neither source is present', async () => {
+    // The configured base comes from appBaseUrl(), the one spelling of it on the
+    // signature path, which answers the production address when the variable
+    // is empty. That is still a whole URL, and still checked by the full HMAC;
+    // what must never appear is a path with no host.
     vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
     const { twilioSignedUrlCandidates } = await ingress();
-    expect(twilioSignedUrlCandidates(request(PATH))).toEqual([]);
+    const { APP_URL_FALLBACK } = await import('@/lib/server/app-url');
+    expect(twilioSignedUrlCandidates(request(PATH))).toEqual([`${APP_URL_FALLBACK}${PATH}`]);
   });
 });
 

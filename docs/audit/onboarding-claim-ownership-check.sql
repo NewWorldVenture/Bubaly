@@ -1,10 +1,10 @@
--- Onboarding resumes only your own family. (SEC-018, migration 0399)
+-- Onboarding resumes only your own family. (SEC-018, migration 0454)
 --
 -- `onboarding_claim_family` resumes from onboarding_progress.family_id, and the
 -- onboarding action then upserts the caller into that family as a PARENT with
 -- the service role. The row was the user's to write, family_id included, so a
 -- fresh account that named someone else's family there became its parent and
--- read its password vault (reproduced with real sessions; see 0399).
+-- read its password vault (reproduced with real sessions; see 0454).
 --
 --   a user writes their own row's family_id                    -> REFUSED
 --   a row that already names another family is not resumed     -> REFUSED (new family instead)
@@ -60,7 +60,7 @@ begin
   end;
   reset role;
 
-  -- The row may already name the victim (written before 0399, or by anything
+  -- The row may already name the victim (written before 0454, or by anything
   -- else); the function must still refuse to resume it.
   insert into public.onboarding_progress (user_id, family_id, source, status) values (attacker, fam_v, 'wizard', 'in_progress')
   on conflict (user_id) do update set family_id = fam_v, status = 'in_progress';
@@ -129,7 +129,7 @@ begin
     failures := failures + 1;
   end if;
   reset role;
-  -- a user may still update source and status on their own row (0399 kept them)
+  -- a user may still update source and status on their own row (0454 kept them)
   perform set_config('request.jwt.claim.sub', newbie::text, true);
   perform set_config('request.jwt.claim.role', 'authenticated', true);
   perform set_config('request.jwt.claims', json_build_object('sub', newbie::text, 'role', 'authenticated')::text, true);

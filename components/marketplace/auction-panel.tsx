@@ -61,7 +61,7 @@ export function AuctionPanel({
   refetch.current = async () => {
     const sb = createClient();
     const [{ data: l }, { data: b }] = await settleAll([
-      // Works whether or not 0397 has reached this database (lib/marketplace/reserve-view.ts).
+      // Works whether or not 0452 has reached this database (lib/marketplace/reserve-view.ts).
       readWithReserveView<Pick<Database['public']['Tables']['marketplace_listings']['Row'],
         'sale_format' | 'status' | 'starting_bid_cents' | 'current_bid_cents' | 'bid_count' | 'has_reserve' | 'reserve_met'
         | 'buy_now_cents' | 'auction_starts_at' | 'auction_ends_at' | 'highest_bidder_family_id'>>(

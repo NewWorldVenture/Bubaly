@@ -59,6 +59,11 @@ export default async function ConflictsPage() {
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 
+  // `settleAll` hands back `{ data: null, error }` on a failed read, so
+  // destructuring `{ data }` alone turns an outage into "no conflicts found" —
+  // on the page whose entire job is finding them. That is the same shape as the
+  // ledger reconciler rendering "everything reconciles" from a truncated read:
+  // an absence presented as an all-clear.
   const readError = eventsError ?? membersError;
   if (readError) {
     console.error('[conflicts] calendar read failed', readError);

@@ -41,7 +41,7 @@ export function AccidentClient({ vehicles, claimsPhone }: { vehicles: Vehicle[];
       <Card className="border-danger/30 bg-danger/5">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-danger"><AlertTriangle className="h-4 w-4" /> {t('accidentClient.ifAnyoneIsHurtOrIn')}</h2>
         <div className="mt-2 flex flex-wrap gap-2">
-          <a href="tel:911" className="inline-flex h-10 items-center gap-2 rounded-xl bg-danger px-4 text-sm font-semibold text-white"><Phone className="h-4 w-4" /> {t('accidentClient.call911')}</a>
+          <a href="tel:911" className="inline-flex h-10 items-center gap-2 rounded-xl bg-danger px-4 text-sm font-semibold text-danger-fg"><Phone className="h-4 w-4" /> {t('accidentClient.call911')}</a>
           {claimsPhone && <a href={`tel:${claimsPhone}`} className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated"><Phone className="h-4 w-4" /> {t('accidentClient.callInsuranceClaims')}</a>}
         </div>
       </Card>

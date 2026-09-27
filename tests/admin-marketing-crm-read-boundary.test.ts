@@ -10,7 +10,7 @@ const pipeline = readFileSync('app/(app)/admin/marketing/pipeline/page.tsx', 'ut
 
 describe('admin marketing CRM read boundaries', () => {
   it('preserves customer loader failures on the customer and segment pages', () => {
-    expect(customers).toContain('getMarketingCustomersWithError');
+    expect(customers).toContain('getMarketingCustomersWithError(');
     expect(customers).toContain('customersError');
     expectSays(customers, 'customers.couldNotLoadMarketingCustomers', 'Could not load marketing customers from Supabase. Refresh and try again.');
     expect(segments).toContain('segmentsResult.error ?? customersResult.error');

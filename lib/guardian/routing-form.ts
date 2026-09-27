@@ -29,6 +29,10 @@
 
 import type { RoutingMode } from './pipeline';
 import { TRUST_LEVELS, type TrustLevel } from './trust';
+import type { Database } from '@/lib/database.types';
+
+type GuardianProfileInsert = Database['public']['Tables']['guardian_member_profiles']['Insert'];
+
 
 /** The column that holds the routing mode for one trust tier. */
 export type RoutingModeField =
@@ -190,7 +194,7 @@ const WRITABLE_COLUMNS = [
 export function guardianProfilePayload(
   input: GuardianProfileWrite,
   familyId: string,
-): Record<string, unknown> {
+): GuardianProfileInsert {
   const payload: Record<string, unknown> = {
     family_id: familyId,
     member_id: input.member_id,
@@ -199,5 +203,8 @@ export function guardianProfilePayload(
     const value = input[column];
     if (value !== undefined) payload[column] = value;
   }
-  return payload;
+  // Typed at the boundary: `guardian_member_profiles` is declared in
+  // database.types.ts, so the upsert checks this shape. WRITABLE_COLUMNS is
+  // the column list, and each value is the input's own typed field.
+  return payload as GuardianProfileInsert;
 }

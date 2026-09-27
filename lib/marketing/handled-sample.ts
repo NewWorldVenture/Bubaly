@@ -107,7 +107,13 @@ export type SampleBriefNumbers = {
  * component puts them into handledProof.sampleBriefHeadline's placeholders.
  */
 export function sampleBriefNumbers(): SampleBriefNumbers {
-  const brief = buildFirstBrief(SAMPLE_WEEK, new Date(SAMPLE_NOW));
+  // 'UTC' explicitly, not by falling through a default. This sample is fiction
+  // with no family behind it, so there is no household zone to resolve — which
+  // makes UTC the right answer here and ONLY here. Stating it at the call site
+  // is the difference between a decision and an accident: the default it used
+  // to inherit was removed precisely so no real caller can take this path
+  // without saying they meant to.
+  const brief = buildFirstBrief(SAMPLE_WEEK, new Date(SAMPLE_NOW), [], 'UTC');
   return {
     today: brief.todayCount,
     clashes: brief.conflicts.length,

@@ -27,6 +27,7 @@ const later = <T>(value: () => T): Promise<T> => new Promise((resolve) => setTim
 function runs() {
   const filters: Array<[string, unknown]> = [];
   let patch: Record<string, unknown> | null = null;
+  let single = false;
   const exec = () => {
     let hits = db.runs.filter((r) => filters.every(([column, value]) => r[column] === value));
     if (patch) {
@@ -34,6 +35,9 @@ function runs() {
       if (patch.status === 'dismissed' && db.beforeDismissWrite) { const land = db.beforeDismissWrite; db.beforeDismissWrite = null; land(); }
       hits = db.runs.filter((r) => filters.every(([column, value]) => r[column] === value));
       for (const r of hits) Object.assign(r, patch);
+      // `.select('id')` answers a list, `.maybeSingle()` one row or null — the
+      // action reads a stamp with wroteNoRows and a claim with a null check.
+      if (!single) return { data: hits.map((r) => ({ id: r.id })), error: null };
       return { data: hits[0] ? { id: hits[0].id } : null, error: null };
     }
     return { data: hits[0] ? { ...hits[0] } : null, error: null };
@@ -42,14 +46,17 @@ function runs() {
     select: () => chain,
     eq: (column: string, value: unknown) => { filters.push([column, value]); return chain; },
     update: (value: Record<string, unknown>) => { patch = value; return chain; },
-    maybeSingle: () => later(exec),
+    maybeSingle: () => { single = true; return later(exec); },
     then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => later(exec).then(resolve, reject),
   };
   return chain;
 }
 function passthrough(data: unknown) {
   const chain: Record<string, unknown> = {
+    // filter/order/limit: the governing-approval read (approval_requests),
+    // which answers "no approval names this plan" here — the never-gated path.
     select: () => chain, eq: () => chain, update: () => chain,
+    filter: () => chain, order: () => chain, limit: () => chain,
     maybeSingle: () => later(() => ({ data, error: null })),
     then: (resolve: (v: unknown) => unknown) => later(() => ({ data: null, error: null })).then(resolve),
   };
@@ -85,7 +92,7 @@ beforeEach(() => {
   db.failFinal = false;
   db.beforeDismissWrite = null;
   db.runs = [{ id: 'run-1', family_id: 'family-1', status: 'pending', state: 'awaiting_approval', metadata: { plan_id: 'plan-1', kinds: [] }, approved_at: null, approved_by: null }];
-  materialize.fn = vi.fn(async () => ['calendar']);
+  materialize.fn = vi.fn(async () => ({ applied: ['calendar'], failed: [] }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -132,7 +139,7 @@ describe('an approval that does not finish goes back to the queue', () => {
     materialize.fn = vi.fn(async () => { throw new Error('provider down'); });
     await expect(executeQueuedRunAction('run-1')).rejects.toThrow('provider down');
     expect(run()).toMatchObject({ status: 'pending', state: 'awaiting_approval', approved_at: null });
-    materialize.fn = vi.fn(async () => ['calendar']);
+    materialize.fn = vi.fn(async () => ({ applied: ['calendar'], failed: [] }));
     expect(await executeQueuedRunAction('run-1')).toMatchObject({ ok: true });
   });
 

@@ -13,11 +13,11 @@ import { RESERVE_VIEW_COLUMNS } from '@/lib/marketplace/reserve-view';
 // bid exactly the leader's ceiling moved a $10.00 auction to $500.00, the
 // leader's entire maximum, without ever taking the lead.
 //
-// 0397 fixes it with column privileges, and
+// 0452 fixes it with column privileges, and
 // docs/audit/proxy-bid-ceiling-is-secret-check.sql holds the database half on
-// every PR. This file holds the code half: after 0397 a client read that names
+// every PR. This file holds the code half: after 0452 a client read that names
 // a secret column fails with 42501, and so does `select('*')` on either table,
-// so the code must never do either. Before 0397 the auction board was doing the
+// so the code must never do either. Before 0452 the auction board was doing the
 // first — serialising `reserve_cents` into the props of every viewer's page.
 
 const SECRETS = ['reserve_cents', 'highest_max_cents', 'max_cents'] as const;
@@ -49,7 +49,7 @@ export function auctionReads(file: string, source: string): Read[] {
       const def = new RegExp(`const\\s+${m[5]}\\s*=\\s*(['"\`])([\\s\\S]*?)\\1`).exec(source);
       // Or it is the callback parameter of readWithReserveView, whose FIRST
       // argument is the list actually selected (lib/marketplace/reserve-view.ts
-      // swaps in reserve_cents only when the database predates 0397).
+      // swaps in reserve_cents only when the database predates 0452).
       const call = def ? null : [...source.slice(Math.max(0, m.index! - 900), m.index!)
         .matchAll(/readWithReserveView(?:<[\s\S]*?>)?\(\s*(?:(['"`])([\s\S]*?)\1|([A-Za-z_$][\w$]*))\s*,\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g)]
         .filter((c) => c[4] === m[5]).pop();
@@ -68,10 +68,10 @@ export function auctionReads(file: string, source: string): Read[] {
   return reads;
 }
 
-/** Why a read will fail or leak after 0397, or null when it is fine. */
+/** Why a read will fail or leak after 0452, or null when it is fine. */
 export function problemWith(read: Read): string | null {
   const cols = read.columns.split(',').map((c) => c.trim().split(/\s|:/)[0]);
-  if (cols.includes('*') || read.columns.trim() === '') return `selects * from ${read.table}, which 0397 refuses to anon and authenticated`;
+  if (cols.includes('*') || read.columns.trim() === '') return `selects * from ${read.table}, which 0452 refuses to anon and authenticated`;
   if (read.columns.startsWith('<unresolved')) return `select list ${read.columns} could not be resolved, so it cannot be checked`;
   const named = cols.filter((c) => (SECRETS as readonly string[]).includes(c));
   return named.length ? `selects ${named.join(', ')} from ${read.table}` : null;
@@ -144,7 +144,7 @@ describe('a proxy bid ceiling is secret (SEC-016)', () => {
     // The badge a bidder sees is computed in SQL; the outcome a close resolves
     // is computed in TypeScript. If they disagreed, the board could say
     // "Reserve met" on an item that then does not sell.
-    const sql = readFileSync('supabase/migrations/0397_a_proxy_bid_ceiling_is_secret.sql', 'utf8');
+    const sql = readFileSync('supabase/migrations/0452_a_proxy_bid_ceiling_is_secret.sql', 'utf8');
     expect(sql).toMatch(/reserve_cents is null or \(bid_count > 0 and current_bid_cents >= reserve_cents\)/);
     const mirror = (reserve: number | null, current: number, count: number) =>
       reserve === null || (count > 0 && current >= reserve);
@@ -155,11 +155,11 @@ describe('a proxy bid ceiling is secret (SEC-016)', () => {
   });
 
   it('the migration computes its grant list and checks itself', () => {
-    const sql = readFileSync('supabase/migrations/0397_a_proxy_bid_ceiling_is_secret.sql', 'utf8');
+    const sql = readFileSync('supabase/migrations/0452_a_proxy_bid_ceiling_is_secret.sql', 'utf8');
     expect(sql).toContain("revoke select on public.%I from anon, authenticated");
     expect(sql).toMatch(/a\.attname <> all \(v_secrets\)/);
-    expect(sql).toContain("0397: secret columns still client-selectable");
-    expect(sql).toContain("0397: ordinary columns lost their SELECT grant");
+    expect(sql).toContain("0452: secret columns still client-selectable");
+    expect(sql).toContain("0452: ordinary columns lost their SELECT grant");
   });
 
   it('the database half is held by a probe that runs on every PR', () => {

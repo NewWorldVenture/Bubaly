@@ -2,13 +2,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 // PRIV-002. `profiles_select_self` shows co-members' profiles to each other.
-// Before 0404 it ignored `is_active`, and a removed member's row stays (inactive)
+// Before 0426 it ignored `is_active`, and a removed member's row stays (inactive)
 // and visible to the family, so the family kept reading the removed person's
 // email, name, birth date and phone — including a number changed after they
 // left. docs/audit/profile-visibility-ends-with-membership-check.sql proves the
 // behaviour on a real catalogue; this keeps the LAST definition in the
 // migration history honest, since the policy has already been re-created once
-// (0118) and a copy of that text would quietly undo 0404.
+// (0118) and a copy of that text would quietly undo 0426.
 
 const executable = (raw: string) => raw.replace(/^\s*--.*$/gm, '');
 
@@ -25,14 +25,14 @@ function lastDefinition(): { file: string; sql: string } {
 }
 
 describe('a profile is visible to active co-members only (PRIV-002)', () => {
-  it('is last defined by 0404 or later', () => {
-    expect(lastDefinition().file >= '0404').toBe(true);
+  it('is last defined by 0426 or later', () => {
+    expect(lastDefinition().file >= '0426').toBe(true);
   });
 
   it('requires both memberships to be active', () => {
     const { sql } = lastDefinition();
     expect(sql).toMatch(/me\.user_id = auth\.uid\(\) and me\.is_active/);
-    expect(sql).toMatch(/them\.user_id = public\.profiles\.id and them\.is_active/);
+    expect(sql).toMatch(/them\.user_id = (public\.)?profiles\.id and them\.is_active/);
   });
 
   it('still lets everyone read their own profile', () => {

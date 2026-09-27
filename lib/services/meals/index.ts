@@ -30,7 +30,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { Json, MealType, Tables } from '@/lib/database.types';
 import { normalizeAllergies } from '@/lib/meals/pantry-chef';
-import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
@@ -400,8 +400,14 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   const createdMealIds: string[] = [];
   const removeCreatedMeals = async () => {
     if (!createdMealIds.length) return;
-    const { error } = await scope.db.from('meals').delete().eq('family_id', scope.familyId).in('id', createdMealIds);
+    // Every id here was created by THIS call, so an exact count is right:
+    // fewer removed is a partial rollback that leaves orphan meals in the
+    // family's recipe list. Logged, not raised. Audit C1-S9-65.
+    const { data: removed, error } = await scope.db.from('meals').delete().eq('family_id', scope.familyId).in('id', createdMealIds).select('id');
     if (error) console.error('[service:meals] rollback of created meals failed', error);
+    else if ((removed?.length ?? 0) !== createdMealIds.length) {
+      console.error('[service:meals] rollback of created meals was partial', { removed: removed?.length ?? 0, created: createdMealIds.length });
+    }
   };
 
   const resolved = await resolveEntries(scope, valid.data, createdMealIds);
@@ -450,6 +456,9 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
   }));
   const restore = async (removeInserted: boolean): Promise<boolean> => {
     if (removeInserted) {
+      // Rows deliberately not checked here: `readTargetRows()` below RE-READS
+      // the plan and compares ids, which confirms this delete more strictly
+      // than a row count would. Audit C1-S9-65.
       const { error } = await scope.db.from('meal_plans').delete()
         .eq('family_id', scope.familyId).in('id', rows.map((row) => row.id));
       if (error) { console.error('[service:meals] rollback clear failed', error); return false; }
@@ -769,6 +778,13 @@ export async function foodProfile(scope: ServiceScope): Promise<ServiceResult<Fo
   const members = await getMembers(scope);
   if (!members.ok) return members;
 
+  // Allergies come through `family_allergies()` (0438), not a select on
+  // `medical_profiles`: that table now reads manager-or-self, and `scope.db` is
+  // the caller's client, so a child planning a meal would have been handed an
+  // empty list with no error and the planner would have called the household
+  // allergy-free. The RPC hands every member the (member_id, allergies) pairs
+  // for their own household and raises for anyone else.
+  //
   // The facts read PAGES, and the others do not, for a reason worth stating.
   // `classifyFoodFact` turns a preference row into the household's ALLERGIES
   // list, which the AI context slice renders as "ALLERGIES (never serve): …".
@@ -781,7 +797,7 @@ export async function foodProfile(scope: ServiceScope): Promise<ServiceResult<Fo
   // It costs one extra round trip on every context build (`readAll` stops only
   // on an EMPTY page, since a short page is also what the cap looks like).
   const [medical, favorites, facts] = await settleAll([
-    scope.db.from('medical_profiles').select('member_id, allergies').eq('family_id', scope.familyId),
+    scope.db.rpc('family_allergies', { p_family_id: scope.familyId }),
     scope.db.from('family_favorites').select('member_id, kind, name').eq('family_id', scope.familyId).in('kind', ['recipe', 'meal', 'snack', 'restaurant', 'drink']),
     readAllAsQuery<{ member_id: string | null; category: string | null; label: string; value: string }>((from, to) =>
       scope.db.from('family_facts').select('member_id, category, label, value').eq('family_id', scope.familyId)

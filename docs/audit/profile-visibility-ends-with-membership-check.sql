@@ -1,4 +1,4 @@
--- Removing a member ends their profile's visibility to the family. (PRIV-002, migration 0404)
+-- Removing a member ends their profile's visibility to the family. (PRIV-002, migration 0426)
 --
 -- `profiles_select_self` shows co-members' profiles to each other. It did not
 -- check `is_active`, and a removed member's row is kept (inactive) and still

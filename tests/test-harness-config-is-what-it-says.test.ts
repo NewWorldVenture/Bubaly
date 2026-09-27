@@ -38,13 +38,21 @@ describe('CI runs the suite on a DST-observing host (MAIN-F-F04)', () => {
   });
 });
 
-describe('lint fails on a warning (MAIN-F-D14)', () => {
+describe('lint fails on a NEW warning (MAIN-F-D14)', () => {
   // The three exhaustive-deps warnings lived for weeks as "the documented
   // baseline" because `next lint` exits 0 on warnings, so CI could not see a
-  // fourth. The baseline is now zero, and a warning fails the Lint step.
-  it('the lint script refuses any warning', () => {
+  // fourth. Those are gone. What the ceiling now holds is main's decision: its
+  // two keyboard rules (click-events-have-key-events, no-static-element-
+  // interactions) warn on 15 mouse-only conveniences that already have a
+  // keyboard path, kept visible as backlog (see
+  // tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts). The ceiling is
+  // exactly that count, so any other warning, of any rule, fails the Lint step,
+  // and it may only come down as that backlog is worked.
+  it('the lint script refuses any warning beyond the recorded backlog', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
-    expect(pkg.scripts.lint).toMatch(/--max-warnings 0\b/);
+    const ceiling = /--max-warnings[ =](\d+)\b/.exec(pkg.scripts.lint)?.[1];
+    expect(ceiling, 'the lint script sets --max-warnings').toBeDefined();
+    expect(Number(ceiling)).toBeLessThanOrEqual(15);
   });
 
   it('and CI runs that script', () => {

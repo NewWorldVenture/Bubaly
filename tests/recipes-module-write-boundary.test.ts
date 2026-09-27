@@ -18,11 +18,13 @@ function body(fn: string): string {
   return src.slice(start, after === -1 ? undefined : after);
 }
 
+// Re-pointed under C1-S9-81 from the exact `const { error } =`: writes now
+// also bind the rows they changed and read them. The property is unchanged.
 describe('recipes-module write boundaries fail visibly', () => {
   for (const fn of ['toggleFavorite', 'markMade', 'deleteRecipe']) {
     it(`${fn} captures the Supabase error and toasts it`, () => {
       const b = body(fn);
-      expect(b, `${fn} must destructure { error }`).toMatch(/const \{ error \} = await/);
+      expect(b, `${fn} must destructure { error }`).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await/);
       expect(b, `${fn} must guard on error`).toContain('if (error) return toastError(describeDbError(error))');
     });
   }

@@ -12,8 +12,10 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -25,6 +27,8 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { galleryStep } from '@/lib/ui/gallery';
+import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
@@ -89,10 +93,30 @@ export function PhotosModule() {
     },
   });
 
+  // SEC-001: every photo, video, cover and download below is read through a URL
+  // signed with this viewer's session. `url` stays the stored reference.
+  const media = useFamilyMediaUrls(allPhotos.map((p) => p.url));
+
   const photos = allPhotos.filter((p) =>
     !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
+
+  // Left/Right walk the gallery while the lightbox is open. The two chevrons
+  // are the only way to move between photos and they unmount at each end, so
+  // without this a keyboard user could reach the first photo and then had to
+  // close and reopen to see the next one. Clamped rather than wrapped: the
+  // buttons do not wrap either, and the counter ("3 / 20") says where you are.
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (galleryStep(0, e.key, 1) === null) return;
+      setLightboxIdx((i) => (i === null ? i : galleryStep(i, e.key, photos.length) ?? i));
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxIdx, photos.length]);
 
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
@@ -158,29 +182,16 @@ export function PhotosModule() {
   // `lightboxIdx !== null` is the real open condition, not a literal `true`: the
   // element is only rendered while it is open.
   //
-  // What it deliberately does NOT do is declare aria-modal. The attribute tells
-  // assistive technology the rest of the page is inert, and the rule this
-  // codebase settled on is that only the shared Modal says it — a photo viewer
-  // cannot take that component's chrome (a title bar and a max-w-lg panel over a
-  // full-bleed image), and the grandfathered list of overlays that say it
-  // themselves may only shrink. The behaviour the attribute promises is
-  // implemented here regardless; what is left out is the CLAIM, not the trap.
+  // It declares aria-modal, which tells assistive technology the rest of the
+  // page is inert, and that claim is true only because the hook below makes it
+  // so. The licence is the contract, not a name: a component may say
+  // aria-modal when it takes useDialogBehavior and attaches the ref
+  // (tests/consent-preference-centre-focus.test.ts, hasDialogContract). A photo
+  // viewer cannot take the shared Modal's chrome — a title bar and a max-w-lg
+  // panel over a full-bleed image — so it takes the behaviour instead.
   const lightboxRef = useRef<HTMLDivElement>(null);
   const closeLightbox = useCallback(() => setLightboxIdx(null), []);
   useDialogBehavior(lightboxRef, lightboxIdx !== null, { onClose: closeLightbox });
-
-  // The arrows move between photos because the Previous/Next buttons already
-  // exist either side of the image and a keyboard user should not have to Tab
-  // back to them for every photo.
-  useEffect(() => {
-    if (lightboxIdx === null) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') setLightboxIdx((i) => (i !== null && i > 0 ? i - 1 : i));
-      if (e.key === 'ArrowRight') setLightboxIdx((i) => (i !== null && i < photos.length - 1 ? i + 1 : i));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [lightboxIdx, photos.length]);
 
   // ── Drag & drop ───────────────────────────────────────────
   useEffect(() => {
@@ -201,8 +212,10 @@ export function PhotosModule() {
 
   async function toggleFavorite(photo: Photo) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
+    const { data: favorited, error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(favorited)) toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshPhotos();
   }
 
@@ -212,18 +225,25 @@ export function PhotosModule() {
     // dropping this error showed a false "Photo deleted" while the photo remained.
     // Only remove the storage object after the row is gone, so a failed delete can
     // never orphan a library row that points at an already-removed image.
-    const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
+    // "Only after the row is gone" needs the row to be gone: under RLS a refused
+    // delete comes back with no error and zero rows, and this went on to remove
+    // the file and say "Photo deleted" about a photo still in the library.
+    // Zero rows now stops before storage is touched. Audit C1-S9-82.
+    const { data: removedRow, error } = await supabase.from('family_photos').delete().eq('id', photo.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
-    // SEC-015, same shape: storage answers a refused delete and a delete of
-    // something absent identically — `error: null`, `data: []` — so the returned
-    // list is what says the file is gone. `family-media` is a PUBLIC bucket, so
-    // a removal that quietly failed leaves the photo retrievable by its URL for
-    // ever, with no row left to find it by. The comment above records that
-    // dropping the ROW delete's error once showed a false "Photo deleted"; this
-    // is the same falsehood, three lines down.
+    if (wroteNoRows(removedRow)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshPhotos(); return; }
+    // This module deletes the ROW first, deliberately — the comment above says
+    // why. What it did not do was read the storage result: a file that survives
+    // after its row is gone is referenced by nothing, and "Photo deleted" was
+    // said either way. The row really is gone, so this cannot refuse; it can
+    // stop claiming. And storage answers a refused delete and a delete of
+    // something absent identically — `error: null`, `data: []` — so the
+    // returned list, read by removeFamilyMedia, is what says the file is gone
+    // (SEC-015). Audit C1-S6-01.
     const removal = await removeFamilyMedia(supabase, photo.storage_path);
     if (removal.error) {
-      toastError(tr('photosModule.removedFromYourLibraryBut'));
+      console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, removal.error);
+      toastError(tr('photosModule.theFileCouldNotBe'));
       void refreshPhotos();
       if (lightboxIdx !== null) setLightboxIdx(null);
       return;
@@ -235,8 +255,9 @@ export function PhotosModule() {
 
   async function updateCaption(photo: Photo, caption: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    const { data: captioned, error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(captioned)) toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshPhotos();
     setEditPhoto(null);
   }
@@ -312,8 +333,7 @@ export function PhotosModule() {
                     className="group text-left">
                     <div className="relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-elevated">
                       {album.cover ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <FamilyMediaImg src={album.cover} alt={album.name} loading="lazy" decoding="async" className="h-full w-full object-cover transition group-hover:scale-105" />
                       ) : (
                         <div className="flex h-full items-center justify-center text-5xl opacity-30">
                           <kind.icon className="h-12 w-12" style={{ color: kind.color }} />
@@ -391,10 +411,10 @@ export function PhotosModule() {
                       <Play className="h-10 w-10 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt={photo.caption ?? tr('photosModule.photo')}
+                    <FamilyMediaImg src={photo.url} alt={photo.caption ?? tr('photosModule.photo')}
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
-                      loading="lazy" decoding="async" />
+                      loading="lazy" decoding="async"
+                      fallback={<div className="aspect-square w-full bg-surface/40" />} />
                   )}
                   </button>
                   {/* Video badge */}
@@ -446,8 +466,7 @@ export function PhotosModule() {
                       <Play className="h-5 w-5 text-white/70" />
                     </div>
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo.url ?? ''} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-xl object-cover" />
+                    <FamilyMediaImg src={photo.url} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
@@ -497,23 +516,25 @@ export function PhotosModule() {
             <div className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center">
               {photos[lightboxIdx].media_type === 'video' ? (
                 <video
-                  src={photos[lightboxIdx].url ?? ''}
+                  src={media(photos[lightboxIdx].url) ?? undefined}
                   controls
                   autoPlay
                   playsInline
                   className="max-h-[80vh] max-w-full rounded-2xl shadow-2xl"
                 />
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photos[lightboxIdx].url ?? ''} alt={photos[lightboxIdx].caption ?? ''}
-                  className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+                <FamilyMediaImg src={photos[lightboxIdx].url} alt={photos[lightboxIdx].caption ?? ''}
+                  className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl"
+                  fallback={<div className="h-[50vh] w-[60vw] max-w-full rounded-2xl bg-white/10" />} />
               )}
               {/* Controls */}
               <div className="mt-4 flex items-center gap-3 text-white">
                 <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
                 {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
                 <div className="ml-auto flex gap-2">
-                  <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                  <a href={media(photos[lightboxIdx].url) ?? undefined} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
+                    aria-disabled={media(photos[lightboxIdx].url) ? undefined : true}
+                    onClick={(e) => { if (!media(photos[lightboxIdx].url)) e.preventDefault(); }}
                     className="rounded-lg bg-elevated p-2 hover:bg-elevated transition">
                     <Download className="h-4 w-4" />
                   </a>
@@ -716,8 +737,8 @@ function EditPhotoModal({ photo, onClose, onSave }: { photo: Photo; onClose: () 
   return (
     <Modal open onClose={onClose} title={tr('photos.editPhoto')}>
       <div className="space-y-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo.url ?? ''} alt="" className="max-h-48 w-full rounded-xl object-cover" />
+        <FamilyMediaImg src={photo.url} alt="" className="max-h-48 w-full rounded-xl object-cover"
+          fallback={<div className="h-48 w-full rounded-xl bg-surface/40" />} />
         <Field label={tr('photos.caption')}>
           {(id) => <Input id={id} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={tr('photos.addACaption')} autoFocus />}
         </Field>

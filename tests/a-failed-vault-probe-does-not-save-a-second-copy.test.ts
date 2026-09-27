@@ -394,8 +394,12 @@ describe('a failed vault probe does not save a second copy', () => {
     const result = await saveDiscoveredRecipe({ provider: 'themealdb', sourceRecipeId: TERIYAKI });
 
     expect(result.ok, 'a duplicate-key error with no row behind it must be reported').toBe(false);
-    // Described, not the database's own "duplicate key …" text (SEC-023).
-    expect(result.ok ? '' : result.error).toBe('That already exists. Try a different value.');
+    // Still a failure — and described, not repeated: 23505 is classified, so
+    // the family reads "That already exists…" and the constraint name stays in
+    // the log (tests/the-database-does-not-talk-to-the-browser.test.ts).
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.error).toMatch(/already exists/);
+    expect(result.ok ? '' : result.error).not.toContain('duplicate key');
     expect(state.rows).toHaveLength(0);
   });
 });

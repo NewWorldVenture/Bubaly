@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -91,8 +91,10 @@ export function LanguageModule() {
 
   async function gradeCard(c: Card, grade: Grade) {
     const next = sm2(c, grade, new Date());
-    const { error } = await createClient().from('vocab_cards').update(next).eq('id', c.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('vocab_cards').update(next).eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setRevealed(false);
     setReviewedCount((n) => n + 1);
   }
@@ -102,26 +104,28 @@ export function LanguageModule() {
     const minutes = Math.max(1, Math.round(reviewedCount / 4));
     const { error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${reviewedCount} cards reviewed`, practiced_on: isoDate(new Date()), created_by: userId });
     if (error) return toastError(describeDbError(error));
-    success(tr('language.cardsReviewedMinutesLogged', { cards: reviewedCount, minutes }));
+    success(tr('modules.cardsReviewed', { count: reviewedCount, minutes }));
     setReviewedCount(0);
   }
 
   async function toggleSuspend(c: Card) {
-    const { error } = await createClient().from('vocab_cards').update({ is_suspended: !c.is_suspended }).eq('id', c.id);
+    const { data: updated2, error } = await createClient().from('vocab_cards').update({ is_suspended: !c.is_suspended }).eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteCard(c: Card) {
     if (!(await askConfirm({ title: tr('language.deleteCardQ'), body: tr('confirm.cannotBeUndone') }))) return;
-    const { error } = await createClient().from('vocab_cards').delete().eq('id', c.id);
+    const { data: removed, error } = await createClient().from('vocab_cards').delete().eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('languageModule.cardRemoved'));
   }
 
   async function addStarterDeck() {
     if (!goal) return;
     const deckCards = starterDeck(goal.language_code);
-    if (!deckCards.length) return toastError(tr('language.noStarterDeckYet', { language: goal.language_label }));
+    if (!deckCards.length) return toastError(tr('modules.noStarterDeck', { language: goal.language_label }));
     const have = new Set(myCards.map((c) => c.term.toLowerCase()));
     const fresh = deckCards.filter((c) => !have.has(c.term.toLowerCase()));
     if (!fresh.length) return toastError(tr('languageModule.theStarterDeckIsAlready'));
@@ -129,25 +133,28 @@ export function LanguageModule() {
     const { error } = await createClient().from('vocab_cards').insert(fresh.map((c) => ({ family_id: familyId, goal_id: goal.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: isoDate(new Date()), created_by: userId })));
     setAdding(false);
     if (error) return toastError(describeDbError(error));
-    success(tr('language.starterCardsAdded', { count: fresh.length }));
+    success(tr('modules.starterCardsAdded', { count: fresh.length }));
   }
 
   async function deleteSession(s: Session) {
-    const { error } = await createClient().from('language_sessions').delete().eq('id', s.id);
+    const { data: removed2, error } = await createClient().from('language_sessions').delete().eq('id', s.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('languageModule.sessionRemoved'));
   }
 
   async function archiveGoal(g: Goal, active: boolean) {
-    const { error } = await createClient().from('language_goals').update({ is_active: active }).eq('id', g.id);
+    const { data: updated3, error } = await createClient().from('language_goals').update({ is_active: active }).eq('id', g.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(active ? 'Goal reopened' : 'Goal archived');
   }
 
   async function deleteGoal(g: Goal) {
     if (!(await askConfirm({ title: tr('language.deleteGoalQ', { name: nameOf(g.member_id), language: g.language_label }), body: tr('language.deleteGoalBody') }))) return;
-    const { error } = await createClient().from('language_goals').delete().eq('id', g.id);
+    const { data: removed3, error } = await createClient().from('language_goals').delete().eq('id', g.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setGoalId('');
     success(tr('languageModule.goalDeleted'));
   }
@@ -400,11 +407,12 @@ function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { family
     setLoading(true);
     const payload = { term, translation, example: String(f.get('example') ?? '').trim() || null, part_of_speech: String(f.get('part_of_speech') ?? '').trim() || null, tags: String(f.get('tags') ?? '').split(',').map((t) => t.trim()).filter(Boolean), notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
-    const { error } = card
-      ? await supabase.from('vocab_cards').update(payload).eq('id', card.id)
-      : await supabase.from('vocab_cards').insert({ family_id: familyId, goal_id: goalId, created_by: userId, due_on: isoDate(new Date()), ...payload });
+    const { data: saved, error } = card
+      ? await supabase.from('vocab_cards').update(payload).eq('id', card.id).select('id')
+      : await supabase.from('vocab_cards').insert({ family_id: familyId, goal_id: goalId, created_by: userId, due_on: isoDate(new Date()), ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

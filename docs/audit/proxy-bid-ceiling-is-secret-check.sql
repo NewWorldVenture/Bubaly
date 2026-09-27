@@ -1,7 +1,7 @@
--- A proxy bid's ceiling is secret. (SEC-016, migration 0397)
+-- A proxy bid's ceiling is secret. (SEC-016, migration 0452)
 --
 -- In a proxy auction the leader's maximum is the one thing the mechanism
--- depends on nobody knowing. Before 0397 every rival in a sharing circle could
+-- depends on nobody knowing. Before 0452 every rival in a sharing circle could
 -- select `highest_max_cents` (and the "hidden floor" `reserve_cents`), and the
 -- seller could select every bidder's `max_cents`. A rival who bids exactly the
 -- leader's ceiling lands in the engine's "does not beat the standing proxy"
@@ -71,7 +71,7 @@ begin
      and a.attname <> all (secrets)
      and not has_column_privilege('authenticated', c.oid, a.attname, 'SELECT');
   if missing is not null then
-    raise warning 'REGRESSION: ordinary columns are not selectable (a new column needs its grant — see 0397): %', missing;
+    raise warning 'REGRESSION: ordinary columns are not selectable (a new column needs its grant — see 0452): %', missing;
     failures := failures + 1;
   end if;
 

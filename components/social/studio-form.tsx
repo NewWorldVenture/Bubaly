@@ -21,10 +21,16 @@ import { resolveScheduleTime, scheduleTimezone } from '@/lib/social/schedule-tim
 type AccountLite = { id: string; platform: SocialPlatform; display_name: string | null; handle: string | null; status: string };
 
 export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLite[]; defaultTimezone?: string }) {
-  const a11yId = useId();
   const tr = useTranslations();
   const router = useRouter();
   const [title, setTitle] = useState('');
+  // Each caption below was a styled <label> pointing at nothing: announced on
+  // its own, then silence when focus reached the field it named. Every name
+  // already exists in the catalogue, so this is wiring, not copy.
+  const uid = useId();
+  const titleFieldId = `${uid}title`;
+  const bodyFieldId = `${uid}body`;
+  const linkFieldId = `${uid}link`;
   const [body, setBody] = useState('');
   const [link, setLink] = useState('');
   const [kind, setKind] = useState<PostKind>('text');
@@ -161,8 +167,9 @@ export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLit
       {/* Editor */}
       <div className="space-y-4 lg:col-span-2">
         <Card>
-          <label htmlFor={`${a11yId}-f1`} className="mb-1 block text-xs font-medium text-muted">{tr('studio.draftTitleInternal')}</label>
-          <input id={`${a11yId}-f1`}
+          <label htmlFor={titleFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.draftTitleInternal')}</label>
+          <input
+            id={titleFieldId}
             value={title}
             onChange={(e) => editDraft(() => setTitle(e.target.value))}
             placeholder={tr('studio.springBreakRecap')}
@@ -184,16 +191,18 @@ export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLit
             ))}
           </div>
 
-          <label htmlFor={`${a11yId}-f2`} className="mb-1 block text-xs font-medium text-muted">{tr('studio.captionBody')}</label>
-          <textarea id={`${a11yId}-f2`}
+          <label htmlFor={bodyFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.captionBody')}</label>
+          <textarea
+            id={bodyFieldId}
             value={body}
             onChange={(e) => editDraft(() => setBody(e.target.value))}
             rows={6}
             placeholder={tr('studio.writeYourPostUseHashtagsAnd')}
             className="w-full resize-y rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
-          <label htmlFor={`${a11yId}-f3`} className="mb-1 mt-3 block text-xs font-medium text-muted">{tr('studio.linkOptional')}</label>
-          <input id={`${a11yId}-f3`}
+          <label htmlFor={linkFieldId} className="mb-1 mt-3 block text-xs font-medium text-muted">{tr('studio.linkOptional')}</label>
+          <input
+            id={linkFieldId}
             value={link}
             onChange={(e) => editDraft(() => setLink(e.target.value))}
             placeholder="https://…"

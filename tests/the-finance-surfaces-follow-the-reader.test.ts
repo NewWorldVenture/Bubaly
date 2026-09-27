@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { usd as usdDollars, fmtDueDate } from '@/lib/finance/hub';
 import { usd as usdCents } from '@/lib/finance/splits';
 import { buildCashflowTimeline, money, pretty } from '@/lib/finance/timeline';
+import { at } from './helpers/source-order';
 
 describe('lib/finance/hub — the Finances sub-pages', () => {
   it('formats dollars in the reader locale, in dollars', () => {
@@ -39,7 +40,7 @@ describe('lib/finance/hub — the Finances sub-pages', () => {
     // American ORDER. Assert the order, not the words.
     const de = fmtDueDate('2026-07-14', 'de-DE');
     expect(de).toBe('14. Juli 2026');
-    expect(de.indexOf('14')).toBeLessThan(de.indexOf('Juli'));
+    expect(at(de, '14')).toBeLessThan(at(de, 'Juli'));
     expect(fmtDueDate('2026-07-14', 'pt-PT')).toBe('14/07/2026');
     expect(fmtDueDate('2026-07-14')).toBe('Jul 14, 2026');
   });

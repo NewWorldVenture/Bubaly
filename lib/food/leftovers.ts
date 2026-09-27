@@ -1,5 +1,10 @@
 // lib/food/leftovers.ts — pure helpers for Leftover Intelligence.
 // Track leftovers and tell the family what to eat before it spoils. No I/O.
+//
+// Takes a `todayKey` rather than an instant, for the reason lib/pantry/logic.ts
+// gives at length: "eat today" and "past use-by" were being decided against the
+// HOST's midnight, so for the last seven hours of a Californian day a leftover
+// due tomorrow was already telling the family to eat it now.
 
 import { daysUntil, type ExpiryTone } from '@/lib/pantry/logic';
 
@@ -30,8 +35,8 @@ export interface LeftoverUrgency {
 }
 
 /** Classify a leftover by its eat-before date into an action recommendation. */
-export function leftoverUrgency(useBy: string | null | undefined, now: number = Date.now()): LeftoverUrgency {
-  const days = daysUntil(useBy, now);
+export function leftoverUrgency(useBy: string | null | undefined, todayKey: string): LeftoverUrgency {
+  const days = daysUntil(useBy, todayKey);
   if (days === null) return { tone: 'neutral', label: 'No date', days: null, suggestion: 'ok' };
   if (days < 0) return { tone: 'danger', label: days === -1 ? 'Past use-by (1d)' : `Past use-by (${-days}d)`, days, suggestion: 'expired' };
   if (days === 0) return { tone: 'danger', label: 'Eat today', days, suggestion: 'eat_now' };
@@ -42,12 +47,12 @@ export function leftoverUrgency(useBy: string | null | undefined, now: number = 
 }
 
 /** Active (fresh) leftovers sorted most-urgent first. */
-export function activeLeftovers<T extends LeftoverLike>(items: T[], now: number = Date.now()): T[] {
+export function activeLeftovers<T extends LeftoverLike>(items: T[], todayKey: string): T[] {
   return items
     .filter((l) => (l.status ?? 'fresh') === 'fresh')
     .sort((a, b) => {
-      const da = daysUntil(a.use_by, now);
-      const db = daysUntil(b.use_by, now);
+      const da = daysUntil(a.use_by, todayKey);
+      const db = daysUntil(b.use_by, todayKey);
       if (da === null) return 1;
       if (db === null) return -1;
       return da - db;
@@ -55,11 +60,11 @@ export function activeLeftovers<T extends LeftoverLike>(items: T[], now: number 
 }
 
 /** A short, friendly "eat me first" line for the dashboard, or null. */
-export function leftoverNudge<T extends LeftoverLike>(items: T[], now: number = Date.now()): string | null {
-  const active = activeLeftovers(items, now);
+export function leftoverNudge<T extends LeftoverLike>(items: T[], todayKey: string): string | null {
+  const active = activeLeftovers(items, todayKey);
   if (active.length === 0) return null;
   const top = active[0];
-  const u = leftoverUrgency(top.use_by, now);
+  const u = leftoverUrgency(top.use_by, todayKey);
   const name = top.source_meal || top.name || 'a leftover';
   if (u.suggestion === 'expired') return `Toss or check ${name} — it's past its use-by date.`;
   if (u.suggestion === 'eat_now') return `Eat ${name} today before it goes bad.`;
@@ -69,9 +74,9 @@ export function leftoverNudge<T extends LeftoverLike>(items: T[], now: number = 
 }
 
 /** Count of leftovers that need attention soon (eat now/soon or expired). */
-export function urgentLeftoverCount<T extends LeftoverLike>(items: T[], now: number = Date.now()): number {
-  return activeLeftovers(items, now).filter((l) => {
-    const s = leftoverUrgency(l.use_by, now).suggestion;
+export function urgentLeftoverCount<T extends LeftoverLike>(items: T[], todayKey: string): number {
+  return activeLeftovers(items, todayKey).filter((l) => {
+    const s = leftoverUrgency(l.use_by, todayKey).suggestion;
     return s === 'eat_now' || s === 'eat_soon' || s === 'expired';
   }).length;
 }

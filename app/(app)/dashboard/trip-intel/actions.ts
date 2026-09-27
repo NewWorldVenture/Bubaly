@@ -10,7 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getFormat } from '@/lib/utils/format-server';
 import { createServer } from '@/lib/supabase/server';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { departureFromEstimate } from '@/lib/trips/drive-time';
 import type { TripRecommendations } from '@/lib/trips/research';
 
@@ -65,11 +65,13 @@ export async function saveTripPlanAction(input: {
 }
 
 export async function deleteTripPlanAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
-    .from('trip_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: removedPlan, error } = await supabase
+    .from('trip_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(removedPlan)) return { ok: false, error: t('actions.couldNotDeleteThatTripPlan') };
   revalidatePath('/dashboard/trip-intel');
   return { ok: true };
 }
@@ -131,9 +133,15 @@ async function upsertHeadOutEvent(
     category: 'general' as const,
   };
   if (opts.existingId) {
-    const { error } = await supabase.from('calendar_events').update(fields).eq('id', opts.existingId).eq('family_id', opts.familyId);
+    // If the family deleted the departure event from the calendar itself, this
+    // matched nothing and still returned `existingId` — so the plan went on
+    // pointing at an event that no longer exists and said the leave-by time was
+    // on their calendar. Zero rows now falls through to create it again, which
+    // is what the family asked for by saving the plan. Audit C1-S9-61.
+    const { data: updated, error } = await supabase.from('calendar_events')
+      .update(fields).eq('id', opts.existingId).eq('family_id', opts.familyId).select('id');
     if (error) return { ok: false, error: describeDbError(error) };
-    return { ok: true, id: opts.existingId };
+    if (!wroteNoRows(updated)) return { ok: true, id: opts.existingId };
   }
   const { data, error } = await supabase
     .from('calendar_events').insert({ ...fields, family_id: opts.familyId, created_by: opts.userId }).select('id').maybeSingle();
@@ -172,10 +180,15 @@ async function withdrawHeadOutEvent(
   eventId: string,
   planError: unknown,
 ): Promise<boolean> {
-  const { error } = await supabase.from('calendar_events').delete().eq('id', eventId).eq('family_id', familyId);
-  if (error) {
+  // Confirmed: a delete RLS refused answers zero rows and no error, and `true`
+  // here tells the family the event is gone while it stays on the calendar.
+  // This event was inserted moments ago by this request, so zero rows is a
+  // refusal, not an event already removed. Audit C1-S9-89.
+  const { data: withdrawn, error } = await supabase.from('calendar_events').delete()
+    .eq('id', eventId).eq('family_id', familyId).select('id');
+  if (error || wroteNoRows(withdrawn)) {
     console.error('[trip-intel] a head-out event with no plan behind it could not be withdrawn', {
-      eventId, familyId, planError, withdrawError: error,
+      eventId, familyId, planError, withdrawError: error ?? 'no rows deleted',
     });
     return false;
   }
@@ -341,7 +354,7 @@ export async function refreshDeparturePlanAction(input: {
   // would cut the link to that event and duplicate it on the next refresh.
   if (!headOut.ok) return { ok: false, error: headOut.error };
 
-  const { error } = await supabase
+  const { data: refreshed, error } = await supabase
     .from('departure_plans')
     .update({
       drive_seconds: input.driveSeconds,
@@ -352,7 +365,8 @@ export async function refreshDeparturePlanAction(input: {
       reminder_event_id: headOut.id,
       last_checked_at: new Date().toISOString(),
     })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+    .eq('id', input.id).eq('family_id', ctx.active.familyId)
+    .select('id');
 
   if (error) {
     // A plan whose head-out event had been deleted from the calendar (the FK
@@ -365,12 +379,18 @@ export async function refreshDeparturePlanAction(input: {
     }
     return { ok: false, error: describeDbError(error) };
   }
+  // This returns `leaveBy` to the caller — the time the family is told to
+  // leave. An update matching no rows means that time was never stored, so the
+  // reminder still fires against the old drive estimate while the screen shows
+  // the new one. Audit C1-S9-56.
+  if (wroteNoRows(refreshed)) return { ok: false, error: t('actions.couldNotUpdateThatDeparturePlan') };
   revalidatePath('/dashboard/trip-intel');
   revalidatePath('/dashboard/calendar');
   return { ok: true, data: { leaveBy: plan.leaveByISO } };
 }
 
 export async function deleteDeparturePlanAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
@@ -395,13 +415,18 @@ export async function deleteDeparturePlanAction(input: { id: string }): Promise<
     .from('departure_plans').select('reminder_event_id').eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
   if (readError) return { ok: false, error: describeDbError(readError) };
   if (existing?.reminder_event_id) {
-    const { error: eventError } = await supabase
-      .from('calendar_events').delete().eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId);
+    const { data: removedEvent, error: eventError } = await supabase.from('calendar_events').delete()
+      .eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId).select('id');
     if (eventError) return { ok: false, error: describeDbError(eventError) };
+    // A reminder whose plan still links it cannot already be gone — 00981's
+    // ON DELETE SET NULL would have cleared the link — so zero rows here is a
+    // refusal, and the plan is kept so the family can retry. Audit C1-S9-89.
+    if (wroteNoRows(removedEvent)) return { ok: false, error: t('actions.couldNotRemoveThatReminder') };
   }
-  const { error } = await supabase
-    .from('departure_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: removedDeparture, error } = await supabase
+    .from('departure_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(removedDeparture)) return { ok: false, error: t('actions.couldNotDeleteThatDeparturePlan') };
   revalidatePath('/dashboard/trip-intel');
   revalidatePath('/dashboard/calendar');
   return { ok: true };

@@ -14,46 +14,37 @@ import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
-import { localPartsAt, startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
+import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// Every window this returns is a FAMILY day, not a host day. `setHours(0,0,0,0)`
-// is midnight where the process runs, so on a UTC host a Californian family's
-// dashboard counted "today" from 17:00 yesterday: last night's events on this
-// morning's list, tonight's missing from it (F-017, F-F02).
+// Every bound below is the FAMILY's, not the host's.
 //
-// The later boundaries walk day by day through `startOfNextLocalDay` rather
-// than adding multiples of 24 hours, because a DST changeover inside the window
-// shifts every boundary after it by an hour.
-function advanceLocalDays(from: Date, timezone: string, days: number): Date {
-  let at = from;
-  for (let i = 0; i < days; i++) at = startOfNextLocalDay(at, timezone);
-  return at;
-}
-
-function dayBounds(timezone: string) {
-  const now = new Date();
-  const start = startOfLocalDay(now, timezone);
-  const end = startOfNextLocalDay(now, timezone);
-  const in7 = advanceLocalDays(start, timezone, 7);
-  const in14 = advanceLocalDays(start, timezone, 14);
-  // Monday-first, read in the family's zone: `getDay()` on a host-zone Date can
-  // name a different weekday than the family is living.
-  const localDow = new Date(Date.UTC(
-    localPartsAt(start, timezone).year,
-    localPartsAt(start, timezone).month - 1,
-    localPartsAt(start, timezone).day,
-  )).getUTCDay();
-  let weekStart = start;
-  for (let i = 0; i < (localDow + 6) % 7; i++) {
-    const p = localPartsAt(weekStart, timezone);
-    weekStart = startOfLocalDay(new Date(Date.UTC(p.year, p.month - 1, p.day - 1, 12)), timezone);
-  }
-  const weekEnd = advanceLocalDays(weekStart, timezone, 7);
-  return { start, end, in7, in14, weekStart, weekEnd };
+// `setHours(0, 0, 0, 0)` is the server's midnight, which on a UTC host is 17:00
+// in California and 11:00 the same morning in Sydney. This dashboard's "today",
+// "this week" and "next 7 / 14 days" all hung off it, so a household opening it
+// after their afternoon cutover saw tomorrow's day and lost today's — every
+// day. Same defect and same fix as the kitchen display
+// (app/(app)/display/page.tsx:122).
+//
+// Day KEYS rather than millisecond arithmetic: `+ 7 * 86400000` drifts by an
+// hour across a DST boundary, and `zonedDayBoundsMs` re-resolves each key onto a
+// real local midnight. `weekStartDayKey` keeps the Monday-start week the strip
+// already used.
+function dayBounds(tz: string) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const today = zonedDayBoundsMs(todayKey, tz);
+  const weekStartKey = weekStartDayKey(todayKey);
+  return {
+    start: new Date(today.start),
+    end: new Date(today.end),
+    in7: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 7), tz).start),
+    in14: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 14), tz).start),
+    weekStart: new Date(zonedDayBoundsMs(weekStartKey, tz).start),
+    weekEnd: new Date(zonedDayBoundsMs(addDaysToDayKey(weekStartKey, 7), tz).start),
+  };
 }
 
 function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {

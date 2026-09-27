@@ -7,6 +7,7 @@ import { parseFormFields, validateSubmission, submissionEmail, submissionName } 
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 const MAX_FORM_REQUEST_BYTES = 65_536;
@@ -44,13 +45,22 @@ export async function POST(req: NextRequest) {
   const values = (body.values && typeof body.values === 'object') ? body.values as Record<string, unknown> : {};
   if (!formId) return NextResponse.json({ error: t('submit.formidIsRequired') }, { status: 422 });
 
-  const { data: form } = await supabase
+  // A refused read left the binding null and took the same branch as a row
+  // that genuinely is not there, so the caller was told their own form
+  // does not exist. "Not found" is a claim about their data; it has to come
+  // from an answer, not from the absence of one. Fails closed either way —
+  // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+  const { data: form, error: formError } = await supabase
     .from('marketing_forms')
     .select('id, name, fields')
     .eq('id', formId)
     .eq('status', 'active')
     .is('deleted_at', null)
     .maybeSingle();
+  if (formError) {
+    console.error('[forms/submit] form read failed', { formId, error: describeReadError(formError) });
+    return NextResponse.json({ error: t('submit.thisFormIsTemporarilyUnavailable') }, { status: 503 });
+  }
   if (!form) return NextResponse.json({ error: t('submit.thisFormIsNoLonger') }, { status: 404 });
 
   const fields = parseFormFields(form.fields);

@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { CallHistory } from '@/components/guardian/call-history';
 import { ErrorState } from '@/components/ui/states';
 import { Clock, ArrowLeft } from 'lucide-react';
@@ -28,14 +27,13 @@ export default async function HistoryPage({
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   // settleAll with one query rather than settle(): the Guardian tables are reached
   // through a cast (`withGuardianTables`), and settle's single-value generic
   // infers `unknown` from that builder while settleAll's tuple mapping keeps the
   // response shape. Same guarantee either way — a transport rejection arrives as
   // { data: null, error } instead of taking the page to the error boundary.
-  const [{ data: communications, count, error }] = await settleAll([(db.from('guardian_communications') as ReturnType<typeof supabase.from>)
+  const [{ data: communications, count, error }] = await settleAll([supabase.from('guardian_communications')
     .select(
       'id, comm_type, direction, from_number, to_number, from_name, body, summary, sentiment, trust_level_at_time, routing_mode_used, ai_decision_reason, scam_detected, scam_type, scam_confidence, call_duration_secs, call_recording_url, status, started_at, ended_at',
       { count: 'exact' },

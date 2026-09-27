@@ -36,8 +36,23 @@ function routeFiles(dir: string, out: string[] = []): string[] {
 const blankComments = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, ' '));
 
+/** Blank every `console.*(…)` call: a log payload is where the real message belongs. */
+function blankLogs(s: string): string {
+  let out = s;
+  for (const m of s.matchAll(/\bconsole\.(?:error|warn|log|info|debug)\s*\(/g)) {
+    let depth = 0;
+    let end = m.index!;
+    for (let i = m.index! + m[0].length - 1; i < s.length; i++) {
+      if (s[i] === '(') depth++;
+      else if (s[i] === ')' && --depth === 0) { end = i; break; }
+    }
+    out = out.slice(0, m.index!) + out.slice(m.index!, end + 1).replace(/[^\n]/g, ' ') + out.slice(end + 1);
+  }
+  return out;
+}
+
 describe('API database error boundaries', () => {
-  const routes = routeFiles('app/api').map((f) => [f, blankComments(readFileSync(f, 'utf8'))] as const);
+  const routes = routeFiles('app/api').map((f) => [f, blankLogs(blankComments(readFileSync(f, 'utf8')))] as const);
   const answering = routes.filter(([, src]) => /NextResponse\.json\(/.test(src));
 
   it('reads every API route, not a list of them (non-vacuity)', () => {
@@ -98,5 +113,9 @@ describe('API database error boundaries', () => {
     expect(RAW_PROVIDER_MESSAGE.some((p) => p.test('return NextResponse.json({ error: error.message });'))).toBe(true);
     expect(RAW_PROVIDER_MESSAGE.some((p) => p.test('return NextResponse.json({ error: String(err) });'))).toBe(true);
     expect(RAW_PROVIDER_MESSAGE.some((p) => p.test("return NextResponse.json({ error: t('x.couldNotDoThat') });"))).toBe(false);
+ 
+    // A log payload is not an answer, on one line or several.
+    const logged = blankLogs("console.error('[x] failed', {\n  slug,\n  error: error.message,\n});\nreturn NextResponse.json({ error: t('x.y') });");
+    expect(RAW_PROVIDER_MESSAGE.some((p) => p.test(logged))).toBe(false);
   });
 });

@@ -80,6 +80,9 @@ function respond(call: Call): Reply {
   if (call.table === 'family_automation_runs' && call.kind === 'insert') return { data: { id: 'run-park' }, error: null };
   if (call.table === 'family_automation_runs' && call.kind === 'select') return { data: call.filters.request_id === 'req-0' ? state.filedRuns : [], error: null };
   if (call.table === 'ai_conversations') return { data: state.conversation, error: null };
+  // A matched update answers `.select()` with its row (C1-S9-66); `data: null`
+  // is a shape the client cannot give once rows are asked for.
+  if (call.kind === 'update') return { data: [{ id: 'updated' }], error: null };
   return { data: null, error: null };
 }
 

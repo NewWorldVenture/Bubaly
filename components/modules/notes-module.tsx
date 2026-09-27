@@ -22,6 +22,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { openOnKey, stopAnd } from '@/lib/ui/a11y';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -320,9 +321,10 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
         const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
         const totalCheck = checklist ? note.body!.split('\n').filter((l) => /^\[[ x]\]/i.test(l.trim())).length : 0;
         return (
-          <div key={note.id} onClick={() => onOpen(note)}
+          <div key={note.id} role="button" tabIndex={0} onClick={() => onOpen(note)}
+            onKeyDown={(e) => openOnKey(e, () => onOpen(note))}
             className={cn(
-              'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5',
+              'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5 focus-ring',
               color.bg, color.ring,
             )}>
             {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}

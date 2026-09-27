@@ -5,18 +5,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
+import { appBaseUrl } from '@/lib/server/app-url';
 import { isManager } from '@/lib/constants/roles';
 import { bearerMatches } from '@/lib/server/secret-compare';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 
 export async function POST(req: NextRequest) {
   const tr = await getTranslations();
@@ -47,8 +47,6 @@ export async function POST(req: NextRequest) {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return NextResponse.json(payload, { status });
   };
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Get all parent/manager members with phone numbers
   const { data: members, error: membersError } = await supabase
@@ -135,7 +133,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Record the escalation
-  const { error: escalationError } = await gFrom('guardian_escalations').insert({
+  const { error: escalationError } = await supabase.from('guardian_escalations').insert({
     family_id: familyId,
     communication_id: commId ?? null,
     escalation_type: escalationType,

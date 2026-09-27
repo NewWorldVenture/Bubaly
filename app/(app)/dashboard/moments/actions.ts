@@ -5,8 +5,8 @@
 // (a signal the reasoning layer can learn from). Family-scoped via RLS.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { dayKeyInTz } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -30,7 +30,7 @@ async function setMomentStatus(momentKey: string, status: 'engaged' | 'dismissed
   // discarded outright, with `{ ok: true }` and no toast). Resolve the day in
   // the family's zone with the SAME helper the reader uses, so the write key and
   // the read key cannot drift apart.
-  const today = dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC');
+  const today = todayKeyFor(ctx);
   const { error } = await supabase.from('moment_activations').upsert(
     { family_id: ctx.active.familyId, moment_key: momentKey, as_of_date: today, status, created_by: ctx.user.id },
     { onConflict: 'family_id,moment_key,as_of_date' },

@@ -1,31 +1,31 @@
 // lib/marketplace/reserve-view.ts — read an auction's reserve facts on either
-// side of migration 0397.
+// side of migration 0452.
 //
-// 0397 (SEC-016) revokes client SELECT on `reserve_cents` and adds two stored
+// 0452 (SEC-016) revokes client SELECT on `reserve_cents` and adds two stored
 // generated columns, `has_reserve` and `reserve_met`, for the only two facts the
 // UI shows. The application ships ahead of its migrations — nothing from 0318 on
 // has reached production yet (docs/PENDING_PROD_MIGRATIONS.md) — so every client
 // read of those facts has to work against BOTH schemas:
 //
-//   before 0397   has_reserve / reserve_met do not exist  -> 42703;  reserve_cents readable
-//   after 0397    reserve_cents is not selectable          -> 42501;  the two columns readable
+//   before 0452   has_reserve / reserve_met do not exist  -> 42703;  reserve_cents readable
+//   after 0452    reserve_cents is not selectable          -> 42501;  the two columns readable
 //
 // A read therefore asks for the two columns first, and only when Postgres says
 // one of THOSE columns does not exist does it read again with `reserve_cents` and
 // derive the same two facts with `reserveMet()`, the rule the generated column
 // mirrors. Every other error goes back to the caller unchanged, so a refusal or a
-// dropped connection is never mistaken for an old schema. Once 0397 is applied
+// dropped connection is never mistaken for an old schema. Once 0452 is applied
 // everywhere the fallback is unreachable and this module can be removed.
 import { reserveMet } from './auction';
 
-/** The two columns 0397 adds, exactly as a read's column list must name them. */
+/** The two columns 0452 adds, exactly as a read's column list must name them. */
 export const RESERVE_VIEW_COLUMNS = 'has_reserve, reserve_met';
 
 type ReadError = { code?: string; message: string } | null;
 type ReadResult<T> = { data: T | null; error: ReadError };
 type LegacyRow = { reserve_cents?: number | null; current_bid_cents?: number | null; bid_count?: number | null };
 
-/** True only for "column does not exist" naming one of 0397's two columns. */
+/** True only for "column does not exist" naming one of 0452's two columns. */
 export function isReserveViewMissing(error: ReadError): boolean {
   return error?.code === '42703' && /\b(has_reserve|reserve_met)\b/.test(error.message);
 }

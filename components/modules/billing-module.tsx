@@ -920,7 +920,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billRemoved'));
@@ -929,7 +929,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function markBillPaid(id: string) {
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));
@@ -947,7 +947,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   async function deleteAccount(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteAccountQ'), body: tr('billing.deleteAccountBody') }))) return;
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.accountRemoved'));

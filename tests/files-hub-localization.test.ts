@@ -52,11 +52,20 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ from: () => ({
   delete: () => { h.remove(); return { eq: (...a: unknown[]) => chainEq(a) }; },
 }) }) }));
 
-/** `.eq(...)` resolves on its own and also offers `.select()`. */
-function chainEq(args: unknown[]) {
+/**
+ * `.eq(...)` resolves on its own, offers `.select()`, AND chains another `.eq()`.
+ *
+ * The chained form is what PostgREST really does, and this stub used to stop at
+ * one filter — so when the module started scoping its writes with both
+ * `.eq('id', …)` and `.eq('family_id', …)`, every case here died on
+ * "…update(...).eq(...).eq is not a function". A stub narrower than the builder
+ * it stands in for fails the code for being correct, so it chains now.
+ */
+function chainEq(args: unknown[]): Promise<unknown> & { select: () => Promise<unknown>; eq: (...a: unknown[]) => unknown } {
   const settled = h.eq(...(args as [string, unknown]));
   return Object.assign(Promise.resolve(settled), {
     select: () => Promise.resolve(settled),
+    eq: (...next: unknown[]) => chainEq(next),
   });
 }
 vi.mock('@/lib/storage/documents', () => ({
@@ -212,7 +221,13 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
 
   it('uses translated accessible actions/confirmation while retaining file identity and visibility mutations', async () => {
     render(); await clickName(t('filesHubModule.addFavorite'));
-    expect(h.update).toHaveBeenLastCalledWith({ is_favorite: true }); expect(h.eq).toHaveBeenLastCalledWith('id', 'file-1');
+    expect(h.update).toHaveBeenLastCalledWith({ is_favorite: true });
+    // BOTH filters, not just whichever is last: the row by id, and the family it
+    // must still belong to. RLS filters this update rather than refusing it, so
+    // the scope is what stops a write landing on another household's row and the
+    // `.select('id')` readback is what tells the person when nothing changed.
+    expect(h.eq).toHaveBeenCalledWith('id', 'file-1');
+    expect(h.eq).toHaveBeenLastCalledWith('family_id', 'family-1');
     await clickName(t('filesHubModule.moveVault'));
     expect(h.update).toHaveBeenLastCalledWith({ is_secure: true }); expect(h.success).toHaveBeenLastCalledWith(t('filesHubModule.movedVault'));
     h.docs = [doc({ is_secure: true, is_favorite: true })]; render();
@@ -222,7 +237,8 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
     await clickName(t('filesHubModule.deleteFile', { name: 'Original.pdf' }));
     expect(h.confirm).toHaveBeenCalledWith(t('filesHubModule.deleteConfirm', { name: 'Original.pdf' }));
     expect(h.discard).toHaveBeenCalledWith(expect.anything(), 'family-1/cloud/original.pdf');
-    expect(h.eq).toHaveBeenLastCalledWith('id', 'file-1');
+    expect(h.eq).toHaveBeenCalledWith('id', 'file-1');
+    expect(h.eq).toHaveBeenLastCalledWith('family_id', 'family-1');
   });
 
   it('renders translated empty/search/read/pending states and preserves upload cleanup on insert failure', async () => {

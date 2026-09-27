@@ -30,6 +30,7 @@
 //    it received, with the configured value offered as a second candidate.
 import { NextResponse, type NextRequest } from 'next/server';
 import { twilioSignatureConfigured, validateTwilioSignature } from '@/lib/guardian/twilio';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export type TwilioIngressVerdict =
   | { ok: true; via: 'signature' | 'unsigned_opt_out' }
@@ -70,7 +71,9 @@ export function twilioSignedUrlCandidates(req: NextRequest): string[] {
 
   const host = firstHop(req.headers.get('x-forwarded-host')) || firstHop(req.headers.get('host'));
   if (host) add(`${firstHop(req.headers.get('x-forwarded-proto')) || 'https'}://${host}`);
-  add(process.env.NEXT_PUBLIC_APP_URL);
+  // The one spelling of the configured base (lib/server/app-url.ts), so a
+  // trailing slash or quotes in the environment cannot change the digest.
+  add(appBaseUrl());
   return out;
 }
 
@@ -101,7 +104,7 @@ export function verifyTwilioRequest(
   }
   console.warn(
     `[twilio ingress] ${label}: signature matched none of the URLs this deployment believes it was called at` +
-    ` — ${tried.length ? tried.join(' , ') : '(no forwarded host and NEXT_PUBLIC_APP_URL unset)'}.` +
+    ` — ${tried.length ? tried.join(' , ') : '(no forwarded host and no configured app URL)'}.` +
     ' If Twilio is configured with a different hostname, that is the mismatch.',
   );
   return { ok: false, status: 401, reason: 'bad_signature', tried };

@@ -92,7 +92,9 @@ describe('no shared-secret call site compares with ===', () => {
 
   it('each reaches the constant-time comparison', () => {
     for (const file of SITES) {
-      expect(readFileSync(file, 'utf8'), file).toMatch(/secretsMatch\(|bearerMatches\(/);
+      // Either constant-time helper: this file's (lib/server/secret-compare) or
+      // main's HMAC-digest one (lib/server/secret-equals).
+      expect(readFileSync(file, 'utf8'), file).toMatch(/secretsMatch\(|bearerMatches\(|secretEquals\(/);
     }
   });
 

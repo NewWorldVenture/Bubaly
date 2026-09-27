@@ -25,7 +25,7 @@ export default async function MarketplaceQuestionsPage() {
   const familyId = ctx.active.familyId;
   const meId = ctx.active.member.id;
 
-  const [{ data: questions }, { data: listings, error: listingsError }, { data: members }] = await settleAll([
+  const [questionsRes, listingsRes, membersRes] = await settleAll([
     sb.from('marketplace_questions').select('id, listing_id, asker_member, question, answer, answered_by, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(500),
     // The title lookup every question is joined against: a capped read leaves
@@ -34,20 +34,24 @@ export default async function MarketplaceQuestionsPage() {
     sb.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 
-  // The listing read decides two things, not one: which listing each question
-  // is about, and which questions are MINE (`myListingIds`). A failed read falls
-  // through to an empty map, so every question loses its title AND the page
-  // tells the owner they have none to answer — a quieter wrong answer than an
-  // error, and a worse one.
-  if (listingsError) {
-    console.error('[marketplace-questions] listing read failed', listingsError);
+  // The comment above says a capped read leaves questions rendering without the
+  // listing they are about. readAllAsQuery reports that as `data: null` plus an
+  // error, and destructuring only `data` turned it into an empty title map — so
+  // every question rendered detached from its listing, silently. One of the
+  // call sites C4-S4-01 found unmigrated.
+  const readError = questionsRes.error ?? listingsRes.error ?? membersRes.error;
+  if (readError) {
+    console.error('[marketplace-questions] read failed or truncated', readError);
     return (
       <div className="space-y-6">
         <PageHeader title={t('marketplaceQuestions.questions')} description={t('questions.questionsOnYourListingsAnd')} />
-        <ErrorState message={t('marketplaceQuestions.couldNotLoadTheseQuestions')} />
+        <ErrorState message={t('listingQuestions.couldNotLoadQuestions')} />
       </div>
     );
   }
+  const { data: questions } = questionsRes;
+  const { data: listings } = listingsRes;
+  const { data: members } = membersRes;
 
   const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
   const nameOf = (id: string | null) => (id ? (members ?? []).find((m) => m.id === id)?.display_name ?? 'Someone' : 'Someone');

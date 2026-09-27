@@ -17,7 +17,7 @@
 // Only a parent or adult can change any of this; a child sees the settings
 // read-only, which is deliberate — knowing what Bubaly may do is not the same
 // as being able to widen it.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Bot, Check, Loader2, Moon, ShieldCheck } from 'lucide-react';
 import { AI_CATEGORIES, type AICategory } from '@/lib/ai/categories';
 import type { AISettings } from '@/lib/ai/family-settings';
@@ -80,28 +80,24 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
 
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the load CALL itself failed; translated at render, so the effect
+  // below keeps its empty dependency list. Audit C1-S9-74.
+  const [loadCallFailed, setLoadCallFailed] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
 
-  // The load runs once, on mount. Its failure message reads the CURRENT
-  // translator through a ref rather than listing `t` as a dependency, which
-  // would re-run the load whenever the translator's identity changed.
-  const tRef = useRef(t);
-  tRef.current = t;
   useEffect(() => {
     let alive = true;
-    // `{ ok: false }` was handled; a REJECTION was not, and left the skeleton
-    // on screen forever with nothing said.
-    void loadAISettingsAction().then(
-      (res) => {
-        if (!alive) return;
-        if (res.ok) setSettings(res.settings);
-        else setLoadError(res.error);
-      },
-      (err: unknown) => {
-        console.error('[ai-settings] load failed', err);
-        if (alive) setLoadError(err instanceof Error && err.message ? err.message : tRef.current('globalError.somethingWentWrong'));
-      },
-    );
+    // `{ ok: false }` was handled; a REJECTED load (the call itself failing)
+    // set neither state, so the skeleton said "Loading…" forever with nothing
+    // said. Audit C1-S9-74.
+    void loadAISettingsAction().then((res) => {
+      if (!alive) return;
+      if (res.ok) setSettings(res.settings);
+      else setLoadError(res.error);
+    }).catch((error: unknown) => {
+      console.error('[ai-settings] load failed', error);
+      if (alive) setLoadCallFailed(true);
+    });
     return () => { alive = false; };
   }, []);
 
@@ -129,7 +125,9 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     }
   }, [success, toastError, t]);
 
-  if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
+  if (loadError || loadCallFailed) {
+    return <Card className="p-4 text-sm text-muted">{loadError ?? t('aiActions.couldNotLoadYourBubaly')}</Card>;
+  }
   if (!settings) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">

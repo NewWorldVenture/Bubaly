@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -12,7 +13,15 @@ type Client = SupabaseClient<Database>;
 
 async function ctx() {
   const c = await requireUserContext();
-  return { familyId: c.active.familyId, userId: c.user.id, supabase: await createServer() };
+  return {
+    familyId: c.active.familyId,
+    userId: c.user.id,
+    supabase: await createServer(),
+    // The family's day, for defaulting a date column. `new Date()` formatted as
+    // a day key is the HOST's day, so a record logged at 6pm in California was
+    // dated tomorrow.
+    todayKey: todayKeyFor(c),
+  };
 }
 function str(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -36,15 +45,28 @@ async function saveRow(
   supabase: Client, table: string, id: string | null, row: Record<string, unknown>,
   familyId: string, userId: string, label: string,
 ) {
-  const { error } = id
-    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId)
+  // The comment above states the rule and stops one step short of it. A
+  // PostgREST write reports `{ error }` without throwing — true, and checked —
+  // but it also reports NOTHING about how many rows it touched unless asked. So
+  // the UPDATE branch still let a form report success for a row it never found:
+  // another family's id, an already-deleted record, an RLS refusal. The INSERT
+  // branch is genuinely safe, because an insert either inserts or errors; it
+  // cannot match zero rows. That asymmetry is why only one branch grows a
+  // `.select()`. Audit C1-S9-46.
+  const { data, error } = id
+    ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from(table as 'vehicles').insert({ ...row, family_id: familyId, created_by: userId } as never);
   if (error) throw new Error(describeActionError(error, label));
+  if (id && wroteNoRows(data)) throw new Error(label);
 }
 
 async function softDelete(supabase: Client, table: string, id: string, familyId: string, userId: string, label = 'Could not delete that record.') {
-  const { error } = await supabase.from(table as 'vehicles').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an UPDATE, so it carries the same zero-rows hazard as
+  // `saveRow` above — and the consequence is sharper, because the caller has
+  // already told the family the record is gone.
+  const { data, error } = await supabase.from(table as 'vehicles').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, label));
+  if (wroteNoRows(data)) throw new Error(label);
 }
 
 // ── Vehicles ────────────────────────────────────────────────────────────────
@@ -166,12 +188,12 @@ export async function deleteRentalAction(id: string) {
 // ── Service log ───────────────────────────────────────────────────────────────
 export async function saveAutoServiceAction(fd: FormData) {
   const t = await getTranslations();
-  const { familyId, userId, supabase } = await ctx();
+  const { familyId, userId, supabase, todayKey } = await ctx();
   const vehicleId = str(fd, 'vehicle_id');
   const mileage = num(fd, 'mileage');
   const { error } = await supabase.from('auto_service_records').insert({
     family_id: familyId, vehicle_id: vehicleId, title: str(fd, 'title') ?? 'Service',
-    service_date: str(fd, 'service_date') ?? new Date().toISOString().slice(0, 10),
+    service_date: str(fd, 'service_date') ?? todayKey,
     provider: str(fd, 'provider'), cost: num(fd, 'cost'), mileage, description: str(fd, 'description'),
     next_due_on: str(fd, 'next_due_on'), next_due_mileage: num(fd, 'next_due_mileage'), created_by: userId,
   });
@@ -179,8 +201,18 @@ export async function saveAutoServiceAction(fd: FormData) {
   // Keep the vehicle odometer fresh — best-effort (the record is already saved),
   // but log a failure so a broken update is observable, not silently ignored.
   if (vehicleId && mileage != null) {
-    const { error: odoError } = await supabase.from('vehicles').update({ mileage }).eq('id', vehicleId).eq('family_id', familyId);
-    if (odoError) console.error('[auto] vehicle odometer update failed', { familyId, vehicleId, error: odoError });
+    // The log said it was here so a broken update would be observable — but only
+    // an ERROR reached it, and the commonest way this write does nothing is a
+    // vehicle id that matches no row in this family. Confirmed for the LOG, not
+    // for a bail: the service record is already saved and the caller must not be
+    // failed for it. Audit C1-S9-60.
+    const { data: odoUpdated, error: odoError } = await supabase.from('vehicles')
+      .update({ mileage }).eq('id', vehicleId).eq('family_id', familyId).select('id');
+    if (odoError || wroteNoRows(odoUpdated)) {
+      console.error('[auto] vehicle odometer update failed', {
+        familyId, vehicleId, error: odoError?.message ?? 'no rows updated',
+      });
+    }
   }
   revalidate('/dashboard/auto', '/dashboard/auto/service');
 }

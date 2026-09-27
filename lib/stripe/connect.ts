@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, StripeAccountStatus } from '@/lib/database.types';
 import { getStripe } from '@/lib/stripe';
 import type Stripe from 'stripe';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -93,7 +94,16 @@ export async function createOnboardingLink(
 export async function syncConnectedAccount(supabase: DB, familyId: string, accountId: string): Promise<void> {
   const stripe = getStripe();
   const acct = await stripe.accounts.retrieve(accountId);
-  await supabase
+  // The result was discarded whole. This mirror is what the wallet reads to
+  // decide whether charges and payouts are enabled, so a refused write left the
+  // family looking un-onboarded after they finished — and "refresh" answered ok
+  // over it. Every caller handles a throw: the money action reports it, the
+  // cards page catches it, and in the webhook it is a 500 that Stripe retries,
+  // which is what `lib/stripe/webhook.ts` says a reconciler should do when it
+  // could not reconcile. Zero rows is logged, NOT thrown: an account row that is
+  // gone has nothing to mirror, and throwing would have Stripe retry for days.
+  // Audit C1-S9-64.
+  const { data: mirrored, error } = await supabase
     .from('stripe_connected_accounts')
     .update({
       status: accountStatus(acct),
@@ -104,5 +114,10 @@ export async function syncConnectedAccount(supabase: DB, familyId: string, accou
       card_issuing_enabled: capActive(acct, 'card_issuing'),
       requirements_due: (acct.requirements?.currently_due ?? []) as unknown as Database['public']['Tables']['stripe_connected_accounts']['Update']['requirements_due'],
     })
-    .eq('family_id', familyId);
+    .eq('family_id', familyId)
+    .select('id');
+  if (error) throw new Error('Stripe connected-account mirror update failed');
+  if (wroteNoRows(mirrored)) {
+    console.error('[money] connected account changed at Stripe but no mirror row matched', { familyId, accountId });
+  }
 }

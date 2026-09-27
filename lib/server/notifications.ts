@@ -8,6 +8,8 @@ import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
+import type { NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
@@ -33,25 +35,46 @@ type Candidate = {
 const HOUR = 3600_000;
 
 /**
- * "today at 3:00 PM", read in the FAMILY's zone.
+ * Whose words the money-approval reminders are in — and the honest answer is
+ * "nobody in particular", which is why it is spelled out rather than defaulted.
  *
- * This is the copy F-F02 names. Every part of it used to be the host's: the
- * `today`/`tomorrow` decision came from `setHours(0, 0, 0, 0)`, and both
- * formatters ran with no `timeZone`, so a UTC-hosted deployment told a
- * Californian family that a 7 p.m. appointment was "tomorrow at 3:00 AM". The
- * day and the clock have to come from the same zone as each other and as the
- * family, or the sentence is wrong twice over.
+ * `approvalReminders` puts an amount in a title, so it requires a reader. This
+ * sweep runs from two crons (app/api/cron/notifications, app/api/cron/push-scan)
+ * and from the Scan button (app/api/notifications/generate), and writes ONE row
+ * per manager — so even when a person pressed the button, wording the rows in
+ * their locale would make every other manager's record depend on who happened
+ * to press it. No member or family table stores a language choice yet (finalaudit
+ * I18N-001; it lives only in LOCALE_COOKIE, which a cron never sees), so the
+ * rows are written in the SOURCE locale, explicitly: 'en-US' for the amount, the
+ * English catalogue for the words.
  *
- * The day comparison goes through `dayKeyInTz` — already used by this file for
- * `todayStartIso` — rather than `toDateString()`, which reads the host again.
+ * SO THIS SITE IS GROUNDWORK, NOT A CONVERSION: every manager, a German one
+ * included, still reads "Approval needed: Card purchase · $2,768.50" in the bell
+ * and in push (these rows are type 'system', which lib/notifications/priority.ts
+ * keeps at 'now', so they never reach the brief). What changed is that the prose
+ * lives in the catalogue and the symbol is no longer hand-written. When a
+ * per-member locale column lands, this is the line that reads it — per
+ * recipient, since the builder fans out per manager.
  */
+const NEEDS_TO_KNOW_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
+
+// "today", "tomorrow" and the clock time IN THE FAMILY'S ZONE. This used to
+// compare `toDateString()` against the SERVER's midnight, and render the time
+// with no timeZone at all — so on a UTC host a Pacific family was told an 8pm
+// event was "tomorrow" (20:00 PT is 03:00 UTC the next day) and shown the wrong
+// hour beside it. The rest of this file already resolves `families.timezone`
+// for exactly this reason — see the medication-window note above — and this was
+// the one place the value was not threaded through.
 function timeLabel(iso: string, tz: string, allDay = false): string {
   const d = new Date(iso);
+  const dayKey = dayKeyInTz(d, tz);
   const todayKey = dayKeyInTz(new Date(), tz);
-  const key = dayKeyInTz(d, tz);
-  const day = key === todayKey
+  const day = dayKey === todayKey
     ? 'today'
-    : key === addDaysToDayKey(todayKey, 1)
+    : dayKey === addDaysToDayKey(todayKey, 1)
       ? 'tomorrow'
       : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
   if (allDay) return day;
@@ -238,23 +261,30 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   }
 
   // Pending money approvals → notify the parents who can act on them.
-  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites)) {
+  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites, NEEDS_TO_KNOW_READER)) {
     candidates.push(row);
   }
 
   // Relationship dates entering their reminder window (anniversaries, birthdays,
   // date nights). The related_id is keyed by occurrence year so the permanent
   // dedup sends one advance reminder per occurrence, then again next year.
+  //
+  // `todayKey` — the family's day, computed above and used by every other
+  // reminder in this function via `timeLabel(..., tz)`. This one block passed
+  // the raw instant instead, so it resolved against the HOST's day: a birthday
+  // reminder fired a day early for the last seven hours of every Californian
+  // day. And because the dedup is PERMANENT and keyed by occurrence year, the
+  // early one is the only one — the real day arrives with nothing sent.
   const { data: relDates } = await supabase.from('relationship_dates')
     .select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
     .eq('family_id', familyId).neq('status', 'cancelled').limit(100);
   for (const d of upcomingRelationship((relDates ?? []).map((r): RelDate => ({
     id: r.id, kind: r.kind, title: r.title, eventDate: r.event_date,
     recursAnnually: r.recurs_annually, reminderDaysBefore: r.reminder_days_before, status: r.status,
-  })), now)) {
+  })), todayKey)) {
     const ms = milestoneLabel(d);
     candidates.push({
-      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.next.getFullYear()}`, user_id: null,
+      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.nextKey.slice(0, 4)}`, user_id: null,
       title: `💞 ${d.title} ${formatCountdown(d.days).toLowerCase()}`,
       body: ms ? `${ms} · plan something special` : 'Open the Relationship Helper for gift ideas',
     });

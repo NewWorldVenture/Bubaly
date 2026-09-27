@@ -26,6 +26,8 @@
 // one who cannot delete the row (measured: a child's delete of a secure
 // `documents` row returns zero rows), so the gap cannot produce the leak.
 
+import { describeActionError } from '@/lib/supabase/errors';
+
 type StorageObject = { name: string };
 
 /** The slice of the Storage bucket API this needs; keeps storage-js types out. */
@@ -40,14 +42,15 @@ export type RemovableBucket = {
 /** Remove one object and answer with an error unless it is confirmed gone. */
 export async function removeConfirmed(bucket: RemovableBucket, path: string): Promise<{ error: string | null }> {
   const { data, error } = await bucket.remove([path]);
-  if (error) return { error: error.message };
+  // Described, not repeated: a caller may show this to the family (SEC-023).
+  if (error) return { error: describeActionError(error) };
   if (data?.some((object) => object.name === path)) return { error: null };
 
   const cut = path.lastIndexOf('/');
   const folder = cut > 0 ? path.slice(0, cut) : '';
   const name = path.slice(cut + 1);
   const listed = await bucket.list(folder, { search: name, limit: 100 });
-  if (listed.error) return { error: listed.error.message };
+  if (listed.error) return { error: describeActionError(listed.error) };
   // `search` is a prefix match, so the name is compared exactly: a neighbouring
   // `<name>.bak` must not be mistaken for this object.
   return listed.data?.some((object) => object.name === name)

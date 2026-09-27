@@ -49,11 +49,7 @@ export default async function MarketplaceInsightsPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [
-    { data: listings, error: listingsError },
-    { data: saves, error: savesError },
-    { data: offers, error: offersError },
-  ] = await settleAll([
+  const [listingsRes, savesRes, offersRes] = await settleAll([
     // Every figure on this page is a count over these rows, so a capped read is
     // a wrong number rather than a short list — and `.limit(N)` above 1,000 never
     // applied, because PostgREST caps a response at db-max-rows regardless.
@@ -63,21 +59,25 @@ export default async function MarketplaceInsightsPage() {
     readAllAsQuery((from, to) => sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
   ]);
 
-  // Every figure below is a COUNT, and readAllAsQuery answers a truncated or
-  // failed read with `data: null`. Falling through to `?? []` turns that into a
-  // zero the page renders as a fact — "0 saves", "0 open offers" — which is not
-  // a smaller number than the truth, it is a different claim about the family's
-  // marketplace. The read either completed or the page says it could not.
-  const readError = listingsError ?? savesError ?? offersError;
+  // The comment above states the hazard exactly: a capped read here is a WRONG
+  // NUMBER, not a short list. readAllAsQuery reports a truncated or failed read
+  // as `data: null` plus an error, and destructuring only `data` turned that
+  // into `(listings ?? [])` — so every count on this page rendered 0 and read
+  // as fact. Same shape as the two AI wallet routes (C4-S4-02); this is one of
+  // the call sites C4-S4-01 found unmigrated.
+  const readError = listingsRes.error ?? savesRes.error ?? offersRes.error;
   if (readError) {
-    console.error('[marketplace-insights] read failed', readError);
+    console.error('[marketplace-insights] read failed or truncated', readError);
     return (
       <div className="space-y-6">
         <PageHeader title={t('marketplaceInsights.marketplacePulse')} description={t('insights.theStateOfYourFamily')} />
-        <ErrorState message={t('marketplaceInsights.couldNotLoadMarketplacePulse')} />
+        <ErrorState message={t('insights.couldNotLoadDataFor')} />
       </div>
     );
   }
+  const { data: listings } = listingsRes;
+  const { data: saves } = savesRes;
+  const { data: offers } = offersRes;
 
   const rows = (listings ?? []) as (InsightListing & { title: string })[];
   const titleOf = new Map(rows.map((l) => [l.id, l.title]));

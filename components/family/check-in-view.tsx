@@ -5,6 +5,7 @@ import { ShieldCheck, Trash2, MapPin } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -57,14 +58,21 @@ export function CheckInView() {
       latitude: coords?.latitude ?? null, longitude: coords?.longitude ?? null, created_by: userId,
     });
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('checkInView.checkedIn'));
     setPlace(''); setNote('');
   }
 
   async function remove(id: string) {
-    const { error } = await createClient().from('safety_check_ins').delete().eq('id', id);
-    if (error) toastError(error.message);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there. 0431 establishes a
+    // check-in's "self" by created_by as well as member_id, so another member's
+    // check-in is filtered out rather than refused. Audit C1-S9-84.
+    const { data: removed, error } = await createClient().from('safety_check_ins').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   return (

@@ -1,6 +1,6 @@
 -- The marketplace RPCs nobody was calling.
 --
--- `marketplace_create_circle` was dead from 0176 to 0389 — `security definer`
+-- `marketplace_create_circle` was dead from 0176 to 0446 — `security definer`
 -- pinned to `search_path = public` while calling `gen_random_bytes`, which lives
 -- in `extensions`, so every call raised 42883 and no family ever made a sharing
 -- circle. A probe DID call it, and passed anyway, because CI's pgcrypto sat in

@@ -52,6 +52,20 @@ declare
   -- negative control did not put 0296 back … the vault has been left open'
   -- against a database whose vault was perfectly intact — a false red, with
   -- the most alarming message in the file.
+  --   * NOT the step-up guards. 0391 layers four RESTRICTIVE policies over
+  --     this table — family_credentials_step_up_{select,insert,update,
+  --     delete}_guard — that read `public.session_cleared_step_up() or not
+  --     public.can_manage_family(family_id)`: they decide WHETHER a manager's
+  --     session is strong enough (aal2, or no authenticator enrolled), never
+  --     WHO. Nobody in this fixture has an authenticator, so they answer true
+  --     for the child, the parent and the adult alike and are transparent to
+  --     every refusal and every success measured here. They are excluded by
+  --     WHAT THEY ARE, not by name: RESTRICTIVE (a restrictive policy can only
+  --     narrow, never open the vault) AND calling session_cleared_step_up().
+  --     A PERMISSIVE policy is never excluded, whatever it is called, so a
+  --     fifth permissive policy from anywhere — even one named like a guard —
+  --     still fails this probe. Their own probe is
+  --     a-password-alone-does-not-open-the-familys-vault-check.sql.
   reader     text := $q$
     select count(*),
            count(*) filter (
@@ -63,24 +77,19 @@ declare
       join pg_class c on c.oid = p.polrelid
       join pg_namespace ns on ns.oid = c.relnamespace
      where ns.nspname = 'public' and c.relname = 'family_credentials'
-       -- Except 0395's step-up guard, which is restrictive by design and asks
-       -- only whether the session has cleared step-up. Every session this probe
-       -- makes belongs to an account with no verified factor (asserted below the
-       -- fixture), so the guard answers yes for all of them and cannot be the
-       -- author of any refusal credited here.
        and not (not p.polpermissive
-                and replace(coalesce(pg_get_expr(p.polqual, p.polrelid), ''), 'public.', '') = 'session_cleared_step_up()'
-                and replace(coalesce(pg_get_expr(p.polwithcheck, p.polrelid), 'session_cleared_step_up()'), 'public.', '') = 'session_cleared_step_up()')
+                and concat(pg_get_expr(p.polqual, p.polrelid), ' ', pg_get_expr(p.polwithcheck, p.polrelid))
+                    like '%session\_cleared\_step\_up()%')
   $q$;
 begin
   insert into public.families (id, name) values (fam, 'Vault keys') on conflict do nothing;
   insert into auth.users (id, email) values
     (parent_uid, 'cp@example.test'), (adult_uid, 'ca@example.test'), (child_uid, 'cc@example.test')
   on conflict do nothing;
-  -- The premise that lets the reader set 0395's step-up guard aside.
+  -- The premise that lets the reader set 0391's step-up guard aside.
   if exists (select 1 from auth.mfa_factors
               where user_id in (parent_uid, adult_uid, child_uid) and status::text = 'verified') then
-    raise exception '0296: a fixture account has a verified second factor, so 0395''s step-up guard could refuse it and the refusals below would not be attributable to the role clause';
+    raise exception '0296: a fixture account has a verified second factor, so 0391''s step-up guard could refuse it and the refusals below would not be attributable to the role clause';
   end if;
   -- A child with a real auth user, exactly as child-login-actions.ts creates one.
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values

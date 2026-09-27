@@ -254,8 +254,8 @@ describe('the endpoints refuse before they look anything up', () => {
     // because Amazon's signature covers exactly what arrived; re-serialising a
     // parsed envelope changes whitespace and key order and the signature would
     // never verify again.
-    expect(generic).toContain('readBoundedRequestJson');
-    expect(alexa).toContain('readBoundedRequestBytes');
+    expect(generic).toContain('readBoundedRequestJson(');
+    expect(alexa).toContain('readBoundedRequestBytes(');
     for (const source of [generic, alexa]) expect(source).toMatch(/MAX_BODY_BYTES/);
   });
 
@@ -294,7 +294,7 @@ describe('the endpoints refuse before they look anything up', () => {
     // in this direction — a lib that reached for its own service-role client
     // would be usable from anywhere, including a context that had not checked a
     // token first.
-    expect(generic).toContain('createServiceClient');
+    expect(generic).toContain('createServiceClient(');
     expect(service).not.toContain('createServiceClient(');
     // And no family id is ever taken from the request body.
     expect(generic).not.toMatch(/payload\.\s*family/);

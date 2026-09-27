@@ -15,7 +15,7 @@
 --   unauthenticated GET of a signed URL  -> HTTP 200, 67 bytes
 --
 -- The flag half of that is held by bucket-visibility-is-declared-check.sql,
--- which reported DECLARATION STALE the moment 0394 flipped it. This probe holds
+-- which reported DECLARATION STALE the moment 0450 flipped it. This probe holds
 -- the policy half, which is what governs the authenticated API once the public
 -- path is closed — and which a flag flip alone would leave wide open.
 \set ON_ERROR_STOP on

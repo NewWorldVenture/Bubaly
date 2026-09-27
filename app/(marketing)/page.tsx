@@ -105,7 +105,7 @@ export default async function HomePage() {
       {/* ── 10. Pricing teaser ── */}
       <Container className="max-w-[1440px] px-5 pb-14 pt-8 text-center sm:px-8 sm:pb-16 lg:px-10">
         <p className="text-lg font-semibold text-white/80 sm:text-xl">{t('homeHero.pricingTeaser')}</p>
-        <Link href="/pricing" className="focus-visible:focus-ring mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-violet-300 underline-offset-4 transition hover:underline">
+        <Link href="/pricing" className="focus-ring mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-violet-300 underline-offset-4 transition hover:underline">
           {t('homeHero.seePricing')} →
         </Link>
       </Container>

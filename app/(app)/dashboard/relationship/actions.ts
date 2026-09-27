@@ -24,7 +24,7 @@ import { createEvent, deleteEvent } from '@/lib/services/calendar';
 import { buildCalendarEventForDate } from '@/lib/relationship/calendar';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { SERVICE_CODES } from '@/lib/services/types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
 
 const PATH = '/dashboard/relationship';
@@ -74,13 +74,18 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
         return { ok: false, error: removed.error };
       }
 
-      const { error: unlinkError } = await supabase
+      // The calendar event is already gone by here. An unlink matching no rows
+      // leaves `calendar_event_id` pointing at a deleted event, and the next
+      // sync treats the date as already on the calendar — so it never goes back
+      // on. Audit C1-S9-58.
+      const { data: unlinked, error: unlinkError } = await supabase
         .from('relationship_dates')
         .update({ calendar_event_id: null })
         .eq('id', row.id)
-        .eq('family_id', ctx.active.familyId);
-      if (unlinkError) {
-        console.error('[relationship-action] unlink failed', unlinkError);
+        .eq('family_id', ctx.active.familyId)
+        .select('id');
+      if (unlinkError || wroteNoRows(unlinked)) {
+        console.error('[relationship-action] unlink failed', unlinkError ?? 'no rows updated');
         return { ok: false, error: t('actions.theEventWasRemovedBut') };
       }
 
@@ -119,16 +124,22 @@ export async function toggleDateOnCalendarAction(dateId: string): Promise<Toggle
     });
     if (!created.ok) return { ok: false, error: created.error };
 
-    const { error: linkError } = await supabase
+    // The event exists by now. A link matching no rows leaves the date not
+    // knowing about it, so the next run creates a SECOND event for the same
+    // anniversary — the failure is duplication, not absence.
+    const { data: linked, error: linkError } = await supabase
       .from('relationship_dates')
       .update({ calendar_event_id: created.data.id })
       .eq('id', row.id)
-      .eq('family_id', ctx.active.familyId);
-    if (linkError) {
+      .eq('family_id', ctx.active.familyId)
+      .select('id');
+    if (linkError || wroteNoRows(linked)) {
       // The event exists and the family can see it; only the link is missing, so
       // report rather than delete work they can already use. Logged so a second
       // tap creating a second event is traceable.
-      console.error('[relationship-action] link failed', { dateId: row.id, eventId: created.data.id, error: linkError });
+      console.error('[relationship-action] link failed', {
+        dateId: row.id, eventId: created.data.id, error: linkError?.message ?? 'no rows updated',
+      });
       return { ok: false, error: t('actions.itIsOnYourCalendar') };
     }
 

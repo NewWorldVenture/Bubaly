@@ -117,6 +117,9 @@ function responder(over: Partial<{ run: unknown; steps: unknown[]; toolCalls: un
     if (call.table === 'ai_plans' && call.kind === 'insert') return { data: { id: 'plan-2' }, error: null };
     if (call.kind === 'update' && call.table === 'approval_requests') return { data: [{ id: 'appr-1' }], error: null };
     if (call.kind === 'update' && call.table === 'ai_plan_steps') return { data: [{ id: 's2' }, { id: 's3' }], error: null };
+    // "Every write accepted" means every update MATCHED — and a matched update
+    // answers `.select()` with its row (C1-S9-66).
+    if (call.kind === 'update') return { data: [{ id: 'updated' }], error: null };
     return { data: null, error: null };
   };
 }

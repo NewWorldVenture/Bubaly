@@ -243,9 +243,37 @@ describe('the generic family write path refuses a feature the family does not ha
     state.familyId = FREE;
     // The row belongs to the Plus family; what is under test is that the gate
     // does not run at all on delete, so the write path is reached.
+    //
+    // This asserted `ok: true`, which it could only ever have got by EXPLOITING
+    // a defect: the delete is scoped `.eq('family_id', …)`, so acting as FREE
+    // against a PLUS row matches zero rows — and before C1-S9-55 a zero-row
+    // delete reported success. The setup was right (a cross-family id keeps the
+    // gate out of the picture); the assertion was reading the bug.
+    //
+    // What the comment above says is under test is that the FEATURE GATE does
+    // not run, so that is what is asserted: the refusal that comes back is the
+    // write path's, not the gate's.
+    const result = await deleteFamilyRecord('family_automation_rules', id);
+
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).not.toMatch(/plan|upgrade|tier/i);
+    expect((result as { error: string }).error).toMatch(/could not delete that record/i);
+  });
+
+  it('lets a downgraded family delete a row they actually own', async () => {
+    // The other half, and the one the comment above is really about: ownership
+    // is not gated. Same family throughout, so the delete matches its row.
+    state.familyId = PLUS;
+    const created = await createFamilyRecord('family_automation_rules', { name: 'Sunday meal plan', trigger_type: 'schedule' });
+    const id = (created as { id?: string }).id!;
+
+    // Drop the tier under the same family rather than switching identity.
+    (state.db as { seed: (t: string, r: unknown[]) => void }).seed('subscriptions', [{ family_id: PLUS, plan: 'free', status: 'active' }]);
+
     const result = await deleteFamilyRecord('family_automation_rules', id);
 
     expect(result).toMatchObject({ ok: true });
+    expect(rows('family_automation_rules')).toHaveLength(0);
   });
 
   it('does not gate a table whose feature could not be identified', async () => {

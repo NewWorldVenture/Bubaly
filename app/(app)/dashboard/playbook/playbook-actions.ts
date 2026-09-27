@@ -16,7 +16,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
-import { describeActionError } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -48,6 +48,10 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // A server action carries the request's locale, the same as a page does. Its
   // catalogue comes with it — `getTranslations()` would resolve the locale again.
   const { locale, messages } = await getLocaleContext();
+  // What a failed or truncated read tells the family. The Postgres text and
+  // readAll's "these rows are a PREFIX" diagnostic go to the log, not to the
+  // page (tests/the-database-does-not-talk-to-the-browser.test.ts).
+  const couldNotRead = translate(messages, 'playbookActions.couldNotReadEverything');
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const sb = await createServer();
@@ -68,7 +72,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // would be wrong, so learn nothing rather than learn from a fragment.
   if (plansError) {
     console.error('[dashboard/playbook] meal plan read failed', plansError);
-    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
+    return { ok: false, error: describeActionError(plansError, couldNotRead) };
   }
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
@@ -77,7 +81,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
       .select('id,name').eq('family_id', familyId).in('id', [...mealCounts.keys()]);
     if (mealsError) {
       console.error('[dashboard/playbook] meal name read failed', mealsError);
-      return { ok: false, error: describeActionError(mealsError) };
+      return { ok: false, error: describeActionError(mealsError, couldNotRead) };
     }
     for (const m of meals ?? []) {
       const count = mealCounts.get(m.id) ?? 0;
@@ -91,7 +95,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .order('id').range(from, to), { max: 4000 });
   if (groceriesError) {
     console.error('[dashboard/playbook] grocery read failed', groceriesError);
-    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
+    return { ok: false, error: describeActionError(groceriesError, couldNotRead) };
   }
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
@@ -107,7 +111,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .select('kind,name,member_id,rating').eq('family_id', familyId).limit(500);
   if (favsError) {
     console.error('[dashboard/playbook] favorites read failed', favsError);
-    return { ok: false, error: describeActionError(favsError) };
+    return { ok: false, error: describeActionError(favsError, couldNotRead) };
   }
   for (const f of favs ?? []) {
     if (f.name) signals.push({ type: 'favorite', kind: f.kind ?? 'thing', name: f.name, memberId: f.member_id, rating: f.rating });
@@ -123,7 +127,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // it has none. Fail closed instead of publishing that verdict.
   if (eventsError) {
     console.error('[dashboard/playbook] calendar read failed', eventsError);
-    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
+    return { ok: false, error: describeActionError(eventsError, couldNotRead) };
   }
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
@@ -148,7 +152,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .select('kind,start_date').eq('family_id', familyId).limit(500);
   if (tripsError) {
     console.error('[dashboard/playbook] vacation read failed', tripsError);
-    return { ok: false, error: describeActionError(tripsError) };
+    return { ok: false, error: describeActionError(tripsError, couldNotRead) };
   }
   const styleCounts = new Map<string, number>();
   const bump = (style: string) => styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
@@ -235,11 +239,19 @@ export async function acceptSuggestionAction(input: { id: string }): Promise<Res
 /** Dismiss a suggestion (kept, so it isn't re-suggested on the next refresh). */
 export async function dismissSuggestionAction(input: { id: string }): Promise<Result> {
   const tr = await getTranslations();
-  await requireUserContext();
+  const ctx = await requireUserContext();
   const id = String(input?.id || '').trim();
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
-  const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
+  // The ACTIVE family's suggestion, read back: RLS filters an update rather
+  // than refusing it, so a dismissal it filtered answered `error: null` and
+  // the card came back on the next refresh as though it had never been
+  // dismissed.
+  // Audit C1-S9-60: the whole point of storing the dismissal is that the
+  // suggestion is not offered again.
+  const { data: dismissed, error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' })
+    .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(dismissed)) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   return { ok: true };
 }

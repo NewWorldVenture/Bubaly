@@ -9,6 +9,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildTransformPrompt, parseTransformResult, getRecipeAiAction, type RecipeAiActionId } from '@/lib/recipes/ai-actions';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import type { Database } from '@/lib/database.types';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredients'];
@@ -35,12 +36,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: t('transform.recipeidAndAValidActionid') }, { status: 422 });
   }
 
-  const { data: recipe } = await supabase
+  // A refused read left the binding null and took the same branch as a row
+  // that genuinely is not there, so the caller was told their own recipe
+  // does not exist. "Not found" is a claim about their data; it has to come
+  // from an answer, not from the absence of one. Fails closed either way —
+  // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+  const { data: recipe, error: recipeError } = await supabase
     .from('family_recipes')
     .select('id, family_id, name, cuisine, servings, ingredients, instructions, allergy_flags, category, photo_url')
     .eq('id', recipeId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (recipeError) {
+    console.error('[recipes/transform] recipe read failed', { familyId: ctx.active.familyId, error: describeReadError(recipeError) });
+    return NextResponse.json({ error: t('transform.recipeDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
   if (!recipe) return NextResponse.json({ error: t('transform.recipeNotFound') }, { status: 404 });
 
   const prompt = buildTransformPrompt({

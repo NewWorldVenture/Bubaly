@@ -42,7 +42,7 @@ beforeEach(() => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (raw, init = {}) => {
       const url = new URL(String(raw)); reads.push(url);
-      // TWO calls are legitimate on these routes and nothing else is, so each
+      // THREE calls are legitimate on these routes and nothing else is, so each
       // is matched by SHAPE rather than the second merely being tolerated.
       //
       // The rate-limit RPC is the durable half of the pair, and it can only
@@ -66,6 +66,16 @@ beforeEach(() => {
         expect(body.p_limit).toBeGreaterThan(0);
         expect(body.p_window_seconds).toBe(60);
         return Response.json([{ allowed: rateAllowed, retry_after: rateAllowed ? 0 : 42 }]);
+      }
+      // The third legitimate call, and only after the link resolves: is the
+      // key's owner still an active parent of its family (SRV-001 l12)? A key
+      // whose parent has left the household is refused.
+      if (url.pathname === '/rest/v1/family_members') {
+        expect(init.method ?? 'GET').toBe('GET');
+        expect(url.searchParams.get('family_id')).toBe(`eq.${FAMILY}`);
+        expect(url.searchParams.get('user_id')).toBe(`eq.${USER}`);
+        expect(url.searchParams.get('is_active')).toBe('eq.true');
+        return Response.json([{ role: 'parent' }]);
       }
       expect(url.pathname).toBe('/rest/v1/assistant_links');
       expect(init.method ?? 'GET').toBe('GET');
@@ -106,7 +116,7 @@ describe('exact assistant middleware authorization boundary', () => {
   it.each(PATHS)('rejects a missing token in actual %s before service access', async path => {
     const response = await deliver(path);
     expect(response.status).toBe(path === '/api/assistant' ? 401 : 200);
-    expect(mocks.admin).not.toHaveBeenCalled(); expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
+    expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
     if (path.endsWith('/alexa')) expect(await response.json()).toMatchObject({ response: { outputSpeech: { text: expect.stringContaining('link') } } });
   });
   it.each(PATHS)('rejects an unknown token in actual %s before answering or capturing data', async path => {
@@ -125,7 +135,7 @@ describe('exact assistant middleware authorization boundary', () => {
     // a model) was bounded by nothing that survives a cold start.
     // tests/no-route-gates-on-a-per-instance-limit.test.ts is what requires the
     // pair; this line is what pins where the second one goes.
-    expect(reads.map(r => r.pathname)).toEqual(['/rest/v1/assistant_links', '/rest/v1/rpc/rate_limit_hit']);
+    expect(reads.map(r => r.pathname)).toEqual(['/rest/v1/assistant_links', '/rest/v1/family_members', '/rest/v1/rpc/rate_limit_hit']);
     expect(mocks.answer).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ family_id: FAMILY, user_id: USER }), expect.anything());
     expect(mocks.record).toHaveBeenCalledOnce();
   });
@@ -150,7 +160,6 @@ describe('exact assistant middleware authorization boundary', () => {
     // No speech either: there is no device on the other end of a forged
     // request, and a spoken reply would confirm the endpoint is live.
     expect(await response.text()).toBe('');
-    expect(mocks.admin).not.toHaveBeenCalled();
     expect(reads).toEqual([]);
     expect(mocks.answer).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();

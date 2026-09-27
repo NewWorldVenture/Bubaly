@@ -354,7 +354,8 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, tz: str
   // write tomorrow's row and then be overwritten by the morning's, so a family
   // in Los Angeles could never accumulate two consecutive days to trend.
   try {
-    await supabase.from('family_operating_index').upsert({
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: familyOperatingIndexWriteError } = await supabase.from('family_operating_index').upsert({
       family_id: familyId,
       as_of_date: today,
       composite: index.composite,
@@ -362,6 +363,7 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, tz: str
       dimensions: dimensionsToRecord(index.dimensions) as unknown as Json,
       suggestions: index.suggestions as unknown as Json,
     }, { onConflict: 'family_id,as_of_date' });
+    if (familyOperatingIndexWriteError) console.error('[operating-index] family_operating_index upsert failed', familyOperatingIndexWriteError);
   } catch {
     // Persisting is best-effort; the live index still renders.
   }

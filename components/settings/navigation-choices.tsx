@@ -199,7 +199,7 @@ export function NavigationChoices() {
     void persist(keys.filter((k) => k !== href), restChildren);
   }
   function add(href: string) {
-    if (keys.length >= MAX_SIDEBAR_NAV) { toastError(t('navigationChoices.youCanPinUpTo', { max: MAX_SIDEBAR_NAV })); return; }
+    if (keys.length >= MAX_SIDEBAR_NAV) { toastError(t('settings.pinUpToDestinations', { max: MAX_SIDEBAR_NAV })); return; }
     void persist([...keys, href], childMap);
   }
   async function reset() {

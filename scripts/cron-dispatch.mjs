@@ -4,12 +4,24 @@
 // WHY: Vercel's Hobby plan only allows cron jobs that run once per day and
 // fails the whole deployment when vercel.json schedules anything more
 // frequent ("Hobby accounts are limited to daily cron jobs"). vercel.json now
-// carries daily-safe schedules so production deploys on any plan; the real
-// cadences live here and are driven by .github/workflows/cron-dispatch.yml,
-// which ticks every five minutes and calls every route whose schedule fell
-// due since the previous tick. The routes are idempotent and CRON_SECRET-gated
-// (lib/server/cron-auth.ts), so a Vercel daily run and a GitHub run of the
-// same route never conflict.
+// carries daily-safe schedules so production deploys on any plan; the
+// INTENDED cadences live here and are driven by
+// .github/workflows/cron-dispatch.yml, which asks to tick every five minutes
+// and calls every route whose schedule fell due in the preceding five.
+// The routes are idempotent and CRON_SECRET-gated (lib/server/cron-auth.ts),
+// so a Vercel daily run and a GitHub run of the same route never conflict.
+//
+// READ THE TABLE BELOW AS INTENTIONS, NOT GUARANTEES. GitHub does not deliver
+// this schedule: across the workflow's first 95 runs (2026-09-05 to
+// 2026-09-18, run numbers contiguous) it fired 95 times against 3,922
+// requested ticks, with a minimum gap of 104 minutes and a median of 209 — so
+// every route below runs at roughly 2% of the rate it names, plus whatever
+// vercel.json guarantees. For the fourteen routes whose cadence here is
+// sub-daily, vercel.json guarantees only a single daily firing, and the
+// shortfall runs from 2x to 288x. Measured per route in
+// tests/a-cron-cadence-is-a-promise-nothing-keeps.test.ts; the mechanism that
+// turns a missing tick into a lost firing is in
+// tests/a-late-tick-drops-a-cron.test.ts.
 //
 // On Vercel Pro the original per-minute schedules can go back into
 // vercel.json (copy SCHEDULES below) and this workflow can be disabled.
