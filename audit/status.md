@@ -1,5 +1,44 @@
 # Status board
 
+## Codex integration — 2026-09-27
+
+CURRENT: Integrated incoming main7563462e / PR591 into the worker audit. Source
+head e7988141 passed all four jobs in CI36329827922; those are parent gates.
+Combined tree65719886 passes UTC20,701/20,701 across1,621files, build247,
+full strict types and lint with15existingwarnings. Both parents also have their
+own three-zone unit passes; these are not combined-tree three-zone proof.
+CONTROLLED:85/85 in3.8s (72cache+13registration), workerdd571476, fixture9b12ce5a;
+Temp/bubaly-sw-combined-browser-65719886-20260927.log. Focused33/33 separately.
+HOSTED: Original59f03 CI36331147265 Web/DB/MobilePASS; E2E1369/1370, sole
+native-worker fixture failure at iframe after preceding nativev6controls passed.
+FIXTURE: Finalnative507a6cd uses top-level navigation with CDP scripts disabled,
+respecting real anti-framing headers. Supplemental exactv6 native-engine proof
+passes public install/icon and200/fromServiceWorker exact offline HTML. Corrected
+full hosted case remains pending; current source is not claimed deployed.
+DELTA:878a17b verifies5,191files/modes plus only507a6cd native fixture;
+full generated-route types/lint15PASS, discovery1/1 (not runtime).
+Receipt:linux-combined-65719886/final-native-fixture-receipt.json.
+GATES: Failed Windows environment attempt retained. Three preliminary fixture
+header-union type errors corrected; full strict types then PASS. Combined gate
+receipt: Temp/bubaly-sw-reconcile-20260927/linux-combined-65719886/final-gates-receipt.json.
+INVENTORY: All incoming/original IDs and Claude sections preserved. RegisterB
+14,183=13,877NOT STARTED+297IN PROGRESS+4FIXED+PASS+4BLOCKED+1FAIL.
+Worker SUPPORT-98FD1D4C44AD and fixtures SUPPORT-1A08672F87F3 /
+SUPPORT-827E4294FC10 remain IN PROGRESS. Fixture coverage is not another
+completed product workflow. Priorv5 optimizer/write proof remains intact.
+MEDIA: SEC-001FAIL. Q59 observer-gap follow-up is reproduced with actual React,
+SDK and shared peer cookies: readyB renders/fetches synthetic A capability without
+B signing; active-switch control purges. Synthetic provider/image transport only;
+no live private bytes or media-source repair. Independent from the SW repair.
+PRODUCTION: Latest health16:01:24UTC core checksOK, degraded; six missing settings:
+CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET,
+FCM_PRIVATE_KEY, APNS_PRIVATE_KEY. Older four-setting statements are historical.
+NEXT: Publish combined correction, execute corrected hosted case, then verify
+exact deployment before scoped signoff. No production SQL/provider change.
+OWNERSHIP: Root integrates/verifies; auth_current_boundary updates these owned
+checkpoint sections. All other Claude board content below remains unchanged.
+RECORD: docs/final-audit/service-worker-private-cache-cycle.md; finalaudit.md.
+
 > Two sessions ran this board. Both sections are kept.
 
 ---
@@ -2330,3 +2369,31 @@ LAST-UPDATE: 2026-09-20
 CURRENT: the owner asked for #548 to merge to main; GitHub refused (base moved: #556 landed). main merged into the branch: 95 conflicting files, resolved as main's readback + wroteNoRows() spelling with this branch's family scope + describeActionError(). No migration renumbering (main 0406–0418 < this PR's 0426–0443); next free 0444. 0426's assertion narrowed to auth.uid() membership reads (main's 0416 journal insert policy is a row-integrity check, not membership). Five tables main narrowed now in the gated list with scoped writes; social_account_tokens left it (0406: service-role only).
 VERIFIED: tsc clean · lint 0 (15/15, budget 17→15) · vitest 20,407/20,410 (3 = container Node 22) · replay 423/423 · probes 150/150 twice. RECORD: finalaudit.md Q73.
 OPEN: audit/claude-2.md, claude-3.md, claude-4.md conflict (append-only on both sides) — left for the owner under the concurrency protocol; the merge commit waits on that decision.
+
+## Historical local observation retained during reconciliation
+
+The following is the September 19 checkpoint as written then. Current status is above.
+
+### Retained local checkpoint — 2026-09-19
+
+CURRENT: SEC-001 worker private-image cache repair IN PROGRESS.
+BASELINE: main75a1f3c6, tree2f4cb2f980b1a92c4313d3af4ea7fe514630a648.
+VERIFIED: dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW, GitHubProduction6546108247.
+Public build/auth/phone readiness pass at21:51 UTC; no auth action or SMS dispatch.
+PHONE CI:75a1 run35471471192 remains active; disposable phone acceptance pending.
+Prior2a5 E2E1,293/1,296: three phone cases fail before code entry; repaired
+signout and six callbacks pass by complete enabled-matrix inference.
+The CI-only provider/hook repair is published; product config/SQL unchanged.
+SW RED: Actual worker handlers/Chromium CacheStorage/production logout preserve
+synthetic A private,no-store image and deliver it to B offline after logout.
+No native worker registration, real optimizer or private production content.
+REPAIR: Implementation and exact regression evidence pending; no cache/privacy PASS.
+SUPPORT-98FD1D4C44AD remains IN PROGRESS; SEC-001 remains FAIL.
+INVENTORY: All14,038 IDs/statuses retained.13,842 NOT STARTED,192 IN PROGRESS,
+1 FIXED+PASS,3 FAIL (0.01%). AUTH-001/002/003 remain open; narrowSEC-005 closed.
+NEXT: Complete bounded worker-cache repair, verify and record exact source gates.
+Separate physical-device, production SMS, private-bucket and database obligations remain open.
+RECORD: docs/final-audit/service-worker-private-cache-cycle.md.
+PHONE HISTORY: docs/final-audit/auth-phone-ownership-cycle.md.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:53:24.045Z

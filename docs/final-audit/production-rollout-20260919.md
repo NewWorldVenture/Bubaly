@@ -1,6 +1,24 @@
 # Production rollout — 2026-09-19
 
+## Status reconciliation — 2026-09-27
+
+This is retained September19 history. Run35471471192 for75a1f3c6 ended in E2E FAILURE with the other three jobs successful; later Claude fixes repaired the synthetic clipboard event and pre-hydration phone-entry controls. Incoming06dd CI36320217255 passed all four jobs and its exact deployed build was checked at15:39:23UTC. Latest incoming main7563462e merged PR591 at16:01:34UTC; sourcee7988141 passed all four jobs in CI36329827922. These parent results are separate from the new combined worker source and do not prove production SMS delivery or physical-device persistence.
+
+Current combined tree65719886c4cc6483a0be7d1b5f32f292119570e3 passes UTC20,701/20,701 across1,621files, build247, strict types and lint with15existingwarnings; its controlled worker matrix passes85/85 in3.8s. Both parent three-zone unit passes remain parent-scoped. Full combined gates precede the latest native-test-only correction. Final fixture-only delta tree `878a17b644c5b1b6106de465841d413a4d4f2a86` verifies all 5,191 files/modes against combined65719886 plus only native fixture507a6cd. Full generated-route strict types and lint with 15 existing warnings pass; discovery is 1/1, not runtime. Receipt: `Temp/bubaly-sw-reconcile-20260927/linux-combined-65719886/final-native-fixture-receipt.json`. Original59f03 CI36331147265 has Web/Database/MobilePASS and E2E1,369/1,370: the new native-worker test failed at iframe navigation. Corrected native fixture507a6cd109def62f6053ff1ebd82f8a701b9ca7d uses top-level navigation after CDP disables scripts; supplemental actual-engine v6 install/icon/offline-navigation proof passes, but the corrected complete hosted case and deployment remain pending. No current v6 release is claimed. Details and retained failed Windows/type checkpoints are in [the worker cycle](service-worker-private-cache-cycle.md).
+
+SEC-001 stays FAIL for the public bucket and the separately reproduced Q59 media-cache observer gap. Real mounted React/SDK with synthetic intercepted provider/image transport confirms B's ready session can render/request A's cached signed capability after all observers unmount, without asking Storage asB. Active observed switching correctly purges. No private production data or live authorization was tested, and this release includes no media-cache repair. The three worker/support rows stay IN PROGRESS; AUTH-001/002/003 and broader production readiness remain open.
+
+The anonymous production health read at 16:01:24 UTC returned HTTP 200 with env, database, auth and serviceRole checks OK, but overall degraded and six missing feature settings: `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET`, `GUARDIAN_INTERNAL_SECRET`, `FCM_PRIVATE_KEY` and `APNS_PRIVATE_KEY`. Earlier four-setting statements remain dated history. No settings or secrets were read or changed.
+
+All pending/running statements below describe their original dated checkpoint, not current release status. Current evidence is not retroactively attributed to those old revisions.
+
 The user authorized publishing the current changes to main and production. PR 510 merged at 19:50:26 UTC as `4bee627572be77112b1206f4243841df00f9a181`; its direct parents are prior main `57f22c0b` and audited branch `6353d0d4`. The merge and branch share frozen tree `b039b2c08e994037e65b2677c102b7a338a9bbe5`. No SQL or Supabase configuration changed from prior main.
+
+## Verified CI follow-up release: 75a1f3c6
+
+Release `75a1f3c6b9874e0228af2c81f072e7cc068d1c9e`, tree `2f4cb2f980b1a92c4313d3af4ea7fe514630a648`, publishes the two-file disposable phone CI repair and four audit documents. Application runtime and product Supabase configuration/SQL are unchanged from2a5. Vercel deployment `dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW` succeeds, GitHub Production `6546108247`; the immutable URL is [bubaly-rdlt5ry45](https://bubaly-rdlt5ry45-newworldventure.vercel.app).
+
+At21:51:25 UTC, public build200 identifies exact revision75a1f3c6 with private/no-store headers. The21:51:48 UTC release record verifies exact-deployment public auth/phone readiness, disabled native credential controls/POST with no credential serialization, cookie-neutral invalid callback and clean history; zero page errors, failed public assets or authentication/SMS dispatch. This is public readiness, not production OTP delivery or verification. Evidence: `Temp/bubaly-75a1f3c6-production-release-20260919.json`. Hosted CI `35471471192` remains active; new phone acceptance is pending. The separate service-worker cache repair is now in progress and has no deployment or acceptance claim in this checkpoint.
 
 ## Verified application release: 2a5e7e7a
 
@@ -16,7 +34,7 @@ All 14,038 permanent audit IDs remain. Follow-up SEC-001 discovery executes a de
 
 ## Native-form follow-up on main 70789485
 
-Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` is live on Vercel deployment
+Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` was verified live on Vercel deployment
 `dpl_4e2X1mo4taDXyYNnd38F36DP7M4r`, successful at 20:20:47 UTC, with GitHub
 Production record `6545293519`. Its immutable URL is
 [the verified deployment](https://bubaly-gqgndu7rm-newworldventure.vercel.app).
