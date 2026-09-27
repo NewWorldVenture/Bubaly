@@ -27,7 +27,7 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -263,6 +263,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
 // ─── Policies ────────────────────────────────────────────────────────────────
 function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; members: Member[]; canManage: boolean }) {
   const tr = useTranslations();
+  const plural = usePlural();
   const locale = useLocale();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -322,7 +323,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                     <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60">{domainLabel(tr, p.domain)}</span>
                     <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60 capitalize">{p.capability}</span>
                     <span>· {subjectLabel(p)}</span>
-                    {p.effect === 'require_approval' && <span>· {tr('trustModule.approvalsNeeded', { count: p.required_approvals, model: approvalModelLabel(tr, p.approval_model) })}</span>}
+                    {p.effect === 'require_approval' && <span>· {plural('trustModule.approvalsNeeded', p.required_approvals, { model: approvalModelLabel(tr, p.approval_model) })}</span>}
                     <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
