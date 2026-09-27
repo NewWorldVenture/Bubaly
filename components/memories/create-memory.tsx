@@ -275,9 +275,9 @@ export function CreateMemory() {
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {saving
           ? progress && progress.total > 1
-            ? `Uploading ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`
-            : 'Saving…'
-          : `Save memory${picks.length > 1 ? ` (${picks.length} photos)` : ''}`}
+            ? t('createMemory.uploadingNOfTotal', { n: Math.min(progress.done + 1, progress.total), total: progress.total })
+            : t('createMemory.saving')
+          : picks.length > 1 ? t('createMemory.saveMemoryPhotos', { n: picks.length }) : t('createMemory.saveMemory')}
       </Button>
 
       {/* Upload progress — honest per-file bar so multi-photo saves aren't a blind wait. */}

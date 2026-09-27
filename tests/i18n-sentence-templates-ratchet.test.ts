@@ -12,11 +12,13 @@ import { readsAsSentence, sentenceTemplates } from './helpers/sentence-templates
 // walker gets stricter, and the commit that raises it says so.
 // Batch 1 (admin, command center, memories, marketplace, blog, feedback):
 // 111 -> 87.
+// Batch 2 (dashboards, billing, declutter, marketplace panels, assistant,
+// concierge, focus, care, career), 87 -> 56.
 //
 // Not counted, on purpose: app/api (prompts for the model), a thrown Error (a
 // log line and the error boundary), a translator's own argument, class lists,
 // URLs and queries, and an AI system prompt.
-const CEILING = 87;
+const CEILING = 56;
 
 describe('English sentence templates on the signed-in and public surface do not grow', () => {
   const files = sourceFiles().filter((f) => !f.startsWith('app/api/'));

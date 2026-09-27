@@ -54,7 +54,7 @@ export function MealPlanCardView({ card, compact = false, onAsk, className }: { 
                 {onAsk && !compact && (
                   <button
                     type="button"
-                    onClick={() => onAsk(`Swap ${day.label}'s dinner for something else`)}
+                    onClick={() => onAsk(t('aiCards.swapDinner', { day: day.label }))}
                     className="focus-ring coarse:min-h-11 shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-elevated"
                   >{t('mealPlan.swap')}</button>
                 )}

@@ -85,6 +85,14 @@ export const DENSITY_DESCRIPTIONS: Record<Density, string> = {
   playful: 'The biggest text and roomiest tap targets.',
 };
 
+/** Catalogue keys for what a person reads; the two maps above stay English identifiers. */
+export const DENSITY_LABEL_KEYS: Record<Density, string> = {
+  comfortable: 'densityLabel.comfortable', cozy: 'densityLabel.cozy', playful: 'densityLabel.playful',
+};
+export const DENSITY_DESCRIPTION_KEYS: Record<Density, string> = {
+  comfortable: 'densityDescription.comfortable', cozy: 'densityDescription.cozy', playful: 'densityDescription.playful',
+};
+
 /** Densities a user can pick in Settings (in order), plus 'auto' = role default. */
 export const DENSITY_OPTIONS: Density[] = ['comfortable', 'cozy', 'playful'];
 

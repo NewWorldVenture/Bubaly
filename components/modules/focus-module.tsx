@@ -175,7 +175,7 @@ function FocusQueue() {
           <div>
             <h1 className="text-2xl font-bold">{total === 0 ? 'Nothing on your plate' : 'Focus review finished'}</h1>
             <p className="mt-1 text-sm text-muted">
-              {total === 0 ? 'No events or open tasks for today. Enjoy the calm.' : `Reviewed ${total} items. ${doneCount} to-dos saved as done; ${submittedCount} chores submitted for approval. Skipped tasks remain open.`}
+              {total === 0 ? tr('focusModule.nothingToday') : tr('focusModule.reviewSummary', { total, done: doneCount, submitted: submittedCount })}
             </p>
           </div>
           <button onClick={() => load()} className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-elevated hover:text-fg transition">
