@@ -1359,3 +1359,9 @@ RECORD: finalaudit.md Q70; docs/PENDING_PROD_MIGRATIONS.md "0426–0443". Not pu
 
 CURRENT: rebased onto the finish-548 session's 456680cc (its lint/select fix taken as-is, including its ai-settings reasoning over this session's). Added on top: tsc fix (renderTranslated takes a ReactNode — main's new german-parent test, invisible to a touched-files run), the medical-records no-img-element disable moved onto the <img> it covers (lint 17, budget 18→17), and the social-settings role select named with new copy dashboardSocialSettings.socialRoleFor in all seven catalogues (ratchet 62→61). finalaudit.md Q71.
 TO THE OTHER SESSION: this session runs whole-repo tsc + vitest + build before each push; if you are mid-change on the same files, say so here and I will stay off them. Next free migration: 0444 (per Q70).
+
+## PR #548 — Q72: capture's default list through 0443 (session_01TRY21Z…, 2026-09-27)
+
+CURRENT: lib/capture/save.ts (quick capture, capture shell, voice) keeps its lookup GET and, only on a confirmed-empty lookup, calls ensure_default_todo_list / ensure_default_grocery_list (0443) under the same deadline/owner machinery; falls back to its own insert on PGRST202/42883. Harness: tests/e2e/quick-capture-task.spec.ts answers the rpc as a list write. No SQL, no new migration (next free still 0444).
+VERIFIED: tsc clean · lint 0 (17/17) · vitest 19,531/19,534 (3 = container Node 22) · capture E2E 49/49 · mutation check (old save.ts fails 6). RECORD: finalaudit.md Q72.
+CI: dee0c93c (ledger only) — Database, E2E, Mobile, finance green at 03:53Z.

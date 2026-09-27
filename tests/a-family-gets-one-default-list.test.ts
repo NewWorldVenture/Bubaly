@@ -84,12 +84,11 @@ describe('no writer creates a default list around the one get-or-create', () => 
   //                                     "Add to a new list")
   //   dashboard/migrate/actions.ts      the importer's own named list, looked
   //                                     up by NAME, not the family default
-  //   lib/capture/save.ts               FILED, not fixed: quick capture and
-  //                                     voice keep their own lookup-then-insert
-  //                                     inside the request-deadline and owner
-  //                                     machinery that two E2E harnesses pin
-  //                                     request by request. Converting it is its
-  //                                     own change; see finalaudit.md Q69.
+  //   lib/capture/save.ts               its fallback for a database without
+  //                                     0443 only: an empty lookup goes through
+  //                                     the get-or-create first (Q72), inside the
+  //                                     request-deadline machinery the capture
+  //                                     harnesses pin request by request.
   const ALLOWED = new Map([
     ['grocery_lists', new Set([
       'lib/services/groceries/index.ts', 'components/modules/shopping-module.tsx',

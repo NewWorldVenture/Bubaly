@@ -34247,7 +34247,7 @@ Its first run found **six more writers** than the ledger had named. Two moved on
 
 Nine test fakes gained an `rpc` that answers "function missing", which is the fallback path those cases were written against.
 
-**Filed, not fixed: quick capture and voice.** `lib/capture/save.ts` runs in the browser inside the request-deadline and current-owner machinery (DATA-007's first half). `tests/e2e/quick-capture-task.spec.ts` and `voice-capture-boundaries.spec.ts` pin that machinery request by request, including a held list write. Converting it to the RPC is a change to those harnesses as much as to the code, and it is its own change. Until it lands, two first captures made from the quick-capture sheet itself can still race. Two made from the other writers, or one from each, cannot.
+**Filed, not fixed: quick capture and voice.** `lib/capture/save.ts` runs in the browser inside the request-deadline and current-owner machinery (DATA-007's first half). `tests/e2e/quick-capture-task.spec.ts` and `voice-capture-boundaries.spec.ts` pin that machinery request by request, including a held list write. Converting it to the RPC is a change to those harnesses as much as to the code, and it is its own change. Until it lands, two first captures made from the quick-capture sheet itself can still race. Two made from the other writers, or one from each, cannot. *Fixed at Q72: capture now creates through the same function.*
 
 **Verified:**
 - fresh replay **375/375**; probes **92/92, twice**;
@@ -34361,6 +34361,29 @@ No SQL changed; the replay and probes stand at Q70's 413/413 and 137/137 twice.
 **Hosted CI on d5e4043e (this fix's head): all green.** Database, Mobile, E2E, Typecheck · Lint · Test · Build, and finance-operation-sql each completed with `success`, and PR #548 reports `mergeable_state: clean` against `main` 0306c985. This is the first head since the Q68 merge on which every hosted job passed, E2E included. The three container-only Node 22 failures pass there on the pinned Node 24, as expected. The phone-auth-http case that is red on `main` also passed in this run. It is still recorded as `main`'s own intermittent failure and not closed here, because one green run does not make it a fix.
 
 **What green does NOT change.** PRODUCTION READY stays **NO**. SEC-001 (the public `family-media` bucket) is ❌ until an operator makes it private. The deployed-workflow items under Authentication, Authorization, Core User Journeys and APIs below still need a live environment. Merging this PR to `main` runs `supabase-production-migrations.yml`, which pushes every pending migration to production. The repo's own rule is that agents do not apply migrations to production, so the merge is left to the owner.
+
+
+## Q72 — DATA-007's last writer: quick capture and voice create through 0443
+
+**Found at Q69 and filed there. Fixed here.** `lib/capture/save.ts` is the browser's quick-capture sheet, the full-page capture shell and voice. It still found or made the family's default list by reading "the oldest open list" and inserting one when there was none, with nothing between the two requests. It is the most likely first capture a family makes, so the race Q69 closed for six server writers stayed open on the one path most exposed to it: the sheet and voice at once, or two phones.
+
+**The change keeps everything the capture harnesses pin.** The read-only lookup stays first, under the same deadline, owner and `lookup` stage, and an existing list costs one GET as before. Only when the lookup confirms there is no list does capture call `ensure_default_todo_list` or `ensure_default_grocery_list`. Those re-read under the per-family lock and return the winner's list. The call is:
+- a mutation for the deadline machinery (`dispatched`, `stage: 'list'`);
+- `failed` on a definitive rejection (RLS 42501 included), and `uncertain` on a lost reply or on anything that is not a UUID;
+- retired like any other write when the owner changes.
+
+On a database without 0443 (PGRST202/42883), it falls back to its own insert, as the server helpers do. A failed lookup is still never read as "no list".
+
+**Verified:**
+- **Unit.** `capture-save-boundaries` covers the empty lookup going to the function with the creator identity (member for to-do, user for grocery, `null` member kept as `null`), the fallback to the old insert on a missing function (4 requests, in order), and a non-UUID answer held `uncertain`. The existing denial, lost-reply and retirement cases pass unchanged on the new path. **Mutation check:** against the old `save.ts`, 6 of these fail.
+- **E2E.** The quick-capture fixture now answers `/rpc/ensure_default_todo_list` as the list write it may be, so the held-write and owner-retirement phases still pin it, and the empty-lookup control asserts the list came through the function. **49/49** quick-capture and voice cases pass locally.
+- `tests/a-family-gets-one-default-list.test.ts`'s exception for `save.ts` now reads "fallback only".
+- **Whole repo:**
+  - `tsc` clean; lint exit 0 (17/17);
+  - vitest **19,531 / 19,534**, where the 3 are the container's Node 22.
+  - `npm run build` exit 0; first-load JS shared 103 kB.
+
+No SQL changed: 0443 already grants both functions to `authenticated`, and it is SECURITY INVOKER, so the browser's RLS applies exactly as it did to the insert. DATA-007 stays 🔄 IN PROGRESS. Its reload-persistent idempotency, live RLS and device workflows need a live environment.
 
 # Final Regression
 

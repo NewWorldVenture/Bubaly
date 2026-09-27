@@ -91,6 +91,21 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
     if (url.origin === origin) { await route.fulfill({ contentType: 'text/html', body: '<!doctype html><main id="root"></main>' }); return; }
     if (url.origin !== provider) throw new Error(`Unexpected fixture destination: ${url.origin}`);
     if (request.method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return; }
+    if (url.pathname.endsWith('/rpc/ensure_default_todo_list')) {
+      // 0443's get-or-create, recorded as the list write it may be: it re-reads
+      // the family's open list under a lock and inserts only when there is none.
+      const args = request.postDataJSON() as Record<string, unknown>;
+      const body = { family_id: args.p_family_id, name: args.p_name, created_by: args.p_created_by };
+      state.writes.push({ table: 'todo_lists', method: 'POST', body, query: 'rpc:ensure_default_todo_list' });
+      const finish = async () => {
+        if (state.failMutation) { await route.fulfill({ status: 400, headers, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'Fixture mutation rejected' }) }); return; }
+        let found = state.rows.todo_lists.find(row => row.family_id === body.family_id && row.archived_at === null);
+        if (!found) { found = { id: `10000000-0000-4000-8000-${String(state.writes.length).padStart(12, '0')}`, created_at: new Date().toISOString(), archived_at: null, ...body }; state.rows.todo_lists.push(found); }
+        await route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(found.id) });
+      };
+      if (state.holdMutations) pendingWrites.push(finish); else await finish();
+      return;
+    }
     const table = url.pathname.split('/').at(-1) as Table;
     if (!(table in state.rows)) throw new Error(`Unexpected fixture table: ${table}`);
     if (request.method() === 'GET') {
@@ -230,6 +245,9 @@ test('control: successful empty default-list lookup creates a list with member o
   expect(state.rows.todo_lists).toHaveLength(1);
   expect(state.rows.todo_lists[0]).toMatchObject({ family_id: familyId, created_by: parentId });
   expect(state.rows.todo_items[0].list_id).toBe(state.rows.todo_lists[0].id);
+  // DATA-007: the empty lookup creates through the serialised get-or-create,
+  // never a bare insert a second first-capture could race.
+  expect(state.writes.filter(write => write.table === 'todo_lists').map(write => write.query)).toEqual(['rpc:ensure_default_todo_list']);
 });
 
 test('control: returned task error keeps the draft, reports failure and allows deliberate retry', async ({ page }) => {
