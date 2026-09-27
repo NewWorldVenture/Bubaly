@@ -12,6 +12,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { formatScheduledTime, scheduleDisplayTimezone, scheduleStatusKey } from '@/lib/social/schedule-time';
 import { safeSocialLink } from '@/lib/social/links';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { isUuid } from '@/lib/utils/validation';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -27,6 +28,8 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const tr = await getTranslations();
   const { locale } = await getLocaleContext();
   const { id } = await params;
+  // Not a row id at all: not found, before a read that would fail on it (B12).
+  if (!isUuid(id)) return <AppNotFound backHref="/dashboard/social" />;
   const ctx = await requireUserContext();
   const { post, variants, targets, results } = await getPost(ctx.active.familyId, id);
   if (!post) return <AppNotFound backHref="/dashboard/social" />;
