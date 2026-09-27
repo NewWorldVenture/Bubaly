@@ -144,7 +144,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // messages that were already shipping in English, none of them new. The ceiling
 // is set to the measurement rather than to 2,807 + 89, so the seven strings of
 // slack the surface had banked are banked here too.
-const CEILING = 2889;
+//
+// Then lowered to 2,878 as eleven of them were translated: the Family Wallet's
+// toasts and its "Only … available in Spend." refusal, which children see. A
+// ceiling that is not lowered when strings are fixed lets them come back free.
+const CEILING = 2878;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

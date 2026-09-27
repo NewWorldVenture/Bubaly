@@ -35,7 +35,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
     const res = await claimPayHandleAction({ childWalletId: target || null, handle: normalized });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not claim that Pay-ID');
-    success(`Pay-ID @${normalized} is yours`);
+    success(t('payHandleManager.payIdIsYours', { handle: normalized }));
     setHandle(''); setTarget('');
     router.refresh();
   }

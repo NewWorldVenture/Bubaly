@@ -110,7 +110,11 @@ export function MoneyCardsView({
     } finally {
       setBusy(null);
     }
-    if (issued > 0) success(`Issued ${issued} virtual card${issued !== 1 ? 's' : ''}!`);
+    if (issued > 0) {
+      success(issued === 1
+        ? tr('moneyCards.issuedOneVirtualCard')
+        : tr('moneyCards.issuedVirtualCards', { count: issued }));
+    }
     router.refresh();
   }
 
@@ -424,7 +428,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not order card');
-    success(`Physical card ordered for ${child.name}!`);
+    success(tr('moneyCards.physicalCardOrderedFor', { name: child.name }));
     onIssued();
   }
 
