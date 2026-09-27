@@ -10,14 +10,18 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: () => requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: () => createServer() }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
-function client(runData: unknown, updateError: unknown) {
+// The dismiss write is compare-and-set on status = 'pending' and asks for the
+// rows it changed (`.select('id')`), so `written` is what that write matched.
+function client(runData: unknown, updateError: unknown, written: unknown[] = [{ id: 'r1' }]) {
   const selectChain: Record<string, unknown> = {
     eq: () => selectChain,
     maybeSingle: () => Promise.resolve({ data: runData, error: null }),
   };
   const updateChain: Record<string, unknown> = {
     eq: () => updateChain,
-    then: (onF: (v: { data: null; error: unknown }) => unknown) => Promise.resolve({ data: null, error: updateError }).then(onF),
+    select: () => updateChain,
+    then: (onF: (v: { data: unknown[] | null; error: unknown }) => unknown) =>
+      Promise.resolve({ data: updateError ? null : written, error: updateError }).then(onF),
   };
   return { from: () => ({ select: () => selectChain, update: () => updateChain }) };
 }
@@ -46,5 +50,11 @@ describe('dismissQueuedRunAction write boundary', () => {
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null));
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(true);
+  });
+
+  it('returns ok:false when the write matched no pending row — someone else resolved the run first', async () => {
+    createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null, []));
+    const res = await dismissQueuedRunAction('r1');
+    expect(res.ok).toBe(false);
   });
 });

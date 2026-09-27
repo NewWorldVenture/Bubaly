@@ -86,7 +86,9 @@ export async function applyConciergePlanAction(planId: string, kinds: WriteBackK
 
 export type LoopResult =
   | { ok: true; mode: AutonomyMode; applied: WriteBackKind[]; summary: string | null }
-  | { ok: false; error: string };
+  // `code` names a refusal another surface words differently (the automation
+  // pages' button says "Skip" where this panel's says "Dismiss").
+  | { ok: false; error: string; code?: 'approval_already_decided' };
 
 /**
  * Fired when a plan's status transitions into booked/confirmed. Consults the
@@ -204,7 +206,7 @@ type GoverningApproval = { id: string; status: string; expires_at: string | null
 
 /**
  * The approval that governs a queued run — read from `approval_requests`, the
- * table the trust engine writes and 0381/0388 defend, and NEVER from the run's
+ * table the trust engine writes and 0381/0389 defend, and NEVER from the run's
  * own `metadata`.
  *
  * `metadata.approval_id` used to decide whether a vote was needed at all. It is
@@ -213,13 +215,13 @@ type GoverningApproval = { id: string; status: string; expires_at: string | null
  * 'queued' run whose `status` defaults to 'pending' and whose metadata is
  * free). So one PATCH that dropped the key, or one INSERT that never had it,
  * turned a two-parent plan into a one-tap materialisation while the real
- * approval stayed pending on the other parent's card. 0389 pins the key on
+ * approval stayed pending on the other parent's card. 0390 pins the key on
  * server-written rows; it cannot pin a row born without one, which is why the
  * link is resolved here from the other side.
  *
  * The link is the plan: planAcceptedAction files the approval with
  * `payload = {plan_id, kinds}` (lib/trust/server.ts openApprovalRequest), and
- * 0388 freezes `payload` for the life of the row. Newest first, a pending row
+ * 0389 freezes `payload` for the life of the row. Newest first, a pending row
  * preferred — a plan re-accepted after a decline has a new approval, and that
  * is the one that governs.
  *
@@ -321,7 +323,7 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     if (governing.approval.status !== 'pending') {
       // Decided elsewhere (the card, the sweep, a cancel) while this line stayed
       // pending — the two disagree, and the decision wins. Dismiss clears it.
-      return { ok: false, error: t('actions.runApprovalAlreadyDecided') };
+      return { ok: false, error: t('actions.runApprovalAlreadyDecided'), code: 'approval_already_decided' };
     }
     const decided = await decide(scopeFromUserContext(ctx, sb), governing.approval.id, 'approved');
     if (!decided.ok) return { ok: false, error: decided.error };
@@ -407,6 +409,7 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   // see `governingApprovalFor`. A run without a plan has nothing to resolve
   // and is only a line to clear.
   const meta = (run.metadata ?? {}) as RunMeta;
+  let declinedHere = false;
   if (meta.plan_id) {
     const governing = await governingApprovalFor(sb, ctx.active.familyId, meta.plan_id);
     if (!governing.ok) {
@@ -419,6 +422,7 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     if (approval && stillOpen) {
       const declined = await decide(scopeFromUserContext(ctx, sb), approval.id, 'rejected');
       if (!declined.ok) return { ok: false, error: declined.error };
+      declinedHere = true;
       // `decide` closed the runs whose metadata names this approval; fall
       // through so THIS row is closed too when its metadata was scrubbed.
     }
@@ -431,11 +435,25 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   // `state` alongside the legacy `status`, for the same reason the approve path
   // writes both: a dismissed run left at 'awaiting_approval' stays on "Needs
   // you" (app/(app)/dashboard/needs-you/page.tsx reads `state`) forever.
-  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed', state: 'cancelled' })
-    .eq('id', runId).eq('family_id', ctx.active.familyId);
+  //
+  // Compare-and-set on `status = 'pending'`. Between the read above and this
+  // write, the approval card can approve the plan and `decide()` close the run
+  // as executed; an unconditional write would relabel a plan that DID land as
+  // dismissed. Zero rows is "someone else resolved it" — unless this call's own
+  // decline did, through `decide()`'s close of the runs naming the approval.
+  // This covers a close that has LANDED; a decide() still materialising when
+  // this write lands finds the row dismissed, and without a lock shared by the
+  // two paths that narrower window stays open.
+  const { data: dismissedRows, error: dismissErr } = await sb.from('family_automation_runs')
+    .update({ status: 'dismissed', state: 'cancelled' })
+    .eq('id', runId).eq('family_id', ctx.active.familyId).eq('status', 'pending')
+    .select('id');
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
+  }
+  if (!declinedHere && (!dismissedRows || dismissedRows.length === 0)) {
+    return { ok: false, error: t('actions.runNotFoundOrAlready') };
   }
 
   revalidatePath(PATH);
