@@ -62,7 +62,9 @@ const EXPECTED_404 = new Map<string, string>([
 const IGNORED_CONSOLE = process.env.E2E_SWEEP_IGNORE_CONSOLE ? new RegExp(process.env.E2E_SWEEP_IGNORE_CONSOLE) : null;
 
 const CATALOGUE_KEY = /\b[a-z][a-zA-Z0-9]*\.[a-z][a-z0-9]*[A-Z][a-zA-Z0-9]*\b/;
-const DOUBLED_BRAND = /(?:·|\||—|–|-|:)\s*Bubaly\s*·\s*Bubaly\s*$/i;
+// Any title whose own part ends in the brand before the template adds it:
+// "X · Bubaly · Bubaly", and also "Welcome to Bubaly · Bubaly".
+const DOUBLED_BRAND = /(?:^|[\s·|—–:-])Bubaly\s*·\s*Bubaly\s*$/i;
 
 type Session = { account: OwnedAccount; state: Awaited<ReturnType<BrowserContext['storageState']>> };
 

@@ -55,6 +55,20 @@ describe('page titles leave the brand to the template', () => {
     expect(doubled).toEqual([]);
   });
 
+  // A title read from the catalogue can end in the brand in every locale
+  // ("Welcome to Bubaly", "Willkommen bei Bubaly"), which neither check above
+  // can see: the phone crawl read "Welcome to Bubaly · Bubaly" on /welcome.
+  // Such a title goes through titleWithoutDoubledBrand, which opts it out of
+  // the template when it ends in the brand and leaves it alone otherwise.
+  it('a catalogue title that ends in the brand opts out of the template', () => {
+    const catalogue = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
+    const offenders = files.flatMap((file) =>
+      [...readFileSync(file, 'utf8').matchAll(/\btitle:\s*t\('([^']+)'\)/g)]
+        .filter((m) => ENDS_IN_BRAND.test(catalogue[m[1]] ?? ''))
+        .map((m) => `${file}: t('${m[1]}') = '${catalogue[m[1]]}'`));
+    expect(offenders).toEqual([]);
+  });
+
   it('the rule would catch the shapes production shipped', () => {
     for (const title of ['Send a gift · Bubaly', 'Smart Kitchen | Bubaly', 'Deals · Marketplace | Bubaly']) {
       const src = `export const metadata: Metadata = { title: '${title}' };`;
