@@ -281,7 +281,8 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 className="focus-ring flex-1 min-w-0 rounded text-left">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
-                  <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
+                  {/* A real button, so the keyboard can open the note; its click bubbles to the row (MAIN-F-D06). */}
+                  <button type="button" className="block min-w-0 max-w-full truncate text-left text-sm font-semibold">{note.title ?? t('notes.untitled')}</button>
                   {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>

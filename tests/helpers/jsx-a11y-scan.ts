@@ -161,3 +161,75 @@ export function unnamedSelects(file: string, text?: string): Site[] {
   visit(sf);
   return out;
 }
+
+const NON_INTERACTIVE = /^(div|li|span|tr|td|p|img|section|article|header|footer|figure|ul|main)$/;
+/** A handler that only stops propagation, or only closes something (a click-outside layer). */
+const NOT_AN_ACTION = [
+  /^\{\s*\(?\w*\)?\s*=>\s*\w+\.stopPropagation\(\)\s*\}$/,
+  /^\{\s*(close|onClose|dismiss|onDismiss)\s*\}$/,
+  /^\{\s*\(\)\s*=>\s*\{?\s*(?:(?:\w+\s*&&\s*)?set\w+\((?:false|null)\);?\s*)+\}?\s*\}$/,
+];
+
+/**
+ * A row that holds its own buttons cannot be `role="button"` (that role hides
+ * its children from assistive technology), so its keyboard path is a native
+ * `<button>` inside it with no handler of its own: Enter or Space on it
+ * dispatches a click that bubbles to the row's `onClick`.
+ */
+function bubblesFromAButton(n: ts.Node, outerCall: string | null): boolean {
+  let found = false;
+  const walk = (c: ts.Node) => {
+    if (found) return;
+    const o = ts.isJsxElement(c) ? c.openingElement : ts.isJsxSelfClosingElement(c) ? c : null;
+    if (o && o.tagName.getText() === 'button') {
+      const own = o.attributes.properties.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'onClick') as ts.JsxAttribute | undefined;
+      // Either it has no handler of its own and its click bubbles to the row,
+      // or its own handler performs the row's action itself (typically after
+      // stopPropagation, so the row does not run it twice).
+      if (!own || (outerCall && own.initializer?.getText().replace(/\s+/g, ' ').includes(outerCall))) { found = true; return; }
+    }
+    ts.forEachChild(c, walk);
+  };
+  ts.forEachChild(n, walk);
+  return found;
+}
+
+/** The call an arrow handler makes — `() => onOpen(note)` gives `onOpen(note)`. */
+function handlerCall(handler: string): string | null {
+  const m = /^\{\s*\(\s*\)\s*=>\s*\{?\s*([\w.]+\([^()]*\))\s*;?\s*\}?\s*\}$/.exec(handler);
+  if (m) return m[1];
+  const id = /^\{\s*([\w.]+)\s*\}$/.exec(handler);
+  return id ? id[1] : null;
+}
+
+/**
+ * A non-interactive element that does something on click and cannot be
+ * reached or used from the keyboard: no role, no tabIndex, no key handler.
+ * (MAIN-F-D06: calendar events, notes, recipes and goal cards opened only on a
+ * click.) Click-outside dismiss layers and propagation stops are not actions.
+ */
+export function clickOnlyElements(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const visit = (n: ts.Node) => {
+    const o = ts.isJsxElement(n) ? n.openingElement : ts.isJsxSelfClosingElement(n) ? n : null;
+    if (o && NON_INTERACTIVE.test(o.tagName.getText())) {
+      const props = o.attributes.properties;
+      const at = (k: string) => props.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === k) as ts.JsxAttribute | undefined;
+      const click = at('onClick');
+      const handler = click?.initializer?.getText().replace(/\s+/g, ' ') ?? '';
+      // A backdrop removed from the accessibility tree is a mouse convenience
+      // only when the file also gives the keyboard its own way out:
+      // useDialogBehavior closes the dialog on Escape.
+      const dismissLayer = !!at('aria-hidden') && /useDialogBehavior\s*\(/.test(sf.text);
+      const reachable = (at('role') && at('tabIndex') && (at('onKeyDown') || at('onKeyUp')))
+        || bubblesFromAButton(n, handlerCall(handler)) || dismissLayer;
+      if (click && !props.some(ts.isJsxSpreadAttribute) && !reachable && !NOT_AN_ACTION.some((re) => re.test(handler))) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(n.getStart()).line + 1, what: `<${o.tagName.getText()} onClick=${handler.slice(0, 50)}>` });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}

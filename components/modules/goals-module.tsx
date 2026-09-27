@@ -21,6 +21,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type Goal = Tables<'goals'>;
 

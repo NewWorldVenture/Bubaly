@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type ProposedEvent = {
   title: string; starts_at: string; ends_at: string | null; all_day: boolean;
