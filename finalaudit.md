@@ -49933,6 +49933,7 @@ because this audit has no production login and must not create data there.
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
 | B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
 | B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | 🔄 claimed 2026-09-27 20:10 | — |
+| B13 | Every `/admin` route in the ten other locales (B8 covered the family routes only), local, 1280 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done: 78 routes × 10 locales, 780 loads on a build of `d6546c0c`; no route flagged for a defect (the two text flags are the OAuth scope `offline.access` and the feature key `briefing.morning`, both recorded above as by design) | 2026-09-27 21:30 |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
