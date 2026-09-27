@@ -11,9 +11,9 @@
 -- parent's side ("Added to Casey's ladder", "Casey achieved …").
 --
 -- The same shape this branch has closed for grades (0301), chores (0303), health
--- records (0307) and Guardian screening (0376 (as numbered before the merge; dropped at the merge as main's duplicate)): every member still READS the
+-- records (0307) and Guardian screening (the branch's former 0376, dropped as a duplicate of main's 0318): every member still READS the
 -- ladder — a child seeing their own progress is the point of it — and only a
--- manager writes it. Applied in the dropped Guardian screening migration's (0376 (as numbered before the merge; dropped at the merge as main's duplicate) before the merge) idiom: permissive mng_* policies, a
+-- manager writes it. Applied in the idiom of the branch's dropped Guardian screening migration (former 0376): permissive mng_* policies, a
 -- RESTRICTIVE guard per command so a later permissive policy cannot reopen it,
 -- strays swept by shape, and an assertion that none remain.
 --

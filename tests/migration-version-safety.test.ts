@@ -251,52 +251,99 @@ describe('Supabase migration filename safety', () => {
     // that then collided with main's 0349, 0352 and 0360 moved to 0378
     // (savings goals), 0379 (member locations) and 0380 (audit actor).
     //
-    // The numbers between 0343 and 0360 are held by migrations still in
-    // review; each lands with its own paragraph here. A number below the one
-    // pinned is still free to land: the pin says only which number is next.
+    // 0381_two_parents_means_two_parents_in_the_database_too.sql adds two
+    // BEFORE UPDATE triggers on approval_requests: a move into approved or
+    // modified must be earned by the row's own votes under its own model and
+    // threshold, a vote is signed only as yourself, and the rule of a pending
+    // row cannot be rewritten. The rule had lived in TypeScript alone, and
+    // 0251's decide policy let any adult PATCH status=approved. Held by
+    // docs/audit/two-parents-means-two-parents-check.sql.
     //
-    // 0361-0381 are PR #548's twenty-one, renumbered as one block when main
-    // (7e54596d) was merged into claude/bubaly-repo-connect-etzqg7. That branch
-    // had numbered them 0318-0338 against a main that stopped at 0317, and main
-    // then landed its own 0318-0360 — the twelfth collision between the two
-    // lines of work, and the first to take a whole block at once. They move
-    // ABOVE 0360 rather than into the held gaps, because the gaps belong to the
-    // migrations in review named above, and because 0318-0360 are already on
-    // production: a version below the newest applied one is not what
-    // `supabase db push` applies without being told to. Relative order is kept.
-    // What they touch, in order: policy predicates (0361), driving scores
-    // (0362), reward prices (0363), subscriptions and billing_customers
-    // (0365), nine health tables (0366), safety check-ins (0367), a
-    // guardian_phone unique index (0369), marketplace deal terms (0370),
-    // medications (0371), grades and screen-time limits (0372), behavior_logs
-    // authorship (0373), journals (0374), medical_profiles reads +
-    // family_allergies() (0375), a reward balance trigger (0378),
-    // push_deliveries (0379), the Resend counter (0380) and
-    // independence_milestones (0381).
+    // 0382_a_password_alone_does_not_delete_the_familys_budget.sql adds
+    // session_cleared_step_up() — aal2, or no factor enrolled — and a
+    // RESTRICTIVE insert/update/delete guard on budgets, savings_goals and
+    // bills: the step-up the money pages demanded was never a database rule.
+    // Held by docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql.
     //
-    // FOUR NUMBERS IN THE BLOCK ARE PERMANENTLY UNUSED — 0364, 0368, 0376 and
-    // 0377 — and that is recorded rather than renumbered, for the reason given
-    // for 0334 and 0337 above. Each was the branch's fix for a subject main had
-    // already closed, found by running main's probes against the merged chain
-    // rather than by comparing names: 0364's invite trigger (main's 0298
-    // policy closes every invitee escalation, and main's probes rest on a
-    // manager of two families being able to move an invite); 0368 on six
-    // allowance/gift tables (main's 0306, 0322 and 0324, with restrictive
-    // guards over the permissive policy it keeps — 0306 was on the branch's
-    // base all along); 0376 on Guardian screening (main's 0318); 0377 on the
-    // social-access DELETE (main's 0319, the identical policy). Laid over
-    // main's, each swept the permissive policy main's guards stand on, and
-    // main's negative controls could no longer fail. 0367 lost its locator half
-    // to main's 0335 the same way and kept safety_check_ins, which 0335 does
-    // not reach.
+    // 0383_an_archived_page_takes_its_public_answers_with_it.sql adds four
+    // AFTER triggers on marketing_pages and blog_posts that move a page's
+    // published FAQ answers to 'answered' in the same transaction as its
+    // archive, delete, rename or unpublish: the answers had no join back to
+    // their page and kept rendering after it went dark. Held by
+    // docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql
+    // and docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql.
     //
-    // 0382_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
+    // 0384_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql
+    // gives family_contact_channels.forward_to_phone the E.164 CHECK its own
+    // comment claimed, after normalizing the rows already there and keeping
+    // what they held in forward_to_phone_legacy — no country code guessed. Held
+    // by docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-
+    // be-used-check.sql.
+    //
+    // 0385_a_member_only_rewrites_their_own_memory.sql re-creates
+    // family_facts_update and family_facts_delete with the rule the service
+    // applies — can_manage_family, or a memory about me, or one I wrote — on
+    // top of 0264's category clause: any member could rewrite a parent's
+    // household fact over /rest/v1. Held by
+    // docs/audit/a-member-only-rewrites-their-own-memory-check.sql.
+    //
+    // 0386_a_family_subscribes_to_a_calendar_url_once.sql makes (family_id,
+    // url) unique on calendar_feeds: a failed first sync left the row and the
+    // next press inserted the same URL again, so every school event came in
+    // two or three times. Held by
+    // docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql.
+    //
+    // 0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql
+    // (AUTHZ-011) puts three guards in the database: RESTRICTIVE write policies
+    // on social_settings behind social_has_permission(…, 'manage_settings'),
+    // a trigger that lets a trip link only a document its caller can read from
+    // its own household, and a SECURITY DEFINER trigger that refuses to move a
+    // document to another household while a trip links it. Held by
+    // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
+    // cannot-read-check.sql.
+    //
+    // 0426-0443 are PR #548's block, and it has moved twice. The branch
+    // numbered it 0318-0338 against a main that stopped at 0317; main then
+    // landed its own 0318-0360, and the author moved the block to 0361-0382 on
+    // merging main at 7e54596d. main then landed 0344-0380 (#579, the C1-K
+    // pass) and 0381-0387 (#581), so the block collided again, all of it this
+    // time, and it moved as one block, in order and by name, into the range
+    // this PR was assigned: 0361->0426, 0362->0427, 0363->0428, 0365->0429,
+    // 0366->0430, 0367->0431, 0369->0432, 0370->0433, 0371->0434,
+    // 0372->0435, 0373->0436, 0374->0437, 0375->0438, 0378->0439,
+    // 0379->0440, 0380->0441, 0381->0442, 0382->0443. Above main's newest
+    // rather than into any gap below it, because a version below the newest
+    // one applied is not what `supabase db push` applies without being told
+    // to. What the survivors touch: policy predicates (0426), reward prices
+    // (0428), subscriptions and billing_customers (0429), nine health tables
+    // (0430), a guardian_phone unique index (0432), marketplace deal terms
+    // (0433), medications (0434), grades and screen-time limits (0435),
+    // medical_profiles reads + family_allergies() (0438), a reward balance
+    // trigger (0439), push_deliveries (0440), the Resend counter (0441) and
+    // independence_milestones (0442).
+    //
+    // 0443_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
     // and ensure_default_todo_list: get-or-create of a family's DEFAULT list as
     // one operation under a per-family advisory lock (DATA-007), SECURITY
     // INVOKER so RLS decides exactly what it decided before. Held by
     // docs/audit/a-family-gets-one-default-list-check.sql, which races two
     // sessions against it and against a lock-less copy.
-    expect(audit.nextVersion).toBe('0383');
+    //
+    // 0427, 0431, 0436 AND 0437 ARE PERMANENTLY UNUSED, and that is recorded
+    // rather than renumbered, for the reason given for 0334 and 0337 above.
+    // Each was the branch's fix for a subject #579 had since closed, found by
+    // running main's probes against the merged chain rather than by comparing
+    // names: 0427 (driving scores) is main's 0365, whose rule makes a trip a
+    // manager's to erase; 0431 (safety check-ins, whose locator half 0335 had
+    // already taken) is main's 0379; 0436 (behaviour-note authorship) is main's
+    // 0377; 0437 (journals) is main's 0364, and main's private-journal probe
+    // fails with it in the chain. Laid over main's, each would have replaced or
+    // widened the policy main's guards stand on. The author had already dropped
+    // four more the same way on the first merge (numbered 0364, 0368, 0376 and
+    // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
+    // those never took a number in this range, and the numbers they held then
+    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
+    expect(audit.nextVersion).toBe('0444');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -129,9 +129,11 @@ export async function POST(req: NextRequest) {
 
   // Update contact last-contact timestamp.
   if (decision.contactId) {
-    await supabase.from('guardian_contacts')
+    // Best-effort, not invisible: a refused update resolves as `{ error }`.
+    const { error: touchError } = await supabase.from('guardian_contacts')
       .update({ last_contact_at: new Date().toISOString() })
       .eq('id', decision.contactId);
+    if (touchError) console.error('[guardian-whatsapp] contact last-contact update failed', { contactId: decision.contactId, error: touchError });
   }
 
   // Blocked / high-confidence spam — silently discard.

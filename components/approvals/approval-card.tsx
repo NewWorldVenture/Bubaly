@@ -232,6 +232,18 @@ export function ApprovalCard({
         </details>
       )}
 
+      {/* SOMEONE ALREADY CHANGED THIS. On a multi-approver row the first
+          approver's correction is what the deciding vote executes, and the card
+          used to render Bubaly's original — so the second parent approved
+          wording they were never shown, and opening Edit prefilled the original
+          and reverted it on save. The fields below now carry the edit; this line
+          says an edit happened, so a yes is an informed one. */}
+      {approval.editedFields && approval.editedFields.length > 0 && (
+        <p className={cn('text-[11px] text-amber-300/90', compact ? 'mt-2' : 'mt-3')}>
+          {t('approval.alreadyChangedByAnApprover')} {approval.editedFields.join(', ')}
+        </p>
+      )}
+
       {/* What this request is waiting for. A two-parent rule that says so only
           in the toast after you tap Approve is a rule the family cannot see. */}
       {needsMore && (

@@ -6,7 +6,11 @@
 // badging what's NEW since they last looked. This is the deterministic core:
 // the server feeds real listings + the saved criteria; nothing here does I/O.
 
-import { kindHasPrice, type ListingKind } from '@/lib/marketplace/listings';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents, kindHasPrice, type ListingKind } from '@/lib/marketplace/listings';
+
+/** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type SavedSearchCriteria = {
   query?: string | null;         // keyword(s) over title + description
@@ -92,9 +96,19 @@ export function countNewSince(
   ).length;
 }
 
-/** A human summary of a saved search, e.g. "“bike” · For rent · Sports · under $50". */
+/**
+ * A human summary of a saved search, e.g. "“bike” · For rent · Sports · under $50"
+ * — or "… · unter 50 $" for a German reader.
+ *
+ * The ceiling used to be `under $${Math.round(cents / 100)}`: a literal symbol
+ * in an English phrase, so the Alerts page showed a German reader "under $50"
+ * beside price chips reading "15 $". `locale` and `t` are the READER's and are
+ * required. The ceiling stays in whole dollars, as it always read.
+ */
 export function describeSearch(
   criteria: SavedSearchCriteria,
+  locale: LocaleCode,
+  t: Translate,
   kindLabels: Record<string, string> = {},
   categoryLabels: Record<string, string> = {},
 ): string {
@@ -102,6 +116,9 @@ export function describeSearch(
   if (criteria.query?.trim()) parts.push(`“${criteria.query.trim()}”`);
   if (criteria.kind) parts.push(kindLabels[criteria.kind] ?? criteria.kind);
   if (criteria.category) parts.push(categoryLabels[criteria.category] ?? criteria.category);
-  if (typeof criteria.maxPriceCents === 'number') parts.push(`under $${Math.round(criteria.maxPriceCents / 100)}`);
-  return parts.length ? parts.join(' · ') : 'Anything new';
+  if (typeof criteria.maxPriceCents === 'number') {
+    const wholeDollars = Math.round(criteria.maxPriceCents / 100) * 100;
+    parts.push(t('savedSearch.underAmount', { amount: formatCents(wholeDollars, locale) }));
+  }
+  return parts.length ? parts.join(' · ') : t('savedSearch.anythingNew');
 }

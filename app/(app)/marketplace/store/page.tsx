@@ -9,13 +9,15 @@ import { StoreForm } from '@/components/marketplace/store-form';
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceStorePage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -85,8 +87,8 @@ export default async function MarketplaceStorePage() {
               <li key={l.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3.5 py-2.5">
                 <span className="min-w-0 flex-1 truncate text-sm">{l.title}</span>
                 <span className="text-xs text-muted">{KIND_LABELS[l.kind as ListingKind] ?? l.kind}</span>
-                {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && (
-                  <span className="text-xs font-semibold text-brand-text">{priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}</span>
+                {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t) && (
+                  <span className="text-xs font-semibold text-brand-text">{priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t)}</span>
                 )}
                 <span className={cn(
                   'rounded-full px-2 py-0.5 text-[10px] font-medium',

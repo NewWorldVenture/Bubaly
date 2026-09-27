@@ -54,3 +54,20 @@ export function newSubmissionId(): string {
 export function isSubmissionId(value: unknown): value is string {
   return typeof value === 'string' && SUBMISSION_ID.test(value);
 }
+
+/**
+ * Whether a save attempt is OVER, so its submission id must not be sent again.
+ *
+ * Over when it landed, and when the server answers `already_saved`: an earlier
+ * press under this id wrote a row that no longer matches this one (see
+ * `KeyedCreateOptions` in lib/services/idempotency.ts, which this module cannot
+ * import), so re-sending the id can only ever get that same answer back, and
+ * the page would be stuck on it until a reload.
+ *
+ * Any other failure is NOT over, and neither is a response that never arrived
+ * (a thrown call never reaches this): either may be a write that committed, so
+ * the id is held and pressing again is recognised as the same save.
+ */
+export function submissionSettled(result: { ok: true } | { ok: false; code?: string }): boolean {
+  return result.ok || result.code === 'already_saved';
+}

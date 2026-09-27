@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 
+// The scan STORES suggestion titles, and the subscription ones carry money, so it
+// takes the locale and translator of whoever it writes for. Nothing here asserts
+// wording; an echo translator is enough.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+
 // The accept action (M7) is a server action: it resolves the caller through
 // `requireUserContext`, writes through `createServer`, and speaks through
 // `getTranslations`. Each is mocked to a harness the tests steer; the scan
@@ -124,7 +129,7 @@ describe('autopilot persistence boundaries', () => {
   it('fails closed before any write when a required family read fails', async () => {
     const { client, writes } = failingReadClient('calendar_events');
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
       .rejects.toThrow('Autopilot could not read the required family data');
     expect(writes).toEqual([]);
   });
@@ -132,7 +137,7 @@ describe('autopilot persistence boundaries', () => {
   it('removes an auto-created reminder when its suggestion cannot be saved', async () => {
     const { client, writes } = suggestionInsertFailureClient();
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
       .rejects.toThrow('Autopilot could not save the suggestion');
     expect(writes).toEqual([
       { table: 'reminders', operation: 'insert' },

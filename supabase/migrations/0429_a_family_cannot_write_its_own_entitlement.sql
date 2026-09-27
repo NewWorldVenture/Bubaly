@@ -18,7 +18,7 @@
 -- A PARALLEL SESSION REACHED THIS SAME FINDING and landed
 -- `0300_entitlement_is_not_client_writable.sql` on main while this was in
 -- flight — the second time the two sessions have converged on one defect, after
--- invites (their 0298, this branch's 0364 (as numbered before the merge; dropped at the merge as main's duplicate)). Their migration runs FIRST, and the
+-- invites (their 0298, this branch's former 0364, since dropped). Their migration runs FIRST, and the
 -- two are complementary rather than duplicative, so both stay:
 --
 --   * On `subscriptions` and `billing_customers` they agree, and agree with
@@ -149,7 +149,7 @@ begin
       tbl || '_no_client_delete', tbl);
 
     -- Sweep stray PERMISSIVE write policies BY SHAPE, not by name. Narrowing by
-    -- name is how 0217 left six wallet tables behind for 0368 (as numbered before the merge; dropped at the merge as main's duplicate) to find.
+    -- name is how 0217 left six wallet tables behind for the branch's former 0368 to find.
     for pol in
       select p.polname from pg_policy p
       join pg_class c on c.oid = p.polrelid

@@ -236,7 +236,10 @@ type CommStatus = Database['public']['Tables']['guardian_communications']['Row']
 // a typo is a compile error rather than a discarded update.
 async function updateCommStatus(supabase: ReturnType<typeof createServiceClient>, commId: string | undefined, status: CommStatus) {
   if (!commId) return;
-  await supabase.from('guardian_communications').update({ status }).eq('id', commId);
+  // Best-effort, not invisible: PostgREST RESOLVES a refusal as `{ error }`, so a
+  // dropped answer is a status update that silently never happened.
+  const { error } = await supabase.from('guardian_communications').update({ status }).eq('id', commId);
+  if (error) console.error('[guardian-voice] communication status update failed', { commId, status, error });
 }
 
 function twimlResponse(xml: string): NextResponse {

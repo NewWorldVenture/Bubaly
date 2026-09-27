@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // dismissQueuedRunAction (a manager action) previously discarded the status-update
 // result and returned { ok: true } even when the write failed — so the run stayed
@@ -33,16 +33,14 @@ function client(runData: unknown, updateError: unknown, updateRows: unknown[] | 
   return { from: () => ({ select: () => selectChain, update: () => updateChain }) };
 }
 
-describe('dismissQueuedRunAction write boundary', () => {
-  // The actions module has a large import graph. Loaded inside the first case it
-  // spent that case's 5-second budget on a cold import whenever the machine was
-  // busy, and failed as a timeout rather than on anything it asserts. Loading it
-  // once here, with its own budget, leaves each case timing only the action.
-  let dismissQueuedRunAction: typeof import('@/app/(app)/dashboard/concierge/actions').dismissQueuedRunAction;
-  beforeAll(async () => {
-    ({ dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions'));
-  }, 60_000);
+// Imported ONCE, at module load, after the mocks above are hoisted. The action
+// module pulls in the approvals service, the trust engine and the i18n server;
+// importing it inside each case put that whole transform inside the case's 5 s
+// budget, and on a loaded machine the first case timed out while the action
+// itself ran in milliseconds.
+const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
 
+describe('dismissQueuedRunAction write boundary', () => {
   beforeEach(() => {
     requireUserContext.mockResolvedValue({ active: { familyId: 'fam-1', role: 'parent' }, user: { id: 'user-1' } });
   });

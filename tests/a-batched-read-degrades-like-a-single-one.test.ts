@@ -67,7 +67,11 @@ describe('a batched read degrades like a single one', () => {
 // import, no `.error` substring) fired on them.
 describe('the sites that handle a transport rejection another way', () => {
   const HANDLED: [string, string, RegExp][] = [
-    ['app/(app)/dashboard/dining/page.tsx', 'a local per-query try/catch', /const safe = async[\s\S]*?catch \{ return \[\]; \}/],
+    // Was "a local per-query try/catch". That catch also swallowed the resolved
+    // `error` field, so an RLS denial or a statement timeout on dining_out
+    // rendered "No saved restaurants yet" and "Spend · 30d $0.00" with nothing
+    // in the log. It now settles and triages like the kitchen page.
+    ['app/(app)/dashboard/dining/page.tsx', 'settleAll with every error read and logged', /settleAll\(\[/],
     ['app/(app)/dashboard/planning/page.tsx', 'a local per-query fail-safe', /async function safe</],
     ['app/(app)/dashboard/food/page.tsx', 'the shared degrade-read, which also LOGS the failure', /makeDegradeRead\('food'\)/],
     ['app/(app)/guardian/page.tsx', 'settleAll already, with every error read', /settleAll\(/],

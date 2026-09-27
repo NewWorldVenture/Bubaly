@@ -113,7 +113,7 @@ begin
   -- this is not over-tight. A deliberate future rewording is meant to fail here
   -- and be re-verified by a human rather than pattern-matched past.
   --
-  -- Re-verified once, for 0345: its nine `<t>_step_up_{insert,update,delete}_guard`
+  -- Re-verified once, for 0382: its nine `<t>_step_up_{insert,update,delete}_guard`
   -- policies on budgets, savings_goals and bills are RESTRICTIVE and spelled
   -- exactly `session_cleared_step_up()`. A restrictive policy only ANDs with the
   -- permissive ones, so it can refuse a write and can never re-open one — the

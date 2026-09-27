@@ -10,7 +10,7 @@ import { expandEvents } from '@/lib/calendar/recurrence';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
-import { newSubmissionId } from '@/lib/utils/submission-id';
+import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { Modal } from '@/components/ui/modal';
@@ -973,6 +973,8 @@ function NewEventModal({ existing, onClose, onSaved }: {
   // Deliberately NOT reset when a save fails. The failure a parent retries is
   // usually a lost response, not a rejected write, and re-minting on failure is
   // exactly what turns that retry into the duplicate this is here to prevent.
+  // The one failure that does re-mint is `already_saved` (below): the server
+  // has said an earlier Save landed, so this composition is over.
   const submissionId = useRef('');
   if (!submissionId.current) submissionId.current = newSubmissionId();
 
@@ -1017,7 +1019,14 @@ function NewEventModal({ existing, onClose, onSaved }: {
       const result = existing
         ? await updateCalendarEventAction(existing.id, fields)
         : await createCalendarEventAction({ ...fields, submissionId: submissionId.current });
-      if (!result.ok) { toastError(result.error); return; }
+      if (!result.ok) {
+        // `already_saved`: an earlier Save of this modal landed as the event the
+        // message names, and it no longer matches these fields. That save is
+        // settled; a further Save is a new event, which the message offers.
+        if (submissionSettled(result)) submissionId.current = newSubmissionId();
+        toastError(result.error);
+        return;
+      }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

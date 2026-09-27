@@ -13,7 +13,17 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { refreshSignalsAction, setSignalStatusAction } from '@/app/(app)/dashboard/family-signals/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
+// A budget_drift signal's evidence carries `spent` and `limit` in DOLLARS
+// (lib/intelligence/hard-signals.ts copies budgets.amount and summed
+// expenses.amount), and neither table has a currency column, so the money is USD.
+// The reader's locale decides only where the symbol goes and how digits group.
+const CURRENCY = 'USD';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export interface SignalView {
   id: string; kind: string; title: string; detail: string | null;
@@ -28,20 +38,30 @@ const KIND_META: Record<string, { icon: React.ComponentType<{ className?: string
   budget_drift: { icon: Wallet, label: 'Over budget', accent: 'text-emerald-400 bg-emerald-500/10' },
 };
 
-function evidenceChips(kind: string, ev: Record<string, unknown>): string[] {
+function evidenceChips(kind: string, ev: Record<string, unknown>, t: Translate, locale: LocaleCode): string[] {
   const n = (k: string) => (typeof ev[k] === 'number' ? String(ev[k]) : null);
+  const dollars = (k: string) => (typeof ev[k] === 'number' ? formatCents(Math.round((ev[k] as number) * 100), CURRENCY, locale) : null);
   switch (kind) {
     case 'ignored_reminder': return [n('count') && `missed ${ev.count}×`].filter(Boolean) as string[];
     case 'stress_window': return [n('events') && `${ev.events} events`, Number(ev.conflicts) > 0 && `${ev.conflicts} clashes`, Number(ev.overdue) > 0 && `${ev.overdue} overdue`].filter(Boolean) as string[];
     case 'chore_conflict': return [Number(ev.rejected) > 0 && `${ev.rejected} rejected`, Number(ev.disputed) > 0 && `${ev.disputed} disputed`, n('members') && `${ev.members} people`].filter(Boolean) as string[];
     case 'routine_adherence': return [n('adherencePct') && `${ev.adherencePct}% adherence`, `${ev.actual}/${ev.expected} done`].filter(Boolean) as string[];
-    case 'budget_drift': return [n('spent') && `$${ev.spent} spent`, n('limit') && `$${ev.limit} cap`, ev.recurring === true && '2 periods'].filter(Boolean) as string[];
+    case 'budget_drift': {
+      const spent = dollars('spent');
+      const limit = dollars('limit');
+      return [
+        spent && t('familySignals.amountSpent', { amount: spent }),
+        limit && t('familySignals.amountCap', { amount: limit }),
+        ev.recurring === true && t('familySignals.twoPeriods'),
+      ].filter(Boolean) as string[];
+    }
     default: return [];
   }
 }
 
 export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; hidden: SignalView[] }) {
   const t = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -118,6 +138,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
           {active.map((s) => {
             const meta = KIND_META[s.kind] ?? { icon: Brain, label: 'Pattern', accent: 'text-brand-text bg-brand/10' };
             const Icon = meta.icon;
+            const chips = evidenceChips(s.kind, s.evidence, t, locale.code);
             return (
               <div key={s.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start gap-3">
@@ -129,9 +150,9 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
                     </div>
                     <p className="mt-0.5 text-sm font-semibold">{s.title}</p>
                     {s.detail && <p className="mt-0.5 text-xs text-muted">{s.detail}</p>}
-                    {evidenceChips(s.kind, s.evidence).length > 0 && (
+                    {chips.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {evidenceChips(s.kind, s.evidence).map((c) => (
+                        {chips.map((c) => (
                           <span key={c} className="rounded-full border border-border/70 bg-bg/40 px-2 py-0.5 text-[10px] font-medium text-muted">{c}</span>
                         ))}
                       </div>

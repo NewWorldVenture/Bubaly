@@ -136,7 +136,7 @@ begin
 
     -- Sweep stray permissive WRITE policies BY SHAPE, not by name — 0217
     -- narrowed five wallet tables by name and left six behind, which is how
-    -- 0368 (as numbered before the merge; dropped at the merge as main's duplicate) came to exist. `*` (FOR ALL) is included: that is the shape being
+    -- the branch's former 0368 (dropped: main's 0306/0322/0324 cover it) came to exist. `*` (FOR ALL) is included: that is the shape being
     -- replaced here, and its read half has been restated above.
     for pol in
       select p.polname from pg_policy p

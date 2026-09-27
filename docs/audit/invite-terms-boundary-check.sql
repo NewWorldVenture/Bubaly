@@ -127,7 +127,7 @@ begin
 
   -- Legs 7 and 8 — a manager could neither readdress an issued invite nor
   -- move one to a second family they also manage — asserted the audit
-  -- branch's 0364 (as numbered before the merge; dropped at the merge as main's duplicate) trigger, which fixed family_id, token and email at issue.
+  -- branch's former 0364 trigger, which fixed family_id, token and email at issue.
   -- At the merge with main that trigger was dropped: main's 0298 policy
   -- already closes every escalation the INVITEE has (legs 1-5 above, all
   -- still asserted), and main's own invite probes rest on a manager of both

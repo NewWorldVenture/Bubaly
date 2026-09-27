@@ -180,12 +180,34 @@ const ownershipFiltered = (window: string) => /\.eq\('(family_id|user_id)'/.test
  * the measurement is the part that cannot be re-derived from the migration text.
  */
 const KNOWN_UNFIXED: string[] = [
-  // Empty, and the shape is kept so the next measurement has somewhere to land.
-  // All 32 sites the measured list revealed are fixed: 21 were already reading
-  // the row back and only needed `.eq('family_id', …)`; 11 needed both, and the
+  // The first measurement's 32 sites are all fixed: 21 were already reading the
+  // row back and only needed `.eq('family_id', …)`; 11 needed both, and the
   // sharpest of those is marketplace-module's `remove`, where a filtered delete
   // left the listing in place and then deleted its photo from storage — data
   // loss, not merely a wrong toast.
+  //
+  // The SECOND measurement, on the merge of main's 0344-0380 (#579) into PR #548:
+  // main's C1-K pass narrowed writes on 32 more tables, and
+  // docs/audit/gated-write-tables-check.sql's `recorded` list grew with them
+  // (108 -> 140), which is what turned these twelve file/verb/table sites
+  // (27 call sites) from "not gated" into "gated and silent or unscoped". They
+  // are main's call sites on main's newly gated tables, recorded here exactly as
+  // the header above says a new measurement is — read, named, and tolerated
+  // until each is fixed — rather than swept in a merge commit. Each still has to
+  // MATCH (a fixed one must be deleted here), and the rule is enforced on every
+  // other site.
+  'components/marketplace/listing-questions.tsx update marketplace_questions',
+  'components/modules/chores-module.tsx update chore_assignments',
+  'components/modules/meals-module.tsx delete meal_vote_ballots',
+  'components/modules/messages-module.tsx update family_messages',
+  'components/modules/screen-time-module.tsx update screen_time_entries',
+  'components/modules/voting-module.tsx delete family_poll_votes',
+  'components/modules/watchlist-module.tsx delete watchlist_votes',
+  'components/modules/watchlist-module.tsx update watchlist_votes',
+  'app/(app)/dashboard/workload/actions.ts update chore_assignments',
+  'app/(app)/marketplace/handoff/actions.ts update marketplace_handoffs',
+  'app/(app)/missions/actions.ts delete chore_submissions',
+  'app/(app)/missions/actions.ts update chore_assignments',
 ]
 
 /** `file verb table`, the shape KNOWN_UNFIXED records. */

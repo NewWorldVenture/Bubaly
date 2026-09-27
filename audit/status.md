@@ -1334,7 +1334,7 @@ Run 3217 on 4cbcb95b reads "cancelled", not "failed" - superseded 67s later by
 a8bfff31 under concurrency: cancel-in-progress. Checked rather than assumed.
 
 VERIFIED LOCALLY: 14,275 green under both timezones, tsc clean, lint 0 at 12,
-migration audit passes at 345 files with 0376 (as numbered before the merge; dropped at the merge as main's duplicate) next.
+migration audit passes at 345 files with 0376 next (the numbering of that time).
 Q42 (HIGH, client paths): RLS FILTERS a write rather than refusing it, so twelve
 client delete/update paths across eight modules reported success over records
 they never touched. Made live by this audit own 0430/0431/0434/0436/0437. Fixed
@@ -1345,6 +1345,12 @@ LAST-UPDATE: 2026-09-19, after the main merge and the first green CI.
 
 ## PR #548 (claude/bubaly-repo-connect-etzqg7) — main merged, 2026-09-26
 
-CURRENT: origin/main 7e54596d merged into the branch (98 conflicting files, 163 hunks). The branch's 21 migrations renumbered 0318-0338 → 0426-0442; 0364, 0368, 0376 and 0377 dropped as duplicates of main's 0298, 0306/0322/0324, 0318 and 0319 (found by running main's probes on the merged chain, not by name); 0431 narrowed to safety_check_ins. Next free: 0443.
+CURRENT: origin/main 7e54596d merged into the branch (98 conflicting files, 163 hunks). The branch's 21 migrations renumbered 0318-0338 → 0426-0442; 0364, 0368, 0376 and 0377 dropped as duplicates of main's 0298, 0306/0322/0324, 0318 and 0319 (found by running main's probes on the merged chain, not by name); 0431 narrowed to safety_check_ins (0431 dropped at the dcc0b42b merge as main's 0379's duplicate; see the next section). Next free: 0443.
 VERIFIED: replay 374/374 · probes 91/91 twice · tsc clean · lint 0 errors (18/18) · vitest 18,684/18,687 (3 = container Node 22) · build exit 0.
 RECORD: finalaudit.md Q68. E2E runs in CI on the pushed merge. No production migration applied by an agent; 0426-0442 reach production only when #548 merges.
+
+## PR #548 — main merged again (6ff770da, then dcc0b42b), 2026-09-27
+
+CURRENT: branch finish-548 from the author's 134f31a2; main merged at 6ff770da and at dcc0b42b (#579's 0344-0380, #581's 0381-0387). The block 0361-0382 moved to 0426-0443 in order; 0427, 0431, 0436 and 0437 dropped as duplicates of main's 0365, 0379, 0377 and 0364, each shown by a probe going red with the file put back (finalaudit.md Q70). Next free: 0444.
+VERIFIED (at dcc0b42b): replay 412/412 on a private PG 16.13 database · probes 137/137 twice, none skipped.
+RECORD: finalaudit.md Q70; docs/PENDING_PROD_MIGRATIONS.md "0426–0443". Not pushed. No production migration applied by an agent.

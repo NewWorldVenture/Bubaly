@@ -13,6 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createTransactionAction } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -577,7 +578,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
       memberId: String(f.get('member_id') ?? '') || null,
     });
     setLoading(false);
-    if (!res.ok) return onError(res.error);
+    if (!res.ok) return reportRefusal(res, onError);
     onSaved();
   }
 

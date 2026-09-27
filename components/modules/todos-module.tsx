@@ -10,7 +10,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { completeTodoAction, createTodoAction, deleteTodoAction, updateTodoAction } from '@/app/(app)/dashboard/todos/actions';
-import { newSubmissionId } from '@/lib/utils/submission-id';
+import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -81,9 +81,10 @@ export function TodosModule() {
   const [editingItem, setEditingItem] = useState<TodoItem | null>(null);
   const [newListOpen, setNewListOpen] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
-  // Held across retries of one quick add and cleared once the row lands, so a
-  // second press after a lost response is deduplicated while a task typed again
-  // tomorrow is a new one. See lib/utils/submission-id.ts.
+  // Held across retries of one quick add and cleared once the attempt is settled
+  // (the row lands, or the server answers `already_saved`), so a second press
+  // after a lost response is deduplicated while a task typed again tomorrow is a
+  // new one. See lib/utils/submission-id.ts.
   const quickSubmission = useRef('');
   const [quickBusy, setQuickBusy] = useState(false);
 
@@ -218,19 +219,35 @@ export function TodosModule() {
       const listId = await ensureListId();
       if (!listId) return;
       const due = when === 'today' ? todayStr : when === 'tomorrow' ? tomorrowStr : weekEndStr;
-      // One id per quick-add attempt, minted when the title is typed and cleared
-      // when the row lands. A second press after a lost response is the same
-      // task; typing "Call the dentist" again tomorrow is a different one.
+      // One id per quick-add attempt: minted on the first press and held until
+      // the row lands, whatever is typed or pressed in between. A second press
+      // after a lost response is the same task; typing "Call the dentist" again
+      // tomorrow is a different one. A press whose title or day CHANGED since
+      // the attempt that already landed is answered `already_saved` by the
+      // server rather than a false "Task added" — see below.
       quickSubmission.current ||= newSubmissionId();
       const result = await createTodoAction({
         title, listId, dueDate: due, priority: 'medium',
         assigneeId: selfId, submissionId: quickSubmission.current,
       });
-      if (!result.ok) { toastError(result.error); return; }
-      quickSubmission.current = '';
+      // Landed, or answered `already_saved`: this attempt is over and the next
+      // press is a new task. Any other failure keeps the id (it may have landed).
+      if (submissionSettled(result)) quickSubmission.current = '';
+      if (!result.ok) {
+        // `already_saved`: an earlier press did land, as the task the message
+        // names — show it. The title stays in the box, so pressing again adds
+        // it as a new task, which the message offers.
+        if (result.code === 'already_saved') void refreshItems();
+        toastError(result.error);
+        return;
+      }
       setQuickTitle('');
       success(tr('todosModule.taskAdded'));
       void refreshItems();
+    } catch (err) {
+      // A lost response lands here. Say so, and keep the id, so pressing again
+      // is recognised as the same task rather than a second one.
+      toastError(describeDbError(err));
     } finally {
       setQuickBusy(false);
     }
@@ -638,7 +655,14 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
       const result = item
         ? await updateTodoAction(item.id, fields)
         : await createTodoAction({ ...fields, listId, submissionId: submissionId.current });
-      if (!result.ok) { toastError(result.error); return; }
+      if (!result.ok) {
+        // `already_saved`: an earlier Save of this modal landed as the task the
+        // message names, and it no longer matches these fields. That save is
+        // settled; a further Save is a new task, which the message offers.
+        if (submissionSettled(result)) submissionId.current = newSubmissionId();
+        toastError(result.error);
+        return;
+      }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

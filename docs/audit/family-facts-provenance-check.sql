@@ -19,7 +19,7 @@
 -- pg_constraint on every run, so it is not a grep frozen into this comment.
 --
 -- RLS is not what refuses here. 0264_ai_surface_role_privacy.sql:107-134
--- created this table's four policies and 0357_a_member_only_rewrites_their_
+-- created this table's four policies and 0385_a_member_only_rewrites_their_
 -- own_memory.sql:121-145 re-enables RLS and drops and re-creates
 -- `family_facts_update` and `family_facts_delete` on a narrower predicate (an
 -- earlier version of this paragraph said 0264 "owns" all four; a later
@@ -28,7 +28,7 @@
 -- exports PGUSER=postgres,
 -- .github/workflows/ci.yml:196 sets the same, and run-probes.sh issues no
 -- `set role` — and a superuser bypasses both row-level security and table
--- GRANTs, so no policy of 0264's or 0357's and no missing privilege can be
+-- GRANTs, so no policy of 0264's or 0385's and no missing privilege can be
 -- what says no.
 --
 -- Nor is a trigger: the ONLY trigger on public.family_facts is
@@ -181,7 +181,7 @@ begin
   -- loosen the schema. Second, it runs as `postgres`, so it is NOT evidence
   -- that a non-superuser can move provenance; a column-level `revoke update
   -- (source)` would sail past this leg and past §2 alike. Who may rewrite a
-  -- memory is the question of 0357 and its probe,
+  -- memory is the question of 0385 and its probe,
   -- a-member-only-rewrites-their-own-memory-check.sql, under verify-pg.sh's
   -- `rls` path — not this one.
   begin
@@ -377,7 +377,7 @@ begin
   -- passes every leg above and both refusals. The header credits 0265's two
   -- named constraints because its author read the migrations; this is what
   -- makes that credit self-verifying — 0265:52-55 queries pg_constraint for
-  -- these same names, and 0357:147-186 proves its own policy out of pg_policy
+  -- these same names, and 0385:147-186 proves its own policy out of pg_policy
   -- the same way. It runs AFTER the refusals on purpose: a LOOSENED guard must
   -- fail on the refusal it defeats (§3), a DECOY refuser on the control that
   -- trips over it, and only the third case — a same-predicate impostor —

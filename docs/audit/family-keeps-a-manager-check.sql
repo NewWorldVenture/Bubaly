@@ -30,7 +30,7 @@
 -- is not enough in this corpus: migrations routinely attach triggers from a
 -- loop through `execute format(...)`, which such a grep cannot see. Counting
 -- those, family_members carries three triggers, and pg_trigger on a fresh
--- replay (latest migration when this was written: 0365) lists exactly these:
+-- replay (latest migration when this was written: 0387) lists exactly these:
 --   * trg_family_keeps_a_manager — 0299, the guard under test;
 --   * trg_set_updated_at — attached by `execute format` loops over every table
 --     with an updated_at column (first 0003_functions_triggers.sql:87-98);

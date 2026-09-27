@@ -478,12 +478,18 @@ describe('forgetFact', () => {
     expect(del?.filters).toEqual({ family_id: 'fam-1', id: 'fact-1' });
   });
 
-  it('lets a teen forget only facts about themselves', async () => {
-    const { db, calls } = makeDb(() => ({ data: FACT({ member_id: 'member-2' }), error: null }));
-    expect(await forgetFact(scopeWith(db, { role: 'teen', memberId: 'member-3' }), 'fact-1')).toMatchObject({ ok: false, code: 'denied' });
+  it('lets a teen forget only facts about themselves or that they wrote', async () => {
+    // Written by a parent (auth-user-1), about member-2. The teens here sign in
+    // as someone else, so only the member half of the rule can let them in.
+    const { db, calls } = makeDb(() => ({ data: FACT({ member_id: 'member-2', created_by: 'auth-user-1' }), error: null }));
+    expect(await forgetFact(scopeWith(db, { role: 'teen', memberId: 'member-3', userId: 'auth-teen-3' }), 'fact-1')).toMatchObject({ ok: false, code: 'denied' });
     expect(calls.some((c) => c.kind === 'delete')).toBe(false);
-    const own = await forgetFact(scopeWith(db, { role: 'teen', memberId: 'member-2' }), 'fact-1');
+    const own = await forgetFact(scopeWith(db, { role: 'teen', memberId: 'member-2', userId: 'auth-teen-2' }), 'fact-1');
     expect(own.ok).toBe(true);
+    // And the author half: a fact about someone else that THIS teen filed.
+    const { db: authoredDb } = makeDb(() => ({ data: FACT({ member_id: 'member-2', created_by: 'auth-teen-3' }), error: null }));
+    const authored = await forgetFact(scopeWith(authoredDb, { role: 'teen', memberId: 'member-3', userId: 'auth-teen-3' }), 'fact-1');
+    expect(authored.ok).toBe(true);
   });
 
   it('dismisses an inbox card rather than deleting it', async () => {

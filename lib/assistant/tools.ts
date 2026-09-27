@@ -9,7 +9,8 @@ import type { ToolSpec } from '@/lib/ai/provider';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
+import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
@@ -18,6 +19,20 @@ import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import { ensureTodoListId } from '@/lib/services/tasks';
 
 type DB = SupabaseClient<Database>;
+
+/**
+ * The reader of this file's tool results is the MODEL, not a family member: it
+ * reads `{ title, urgency }` and writes the reply the family actually reads, in
+ * their language. So the "needs you" titles it is handed are worded in the
+ * source locale, explicitly — 'en-US' amounts, English catalogue words — the
+ * same rule the hardcoded-locale ratchet records for this file's other
+ * model-read formatter. Not a default: the family-facing callers of
+ * buildHomeNeeds pass their request's locale.
+ */
+const MODEL_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
 
 export type AssistantCtx = {
   familyId: string;
@@ -446,6 +461,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           lowGrocery: (grocery.count ?? 0) > 0,
           openTodos: todos.count ?? 0,
           now,
+          reader: MODEL_READER,
         }));
         return { ok: true, count: needs.length, items: needs.map((n) => ({ title: n.title, urgency: n.urgency })) };
       },

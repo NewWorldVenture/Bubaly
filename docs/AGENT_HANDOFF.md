@@ -6274,9 +6274,13 @@ migration was deleted when the duplicate was consolidated away.)
   start/pause, declare winner; results table with rate/lift/two-proportion significance).
 - `lib/marketing/ab.ts` (pure, tested): `assignVariant` (deterministic FNV hash → sticky,
   even split), `computeABResults` (two-proportion z-test, p-value, lift), `leadingVariant`.
-- Tracking: `POST /api/ab/track { experiment, variant, kind: exposure|conversion, visitorId }`
+- Tracking: `POST /api/ab/track { experiment, variant, kind: exposure|conversion }`
   — service-role insert into `ab_events`, only records for `running` experiments, deduped by
-  a unique (experiment, visitor, kind) index. To USE in a surface: call `assignVariant` to
+  a unique (experiment, visitor, kind) index. The visitor is the `bubaly_vid` cookie the
+  same-origin request carries (SEC-008, `lib/marketing/visitor-cookie.ts`), NOT a body field:
+  do not send `visitorId` — one that is not this browser's cookie is refused with 403, and
+  with no cookie the event is recorded visitor-less. Call `getAnonymousId()` first so the
+  cookie exists. To USE in a surface: call `assignVariant` to
   pick a variant, render it, and `fetch('/api/ab/track', …)` on exposure + on conversion.
   (Instrumenting specific pages/CTAs is the remaining glue — engine + admin are done.)
 

@@ -25,6 +25,7 @@ import {
 } from '@/lib/closet/outfits';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
@@ -33,10 +34,14 @@ type Outfit = Tables<'outfits'>;
 type Log = Tables<'outfit_logs'>;
 type WeatherLocation = Tables<'weather_locations'>;
 
+// wardrobe_items.price_cents has no currency column and the form takes dollars
+// ("Price ($)"), so the amount is USD. The CURRENCY is the money's; the reader's
+// locale only decides where the symbol goes and how the digits group (I18N-003).
+const CURRENCY = 'USD';
+
 const fToC = (f: number) => Math.round(((f - 32) * 5) / 9);
 const cToF = (c: number) => Math.round((c * 9) / 5 + 32);
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
   return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
@@ -45,6 +50,7 @@ const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
 export function ClosetModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
+  const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
@@ -261,7 +267,7 @@ export function ClosetModule() {
             <p className={cn('mt-2 text-xl font-bold', summary.retire > 0 ? 'text-amber-300' : 'text-fg')}>{summary.text}</p>
             <p className="mt-1 text-xs text-muted">
               {summary.wornThisWeek} outfit{summary.wornThisWeek === 1 ? '' : 's'} {t('closet.loggedThisWeek')}
-              {summary.avgCostPerWearCents !== null ? ` · avg ${money(summary.avgCostPerWearCents)} per wear` : ''}
+              {summary.avgCostPerWearCents !== null ? ` · ${t('closet.avgCostPerWear', { amount: money(summary.avgCostPerWearCents) })}` : ''}
             </p>
             {summary.mostWorn.length > 0 && (
               <p className="mt-2 text-xs text-muted">{t('closet.mostWorn')} {summary.mostWorn.map((m) => `${m.name} (${m.count}×)`).join(', ')}</p>
@@ -309,7 +315,7 @@ export function ClosetModule() {
                     <p className="mt-1 text-[11px] text-muted">
                       warmth {item.warmth}/5 · formality {item.formality}/5
                       {item.last_worn_on ? ` · worn ${fmtDate(item.last_worn_on)}` : ''}
-                      {cpw !== null ? ` · ${money(cpw)}/wear` : ''}
+                      {cpw !== null ? ` · ${t('closet.costPerWear', { amount: money(cpw) })}` : ''}
                     </p>
                   </div>
                 </div>

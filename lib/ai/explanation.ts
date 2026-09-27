@@ -6,6 +6,14 @@
 // consistent, DOM-free `Explanation` the reusable <WhyThis> affordance renders.
 // No I/O — the surfaces feed it already-loaded data. Fully unit-tested.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
+// The reader's translator, typed as lib/decisions/engine.ts and
+// lib/voting/consensus.ts type it: what useTranslations() / getTranslations()
+// hand out.
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type ExplanationFactor = {
   label: string;         // e.g. "Confidence"
   value: string;         // e.g. "92% — Bubaly can auto-handle"
@@ -256,8 +264,19 @@ export type ConsensusLike = {
   budgetCents?: number | null;
 };
 
-/** Explain a Group-Voting consensus recommendation (T6 → T7 reuse). */
-export function explainConsensus(c: ConsensusLike): Explanation {
+/**
+ * Explain a Group-Voting consensus recommendation (T6 → T7 reuse).
+ *
+ * `locale` and `t` are the READER's, and required. This text is not for the
+ * model: the voting screen's "Why this?" shows it to the family, so the budget
+ * cap is money a family reads and follows their format (I18N-003) — and the
+ * word beside it is the catalogue's (explanation.budgetCap), not English glued
+ * to a German amount ("2.769 $ cap"). The cap is USD — family_polls.budget_cents
+ * and budgets.amount carry no currency column — and it is shown to the whole
+ * unit, as it always was, by rounding the cents away before formatting. The
+ * factor labels, the reason and the tip carry no money and are still English.
+ */
+export function explainConsensus(c: ConsensusLike, locale: LocaleCode, t: Translate): Explanation {
   const agreement = c.consensusLevel >= 0.6 ? 'strong agreement' : c.consensusLevel >= 0.4 ? 'leaning one way' : 'a split vote';
   const factors: ExplanationFactor[] = [
     { label: 'Votes', value: `${c.votes} (${c.votePct}% of ${c.totalVotes})` },
@@ -265,7 +284,10 @@ export function explainConsensus(c: ConsensusLike): Explanation {
     { label: 'Family agreement', value: titleCase(agreement) },
   ];
   if (typeof c.budgetCents === 'number') {
-    factors.push({ label: 'Budget checked', value: `$${(c.budgetCents / 100).toFixed(0)} cap` });
+    factors.push({
+      label: 'Budget checked',
+      value: t('explanation.budgetCap', { amount: formatCents(Math.round(c.budgetCents / 100) * 100, 'USD', locale) }),
+    });
   }
   return {
     reason: c.rationale || `“${c.label}” best balances what the family wants with what actually fits.`,

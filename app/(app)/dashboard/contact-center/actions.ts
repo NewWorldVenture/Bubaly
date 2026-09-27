@@ -7,8 +7,8 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { describeActionError } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
+import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
-import { toCallableE164 } from '@/lib/contact-center/phone';
 
 type Fail = { ok: false; error: string };
 
@@ -79,19 +79,18 @@ export async function updateConciergeAction(input: {
   const patch: Partial<{ ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }> = {};
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;
+  // The fallback number is the one thing on this card that leaves the product: it
+  // is dialled and texted from Bubaly's own Twilio account, so it is stored only
+  // in the form the provider accepts, and the parent is told now instead of every
+  // future urgent text being dropped in silence. It used to be stored as typed:
+  // the field's own placeholder format ("+1 555 123 4567") then failed the E.164
+  // check in urgent SMS delivery on every message, and anything else typed here
+  // reached the call's TwiML. `normalizeFallbackPhone` also refuses a number
+  // without its country code rather than guessing +1 — see its header.
   if (input.forwardTo !== undefined) {
-    // This number is dialled and texted from Bubaly's own Twilio account, so it
-    // is stored only as a number Twilio can use. It used to be stored as typed:
-    // the field's own placeholder format ("+1 555 123 4567") then failed the
-    // E.164 check in urgent SMS delivery on every message, and anything else
-    // typed here reached the call's TwiML.
-    const typed = String(input.forwardTo ?? '').trim();
-    if (!typed) patch.forward_to_phone = null;
-    else {
-      const e164 = toCallableE164(typed);
-      if (!e164) return { ok: false, error: t('actions.forwardingNumberNotCallable') };
-      patch.forward_to_phone = e164;
-    }
+    const fallback = normalizeFallbackPhone(input.forwardTo);
+    if (!fallback.ok) return { ok: false, error: t('actions.enterTheFallbackNumberIn') };
+    patch.forward_to_phone = fallback.value;
   }
   const { error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId);
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheConcierge')) };

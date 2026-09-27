@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { deleteBudgetAction, setBudgetAction } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ export function BudgetsView() {
   async function remove(id: string) {
     if (!confirm(t('budgetsView.deleteThisBudget'))) return;
     const res = await deleteBudgetAction(id);
-    if (!res.ok) toastError(res.error); else success(t('budgetsView.deleted'));
+    if (!res.ok) reportRefusal(res, toastError); else success(t('budgetsView.deleted'));
   }
 
   return (
@@ -111,7 +112,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
     // other's spend as unbudgeted.
     const res = await setBudgetAction(v.category, Math.abs(parseFloat(v.amount) || 0), v.period as Period);
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(t('budgetsView.budgetAdded'));
     onClose();
   }

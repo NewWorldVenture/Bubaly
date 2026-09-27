@@ -4,6 +4,19 @@
 // marketplace_negotiation_respond RPCs, which row-lock the listing). These pure
 // helpers power the UI: whose turn it is, what actions are legal, sensible
 // suggested amounts, and human-readable thread lines. Fully unit-tested.
+//
+// THE THREAD LINES ARE THE READER'S. Every one of them used to be an English
+// sentence with `$${(c / 100).toFixed(2)}` inside it — a literal symbol and a
+// number with no locale at all, so a German family read "Your move — they're at
+// $2768.50." Localising only the number would have left an English sentence
+// around a German amount, so the sentences are catalogue keys with the amount
+// as a placeholder, and `locale` + `t` are REQUIRED: every caller has a reader.
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
+import { MARKETPLACE_CURRENCY } from './listings';
+
+/** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type NegotiationStatus = 'open' | 'agreed' | 'declined' | 'withdrawn' | 'expired';
 export type Party = 'buyer' | 'seller';
@@ -24,7 +37,10 @@ export interface Round {
   createdAt: string;
 }
 
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+/** An offer amount, always to the cent (an offer of $60 reads "$60.00", as it
+ *  did), in the reader's notation. The currency is the money's own — see
+ *  MARKETPLACE_CURRENCY. */
+const money = (c: number, locale: LocaleCode) => createFormat(locale).fmtMoney(c, MARKETPLACE_CURRENCY);
 
 /** Whose turn is it to move? Null once the thread is closed. */
 export function whoseTurn(n: Pick<Negotiation, 'status' | 'lastActor'>): Party | null {
@@ -56,9 +72,13 @@ export function availableActions(
 
 /** Clamp/validate a proposed counter given the listing ask (cents). Returns a
  *  reason string when invalid, else null. Mirrors the RPC's amount guards. */
-export function validateOfferAmount(amountCents: number, askCents: number): string | null {
-  if (!Number.isFinite(amountCents) || amountCents <= 0) return 'Enter an amount above $0.';
-  if (askCents > 0 && amountCents >= askCents) return `That's at or above the ${money(askCents)} asking price — just buy it.`;
+export function validateOfferAmount(
+  amountCents: number, askCents: number, locale: LocaleCode, t: Translate,
+): string | null {
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return t('negotiation.enterAnAmountAboveZero');
+  if (askCents > 0 && amountCents >= askCents) {
+    return t('negotiation.atOrAboveTheAskingPrice', { ask: money(askCents, locale) });
+  }
   return null;
 }
 
@@ -83,31 +103,63 @@ export function savingsPercent(agreedCents: number, askCents: number): number {
 }
 
 /** One-line human summary of a thread's live state, from `viewer`'s side. */
-export function statusLine(n: Negotiation, viewer: Party): string {
+export function statusLine(n: Negotiation, viewer: Party, locale: LocaleCode, t: Translate): string {
   switch (n.status) {
-    case 'agreed':    return `Deal agreed at ${money(n.agreedAmountCents ?? n.currentAmountCents)}.`;
-    case 'declined':  return 'Declined.';
-    case 'withdrawn': return 'Withdrawn.';
-    case 'expired':   return 'Expired.';
+    case 'agreed':
+      return t('negotiation.dealAgreedAt', { amount: money(n.agreedAmountCents ?? n.currentAmountCents, locale) });
+    case 'declined':  return t('negotiation.statusDeclined');
+    case 'withdrawn': return t('negotiation.statusWithdrawn');
+    case 'expired':   return t('negotiation.statusExpired');
     default: break;
   }
+  const amount = money(n.currentAmountCents, locale);
   const turn = whoseTurn(n);
-  if (turn === viewer) return `Your move — they're at ${money(n.currentAmountCents)}.`;
-  return `Waiting on ${turn === 'seller' ? 'the seller' : 'the buyer'} — you're at ${money(n.currentAmountCents)}.`;
+  if (turn === viewer) return t('negotiation.yourMoveTheyreAt', { amount });
+  return t(turn === 'seller' ? 'negotiation.waitingOnTheSellerYoureAt' : 'negotiation.waitingOnTheBuyerYoureAt', { amount });
 }
 
+/**
+ * One whole sentence per side and move, rather than "{who} {verb}": a translator
+ * gets "Buyer offered {amount}" to render as one thought, and no language has to
+ * agree a verb with a noun glued in from somewhere else. The amount-less forms
+ * are for a round whose amount_cents is null (the column is nullable).
+ */
+const ROUND_WITH_AMOUNT: Record<Party, Partial<Record<string, string>>> = {
+  buyer: {
+    offer: 'negotiation.buyerOfferedAmount',
+    counter: 'negotiation.buyerCounteredAmount',
+    accept: 'negotiation.buyerAcceptedAmount',
+  },
+  seller: {
+    offer: 'negotiation.sellerOfferedAmount',
+    counter: 'negotiation.sellerCounteredAmount',
+    accept: 'negotiation.sellerAcceptedAmount',
+  },
+};
+const ROUND_BARE: Record<Party, Partial<Record<string, string>>> = {
+  buyer: {
+    offer: 'negotiation.buyerOffered',
+    counter: 'negotiation.buyerCountered',
+    accept: 'negotiation.buyerAccepted',
+    decline: 'negotiation.buyerDeclined',
+    withdraw: 'negotiation.buyerWithdrew',
+  },
+  seller: {
+    offer: 'negotiation.sellerOffered',
+    counter: 'negotiation.sellerCountered',
+    accept: 'negotiation.sellerAccepted',
+    decline: 'negotiation.sellerDeclined',
+    withdraw: 'negotiation.sellerWithdrew',
+  },
+};
+
 /** Render a round as a short thread line (for the timeline UI). */
-export function roundLine(r: Round): string {
-  const who = r.actorRole === 'seller' ? 'Seller' : 'Buyer';
-  const amt = r.amountCents != null ? ` ${money(r.amountCents)}` : '';
-  switch (r.kind) {
-    case 'offer':   return `${who} offered${amt}`;
-    case 'counter': return `${who} countered${amt}`;
-    case 'accept':  return `${who} accepted${amt}`;
-    case 'decline': return `${who} declined`;
-    case 'withdraw':return `${who} withdrew`;
-    default:        return `${who}`;
-  }
+export function roundLine(r: Round, locale: LocaleCode, t: Translate): string {
+  const side: Party = r.actorRole === 'seller' ? 'seller' : 'buyer';
+  const withAmount = ROUND_WITH_AMOUNT[side][r.kind];
+  if (withAmount && r.amountCents != null) return t(withAmount, { amount: money(r.amountCents, locale) });
+  // `kind` arrives from the database as a string; an unknown one names the side.
+  return t(ROUND_BARE[side][r.kind] ?? (side === 'seller' ? 'negotiation.roleSeller' : 'negotiation.roleBuyer'));
 }
 
 /** Sort rounds oldest→newest (defensive; the query already orders). */

@@ -3,6 +3,15 @@ import {
   answerMarketQuestion, marketSystemPrompt, routeMarketIntent, searchTerms,
   type MarketSnapshot, type SnapshotListing,
 } from '@/lib/marketplace/assistant';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+// The REAL en-US catalogue, so a sentence missing from it fails here instead of
+// reaching a family as its key. The marketAssistant.* sentences are added by the
+// I18N-003 marketplace change and land in lib/i18n/messages/*.json with the
+// orchestrator's catalogue merge: until that merge, the price and find cases
+// below are red.
+const t = (key: string, params?: Record<string, string | number>) =>
+  translate(getMessages('en-US'), key, params);
 
 const listing = (over: Partial<SnapshotListing>): SnapshotListing => ({
   id: over.id ?? 'l1', title: 'Item', kind: 'sell', category: 'toys', condition: 'good',
@@ -48,53 +57,64 @@ describe('searchTerms', () => {
 
 describe('answerMarketQuestion', () => {
   it('prices from same-category comps with a real dollar figure', () => {
-    const r = answerMarketQuestion('What should I charge for a kids bike in good condition?', SNAP);
+    const r = answerMarketQuestion('What should I charge for a kids bike in good condition?', SNAP, 'en-US', t);
     expect(r.intent).toBe('price');
     expect(r.reply).toMatch(/\$\d/);
-    expect(r.reply).toContain('comparable');
+    expect(r.reply).toContain('comparable sports listings on your family board');
+    expect(r.reply).toContain('for one in good condition');
     expect(r.links.some((l) => l.label.includes('60 seconds'))).toBe(true);
   });
 
   it('finds matching live listings within budget, with item links', () => {
-    const r = answerMarketQuestion('find a bike under $50', SNAP);
+    const r = answerMarketQuestion('find a bike under $50', SNAP, 'en-US', t);
     expect(r.intent).toBe('find');
+    expect(r.reply).toMatch(/^Found (one|\d+) on the board: /);
     expect(r.reply).toContain('balance bike');
     expect(r.reply).not.toContain('Mountain bike'); // $60 > $50 budget
     expect(r.links[0].href).toMatch(/^\/marketplace\/item\//);
   });
 
   it('offers a saved-search alert when nothing matches', () => {
-    const r = answerMarketQuestion('find a trampoline', SNAP);
+    const r = answerMarketQuestion('find a trampoline', SNAP, 'en-US', t);
     expect(r.reply).toContain('alert');
     expect(r.links.some((l) => l.href === '/marketplace/alerts')).toBe(true);
   });
 
   it('summarizes MY listings and open offers', () => {
-    const r = answerMarketQuestion('how are my listings doing?', SNAP);
+    const r = answerMarketQuestion('how are my listings doing?', SNAP, 'en-US', t);
     expect(r.intent).toBe('mine');
     expect(r.reply).toContain('1 listing');
     expect(r.reply).toContain('1 open offer');
   });
 
   it('ranks demand from open wanted requests', () => {
-    const r = answerMarketQuestion("what's in demand?", SNAP);
+    const r = answerMarketQuestion("what's in demand?", SNAP, 'en-US', t);
     expect(r.intent).toBe('demand');
     expect(r.reply).toContain('Furniture (2 requests)');
   });
 
   it('answers fees honestly (no commission)', () => {
-    const r = answerMarketQuestion('what are the fees?', SNAP);
+    const r = answerMarketQuestion('what are the fees?', SNAP, 'en-US', t);
     expect(r.reply).toContain('no commission');
   });
 });
 
 describe('marketSystemPrompt', () => {
   it('embeds grounded board stats + scope rules', () => {
-    const p = marketSystemPrompt(SNAP);
+    const p = marketSystemPrompt(SNAP, 'en-US');
     expect(p).toContain('Marketplace specialist');
     expect(p).toContain('LIVE BOARD (8 available listings)');
     expect(p).toContain('sports:');
     expect(p).toContain('OPEN REQUESTS');
     expect(p).toContain('never invent');
+  });
+
+  it('gives the model the ASKER’s amounts to quote, because its reply reaches them verbatim', () => {
+    // Sports medians: 15, 20, 40, 60 → the upper middle, $40.
+    const de = marketSystemPrompt(SNAP, 'de-DE');
+    expect(de).toContain('median asking 40\u00a0$');
+    expect(de).not.toMatch(/\$\s?\d/);
+    expect(de).toContain('reading in de-DE');
+    expect(marketSystemPrompt(SNAP, 'en-US')).toContain('median asking $40');
   });
 });

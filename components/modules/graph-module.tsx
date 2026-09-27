@@ -5,7 +5,7 @@
 // relationships: trace how two things connect, and see the blast radius when
 // something changes. 100% Supabase + family-scoped. The heavy lifting lives in the
 // pure, tested engine at lib/graph/reason.ts.
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Network, GitBranch, Zap, Users, Plus, ArrowRight, Sparkles, Route,
 } from 'lucide-react';
@@ -49,17 +49,37 @@ export function GraphModule() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: entityRows, loading: entityLoading, error: entityError, refresh: refreshEntities } = useRealtimeQuery<EntityRow>({
+  const { data: entityRows, loading: entityLoading, error: entityError, refresh: refreshEntities, refreshAndConfirm: confirmEntities } = useRealtimeQuery<EntityRow>({
     table: 'graph_entities', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('graph_entities').select('*').eq('family_id', familyId),
   });
-  const { data: edgeRows, loading: edgeLoading, error: edgeError, refresh: refreshEdges } = useRealtimeQuery<EdgeRow>({
+  const { data: edgeRows, loading: edgeLoading, error: edgeError, refresh: refreshEdges, refreshAndConfirm: confirmEdges } = useRealtimeQuery<EdgeRow>({
     table: 'graph_edges', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('graph_edges').select('*').eq('family_id', familyId),
   });
   const loading = entityLoading || edgeLoading;
   const error = entityError || edgeError;
   const refresh = () => { void refreshEntities(); void refreshEdges(); };
+
+  // Nothing pushes graph rows to this screen. `graph_entities`/`graph_edges` are
+  // absent from REALTIME_TABLES (lib/realtime/published-tables.ts), so
+  // `useRealtimeQuery` deliberately opens no channel for them — a write from
+  // this component reaches the mounted list only if the component reads it back.
+  // Every write path below therefore reads back BEFORE it claims success, so a
+  // green toast can never announce rows the list beside it is still not showing.
+  // The pruning half is what makes a silent claim actively harmful: a twin
+  // rebuild deletes nodes, and a stale list keeps offering those deleted ids to
+  // AddEdgeModal, whose insert then fails on the graph_edges foreign key.
+  //
+  // Both tables are read back even after a write that touched only one. The
+  // list below renders only while BOTH reads are healthy (`error` above is
+  // `entityError || edgeError`, and a failed read swaps the whole panel for
+  // ErrorState), so a row is on screen only when both confirm — and a second
+  // read that heals a previously failed one is what puts it back there.
+  const readBack = async () => {
+    const [entities, edges] = await Promise.all([confirmEntities(), confirmEdges()]);
+    return entities.ok && edges.ok;
+  };
 
   const graph: Graph = useMemo(() => ({
     entities: (entityRows ?? []).map((e) => ({
@@ -84,19 +104,60 @@ export function GraphModule() {
   const [toId, setToId] = useState('');
   const path = fromId && toId ? findPath(index, fromId, toId) : null;
 
-  // Add entity / edge modals.
+  // Add entity / edge modals. `entityOpening`/`edgeOpening` count how many
+  // times each has been opened: a write notes the count when it submits, and
+  // its read-back closes the modal only while that same opening is still up.
   const [addEntity, setAddEntity] = useState(false);
   const [addEdge, setAddEdge] = useState(false);
+  const entityOpening = useRef(0);
+  const edgeOpening = useRef(0);
+  const openEntity = () => { entityOpening.current += 1; setAddEntity(true); };
+  const openEdge = () => { edgeOpening.current += 1; setAddEdge(true); };
 
   // Rebuild the graph from the family's real cross-domain data (the twin projector).
   const [projecting, setProjecting] = useState(false);
   async function rebuildFromData() {
     setProjecting(true);
-    const res = await projectTwinAction();
-    setProjecting(false);
-    if (!res.ok) { toastError(res.error ?? 'Could not rebuild the twin'); return; }
-    if (res.entities === 0) { toastError(t('graphModule.noFamilyDataToProject')); return; }
-    success(t('modules.twinSynced', { entities: res.entities ?? 0, edges: res.edges ?? 0 }));
+    try {
+      const res = await projectTwinAction();
+      if (!res.ok) { toastError(res.error ?? 'Could not rebuild the twin'); return; }
+      if (res.entities === 0) { toastError(t('graphModule.noFamilyDataToProject')); return; }
+      // The projection wrote; the screen has not read it yet. Stay "Syncing…"
+      // until the new nodes and links are actually in hand.
+      if (!await readBack()) { toastError(t('graphModule.rebuiltButNotOnScreen')); return; }
+      success(t('modules.twinSynced', { entities: res.entities ?? 0, edges: res.edges ?? 0 }));
+    } finally {
+      setProjecting(false);
+    }
+  }
+
+  // The modal awaits these while its button stays on "Adding…"/"Linking…", the
+  // same way "Rebuild from data" stays on "Syncing…": the read-back runs with
+  // the pending control still on screen, and the modal closes only once the
+  // answer is in — either way, so its button is never re-enabled over a row
+  // that already exists.
+  //
+  // Cancel, the X and ESC stay live meanwhile: a read-back settles only when
+  // its network round trip does (use-realtime-query.ts has no timeout of its
+  // own), and a parent must not be trapped behind one that stalls. So the close
+  // is owed only to the opening that did the write. A parent who cancelled out
+  // of "Adding…", opened a fresh modal and started typing keeps that modal and
+  // what is in it. The toast is owed regardless: the row exists whether or not
+  // they waited for it, and the list beside them has just moved (or failed to).
+  async function entityWasSaved(name: string) {
+    const opening = entityOpening.current;
+    const shown = await readBack();
+    if (opening === entityOpening.current) setAddEntity(false);
+    if (!shown) { toastError(t('graphModule.savedButNotOnScreen')); return; }
+    success(t('modules.addedNamed', { name }));
+  }
+
+  async function edgeWasSaved() {
+    const opening = edgeOpening.current;
+    const shown = await readBack();
+    if (opening === edgeOpening.current) setAddEdge(false);
+    if (!shown) { toastError(t('graphModule.savedButNotOnScreen')); return; }
+    success(t('graphModule.linked'));
   }
 
   return (
@@ -109,8 +170,8 @@ export function GraphModule() {
             <Button onClick={rebuildFromData} disabled={projecting}>
               <Sparkles className="size-4" /> {projecting ? 'Syncing…' : 'Rebuild from data'}
             </Button>
-            <Button variant="secondary" onClick={() => setAddEntity(true)}><Plus className="size-4" /> {t('graph.entity')}</Button>
-            <Button variant="secondary" onClick={() => setAddEdge(true)} disabled={graph.entities.length < 2}>
+            <Button variant="secondary" onClick={openEntity}><Plus className="size-4" /> {t('graph.entity')}</Button>
+            <Button variant="secondary" onClick={openEdge} disabled={graph.entities.length < 2}>
               <GitBranch className="size-4" /> {t('graph.link')}
             </Button>
           </>
@@ -122,7 +183,7 @@ export function GraphModule() {
       ) : error ? (
         <ErrorState message={t('graphModule.couldNotLoadTheKnowledge')} onRetry={refresh} />
       ) : graph.entities.length === 0 ? (
-        <EmptyState onAdd={() => setAddEntity(true)} onRebuild={rebuildFromData} projecting={projecting} />
+        <EmptyState onAdd={openEntity} onRebuild={rebuildFromData} projecting={projecting} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: entity list + hubs */}
@@ -255,7 +316,7 @@ export function GraphModule() {
         <AddEntityModal
           familyId={familyId} userId={userId}
           onClose={() => setAddEntity(false)}
-          onSaved={(name) => { success(t('modules.addedNamed', { name })); setAddEntity(false); }}
+          onSaved={entityWasSaved}
           onError={toastError}
         />
       )}
@@ -263,7 +324,7 @@ export function GraphModule() {
         <AddEdgeModal
           familyId={familyId} userId={userId} entities={graph.entities}
           onClose={() => setAddEdge(false)}
-          onSaved={() => { success(t('graphModule.linked')); setAddEdge(false); }}
+          onSaved={edgeWasSaved}
           onError={toastError}
         />
       )}
@@ -290,7 +351,7 @@ function EmptyState({ onAdd, onRebuild, projecting }: { onAdd: () => void; onReb
 
 function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; onClose: () => void;
-  onSaved: (name: string) => void; onError: (m: string) => void;
+  onSaved: (name: string) => Promise<void>; onError: (m: string) => void;
 }) {
   const t = useTranslations();
   const [name, setName] = useState('');
@@ -303,9 +364,10 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
     setSaving(true);
     const sb = createClient();
     const { error } = await sb.from('graph_entities').insert({ family_id: familyId, name: n, kind, created_by: userId });
-    setSaving(false);
-    if (error) { onError(describeDbError(error)); return; }
-    onSaved(n);
+    if (error) { setSaving(false); onError(describeDbError(error)); return; }
+    // Written. Stay on "Adding…" while the parent reads the row back onto the
+    // screen; the parent closes this modal once it has.
+    await onSaved(n);
   }
   return (
     <Modal open onClose={onClose} title={t('graph.addEntity')}>
@@ -327,7 +389,7 @@ function AddEntityModal({ familyId, userId, onClose, onSaved, onError }: {
 
 function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }: {
   familyId: string; userId: string | null; entities: GraphEntity[];
-  onClose: () => void; onSaved: () => void; onError: (m: string) => void;
+  onClose: () => void; onSaved: () => Promise<void>; onError: (m: string) => void;
 }) {
   const t = useTranslations();
   const [sourceId, setSourceId] = useState('');
@@ -347,9 +409,10 @@ function AddEdgeModal({ familyId, userId, entities, onClose, onSaved, onError }:
       family_id: familyId, source_id: sourceId, target_id: targetId, relation: rel,
       weight: Math.min(1, Math.max(0, Number(weight) || 0.8)), created_by: userId,
     });
-    setSaving(false);
-    if (error) { onError(describeDbError(error)); return; }
-    onSaved();
+    if (error) { setSaving(false); onError(describeDbError(error)); return; }
+    // Written. Stay on "Linking…" while the parent reads the link back onto the
+    // screen; the parent closes this modal once it has.
+    await onSaved();
   }
   return (
     <Modal open onClose={onClose} title={t('graph.linkTwoEntities')}>

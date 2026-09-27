@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { defaultReminderIso, runAutopilotScan, scanWindow } from '@/lib/autopilot/scan';
+
+// The scan STORES suggestion titles, and the subscription ones carry money, so it
+// takes the locale and translator of whoever it writes for. Nothing here asserts
+// wording; an echo translator is enough.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 // The Autopilot scan opened with `new Date().toISOString().slice(0, 10)` and
@@ -195,7 +200,7 @@ describe('the scan answers the family’s day end to end', () => {
       { id: 'c-late', family_id: 'f1', status: 'todo', due_at: c.choreDueLastNight, member_id: null, chore_id: null },
     ]);
 
-    await runAutopilotScan(db, 'f1', 'u1', c.tz, new Date(c.now));
+    await runAutopilotScan(db, 'f1', 'u1', c.tz, 'en-US', echo, new Date(c.now));
     const titles = db.table('autopilot_suggestions').map((row) => String(row.title));
 
     // A DATE column that says the family's today means TODAY. Read against

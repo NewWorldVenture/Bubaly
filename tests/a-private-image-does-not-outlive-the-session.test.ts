@@ -86,8 +86,12 @@ describe('a private image does not outlive the session that fetched it', () => {
     // excluded by path.
     sw = boot(image('public, max-age=60, must-revalidate'));
     const res = await sw.get('/_next/image?url=https%3A%2F%2Fx.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Ffamily-media%2Fa.jpg&w=640&q=75', 'image');
-    // The worker declines to handle it at all, so the browser goes to the network.
-    expect(res).toBeUndefined();
+    // The worker answers it from the network — `respondWith(fetch(request))`,
+    // the shape main's tests/a-private-image-does-not-outlive-logout pins — and
+    // writes it to no cache. (This once asserted the worker DECLINED the
+    // request; to the browser that is the same network round trip, and the
+    // property, nothing stored, is unchanged.)
+    expect(res).toBeDefined();
     expect(sw.storedUrls().some((u) => u.includes('/_next/image'))).toBe(false);
   });
 

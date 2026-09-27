@@ -34,9 +34,9 @@
 -- creates any policy on public.documents. The census, redone rather than
 -- recounted (an earlier version of this header said "four files" while a
 -- fifth sat in the tree): `grep -l documents_select supabase/migrations` hits
--- 01090, 0266, 0303, 0312 and 0365; `grep -l is_sensitive_document` hits 0266,
--- 0303, 0312 and 0365. 0303 names the policy in prose and replaces the three
--- storage.objects policies; 0312 replaces only the FUNCTION body; 0365 names
+-- 01090, 0266, 0303, 0312 and 0387; `grep -l is_sensitive_document` hits 0266,
+-- 0303, 0312 and 0387. 0303 names the policy in prose and replaces the three
+-- storage.objects policies; 0312 replaces only the FUNCTION body; 0387 names
 -- both to explain why its vacation_documents guard is SECURITY INVOKER, and
 -- the policies it creates are on social_settings. Assertion 6 below reads the
 -- policy back out of pg_policies, so this paragraph going stale is a red build
@@ -49,7 +49,7 @@
 -- `trg_set_updated_at` (BEFORE UPDATE; 0003's loop over every table with an
 -- updated_at column), `trg_mark_model_dirty` (AFTER INSERT OR UPDATE OR
 -- DELETE; 0134's table array names 'documents', made delete-safe by 0249) and,
--- on a database bootstrapped after 0365, `trg_documents_linked_trip_stays_home`
+-- on a database bootstrapped after 0387, `trg_documents_linked_trip_stays_home`
 -- (BEFORE UPDATE OF family_id). No trigger fires on SELECT, so none of them
 -- can be what assertion 3 measures. The seed's WRITES — the document inserts
 -- and the family_members upsert — do go through them, as the bootstrap role,

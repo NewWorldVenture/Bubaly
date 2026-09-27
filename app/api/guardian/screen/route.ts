@@ -142,11 +142,15 @@ export async function POST(req: NextRequest) {
     { role: 'assistant', content: responseText },
   ];
 
-  await supabase.from('guardian_screening_sessions').update({
+  // Every write here reads its answer: PostgREST RESOLVES a refusal as
+  // `{ error }`, and a screening turn that was never saved must at least be
+  // seen in the log (tests/an-api-write-that-failed-leaves-a-trace).
+  const { error: turnError } = await supabase.from('guardian_screening_sessions').update({
     messages: newHistory,
     turn,
     caller_name_stated: decision?.callerName ?? (session as { caller_name_stated?: string }).caller_name_stated,
   }).eq('id', sess.id);
+  if (turnError) console.error('[guardian-screen] screening turn save failed', { sessionId: sess.id, turn, error: turnError });
 
   // If AI reached a decision or max turns hit
   if (decision || turn >= 5) {
@@ -211,7 +215,8 @@ export async function POST(req: NextRequest) {
 
     const summary = await summarizeScreening(newHistory, decision?.callerName ?? null, memberName);
     if (sess.communication_id) {
-      await supabase.from('guardian_communications').update({ summary, status: 'handled' }).eq('id', sess.communication_id);
+      const { error: summaryError } = await supabase.from('guardian_communications').update({ summary, status: 'handled' }).eq('id', sess.communication_id);
+      if (summaryError) console.error('[guardian-screen] communication summary save failed', { commId: sess.communication_id, error: summaryError });
       await notifyFamily(supabase, sess.family_id, memberProfile as { member_id: string } | null, {
         commId: sess.communication_id,
         callerName: decision?.callerName ?? formatPhone(sess.caller_number),
@@ -265,7 +270,7 @@ async function endScreening(
   },
 ) {
 
-  await supabase.from('guardian_screening_sessions').update({
+  const { error: resolveError } = await supabase.from('guardian_screening_sessions').update({
     status: 'resolved',
     final_action: finalAction,
     ai_risk: meta.ai_risk,
@@ -273,13 +278,15 @@ async function endScreening(
     ai_intent: meta.ai_intent,
     resolution_summary: meta.resolution_summary,
   }).eq('id', sessionId);
+  if (resolveError) console.error('[guardian-screen] screening resolution save failed', { sessionId, finalAction, error: resolveError });
 
   if (commId) {
-    await supabase.from('guardian_communications').update({
+    const { error: commError } = await supabase.from('guardian_communications').update({
       status: 'handled',
       ai_decision_reason: meta.resolution_summary,
       sentiment: meta.ai_urgency === 'emergency' ? 'urgent' : meta.ai_risk.includes('scam') ? 'suspicious' : 'neutral',
     }).eq('id', commId);
+    if (commError) console.error('[guardian-screen] communication resolution save failed', { commId, error: commError });
   }
 }
 

@@ -12,7 +12,7 @@ import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
 import { todayKeyFor } from '@/lib/services/scope';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,8 @@ const STATUS_CHIP: Record<string, string> = {
 
 export default async function MarketplaceOrdersPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -162,7 +164,7 @@ export default async function MarketplaceOrdersPage() {
                     </span>
                   )}
                   <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
-                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents)}</span>}
+                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents, locale.code)}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
@@ -170,14 +172,14 @@ export default async function MarketplaceOrdersPage() {
                 {fee && (
                   <p className="mt-1 text-xs text-muted">
                     {role === 'buyer' ? (
-                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
+                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents, locale.code)}</span>
                         {fee.serviceFeeCents > 0 && (
-                          <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
+                          <span> · {t('orders.itemPlusServiceFee', { item: formatCents(fee.subtotalCents, locale.code), fee: formatCents(fee.serviceFeeCents, locale.code) })}</span>
                         )}
                       </>
                     ) : (
-                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
-                        <span> · Bubaly takes {formatCents(fee.platformReceivesCents)}</span>
+                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents, locale.code)}</span>
+                        <span> · {t('orders.bubalyTakes', { amount: formatCents(fee.platformReceivesCents, locale.code) })}</span>
                       </>
                     )}
                   </p>

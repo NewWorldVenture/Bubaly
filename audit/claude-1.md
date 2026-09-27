@@ -8323,7 +8323,7 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   0427 did not filter on `polpermissive`**, so a restrictive guard landing on
   `medical_profiles` or `driving_trips` would make my migration REFUSE TO APPLY
   over somebody else's tightening — a guard failing in the safe direction.
-  Earlier migrations (0311, 0315, 0429–0368 (as numbered before the merge; dropped at the merge as main's duplicate)) filter correctly; I knew the rule
+  Earlier migrations (0311, 0315, 0429, 0430, and the since-dropped 0431 and former 0368) filter correctly; I knew the rule
   and stopped applying it. Both fixed. **0426's sweep deliberately does NOT
   filter**, and now says so: it asks whether a policy delegates its `is_active`
   check to another table, and a restrictive policy with that predicate leans on

@@ -16,10 +16,64 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Policy = Tables<'auto_insurance_policies'>;
 type Vehicle = Tables<'vehicles'>;
+
+/** A premium's billing period (`0037_auto.sql`: monthly | 6_month | annual) → the sentence that carries the amount. */
+const PREMIUM_PERIOD_KEYS: Record<string, string> = {
+  monthly: 'insuranceClient.premiumMonthly',
+  '6_month': 'insuranceClient.premiumSixMonth',
+  annual: 'insuranceClient.premiumAnnual',
+};
+
+/**
+ * A policy's full details — the list the card expands into.
+ *
+ * Its money is written in the READER's format (useLocale) and the words beside
+ * it in their language: `$${Number(p.premium).toLocaleString()}` used to put the
+ * symbol on the American side for everyone, with a raw `/6_month` after it.
+ * `auto_insurance_policies` carries no currency column — the premium and the
+ * deductibles are dollars (numeric, not cents) — so the currency is USD.
+ */
+export function PolicyDetails({ policy: p }: { policy: Policy }) {
+  const t = useTranslations();
+  const locale = useLocale();
+  const money = (dollars: number) => formatCents(Math.round(dollars * 100), 'USD', locale.code);
+
+  let premium: string | null = null;
+  if (p.premium != null) {
+    const amount = money(Number(p.premium));
+    const periodKey = p.premium_period ? PREMIUM_PERIOD_KEYS[p.premium_period] : undefined;
+    premium = !p.premium_period
+      ? amount
+      : periodKey
+        ? t(periodKey, { amount })
+        // A period the form never offers (the column is free text): keep what
+        // was stored rather than dropping it, still with the amount localised.
+        : t('insuranceClient.premiumPerPeriod', { amount, period: p.premium_period });
+  }
+
+  const rows: [string, string | null][] = [
+    ['NAIC', p.naic],
+    [t('insuranceClient.effective'), p.effective_on],
+    [t('insuranceClient.expires'), p.expires_on],
+    [t('insuranceClient.premium'), premium],
+    [t('insuranceClient.collisionDeductible'), p.deductible_collision != null ? money(Number(p.deductible_collision)) : null],
+    [t('insuranceClient.comprehensiveDeductible'), p.deductible_comprehensive != null ? money(Number(p.deductible_comprehensive)) : null],
+  ];
+
+  return (
+    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl border border-border bg-elevated/40 p-3 text-xs sm:grid-cols-3">
+      {rows.filter(([, v]) => v).map(([k, v]) => (
+        <div key={k}><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>
+      ))}
+      {p.notes && <div className="col-span-full"><dt className="text-muted">{t('insuranceClient.notes')}</dt><dd>{p.notes}</dd></div>}
+    </dl>
+  );
+}
 
 export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; vehicles: Vehicle[] }) {
   const t = useTranslations();
@@ -70,19 +124,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                 <button onClick={() => setExpanded(isOpen ? null : p.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-text">
                   {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {isOpen ? 'Hide' : 'Full policy details'}
                 </button>
-                {isOpen && (
-                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl border border-border bg-elevated/40 p-3 text-xs sm:grid-cols-3">
-                    {([
-                      ['NAIC', p.naic], ['Effective', p.effective_on], ['Expires', p.expires_on],
-                      ['Premium', p.premium != null ? `$${Number(p.premium).toLocaleString()}${p.premium_period ? `/${p.premium_period}` : ''}` : null],
-                      ['Collision deductible', p.deductible_collision != null ? `$${p.deductible_collision}` : null],
-                      ['Comprehensive deductible', p.deductible_comprehensive != null ? `$${p.deductible_comprehensive}` : null],
-                    ] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => (
-                      <div key={k}><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>
-                    ))}
-                    {p.notes && <div className="col-span-full"><dt className="text-muted">{t('insuranceClient.notes')}</dt><dd>{p.notes}</dd></div>}
-                  </dl>
-                )}
+                {isOpen && <PolicyDetails policy={p} />}
 
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                   <button onClick={() => { setEditing(p); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('insuranceClient.edit')}</button>

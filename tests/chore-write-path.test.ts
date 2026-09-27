@@ -214,7 +214,10 @@ describe('adding the same chore twice', () => {
       // between our probe (which saw nothing) and our assignment insert.
       if (table === 'chores' && !staged) {
         staged = true;
-        db.seed('chores', [{ id: 'winner-c', family_id: FAMILY, title: 'Feed the dog', points: 15 }]);
+        // The winner is the SAME tap, so it wrote the same content, due day
+        // included: a racing press with different content is refused instead
+        // (tests/a-retried-task-with-a-changed-date-or-title-is-not-told-task-added.test.ts).
+        db.seed('chores', [{ id: 'winner-c', family_id: FAMILY, title: 'Feed the dog', points: 15, due_at: '2026-09-10T09:00:00.000Z' }]);
         db.seed('chore_assignments', [{ id: 'winner-a', family_id: FAMILY, chore_id: 'winner-c', member_id: 'member-2', idempotency_key: key }]);
       }
       return real(table);

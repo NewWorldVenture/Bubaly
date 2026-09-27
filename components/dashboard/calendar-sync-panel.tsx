@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
+import { feedAddedMessage } from '@/lib/calendar/feeds';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
@@ -56,7 +57,7 @@ export function CalendarSyncPanel() {
     const res = await addCalendarFeed({ name, url });
     setAdding(false);
     if (!res.ok) { toastError(res.error); return; }
-    success(res.imported != null ? `Added — ${res.imported} events imported` : 'Calendar added');
+    success(feedAddedMessage(res, t));
     closeModal();
   }
 

@@ -5,6 +5,7 @@ import { UpgradeModal } from '@/components/app/upgrade-modal';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { getMessages, getRawMessages } from '@/lib/i18n/messages';
 import { localeOrDefault, type LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 
 const state = vi.hoisted(() => ({ role: 'parent', checkout: vi.fn(), serverRead: vi.fn() }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ role: state.role, familyId: 'family-pricing' }) }));
@@ -20,10 +21,23 @@ vi.mock('@/components/ui/modal', () => ({
 }));
 
 const locales: LocaleCode[] = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
+// Cents, not strings: each reader sees the plan's USD price in their OWN money
+// format ("12,04 $" in de-DE, "$12.04" in en-US), so the expected text is what
+// the shared formatter produces for that EXPLICIT locale. Each case also checks
+// that a non-English locale's spelling differs from en-US's, so the expectation
+// cannot silently be American everywhere (a Node without full ICU would do that).
 const tiers = [
-  { level: 1, monthly: '$12.04', equivalent: '$9.99', annual: '$119.88' },
-  { level: 2, monthly: '$30.11', equivalent: '$24.99', annual: '$299.88' },
+  { level: 1, monthly: 1204, equivalent: 999, annual: 11988 },
+  { level: 2, monthly: 3011, equivalent: 2499, annual: 29988 },
 ];
+const money = (locale: LocaleCode, cents: number) => formatCents(cents, 'USD', locale);
+const PER_MONTH_KEY = 'pricingValue.perMonthSuffix';
+
+/** `price` immediately followed by a span whose whole text is `suffix` — the "/mo" beside a price. */
+function priceWithSuffix(price: string, suffix: string): RegExp {
+  const lit = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${lit(price)}<span[^>]*>${lit(suffix)}</span>`);
+}
 
 function render(locale: LocaleCode, requiredLevel: number, open = true): string {
   return renderToStaticMarkup(createElement(LocaleProvider, {
@@ -52,10 +66,21 @@ afterEach(() => {
 });
 
 describe.each(locales)('upgrade pricing disclosure in %s', (locale) => {
-  it.each(tiers)('shows tier $level annual charge alongside its monthly equivalent before checkout', ({ level, monthly, equivalent, annual }) => {
+  it.each(tiers)('shows tier $level annual charge alongside its monthly equivalent before checkout', (tier) => {
+    const [monthly, equivalent, annual] = [tier.monthly, tier.equivalent, tier.annual].map((cents) => escaped(money(locale, cents)));
+    if (locale !== 'en-US') {
+      expect(monthly, `${locale} spells money its own way, not as en-US does`).not.toBe(escaped(money('en-US', tier.monthly)));
+    }
+    const level = tier.level;
     const messages = getMessages(locale);
     const template = getRawMessages(locale)['upgradeModal.billedAnnually'];
     expect(template, 'each primary locale supplies its own annual billing disclosure').toContain('{amount}');
+    // "/mo" is catalogue copy too. Red until this change's catalogue merge lands:
+    // the raw key would otherwise sit in the span and a bare `${price}<span`
+    // check would still pass.
+    const perMonth = getRawMessages(locale)[PER_MONTH_KEY];
+    expect(perMonth, 'each primary locale supplies its own per-month suffix').toBeTruthy();
+    const suffix = escaped(perMonth);
     const disclosure = escaped(template.replace('{amount}', annual));
     const html = render(locale, level);
     const buttons = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
@@ -63,13 +88,26 @@ describe.each(locales)('upgrade pricing disclosure in %s', (locale) => {
     const monthlyButton = buttons.find((button) => button.includes(escaped(messages['upgradeModal.chooseMonthly'])));
 
     expect(annualButton).toBeDefined();
-    expect(annualButton).toContain(`${equivalent}<span`);
+    expect(annualButton).toMatch(priceWithSuffix(equivalent, suffix));
     expect(annualButton).toContain(disclosure);
     expect(annualButton!.indexOf(disclosure)).toBeLessThan(annualButton!.indexOf(escaped(messages['upgradeModal.chooseAnnual'])));
-    expect(monthlyButton).toContain(`${monthly}<span`);
+    expect(monthlyButton).toMatch(priceWithSuffix(monthly, suffix));
     expect(monthlyButton).not.toContain(disclosure);
     expect(html).not.toContain('upgradeModal.billedAnnually');
+    expect(html).not.toContain(PER_MONTH_KEY);
     expect(html).not.toContain('{amount}');
+  });
+});
+
+// The English sentences, as English, from the real en-US catalogue — red until
+// this change's catalogue merge supplies pricingValue.perMonthSuffix.
+describe('an en-US reader still reads American money', () => {
+  it.each(tiers)('tier $level', ({ level, monthly, equivalent, annual }) => {
+    const html = render('en-US', level);
+    expect(html).toMatch(priceWithSuffix(money('en-US', monthly), '/mo'));
+    expect(html).toMatch(priceWithSuffix(money('en-US', equivalent), '/mo'));
+    expect(html).toContain(`Billed ${money('en-US', annual)} annually`);
+    expect(money('en-US', annual)).toMatch(/^\$\d+\.\d{2}$/);
   });
 });
 

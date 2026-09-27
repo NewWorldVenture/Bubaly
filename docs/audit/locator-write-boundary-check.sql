@@ -1,5 +1,12 @@
 -- Behavioural proof for main's 0335 and 0379 (this branch's locator migration, 0431, was dropped at the merge as 0379's duplicate once 0335 had taken its other two tables), run as real `authenticated` sessions under RLS.
 --
+-- 0431 did not only repeat 0379 on safety_check_ins, it disagreed with it, and
+-- laid after 0379 it swept 0379's policies away. Measured on a replayed chain
+-- with 0431 put back: a parent could no longer file a check-in FOR a child, and
+-- a child COULD file one naming no member at all. Main's rule — your own member
+-- row, or a manager — is the one kept; step 6 and the last parent control below
+-- assert it, so putting 0431 back turns this probe red.
+--
 -- `app/(app)/dashboard/locator/actions.ts:30` says "Strictly self-only — a
 -- member can only post their own location", and the server action keeps that
 -- promise. The DATABASE did not: member_locations and location_events were
@@ -134,6 +141,17 @@ begin
     raise exception 'the check-in is gone despite the refusal';
   end if;
 
+  -- 6. Cannot file a check-in that names nobody. Main's 0379 lets a member
+  --    write only their own member row (or a manager anyone's); a null
+  --    member_id is nobody's own row, so only a manager may file one.
+  begin
+    insert into public.safety_check_ins (family_id, member_id, status, created_by)
+    values (fam, null, 'need_help', kid_uid);
+    raise exception 'a child filed a check-in naming no member — main''s 0379 keeps a check-in to your own member row, or a manager';
+  exception when insufficient_privilege then
+    null;
+  end;
+
   -- Positive controls: everything the child legitimately does still works.
   insert into public.member_locations (family_id, member_id, latitude, longitude, is_sharing)
   values (fam, kid_mid, 51.4, -0.1, true);
@@ -182,6 +200,14 @@ begin
   get diagnostics n = row_count;
   if n <> 1 then
     raise exception 'a parent can no longer remove their own dot (%)', n;
+  end if;
+  -- …and, under main's 0379, still files a check-in FOR a child (the manager
+  -- arm of "your own member row, or a manager").
+  insert into public.safety_check_ins (family_id, member_id, status, created_by)
+  values (fam, kid_mid, 'safe', parent_uid);
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'a parent can no longer file a check-in for a child (%) — main''s 0379 lets a manager', n;
   end if;
 
   reset role;

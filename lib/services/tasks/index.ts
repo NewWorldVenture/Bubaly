@@ -16,9 +16,12 @@ import 'server-only';
 import type { Priority, RecurrenceFreq, TaskStatus, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError, isMissingFunctionError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, withIdempotency, type IdempotencyProbe } from '../idempotency';
+import {
+  keyedProbe, sameId, sameInstant, withIdempotency, type IdempotencyProbe, type KeyedCreateOptions,
+} from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { getTranslations } from '@/lib/i18n/server';
 
 export type TodoList = Tables<'todo_lists'>;
 export type TodoItem = Tables<'todo_items'>;
@@ -104,7 +107,33 @@ export type CreateTodoInput = {
   tags?: string[];
 };
 
-export async function createTodo(scope: ServiceScope, input: CreateTodoInput): Promise<ServiceResult<TodoItem>> {
+/** The columns a create chooses, as the insert below would write them. */
+type TodoContent = Pick<TodoItem, 'list_id' | 'title' | 'notes' | 'due_date' | 'priority' | 'assigned_to_id' | 'tags'>;
+
+/**
+ * The columns on which a stored row differs from what this request would have
+ * written — `ChangedRetry.drift` for a to-do. Names only: the values are a
+ * family's task text and stay out of logs. `due_date` is a DATE, so a day key
+ * compares as text.
+ */
+function contentDrift(stored: TodoItem, wanted: TodoContent): string[] {
+  const drift: string[] = [];
+  if (!sameId(stored.list_id, wanted.list_id)) drift.push('list_id');
+  if (stored.title !== wanted.title) drift.push('title');
+  if ((stored.notes ?? null) !== wanted.notes) drift.push('notes');
+  if ((stored.due_date ?? null) !== wanted.due_date) drift.push('due_date');
+  if (stored.priority !== wanted.priority) drift.push('priority');
+  if (!sameId(stored.assigned_to_id, wanted.assigned_to_id)) drift.push('assigned_to_id');
+  const storedTags = stored.tags ?? [];
+  if (storedTags.length !== wanted.tags.length || storedTags.some((tag, i) => tag !== wanted.tags[i])) drift.push('tags');
+  return drift;
+}
+
+export async function createTodo(
+  scope: ServiceScope,
+  input: CreateTodoInput,
+  opts: KeyedCreateOptions = {},
+): Promise<ServiceResult<TodoItem>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A task needs a title.', { code: SERVICE_CODES.invalidInput });
   if (input.dueDate && !DAY_KEY.test(input.dueDate)) {
@@ -116,6 +145,15 @@ export async function createTodo(scope: ServiceScope, input: CreateTodoInput): P
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';
   const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
+  const wanted: TodoContent = {
+    list_id: list.data.id,
+    title,
+    notes: input.notes?.trim() || null,
+    due_date: input.dueDate ?? null,
+    priority,
+    assigned_to_id: assigneeId ?? null,
+    tags: input.tags ?? [],
+  };
 
   return withIdempotency<TodoItem>(
     scope,
@@ -125,21 +163,24 @@ export async function createTodo(scope: ServiceScope, input: CreateTodoInput): P
       // 0256: keyed on the call, so re-running a plan step returns its own
       // to-do while a family that really wants two "Pack the kit" rows gets two.
       find: keyedProbe(scope, 'todo_items', 'task'),
+      // A person's press, not a plan step (see KeyedCreateOptions): a row found
+      // under the key that differs from `wanted` is refused with copy naming the
+      // task that really was saved, instead of being reported as "Task added".
+      changedRetry: opts.rejectChangedRetry ? {
+        drift: (stored) => contentDrift(stored, wanted),
+        message: async (stored) => (await getTranslations())('tasks.alreadySavedAs', { title: stored.title }),
+        id: (stored) => stored.id,
+      } : undefined,
     },
     async (key) => {
       const { data, error } = await scope.db
         .from('todo_items')
         .insert({
           family_id: scope.familyId,
-          list_id: list.data.id,
-          title,
-          notes: input.notes?.trim() || null,
-          // Both columns reference family_members(id) — see the header note.
+          // created_by references family_members(id) — see the header note;
+          // so does assigned_to_id, inside `wanted`.
           created_by: scope.memberId,
-          assigned_to_id: assigneeId ?? null,
-          due_date: input.dueDate ?? null,
-          priority,
-          tags: input.tags ?? [],
+          ...wanted,
           idempotency_key: key,
         })
         .select('*')
@@ -409,6 +450,35 @@ function findChoreCreation(scope: ServiceScope, assigneeId: string | null | unde
   };
 }
 
+/** The `chores` columns a create chooses; `icon` only when the caller named one. */
+type ChoreContent =
+  Pick<Chore, 'title' | 'description' | 'points' | 'priority' | 'recurrence' | 'due_at' | 'requires_approval'> & { icon?: string | null };
+
+/**
+ * `ChangedRetry.drift` for a chore and its assignment: the columns on which the
+ * pair found under the key differs from what this create would have written.
+ *
+ * `due_at` is a `timestamptz`, compared as an instant. The board sends a bare
+ * day (`<input type="date">`), which Postgres files at midnight in the
+ * database's zone — UTC on Supabase — and `Date.parse` reads at UTC midnight
+ * too, so an unchanged retry matches. Were those two zones ever to differ, the
+ * cost is one true-worded "already saved" answer, never a lost write.
+ */
+function choreDrift(found: ChoreCreation, wanted: ChoreContent, assigneeId: string | null): string[] {
+  const { chore, assignment } = found;
+  const drift: string[] = [];
+  if (chore.title !== wanted.title) drift.push('title');
+  if ((chore.description ?? null) !== wanted.description) drift.push('description');
+  if (chore.points !== wanted.points) drift.push('points');
+  if (chore.priority !== wanted.priority) drift.push('priority');
+  if (chore.recurrence !== wanted.recurrence) drift.push('recurrence');
+  if (!sameInstant(chore.due_at, wanted.due_at)) drift.push('due_at');
+  if (chore.requires_approval !== wanted.requires_approval) drift.push('requires_approval');
+  if (wanted.icon !== undefined && (chore.icon ?? null) !== wanted.icon) drift.push('icon');
+  if (!sameId(assignment?.member_id, assigneeId)) drift.push('member_id');
+  return drift;
+}
+
 /**
  * Create a chore, optionally assigning it in the same call.
  *
@@ -430,6 +500,7 @@ function findChoreCreation(scope: ServiceScope, assigneeId: string | null | unde
 export async function createChore(
   scope: ServiceScope,
   input: CreateChoreInput,
+  opts: KeyedCreateOptions = {},
 ): Promise<ServiceResult<ChoreCreation>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A chore needs a title.', { code: SERVICE_CODES.invalidInput });
@@ -442,7 +513,19 @@ export async function createChore(
     return fail('A chore cannot be worth negative points.', { code: SERVICE_CODES.invalidInput });
   }
 
-  return withIdempotency(
+  /** The `chores` columns this create chooses, as the insert below writes them. */
+  const choreRow: ChoreContent = {
+    title,
+    description: input.description?.trim() || null,
+    points: input.points ?? 10,
+    priority: input.priority ?? 'medium',
+    recurrence: input.recurrence ?? 'none',
+    due_at: input.dueAt ?? null,
+    requires_approval: input.requiresApproval ?? true,
+    ...(input.icon !== undefined ? { icon: input.icon } : {}),
+  };
+
+  return withIdempotency<ChoreCreation>(
     scope,
     {
       operation: 'tasks.createChore',
@@ -456,20 +539,21 @@ export async function createChore(
       // each other.
       input: { title, assigneeId: input.assigneeId ?? null, dueAt: input.dueAt ?? null },
       find: findChoreCreation(scope, input.assigneeId),
+      // The board's Add, not a plan step (see KeyedCreateOptions): a chore and
+      // assignment found under the key that differ from this press are refused
+      // with copy naming the chore that really was saved.
+      changedRetry: opts.rejectChangedRetry ? {
+        drift: (found) => choreDrift(found, choreRow, input.assigneeId ?? null),
+        message: async (found) => (await getTranslations())('chores.alreadySavedAs', { title: found.chore.title }),
+        id: (found) => found.chore.id,
+      } : undefined,
     },
     async (key) => {
       const { data: chore, error } = await scope.db
         .from('chores')
         .insert({
           family_id: scope.familyId,
-          title,
-          description: input.description?.trim() || null,
-          points: input.points ?? 10,
-          priority: input.priority ?? 'medium',
-          recurrence: input.recurrence ?? 'none',
-          due_at: input.dueAt ?? null,
-          requires_approval: input.requiresApproval ?? true,
-          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+          ...choreRow,
           // chores.created_by references auth.users (0002), unlike the todo tables.
           created_by: scope.userId,
         })

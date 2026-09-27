@@ -92,7 +92,20 @@ describe('briefing API request-language presentation', () => {
     expect(body.digest.items[0].detail).toContain(new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(12.5));
     expect(body.digest.items.some((item: { display?: unknown }) => item.display)).toBe(false);
     expect(body.briefing.operationsScore.stressLevel).toBe('high');
-    expect(body.decisions.items[0]).toMatchObject({ id: 'approval:money', kind: 'approval', title: 'Card purchase to approve · $12.50', href: '/wallet/cards' });
+    // The decisions go back to THIS reader as the brief's list, so a money
+    // approval's title is that reader's sentence: their catalogue's words around
+    // the amount in their format — "12,50 $" for de-DE, "$12.50" for en-US
+    // (AQ-01 / I18N-003). Resolved through the REAL catalogue, like every t()
+    // above: needsSources.* lands with the orchestrated merge of the
+    // home-and-auto i18n asks, and until it does translate() prints the raw key,
+    // which carries no amount, so these are red until then rather than green on
+    // a stand-in. The English-leak check is what a German reader would notice.
+    const approvalAmount = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(12.5);
+    const approvalTitle: string = body.decisions.items[0].title;
+    expect(approvalTitle, 'the amount in the reader\'s format').toContain(approvalAmount);
+    if (locale === 'en-US') expect(approvalTitle).toBe('Card purchase to approve · $12.50');
+    else expect(approvalTitle, 'an English sentence in front of a non-English reader').not.toContain('to approve');
+    expect(body.decisions.items[0]).toMatchObject({ id: 'approval:money', kind: 'approval', title: t('needsSources.toApproveWithAmount', { label: t('needsSources.cardPurchase'), amount: approvalAmount }), href: '/wallet/cards' });
     expect(body.briefing.subtitle).toBe(new Intl.DateTimeFormat(locale, { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric' }).format(new Date()));
   });
   it.each(locales)('%s optional model instructions should carry the trusted output locale', async locale => {

@@ -50,7 +50,7 @@
 -- WHICH STATEMENTS WRITE THAT ACL. Grepping the five names across
 -- supabase/migrations returns 0204, 0218, 0237, 0250, 0253, 0263 and 0292; 0218
 -- only mentions loyalty_redeem_reward in a comment. No migration after 0292
--- names any of them (checked through 0365, the newest file when this was
+-- names any of them (checked through 0387, the newest file when this was
 -- written). No migration does a blanket `grant|revoke … on all functions`, sets
 -- `alter default privileges` for functions, or builds a function grant/revoke
 -- with `execute format(…)` — the only two dynamic ACL loops, 0338:154 and

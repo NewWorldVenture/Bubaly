@@ -23,7 +23,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { completeTodo, createTodo, deleteTodo, updateTodo } from '@/lib/services/tasks';
-import { makeKey } from '@/lib/services/idempotency';
+import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -32,7 +32,14 @@ const PATH = '/dashboard/todos';
 
 export type TodoActionResult =
   | { ok: true; id: string }
-  | { ok: false; error: string };
+  /**
+   * `already_saved`: this submission id already wrote a task, and that task no
+   * longer matches the one just sent — see `KeyedCreateOptions` in
+   * lib/services/idempotency.ts. That attempt is settled, so the browser should
+   * treat the next press as a new composition rather than retry this one
+   * (`submissionSettled`).
+   */
+  | { ok: false; error: string; code?: typeof ALREADY_SAVED };
 
 export type TodoFields = {
   title?: string;
@@ -55,8 +62,15 @@ export type CreateTodoActionInput = TodoFields & {
  * The idempotency key for one save attempt, or null for "do not deduplicate".
  *
  * Namespaced by operation so the same submission id could never have a second,
- * different write answered with the first one's row. A missing or malformed id
- * degrades to today's un-deduplicated write rather than failing the save.
+ * different write answered with the first one's row. It is deliberately NOT
+ * keyed on the task's content (two identical "Pack the kit" compositions must
+ * both land), so a same-operation retry whose content changed — Today pressed,
+ * response lost, Tomorrow pressed — reaches the same key; `createTodo`, asked
+ * to by `rejectChangedRetry`, compares the stored row and answers
+ * `already_saved` instead of a false "Task added". The Add Event and Add Chore
+ * modals do the same through their own actions.
+ * A missing or malformed id degrades to today's un-deduplicated write rather
+ * than failing the save.
  */
 function submissionKey(operation: string, familyId: string, submissionId: unknown): string | null {
   return isSubmissionId(submissionId) ? makeKey([operation, familyId, submissionId]) : null;
@@ -93,8 +107,16 @@ export async function createTodoAction(input: CreateTodoActionInput): Promise<To
       // `undefined` lets the service default to the acting member, so a
       // self-added task is not orphaned; an explicit null unassigns.
       ...(input.assigneeId !== undefined ? { assigneeId: input.assigneeId } : {}),
+    }, {
+      // The key is a person's submission id, not a plan step: a changed press
+      // under it is a change of mind, not the same save (see KeyedCreateOptions).
+      rejectChangedRetry: true,
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      return result.code === ALREADY_SAVED
+        ? { ok: false, error: result.error, code: ALREADY_SAVED }
+        : { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };
