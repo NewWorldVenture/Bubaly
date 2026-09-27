@@ -19,12 +19,13 @@ import { describe, expect, it } from 'vitest';
 
 type Handler = (event: { request: FakeRequest; respondWith: (p: Promise<unknown>) => void; waitUntil: (p: Promise<unknown>) => void }) => void;
 type FakeRequest = { url: string; method: string; mode: string; destination: string };
-type FakeResponse = { ok: boolean; headers: { get: (name: string) => string | null }; clone: () => FakeResponse; body: string };
+type FakeResponse = { ok: boolean; status: number; headers: Headers; clone: () => FakeResponse; body: string };
 
-function response(body: string, cacheControl: string | null): FakeResponse {
+function response(body: string, cacheControl: string | null, contentType = 'image/png'): FakeResponse {
+  const headers = new Headers({ 'content-type': contentType });
+  if (cacheControl) headers.set('cache-control', cacheControl);
   const r: FakeResponse = {
-    ok: true, body,
-    headers: { get: (name) => (name.toLowerCase() === 'cache-control' ? cacheControl : null) },
+    ok: true, status: 200, body, headers,
     clone: () => r,
   };
   return r;
@@ -39,6 +40,7 @@ function loadWorker(network: (url: string) => FakeResponse) {
       const store = stores.get(name)!;
       return {
         put: async (req: FakeRequest, res: FakeResponse) => { store.set(req.url, res); },
+        match: async (req: FakeRequest) => store.get(req.url),
         addAll: async () => {},
       };
     },
@@ -63,7 +65,8 @@ function loadWorker(network: (url: string) => FakeResponse) {
     const request: FakeRequest = { url: `https://bubaly.test${path}`, method: 'GET', mode: 'no-cors', destination };
     let responded: Promise<unknown> | undefined;
     handlers.fetch({ request, respondWith: (p) => { responded = p; }, waitUntil: () => {} });
-    const res = await responded;
+    // Without respondWith the browser performs the ordinary network fetch.
+    const res = responded ? await responded : network(request.url);
     await new Promise((r) => setTimeout(r, 0)); // let the fire-and-forget put land
     return res as FakeResponse;
   }
@@ -73,7 +76,7 @@ function loadWorker(network: (url: string) => FakeResponse) {
 
 describe('the service worker keeps nothing private for the next user', () => {
   it('still caches content-hashed static scripts and public images (control)', async () => {
-    const sw = loadWorker(() => response('bytes', 'public, max-age=31536000, immutable'));
+    const sw = loadWorker((url) => response('bytes', 'public, max-age=31536000, immutable', url.endsWith('.js') ? 'application/javascript' : 'image/png'));
     await sw.get('/_next/static/chunks/app.js', 'script');
     await sw.get('/icons/icon-192.png', 'image');
     expect(sw.stored('/_next/static/chunks/app.js')).toBe(true);
