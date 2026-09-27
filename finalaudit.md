@@ -46375,7 +46375,17 @@ Settings and the money timeline also carried unused English copies next to keys 
 
 **Status:** FIXED.
 
-**OPEN:** the zone kinds in `lib/declutter/missions.ts` (`ZONE_KINDS[].label`) are still English lib data in the zone picker.
+**Follow-up (same pass).** More of `/dashboard/declutter` is now translated:
+- the zone kinds in the zone picker
+- the five clutter-score labels
+- "Worst spot: …" and "Add the spots that get messy"
+
+These come from the catalogue now (`declutterModule.kind.*` and `declutterModule.score.*`).
+
+**OPEN:**
+- `lib/declutter/missions.ts` still words `summary.text`, the weekly plan's day labels and the mission templates in English.
+- A template's English title is written into the new mission when a family picks it, the same pattern `C1-S9-110` fixed for chores.
+- Fixing this needs keyed templates in the lib. Its unit tests (`tests/declutter*.test.ts`) pin the English strings, so it is a separate change.
 
 ---
 
