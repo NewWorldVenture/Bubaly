@@ -1,5 +1,53 @@
 # Final Production Audit
 
+## Source-qualified release checkpoint — 2026-09-27
+
+**PR607's original full run remains FAIL; its other exact-source gates are complete.** Frozen4d807747/tree35a8c6be records 20,848 unit passes and23 failures in the one marketplace React-shim fixture. On the same unchanged5,228 files, build246, generated types, lint with15 existing warnings, production dependency audit0 and all four static audits pass. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-4d807747-20260927/summary.json`, verified through18:43:03 UTC. The corresponding hosted [CI36341275722](https://github.com/NewWorldVenture/Bubaly/actions/runs/36341275722) Web job also fails at18:42:29 on that same missing-hook fixture; Database/Mobile pass. Its superseded E2E run is automatically cancelled at18:45:08 UTC (smoke step cancelled18:44:31); no manual cancellation was issued and no final browser pass is claimed. Log: `C:/Users/Daniel/AppData/Local/Temp/bubaly-4d-ci36341275722-web-108681724963-20260927.log`. These failures are preserved. The reviewed three-line fixture-only correction is pushed as `7e2f27adad2e27667c49fd3ad1ceedf8e990a376`; its32-case scoped pass is recorded below, while corrected-source full canonical and hosted acceptance remain pending.
+
+**Framework PR602 and production601 have separate receipts.** For b718/treebd217, hosted Web completes SUCCESS at18:41:53 UTC:20,858 tests across1,638 files in each of three timezones, build246, generated types, lint and static/production dependency audits pass. Database/Mobile also pass; E2E remains pending at this checkpoint. Actual checkout79ec1110 has the same tree. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-b718-publication-20260927/web-terminal.json`. Current deployed82da, from PR601, has exact public revision/worker verification and native1/1 PASS at18:41:23–30; retained native evidence: `C:/Users/Daniel/AppData/Local/Temp/bubaly-native-production-82da8da6-retained-receipt-20260927.json`, alongside the public/native receipts below. Six missing feature settings still leave health degraded. No authenticated provider journey is certified, and these production checks do not deploy or certify the pending Next16/controls candidates.
+
+**The current Register B header is corrected to its actual rows:**14,226 total =13,831 NOT STARTED +380 IN PROGRESS +10 FIXED + PASS +four BLOCKED +one FAIL. Its stale14,213 total and denominator are corrected; all IDs/statuses and the rounded0.07% signoff remain unchanged. Session A's separate841-row counts and all dated historical totals are preserved. Page closures and the398-row page board are unchanged. **PRODUCTION READY: NO.** This documentation checkpoint records pending work accurately; it is not a source release or a new acceptance claim.
+
+## Marketplace test fixture correction — 2026-09-27
+
+**The first full next-controls unit run failed and remains recorded.** Frozen PR607 head `4d807747d93395992831b3a57fe5c539330c2f91`, tree `35a8c6be22a5f0a4dddb1defa479e2596a3a1f5e`, verified 5,228 source files before running. UTC produced **20,848 PASS plus 23 FAIL / 20,871 tests** across 1,639 passing files and one failing file in107.08s. All23 failures are in the existing marketplace-money test's hand-built React hook dispatcher, which did not implement the newly used `useSyncExternalStore`. Evidence: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-4d807747-20260927/{unit-UTC.log,unit-UTC.exit,source-before.json}`. Other gates on that frozen source were still running when this corrective checkpoint was written; it is not an all-gates pass.
+
+**A three-line fixture-only correction passes all32 retained assertions in1.64s.** Existing test `tests/a-german-family-types-marketplace-money-beside-a-trailing-unit.test.ts` now implements its manual server expansion by calling `getServerSnapshot`; two comment lines explain that actual React hydration/browser transition is covered by the separate twelve-case formatter browser fixture. No application source or assertion changes. Final test blob: `f25242bd4a05b9ba087b66c94c040baf6c007d16`. GREEN: `C:/Users/Daniel/AppData/Local/Temp/bubaly-controls-private-20260927/marketplace-hook-fixture-green.log`. This scoped pass does not replace the original failed full run. Corrected-source full canonical and hosted gates remain pending, and PR602's separate hosted run remains under observation.
+
+**Inventory adds one previously missing test row as IN PROGRESS:** SUPPORT-5924E9288710. This is an existing test, not a new product workflow or source file. All14,225 prior IDs and statuses are retained. Register B now has **14,226 items: 13,831 NOT STARTED, 380 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. Page claims, 398-row page board,0.07% signoff and all prior failed/flaky evidence remain unchanged. PR601 main82da is now verified live: Vercel deployment46W4uqpq27BioUwKkLbiRfzPzPT2 and GitHub Production6696249213 succeeded at18:39:34 UTC, immutable https://bubaly-l3sk6ylsd-newworldventure.vercel.app; the public build revision matches82da at18:40:37 UTC. Full anonymous public/native verification then passes at18:41:23–30 UTC: exact revision and worker SHA, enabled login entry controls without submission, protected meals redirect, and native offline public fallback with private cache exclusion. The native wrapper passes1/1 in6.4s; the same six unset feature settings keep health degraded. Receipts: C:/Users/Daniel/AppData/Local/Temp/bubaly-sw-production-82da8da6-20260927.json, bubaly-native-production-82da8da6-20260927.log and bubaly-native-82da-20260927/report.json. Its first local invocation failed during Node certificate setup before the successful system-CA retry; that setup failure is not a production application result. No signed-in/provider workflow is certified. Next-controls acceptance remains pending. **PRODUCTION READY: NO.**
+
+## Localized controls, message ownership and date hydration — 2026-09-27
+
+**The next controls batch is adopted locally; full combined gates and hosted acceptance are pending.** Its 44 non-documentation paths build on framework head `b7181cc71756a6ce8106130a4f3cbeb610cb56ba`. Selected PR598 source `06cef776e94278d4893fe6979fd37911b5b1b0ed` supplies six localized modules, a shared category-label helper and 233 added keys in each of seven catalogs while preserving main's existing values. All sixteen selected PR604 paths and six selected PR605 chunk/contrast paths are reconciled with the current source. The duplicate framework-loader patch is excluded. Existing navigation, authentication, Modal and weekly-meal repairs are preserved; no SQL or live provider action is performed.
+
+**Retained browser controls pass 24/24 in 7.7s on the final adopted source with the private Next16 runtime.** Twelve Inbox cases exercise actual message selection and completion ownership with controlled query/action transport; twelve formatter cases use actual server rendering/hydration, locale and timezone controls. The source is unchanged while they run. Guard checks pass 53/53 in 730ms. Logs: `C:/Users/Daniel/AppData/Local/Temp/bubaly-controls-private-20260927/combined-retained-browser.log` and `final-guard-checks.log`. Earlier bounded controls pass 74/74, with a separate 23-case scoped run; these are not added to the retained-browser total. The unchanged i18n scanner reports 2,544 findings across 591 files, so its prior ceiling is tightened by 106. These controlled checks do not certify database/provider workflows or authenticated production pages.
+
+**Inbox and date regressions retain their original failures.** Inbox module `49963ddd180b28bbf9eb1c3c7a85611899aaca52` passes its independent 12/12 in 7.5s; replacing only the module with the earlier localized source fails all twelve, including secondary blocked controls, while five direct ownership REDs remain the precise earlier regression evidence. Original typed-draft, completed-action and late-draft receipts are retained. Formatter hook `27ca204256befe12d00c9541d6ebfea3cb5b694c`, fixture `267be456ebab39c9646f71ae6afac0bd19ceda3c` and portable formatter guard `a5c3bde64136e4ec8a766735fc12750fccfee15c` pass 12/12 browser cases in 7.0s, 33/33 units, scoped strict types and lint. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-date-hydration-candidate-20260927/retained-receipt.json`. Claude's P-11/P-12 and PR598 findings remain attributed local claims, distinct from these final integrated controls.
+
+**Chunk recovery fails closed if its reload marker cannot be read.** The original synthetic native-browser control with a throwing storage read and successful write made five navigations before the fixture cap; that is a reproduced controlled boundary, not an observed production browser policy. Final helper `8e94c957e79026cde2f1a0867f86d1829974093c` and test `e120a9bbacd11c15b30a7a717698c18c91e9173b` pass all 11 native controls and 11 focused checks, plus strict types/lint. Rendered button/reference contrast improves from 4.315/4.355 to 5.365/5.588. Receipts: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr605-chunk-review-20260927/{selective-manifest,fixed-receipt}.json`; the original `receipt.json` retains 10/11 and the desired failure. No local app server or provider calls are used.
+
+**Inventory remains open.** All 14,215 previous IDs survive. Twenty-nine existing NOT STARTED rows move to IN PROGRESS; five existing IN PROGRESS rows remain open. Ten rows are added: six new source files and four previously unregistered existing hook/guard files. Register B now has **14,225 items: 13,831 NOT STARTED, 379 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. The new formatter and Inbox fixtures are SUPPORT-E7C521706850 and SUPPORT-B872930A1F5F. The exact 44-path mapping and status delta are in `C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json`. No page status or product workflow closes; page totals and 0.07% audit signoff remain unchanged. PR606's B6b Interaction-pass claim is preserved separately from the existing B6 privacy blocker.
+
+**The corrected Next15 PR601 baseline now passes its full hosted gate.** [CI36339544177](https://github.com/NewWorldVenture/Bubaly/actions/runs/36339544177), head `52d2a52a2a38a32cc6a73beb63dc5edf2ec29e5a`, finishes all four jobs successfully at 18:33:59 UTC. E2E is clean **1,786/1,786 in 18.6m**, with no failures or flakes. Web passes 20,856 tests across 1,638 files in each of three timezones, build247, generated types and lint. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-52d-ci36339544177-terminal-20260927.json`. This certifies that earlier source, not the next-controls batch or the newer framework tree; original37 and PR600 failed histories remain recorded. Actual hosted checkout `ee22ee5e601ebba8857e52661373a3d7b6272a3b` has tree `b26903e37e97b11b3ac6d6945bcfb1c4af7fd046`, exactly matching reviewed52d. PR601 merged at **18:35:14 UTC** as main `82da8da64bdff47ddeab57bb818836a22c2ffbc7`; the merge additionally preserves PR606's documentation claim, with no new application delta. Production deployment and public verification of82da remain pending.
+
+**Release evidence remains source-specific.** Framework PR602's newer [CI36340228681](https://github.com/NewWorldVenture/Bubaly/actions/runs/36340228681) checks actual checkout `79ec111062d2f6309083daca84799836302fe41c`, whose tree `bd217e014cdbdc08d30271bf7ab3f0f309fc34f0` equals b718. Database and Mobile pass; Web and E2E are still running at this checkpoint. Vercel canceled its preview through the ignored-build step, so no new preview acceptance is claimed. Main advanced to documentation-only `a5ad304537299d01092d0d4fc92947672c6c6cd9` via PR606 with no application/workflow/SQL delta from e96; the last independently captured public revision remains e96 at 18:06 pending a new public identity probe. Earlier failed/flaky runs, production migration, SEC-001 and auth/provider/device obligations remain open. **PRODUCTION READY: NO.** The dated checkpoints below retain their historical scope and are superseded only for the current local integration state.
+
+## Framework integration and manual production-apply boundary — 2026-09-27
+
+**The framework candidate is locally verified against the reconciled PR601 source.** Local commit `f9adfd76879a7e604c8251a5d4ad34ddce19e88b`, tree `74e15a0b903e914fc8f9f5f44920fe3b67fdc024`, combines52d with exactly the approved fifteen framework paths. Next16.3.6 retains React/ReactDOM18.3.1 and the existing ESLint8/config-next15.5.19 policy and15-warning budget; this is not a claim of passing newly introduced compiler lint rules. Webpack is explicit, removed Next configuration is migrated, and nine tag invalidations preserve immediate expiry with `{ expire: 0 }`. Navigation is inherited unchanged from current main. No SQL or application feature scope is added by this framework delta.
+
+**The Next15 baseline is separately verified.** Exact52d2a52a2a38a32cc6a73beb63dc5edf2ec29e5a/treeb26903e37e97b11b3ac6d6945bcfb1c4af7fd046 passes20,856/20,856 UTC units, build247, full generated types and lint with15 warnings; all5,221 raw files/modes remain unchanged. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-52d2a52a-20260927/summary.json`. This is the original-framework baseline, distinct from f9 below.
+
+**Exact f9 canonical gates pass.** Node24.21.0 with physical independent lock-matched dependencies passes **20,856/20,856 UTC units across1,638 files** in127.83s, build246, full generated-route types, lint with15 existing warnings, production dependency audit0, and migration/query/marketing-asset/i18n static audits. All5,222 raw files/modes remain unchanged through18:16:01 UTC; receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-f9adfd76-20260927/summary.json`. The additional full development-dependency audit is not rerun: the earlier exact-lock seven findings (two moderate/five high) remain separately recorded. The route comparison against52d/Next15 removes no application route:549→550 App Router entries adds only `/_global-error/page`; four prerendered routes are unchanged, and only the three Pages framework internals disappear. Receipt: `bubaly-framework-combined52d-20260927/route-comparison.json`.
+
+**The retained browser checks pass278/278 across thirteen suites in51.7s.** They include actual compiled-renderer3, modal2, signed-media11, display25, session reconciliation17, weekly meals44 and the seven controlled React fixtures176. The5,222 tracked source blobs match before and after; receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-combined52d-20260927/browser-receipt.json`. The renderer fixture uses installed unmodified framework modules with synchronous, immediately resolved lazy-child replay and delayed controls. The same retained fixture on oldNext15 produces one desired immediate-replay#418 failure while the two controls pass (`bubaly-framework-release-20260927/renderer-old-red.log`). This supports the bounded [upstream React replay repair](https://github.com/react/react/pull/35494); it does not independently recrawl or close Claude's eight production page findings. The other fixtures use their stated controlled transport; no local app server or live provider journey is claimed.
+
+**The original draft602 hosted run is terminal SUCCESS with two retries.** [CI36337749165](https://github.com/NewWorldVenture/Bubaly/actions/runs/36337749165) tests oldheadbadc5562/treee2999d00 (actual checkout0ff21935), with all four jobs successful. E2E is **1,776 passed plus two flaky/1,778 total in23.9m**, not a clean matrix: emailed recovery callback and the old durable meal test each timed out before passing an automatic retry; cleanup masked the original await and exact causes remain unproved. The three renderer cases had no failures. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr602-ci36337749165-terminal-20260927.json`. This older hosted result does not certify the new combined candidate or workflow guard. Prior failed/flaky PR600/595/596 evidence remains.
+
+**A release-triggered production write hazard is guarded in a separate two-file delta.** The production-migration workflow watches package/lock changes and previously attempted `db push` plus four `--apply` backfills after its ledger checks. Every one of these five writers now requires `success() && github.event_name == 'workflow_dispatch' && inputs.apply == true`; the typed apply input defaultsfalse. Ordinary pushes retain read-only audits. Serialization, credentials checks, ledger guard, SQL, timeout and provider configuration are unchanged. Workflowblob `e477633738a66cf64d5dcd2086096c5ceec1e45a` and existing testblob `5464d22c8b62d83314f6d5e8f6d4e7f864e491ca` pass **69/69 focused checks in six suites**, actual YAML parsing and offline typed-input controls, plus scoped strict types/lint. Removing the first writer's guard makes the retained assertion fail; exact candidate bytes are restored. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-combined52d-20260927/workflow-guard/receipt.json`. All other5,220 source files matchf9. This delta follows the fullf9 run; no full final-tree run, actual workflow dispatch, production migration, backfill or provider write is claimed.
+
+**Publication and final hosted acceptance remain pending.** Separate duplicate PR605 remains under review for selective chunk/contrast changes; its overlapping loader change is not included in this frozen source ([coordination](https://github.com/NewWorldVenture/Bubaly/pull/605#issuecomment-5858479642)). Production is still the independently verified e96 revision recorded below, on the earlier framework. Register B adds framework fixture `SUPPORT-EDFC5692FF80` as IN PROGRESS and moves only existing `DEPLOY-ECF77605B6C7` / `SUPPORT-EAADF3DDD618` from NOT STARTED to IN PROGRESS. All14,214 prior IDs remain. Totals are now **14,215 items:13,860 NOT STARTED,340 IN PROGRESS,10 FIXED + PASS,four BLOCKED and one FAIL**. No page or product workflow closes; page totals and0.07% audit signoff stay unchanged. The production-migration, SEC-001, auth/provider/device and separate Inbox obligations remain open. **PRODUCTION READY: NO.**
+
 ## Concurrent main integration checkpoint — 2026-09-27
 
 **Production moved independently while PR601 was being prepared.** Main `e96e745aea27802c425031b5685c8c473cabb100` (tree `7fbd8f65047710c001d0e4cddeeeac81f9f408e0`) includes merged PR603 and PR585. At **18:04:31 UTC**, public build-info returned HTTP200 with that exact revision and private/no-store caching. Vercel deployment `6KPdUwZyEnsDumJBUVCGH8eZJD1q` and GitHub Production deployment6695777090 report success at17:58:33/34 UTC. Receipts: `C:/Users/Daniel/AppData/Local/Temp/bubaly-e96-public-build-20260927.json` and `bubaly-e96-production-deployment-20260927.json`. Main [CI36338693100](https://github.com/NewWorldVenture/Bubaly/actions/runs/36338693100) has Database/Mobile PASS, with Web/E2E still running at the recorded observation. Deployment identity is verified; full acceptance is not claimed. Earlier a6 production statements below are dated history.
@@ -150,7 +198,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > **Two independent audits are recorded in this file and NEITHER subsumes the
 > other.** Session A (this register, 841 items, `C#-S#-##` findings) is a
 > source-and-migration audit run without production credentials. Session B
-> (Register B, 14,214 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
+> (Register B, 14,226 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
 > 921 IDs from A, 684 from B, 1,602 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
@@ -306,6 +354,8 @@ read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6`
 recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
 theirs to update; the findings are listed here rather than edited under someone else's claim.
 
+PR598 (`06cef776e94278d4893fe6979fd37911b5b1b0ed`) extends this reported pass through C1-S9-111; its later detailed entries include C1-S9-112–114. The PR587 attribution above remains historical. These are Claude's source-specific local findings; the selected integration has separate acceptance evidence and does not promote any page row here.
+
 | Route(s) | Lane | Finding → fix |
 |---|---|---|
 | `/dashboard/calendar` | C | second realtime reader of one table threw; shared channel → `C1-S9-94` (ported to main as `854d8dd7`) |
@@ -322,6 +372,11 @@ theirs to update; the findings are listed here rather than edited under someone 
 | `/reviews/new` | A | "Review us on …" buttons and star labels English → `C1-S9-100` |
 | `/gift/[token]` | A | tab title, occasion label and "a child"/"a family" English → `C1-S9-100`, `C1-S9-104` (composes with main's dead-link card) |
 | `/blog`, `/blog/[slug]` | A | "copy link" copied the host, not the canonical URL → `C1-S9-95`; save button's labels and subscribe failure English → `C1-S9-103` |
+| `/`, `/ai`, `/privacy`, `/reviews/new` and every page that ends in the shared CTA | A | English to a German reader: the CTA's defaults, the `/ai` subtitle, two privacy lines, the review form's default copy; two legal titles overflowed a phone → `C1-S9-108` |
+| `/dashboard/billing` | C | plan buttons, statuses, plan names, tabs, stats and categories English; "Payment & invoices" failed silently → `C1-S9-109` |
+| `/dashboard/chores` | C | statuses, tabs, "N pts" English; a template wrote an English chore → `C1-S9-110` |
+| `/dashboard/inbox` | D | channels, categories, tabs, stats, buttons, sample texts English; an action item's reminder noted "From … · Call" in English → `C1-S9-111` |
+| `/dashboard/reminders` | D | types, priorities, repeats, stats, lead times, snooze toast English; a template wrote an English reminder → `C1-S9-111` |
 
 ### Every page
 
@@ -751,19 +806,19 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 *Different scheme and granularity from the block above; see Register B below.*
 
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27 (a6 production verified;599 hosted clean1775; media coverage closed;585/598 combined full gates pending)
-- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-10, and a status row for all 398 routes.
+- Last Updated: 2026-09-27 (PR601/82da production verified; PR602 Web/Database/Mobile pass, E2E pending; corrected PR607 full gates pending)
+- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-12, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
-- Total Audit Items: 14213 — all14,187 prior IDs retained plus26 integrated source/test/tool paths. Three media regression records close on exact599 hosted/deployed proof; broader SEC-001 remainsFAIL.
-- Not Started: 13862
-- In Progress: 337
+- Total Audit Items: 14226 — recounted from the current Register B rows; every prior ID is retained. Ten recorded closures remain source-qualified; no new closure is added by this checkpoint.
+- Not Started: 13831
+- In Progress: 380
 - Passed: 0
 - Fixed + Passed: 10 (AUTHZ-002, AUTHZ-003, AUTHZ-005, SEC-005; three worker and three media coverage records). Exact scoped hosted/deployment evidence and all earlier failed checkpoints are retained; no additional product workflows are implied.
 - Status normalization: MAIN-F-C07, MAIN-F-C09 and MAIN-F-C10 now use IN PROGRESS, matching their pending integrated retests. Their original CLOSED / MITIGATED / MOSTLY MITIGATED verdicts remain verbatim in their Notes and evidence.
 - Blocked: 4
 - Failed: 1 (SEC-001). Repository fixes and replayed-policy checks for AUTHZ-003 and AUTHZ-005 remain recorded as FIXED + PASS with their explicit production-migration limitation. No deployed-policy verification is inferred.
-- Overall Completion: **0.07%** (10 recorded closures / 14,213 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
+- Overall Completion: **0.07%** (10 recorded closures / 14,226 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
 
 > **On these counts, plainly.** *Total Audit Items* is the Codex cycle's
 > enumeration of the whole target space — every route, table, policy, component
@@ -2682,7 +2737,7 @@ not read the same on this page.*
 | UI-ROUTE-0156 | UI | /dashboard/files/shared | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0157 | UI | /dashboard/files/vault | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0158 | UI | /dashboard/focus | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0159 | UI | /dashboard/food | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0159 | UI | /dashboard/food | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/dashboard/food/page.tsx. |
 | UI-ROUTE-0160 | UI | /dashboard/fridge-chef | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0161 | UI | /dashboard/front-desk | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0162 | UI | /dashboard/goals | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -2737,7 +2792,7 @@ not read the same on this page.*
 | UI-ROUTE-0211 | UI | /dashboard/payments | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0212 | UI | /dashboard/pets | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0213 | UI | /dashboard/photos | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0214 | UI | /dashboard/planning | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0214 | UI | /dashboard/planning | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/dashboard/planning/page.tsx. |
 | UI-ROUTE-0215 | UI | /dashboard/playbook | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0216 | UI | /dashboard/prep-plans | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0217 | UI | /dashboard/profile | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3041,7 +3096,7 @@ not read the same on this page.*
 | ROUTE-3DABE9139F6D | ROUTE | /p/[slug] | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ROUTE-396C1A763329 | ROUTE | /join | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ROUTE-5560BE3FAD6C | ROUTE | /onboarding | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-A9BBDE40CF2D | COMPONENT | app/error.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-A9BBDE40CF2D | COMPONENT | app/error.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/error.tsx. |
 | CONTROL-5EBAB817000F | CONTROL | Button at line 26 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3FEFCD63FD8B | CONTROL | Link at line 27 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6961786A61B2 | CONTROL | Button at line 27 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3077,7 +3132,7 @@ not read the same on this page.*
 | CONTROL-59BFC1C5C0C7 | CONTROL | Modal at line 129 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-625CDDDFB71E | CONTROL | ErrorState at line 145 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2FF3D898B9C1 | CONTROL | Button at line 237 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8C4B52FD2ED3 | COMPONENT | app/global-error.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8C4B52FD2ED3 | COMPONENT | app/global-error.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/global-error.tsx. |
 | CONTROL-5786845C3121 | CONTROL | button at line 63 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AE6FCECBA6B5 | CONTROL | a at line 79 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-03F457515F0A | CONTROL | Link at line 27 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3765,13 +3820,13 @@ not read the same on this page.*
 | CONTROL-AE10930C7CDC | CONTROL | Link at line 39 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-74ADC5EA0AC0 | CONTROL | Link at line 71 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-7274A76FF45B | COMPONENT | components/social/platform.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-7C7A2D8FCA85 | COMPONENT | components/social/connect-grid.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-7C7A2D8FCA85 | COMPONENT | components/social/connect-grid.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/social/connect-grid.tsx. |
 | CONTROL-8DBB560FB027 | CONTROL | button at line 68 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1BDCFFAC7ACD | CONTROL | a at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AE82C052E446 | CONTROL | ExternalLink at line 78 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-AF5E58CA4C52 | COMPONENT | components/social/admin-subnav.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-30969B32C425 | CONTROL | Link at line 16 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-E100DA242A22 | COMPONENT | components/social/account-row.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-E100DA242A22 | COMPONENT | components/social/account-row.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/social/account-row.tsx. |
 | CONTROL-2EB230417231 | CONTROL | button at line 33 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-14AC66ED765B | COMPONENT | components/settings/security-panel.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EC34EE357A76 | CONTROL | MfaErrorNotice at line 179 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4415,7 +4470,7 @@ not read the same on this page.*
 | COMPONENT-D23B16B54832 | COMPONENT | components/app/sidebar-account.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A4B5DE1098C8 | CONTROL | Link at line 47 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A94ACC20854E | CONTROL | ThemeSwitch at line 55 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-F9A1C77FEBF4 | COMPONENT | components/app/section-error.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-F9A1C77FEBF4 | COMPONENT | components/app/section-error.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/app/section-error.tsx. |
 | CONTROL-AD3D49755654 | CONTROL | Button at line 42 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8CE8288BDB47 | CONTROL | Link at line 45 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-0BCA25711690 | COMPONENT | components/app/role-density.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4539,7 +4594,7 @@ not read the same on this page.*
 | CONTROL-F15C60A155D6 | CONTROL | button at line 152 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-ADEEE7C81727 | CONTROL | form at line 159 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-133F9F1E464F | CONTROL | button at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-FB9A12919561 | COMPONENT | components/auto/vehicles-client.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-FB9A12919561 | COMPONENT | components/auto/vehicles-client.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/auto/vehicles-client.tsx. |
 | CONTROL-80BA1BAE7DC3 | CONTROL | Button at line 32 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7633F6900846 | CONTROL | Button at line 36 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DEE82CB9266F | CONTROL | button at line 55 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4580,7 +4635,7 @@ not read the same on this page.*
 | CONTROL-09D5E6D1F699 | CONTROL | Textarea at line 76 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0F8EBFDF130D | CONTROL | Button at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2755E4AA05C3 | CONTROL | Button at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4FEF98FDF739 | COMPONENT | components/auto/rentals-client.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4FEF98FDF739 | COMPONENT | components/auto/rentals-client.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/auto/rentals-client.tsx. |
 | CONTROL-91F3413C2F37 | CONTROL | Button at line 32 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-2977160124E7 | CONTROL | Button at line 36 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3FA63A53ABBE | CONTROL | button at line 51 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4850,7 +4905,7 @@ not read the same on this page.*
 | CONTROL-DDC814A4FF8B | CONTROL | Button at line 260 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-10AC9A48F477 | COMPONENT | components/auto/auto-subnav.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3F1B0B8F8E01 | CONTROL | Link at line 27 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-2F1A0F03CF2F | COMPONENT | components/modules/trust-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-2F1A0F03CF2F | COMPONENT | components/modules/trust-module.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/modules/trust-module.tsx. |
 | CONTROL-4BC216F2E7A1 | CONTROL | EndEmergencyButton at line 124 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3800BD4264D6 | CONTROL | button at line 147 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6CD62A26773F | CONTROL | ApprovalsTab at line 155 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4963,7 +5018,7 @@ not read the same on this page.*
 | CONTROL-837E7BA71025 | CONTROL | input at line 173 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B6BD4DC47227 | CONTROL | Button at line 180 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-451B23AFFB02 | CONTROL | Button at line 181 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | nutrition_logs delete was silent and had no success toast, so a filtered no-op was invisible. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
+| COMPONENT-6CB9B35497E6 | COMPONENT | components/meals/nutrition-view.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | nutrition_logs delete was silent and had no success toast, so a filtered no-op was invisible. Added .eq('family_id', …) + .select('id'); refuses on an empty result Selected localization, message ownership, date/layout or stale-chunk recovery path. | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Browser workflow not yet exercised. See finalaudit.md Q53. Integrated path: components/meals/nutrition-view.tsx. |
 | CONTROL-7493F1865E5E | CONTROL | ErrorState at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BADD497F00D8 | CONTROL | Button at line 54 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FB2B11901AAD | CONTROL | button at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -5542,7 +5597,7 @@ not read the same on this page.*
 | CONTROL-AAF6682B1F8A | CONTROL | Textarea at line 277 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-14680E4D1959 | CONTROL | Button at line 280 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C2AE1D14A015 | CONTROL | Button at line 281 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts | 2026-09-26 (Q59): family-media reads signed per viewer — reminder card and editor image; the reminder link now goes through safeWebLink (SEC-006) | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) | Rendering in a browser against a private bucket is unverified. See Q59. |
+| COMPONENT-8DAC200BDFEA | COMPONENT | components/modules/reminders-module.tsx | 🔄 IN PROGRESS | High | tests/a-family-photo-is-signed-not-public.test.ts (12 cases: parser, one-call signing, per-item denial → null, failed/thrown signing → null, in-memory cache reuse, shared in-flight, purge on sign-out, late result discarded) and tests/a-family-media-reference-is-never-rendered-raw.test.ts 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | 2026-09-26 (Q59): family-media reads signed per viewer — reminder card and editor image; the reminder link now goes through safeWebLink (SEC-006) Selected localization, message ownership, date/layout or stale-chunk recovery path. | 2026-09-26 (Q59): guards pass; calibrated — a public-URL fallback mutant fails 3 signer cases, and a raw <img src={photo.url}> or the closet photoUrl helper put back each fail the render guard naming the file. tsc clean, lint exit 0, full suite 17,150/17,153 (3 = container Node 22) IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Rendering in a browser against a private bucket is unverified. See Q59. Integrated path: components/modules/reminders-module.tsx. |
 | CONTROL-FDD2504884EB | CONTROL | ErrorState at line 255 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-5EACC750938F | CONTROL | Button at line 265 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0521203B2D3C | CONTROL | Button at line 268 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -6522,7 +6577,7 @@ not read the same on this page.*
 | CONTROL-B16ED6EE9444 | CONTROL | Button at line 227 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-96321239185D | CONTROL | Button at line 228 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3E7C992F81FD | CONTROL | button at line 238 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-860E945A54DE | COMPONENT | components/modules/kitchen-dashboard.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-860E945A54DE | COMPONENT | components/modules/kitchen-dashboard.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/modules/kitchen-dashboard.tsx. |
 | CONTROL-BA695CB782F8 | CONTROL | Button at line 71 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-A8D3ECC80CEC | CONTROL | Button at line 94 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0A2283461B2A | CONTROL | Link at line 96 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -6724,7 +6779,7 @@ not read the same on this page.*
 | CONTROL-7D76FD76BF2E | CONTROL | Link at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-A0A4E9A10E1B | COMPONENT | components/admin/super-admin-toggle.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F0B5EDC71B35 | CONTROL | button at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. Additional bounded selection-state finding 2026-09-27: actual module5028af42895964aea8b2092bae788e93dd1ea873 preserves A typed reply in selected B, carries A first-action Added/disabled state to B without a B write, and applies a late A draft to B after witnessed settlement. Three desired RED in C:/Users/Daniel/AppData/Local/Temp/bubaly-inbox-state-red-v4-20260927.log. The v3 third case lacked React settlement and its PASS is excluded. Controlled query/action transport only; separate follow-up coordinated at https://github.com/NewWorldVenture/Bubaly/pull/598#issuecomment-5858303635. No Inbox repair, database/provider proof or status closure is claimed. |
+| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result Selected localization, message ownership, date/layout or stale-chunk recovery path. | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Browser workflow not yet exercised. See finalaudit.md Q53. Additional bounded selection-state finding 2026-09-27: actual module5028af42895964aea8b2092bae788e93dd1ea873 preserves A typed reply in selected B, carries A first-action Added/disabled state to B without a B write, and applies a late A draft to B after witnessed settlement. Three desired RED in C:/Users/Daniel/AppData/Local/Temp/bubaly-inbox-state-red-v4-20260927.log. The v3 third case lacked React settlement and its PASS is excluded. Controlled query/action transport only; separate follow-up coordinated at https://github.com/NewWorldVenture/Bubaly/pull/598#issuecomment-5858303635. No Inbox repair, database/provider proof or status closure is claimed. Integrated path: components/modules/inbox-module.tsx. |
 | CONTROL-7E5DE59B415E | CONTROL | ErrorState at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-26E283453007 | CONTROL | Link at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDAB1FAFF956 | CONTROL | button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -7135,7 +7190,7 @@ not read the same on this page.*
 | CONTROL-6AF405BB1374 | CONTROL | button at line 38 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B86173766E1C | CONTROL | ExternalLink at line 39 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-4ECB82ADE868 | CONTROL | button at line 41 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-8D43C10A11E2 | COMPONENT | components/modules/finances-module.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-8D43C10A11E2 | COMPONENT | components/modules/finances-module.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/modules/finances-module.tsx. |
 | CONTROL-AE192AA6E15F | CONTROL | ErrorState at line 170 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AC4992053D55 | CONTROL | Button at line 187 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6172E53D34CC | CONTROL | Button at line 188 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -7227,7 +7282,7 @@ not read the same on this page.*
 | CONTROL-9DE98771795E | CONTROL | button at line 45 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-27791EA987B1 | CONTROL | button at line 52 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-656B65EABAF3 | CONTROL | button at line 59 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-19FDE886F6F9 | COMPONENT | components/admin/admin-notifications-list.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-19FDE886F6F9 | COMPONENT | components/admin/admin-notifications-list.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/admin/admin-notifications-list.tsx. |
 | CONTROL-37D8ADE4D373 | CONTROL | button at line 85 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1F15E742A46F | CONTROL | button at line 98 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-028059C08E80 | CONTROL | button at line 113 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -7951,7 +8006,7 @@ not read the same on this page.*
 | CONTROL-EC0BDFCB5CD0 | CONTROL | input at line 110 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-6C42BEFFC3B1 | CONTROL | Button at line 112 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-15F8272E4D19 | CONTROL | Button at line 113 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | bills / financial_accounts writes relied on RLS for tenancy; added family scope | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
+| COMPONENT-25581DAD9555 | COMPONENT | components/modules/billing-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | bills / financial_accounts writes relied on RLS for tenancy; added family scope Selected localization, message ownership, date/layout or stale-chunk recovery path. | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Browser workflow not yet exercised. See finalaudit.md Q53. Integrated path: components/modules/billing-module.tsx. |
 | CONTROL-9A89563084C4 | CONTROL | button at line 141 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DC8023D43954 | CONTROL | button at line 142 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-3EEDCE9496CF | CONTROL | Button at line 161 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8063,7 +8118,7 @@ not read the same on this page.*
 | CONTROL-9C08DAF75566 | CONTROL | button at line 302 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-47B75A3C542E | CONTROL | Link at line 311 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8C88578F89DD | CONTROL | button at line 312 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | ai_conversations delete/rename (0255) dropped the row from the list while it stayed in the table. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
+| COMPONENT-1981970D8658 | COMPONENT | components/modules/assistant-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | ai_conversations delete/rename (0255) dropped the row from the list while it stayed in the table. Added .eq('family_id', …) + .select('id'); refuses on an empty result Selected localization, message ownership, date/layout or stale-chunk recovery path. | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Browser workflow not yet exercised. See finalaudit.md Q53. Integrated path: components/modules/assistant-module.tsx. |
 | CONTROL-DC7016178372 | CONTROL | button at line 410 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-46597CC81E90 | CONTROL | button at line 460 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-344F7CC5EC3F | CONTROL | button at line 511 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8555,7 +8610,7 @@ not read the same on this page.*
 | CONTROL-37E0E5A3913B | CONTROL | button at line 99 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-372C0FB51FBE | CONTROL | Link at line 160 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-84D8D94321CA | CONTROL | Link at line 163 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-50BEAAE6C590 | COMPONENT | components/home/warranties-client.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-50BEAAE6C590 | COMPONENT | components/home/warranties-client.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/home/warranties-client.tsx. |
 | CONTROL-4DB4B2EC8A2D | CONTROL | Button at line 55 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-65EA02466BE8 | CONTROL | Button at line 65 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DA52EEF9198A | CONTROL | a at line 89 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -8920,7 +8975,7 @@ not read the same on this page.*
 | CONTROL-C37BCB22DA1B | CONTROL | FollowButton at line 94 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-86DB0A2AC09B | CONTROL | Link at line 123 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-171645BBD57D | CONTROL | Link at line 34 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-BB15C2C3BA3E | COMPONENT | app/(app)/admin/wallet/reconciliation/reconciliation-client.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-BB15C2C3BA3E | COMPONENT | app/(app)/admin/wallet/reconciliation/reconciliation-client.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/admin/wallet/reconciliation/reconciliation-client.tsx. |
 | CONTROL-AC46E9CAB57E | CONTROL | SeverityCard at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-C1A432EC8433 | CONTROL | SeverityCard at line 76 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-31805E9EA9E5 | CONTROL | SeverityCard at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9065,7 +9120,7 @@ not read the same on this page.*
 | CONTROL-FFA77A7EF8D6 | CONTROL | Link at line 19 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-1AAC80B872EF | CONTROL | Link at line 19 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-7F4EB7CFB97A | CONTROL | Link at line 123 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-195C49A49C32 | COMPONENT | app/(app)/error.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-195C49A49C32 | COMPONENT | app/(app)/error.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/error.tsx. |
 | CONTROL-23B8E5FA8D76 | CONTROL | Button at line 35 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-81B87A7069F7 | CONTROL | Link at line 38 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FDC866434CF3 | CONTROL | Link at line 192 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9251,7 +9306,7 @@ not read the same on this page.*
 | CONTROL-38064108B7BA | CONTROL | button at line 75 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-32AA411F95C7 | CONTROL | Link at line 94 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-29C4E8772771 | CONTROL | a at line 36 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-304E49C8891C | COMPONENT | app/(app)/admin/marketing/seo/seo-tabs.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-304E49C8891C | COMPONENT | app/(app)/admin/marketing/seo/seo-tabs.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/admin/marketing/seo/seo-tabs.tsx. |
 | CONTROL-D067BF4BCE2C | CONTROL | button at line 24 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-CBE57FD63EDB | CONTROL | Link at line 60 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F431C5795B4E | CONTROL | SeoTabs at line 67 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9338,7 +9393,7 @@ not read the same on this page.*
 | CONTROL-86344AE5C9BE | CONTROL | button at line 105 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AE323FCF87AD | CONTROL | Link at line 121 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F1D4C8C58A16 | CONTROL | a at line 39 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-1CA95B0E2670 | COMPONENT | app/(app)/admin/marketing/reviews/review-row.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-1CA95B0E2670 | COMPONENT | app/(app)/admin/marketing/reviews/review-row.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/admin/marketing/reviews/review-row.tsx. |
 | CONTROL-52ED6C0E9AF1 | CONTROL | button at line 47 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8EDCE49499C5 | CONTROL | button at line 48 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DA3EDD4C8E52 | CONTROL | button at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9670,7 +9725,7 @@ not read the same on this page.*
 | CONTROL-9803A3AF4763 | CONTROL | button at line 145 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-191F139B38CA | CONTROL | form at line 149 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-AE0E90E36AC7 | CONTROL | button at line 150 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-7B357262B8BF | COMPONENT | app/(app)/admin/marketing/loyalty/reward-editor.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-7B357262B8BF | COMPONENT | app/(app)/admin/marketing/loyalty/reward-editor.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/admin/marketing/loyalty/reward-editor.tsx. |
 | CONTROL-C750A67BFD48 | CONTROL | form at line 21 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-0F5CC3C2979B | CONTROL | input at line 25 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-BB3D313A3228 | CONTROL | label at line 26 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9698,7 +9753,7 @@ not read the same on this page.*
 | CONTROL-2B24F39AECB7 | CONTROL | button at line 65 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-061C8850369D | CONTROL | RewardForm at line 74 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-04F9E34F9754 | CONTROL | button at line 76 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-4E8A9A4913EF | COMPONENT | app/(app)/admin/marketing/loyalty/redemption-row.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-4E8A9A4913EF | COMPONENT | app/(app)/admin/marketing/loyalty/redemption-row.tsx | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: app/(app)/admin/marketing/loyalty/redemption-row.tsx. |
 | CONTROL-2E14D13A1068 | CONTROL | button at line 41 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-EB30535AC69F | CONTROL | button at line 42 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8FC81BE63801 | CONTROL | form at line 48 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13990,7 +14045,7 @@ not read the same on this page.*
 | DEPLOY-4EFBCD22320C | DEPLOY | .github/workflows/finance-transaction-operation-runtime.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DEPLOY-D714A2951C8F | DEPLOY | .github/workflows/move-date-recalculation-runtime.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DEPLOY-1F054EFFB164 | DEPLOY | .github/workflows/supabase-forward-release.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| DEPLOY-ECF77605B6C7 | DEPLOY | .github/workflows/supabase-production-migrations.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| DEPLOY-ECF77605B6C7 | DEPLOY | .github/workflows/supabase-production-migrations.yml | 🔄 IN PROGRESS | High | C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-combined52d-20260927/workflow-guard/receipt.json; focused-green.log; missing-guard-red.log; yaml-parse.json. | Dependency or migration-source pushes retain read-only audits. All five production writers require successful explicit workflow_dispatch apply=true; typed default false. SQL, ledger, timeout and provider settings unchanged. | Six focused suites69/69 PASS; actual YAML parse, offline typed-input controls and missing-first-guard desiredRED; scoped types/lint PASS. No hosted manual apply, SQL or provider execution. | Updated2026-09-27: workflow blob e477633738a66cf64d5dcd2086096c5ceec1e45a. IN PROGRESS pending published workflow acceptance; production migration blockers remain open. |
 | DEPLOY-502F78A953FD | DEPLOY | .github/workflows/supabase-schema-audit.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DEPLOY-4E8F80064B29 | DEPLOY | .github/workflows/travel-confirmation-runtime.yml | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | DEPLOY-542BB584CA4F | DEPLOY | scripts/apply-production-forward-release.mjs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -14470,17 +14525,17 @@ not read the same on this page.*
 | SUPPORT-39A229E29D4D | SUPPORT | lib/database.types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2D0E70ABA483 | SUPPORT | lib/i18n/messages/INVARIANT.txt | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-1818A7DE9BC3 | SUPPORT | lib/i18n/messages/README.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-88F1E3670486 | SUPPORT | lib/i18n/messages/de-DE.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-88F1E3670486 | SUPPORT | lib/i18n/messages/de-DE.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/de-DE.json. |
 | SUPPORT-C96C7B9604E5 | SUPPORT | lib/i18n/messages/en-GB.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-C346841E8649 | SUPPORT | lib/i18n/messages/en-US.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-DC666FC0E80F | SUPPORT | lib/i18n/messages/es-ES.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-C346841E8649 | SUPPORT | lib/i18n/messages/en-US.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/en-US.json. |
+| SUPPORT-DC666FC0E80F | SUPPORT | lib/i18n/messages/es-ES.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/es-ES.json. |
 | SUPPORT-A1988A571FC8 | SUPPORT | lib/i18n/messages/es-MX.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2EF4BCBFBFBA | SUPPORT | lib/i18n/messages/es-US.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-CF4E8E8A59A1 | SUPPORT | lib/i18n/messages/fr-CA.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-24D39068AF0B | SUPPORT | lib/i18n/messages/fr-FR.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-9E9B391BC4E5 | SUPPORT | lib/i18n/messages/it-IT.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-6F4C71EB2624 | SUPPORT | lib/i18n/messages/nl-NL.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-091D62717E32 | SUPPORT | lib/i18n/messages/pt-PT.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-24D39068AF0B | SUPPORT | lib/i18n/messages/fr-FR.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/fr-FR.json. |
+| SUPPORT-9E9B391BC4E5 | SUPPORT | lib/i18n/messages/it-IT.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/it-IT.json. |
+| SUPPORT-6F4C71EB2624 | SUPPORT | lib/i18n/messages/nl-NL.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/nl-NL.json. |
+| SUPPORT-091D62717E32 | SUPPORT | lib/i18n/messages/pt-PT.json | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/i18n/messages/pt-PT.json. |
 | SUPPORT-7BC17E39797E | SUPPORT | lib/recipes/providers/types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-874BE7F04C26 | SUPPORT | lib/supabase/types.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-66E1DFC7BB32 | SUPPORT | memory.md | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -14760,7 +14815,7 @@ not read the same on this page.*
 | SUPPORT-ED65CCA4D82B | SUPPORT | tests/assistant-tool-loop.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-EDC4C9124CE9 | SUPPORT | tests/assistant-toolbox-invariance.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-4F5D7EF4EF41 | SUPPORT | tests/assistant-trust-wrapper.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-86362AAFFE42 | SUPPORT | tests/assistant-workspace.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-86362AAFFE42 | SUPPORT | tests/assistant-workspace.test.ts | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/assistant-workspace.test.ts. |
 | SUPPORT-15B340D0D4FE | SUPPORT | tests/auth-callback-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-A26C72713D42 | SUPPORT | tests/auth-callback-failed-signin-keeps-session.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-69FA1104A3F9 | SUPPORT | tests/auth-context-error-contract.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -15463,7 +15518,7 @@ not read the same on this page.*
 | SUPPORT-A9AA28BCB81D | SUPPORT | tests/production-forward-release-workflow.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-C2B8089CA849 | SUPPORT | tests/production-forward-release.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-F84C22273F95 | SUPPORT | tests/production-migration-contract.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-EAADF3DDD618 | SUPPORT | tests/production-migration-state.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-EAADF3DDD618 | SUPPORT | tests/production-migration-state.test.ts | 🔄 IN PROGRESS | Medium | C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-combined52d-20260927/workflow-guard/receipt.json; focused-green.log; missing-guard-red.log; yaml-parse.json. | Dependency or migration-source pushes retain read-only audits. All five production writers require successful explicit workflow_dispatch apply=true; typed default false. SQL, ledger, timeout and provider settings unchanged. | Six focused suites69/69 PASS; actual YAML parse, offline typed-input controls and missing-first-guard desiredRED; scoped types/lint PASS. No hosted manual apply, SQL or provider execution. | Updated2026-09-27: test blob 5464d22c8b62d83314f6d5e8f6d4e7f864e491ca. IN PROGRESS pending published workflow acceptance; production migration blockers remain open. |
 | SUPPORT-C8CA434BCBC5 | SUPPORT | tests/production-readiness-seed.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-083470B7FEB4 | SUPPORT | tests/production-readiness-workflow.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E0045EC40081 | SUPPORT | tests/production-security-boundaries.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -15525,7 +15580,7 @@ not read the same on this page.*
 | SUPPORT-2D9557FD9E74 | SUPPORT | tests/reminder-attention.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E65968B02086 | SUPPORT | tests/reminder-details.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-FF6E9DF94995 | SUPPORT | tests/reminder-notify.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-261ACBCD01B3 | SUPPORT | tests/reminder-provenance-ui.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-261ACBCD01B3 | SUPPORT | tests/reminder-provenance-ui.test.ts | 🔄 IN PROGRESS | Medium | Pending 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | None Selected localization, message ownership, date/layout or stale-chunk recovery path. | Pending IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/reminder-provenance-ui.test.ts. |
 | SUPPORT-65529CBB0BF1 | SUPPORT | tests/reminder-single-write-path.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-9B116F7C90B8 | SUPPORT | tests/reminder-status-constraint.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-BED63A561AA2 | SUPPORT | tests/reminder-write-path.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -16741,6 +16796,18 @@ not read the same on this page.*
 | SUPPORT-31CE72104105 | SUPPORT | tests/no-catalogue-defines-a-key-twice.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
 | SUPPORT-D1BFE4A72EF8 | SUPPORT | tests/two-widgets-on-one-table-do-not-share-a-channel.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
 | SUPPORT-6184F8927CFB | SUPPORT | tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts | 🔄 IN PROGRESS | Medium | Current main e96 source restored unchanged; blob 418e10ff3ab1c1af44add11530bd3a1ddb929bdd. | Preserve the existing sidebar preference-read contract while reconciling concurrent main. | Read-only source/inventory review complete; current combined canonical execution and hosted acceptance pending. | Added2026-09-27 by canonical-path SHA-256 to inventory an already tracked test. Simulated React hooks/browser storage are unit coverage, not a live navigation/provider journey. No application change or workflow closure is claimed. |
+| SUPPORT-EDFC5692FF80 | SUPPORT | tests/e2e/framework-hydration-replay.spec.ts | 🔄 IN PROGRESS | High | C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-release-20260927/renderer-old-red.log; bubaly-framework-combined52d-20260927/browser-receipt.json. | Retain actual installed compiled-renderer sync, immediate lazy-child replay and delayed controls. No framework/vendor patch or app server. | CurrentNext16 replay fixture3/3 within combined278/278 browserPASS; same fixture oldNext15 has one desired immediate-replay#418 RED and two passingcontrols. Full f9 local gates pass; updated hosted acceptance pending. | Added2026-09-27 by canonical path hash; blob 614ad3e16a24ae03f2b6c9af3a0601c6a47fe229. Renderer mechanism coverage, not a live eight-page recrawl or complete product workflow. Existing page OWNER claims remain. |
+| COMPONENT-10BFCB70C689 | COMPONENT | components/i18n/use-format.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: components/i18n/use-format.ts. Inventory gap for a previously existing file; not new source. |
+| SUPPORT-399582262447 | SUPPORT | tests/i18n-ungated-surface-ratchet.test.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/i18n-ungated-surface-ratchet.test.ts. Inventory gap for a previously existing file; not new source. |
+| SUPPORT-51C089F60FE9 | SUPPORT | tests/medications-fixture-module-graph.test.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/medications-fixture-module-graph.test.ts. Inventory gap for a previously existing file; not new source. |
+| SUPPORT-74DB39BAF195 | SUPPORT | tests/the-shared-formatter-follows-the-locale.test.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/the-shared-formatter-follows-the-locale.test.ts. Inventory gap for a previously existing file; not new source. |
+| LIBRARY-12F68E641276 | LIBRARY | lib/finance/category-label.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/finance/category-label.ts. |
+| LIBRARY-2BE370588475 | LIBRARY | lib/utils/stale-bundle-reload.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: lib/utils/stale-bundle-reload.ts. |
+| SUPPORT-60A1816EC479 | SUPPORT | tests/a-client-component-formats-in-the-readers-locale.test.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/a-client-component-formats-in-the-readers-locale.test.ts. |
+| SUPPORT-EDC648151199 | SUPPORT | tests/a-failed-chunk-reloads-the-page.test.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/a-failed-chunk-reloads-the-page.test.ts. |
+| SUPPORT-E7C521706850 | SUPPORT | tests/e2e/format-hydration.spec.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/e2e/format-hydration.spec.ts. |
+| SUPPORT-B872930A1F5F | SUPPORT | tests/e2e/inbox-message-ownership.spec.ts | 🔄 IN PROGRESS | Medium | 2026-09-27 local controls checkpoint: 24/24 retained browser and 53/53 guard checks on the frozen 44-path integration; full combined/hosted gates pending. Exact source map: C:/Users/Daniel/AppData/Local/Temp/bubaly-next-controls-audit-20260927/integrity.json. | Selected localization, message ownership, date/layout or stale-chunk recovery path. | IN PROGRESS: bounded local source/fixture proof; no workflow or page closure. | Integrated path: tests/e2e/inbox-message-ownership.spec.ts. |
+| SUPPORT-5924E9288710 | SUPPORT | tests/a-german-family-types-marketplace-money-beside-a-trailing-unit.test.ts | 🔄 IN PROGRESS | Medium | Frozen4d full UTC20,848PASS/23FAIL; manual React server dispatcher corrected with getServerSnapshot,32/32 focusedGREEN in1.64s. Temp/bubaly-ci-4d807747-20260927/unit-UTC.log; Temp/bubaly-controls-private-20260927/marketplace-hook-fixture-green.log. | Fixture must model the shared formatter hook during manual server-tree expansion. | Scoped fixture passes; full corrected-source canonical/hosted acceptance pending. No application/assertion changes. | Existing-source inventory gap. Actual browser hydration remains covered by format-hydration.spec.ts; no workflow closure. |
 
 ## Inventory and evidence rules
 
@@ -45943,6 +46010,100 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][REMINDERS/INBOX]` C1-S9-111 — reminders and the Communications Hub showed English in every locale, and two actions wrote English into family data
+
+**File/path:** `components/modules/reminders-module.tsx`, `components/modules/inbox-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.**
+- **`/dashboard/reminders`** showed English in every locale:
+  - reminder types, priorities and repeat options
+  - the four stat tiles
+  - the early-reminder lead times ("15 minutes before")
+  - the snooze toast ("Snoozed for 15 min")
+- **`/dashboard/inbox`** showed English in every locale:
+  - channels, categories, tabs and stats
+  - the Draft reply / Copy / Save buttons
+  - the four AI-import sample texts
+- **Two actions wrote English into the family's data:**
+  - Quick-add templates created each reminder with an English title and English notes.
+  - Turning an inbox action item into a reminder noted it "From <name> · Call".
+
+**Fix.**
+- Labels are catalogue keys, and counted phrases go through the locale's plural rules (`usePlural`).
+- Templates and the "From …" note are worded in the picker's language when they are written.
+- Stored values are unchanged. Kind, priority, recurrence, channel and category stay the key and are worded at render.
+- The AI reply prompt names the channel by its id, since the prompt is instructions to the model rather than reader copy.
+
+**Status:** FIXED.
+- Scanner findings: `reminders-module` 29 → 1 (a type-alias fragment) and `inbox-module` 29 → 0.
+- `tests/i18n-ungated-surface-ratchet.test.ts` CEILING drops from 2819 to 2581, which holds the burn-down so far.
+
+**Correction (merge of main at `a6dcd18e`).** The merge commit says `i18n-propagate` had overwritten six `appNotFound.*` values. That is wrong: the script never overwrites. They were this branch's own `C1-S9-97` wording for keys that main added independently in `199a94b5`, and the merge keeps main's wording, as with every overlap.
+
+---
+
+### `[CLAUDE-1][MEDIUM][FINANCES]` C1-S9-112 — the finances overview showed English in every locale, including the categories a family picks
+
+**File/path:** `components/modules/finances-module.tsx`, `components/modules/billing-module.tsx`, new `lib/finance/category-label.ts`; seven catalogues.
+
+**Problem.** `/dashboard/finances` (part of the `C1-S9-101` burn-down) showed English in every locale:
+- the four stat tiles and their "this month" / "Set aside" lines
+- the money tip ("Your biggest category this month is …")
+- "X of Y", "Over budget" and "You’re on track!"
+- "Overdue · " and "Due " on each upcoming bill
+- the S M T W T F S row of the bills calendar
+- every spending category: in the breakdown, on each transaction, and in the add-transaction picker
+
+**Fix.**
+- Copy is catalogue keys. The bills calendar's weekday initials come from `Intl` in the reader's locale.
+- Categories stay stored as the English word, because that is data and budgets match on it. They are shown through `categoryLabel()`, which now lives in `lib/finance/category-label.ts` and is shared with billing (`C1-S9-109`). It knows both pages' pick lists.
+- Billing's `billingModule.category.*` keys are renamed `financeCategory.*`, with values unchanged.
+
+**Status:** FIXED. Scanner findings for `finances-module` drop from 26 to 19. The 19 left are the stored category values (data) and four type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][ASSISTANT]` C1-S9-113 — the assistant greeted, suggested and labelled in English in every locale
+
+**File/path:** `components/modules/assistant-module.tsx`, `tests/assistant-workspace.test.ts`; seven catalogues.
+
+**Problem.** `/dashboard/assistant` (part of the `C1-S9-101` burn-down) showed English in every locale:
+- the opening greeting, which also called a nameless reader "there"
+- the five suggestion chips, the five "Popular requests" cards and the "Try asking" prompts. Pressing one sent the English text as the reader's own message.
+- the four "At a glance" labels and "… added to calendar"
+- every outcome chip in the thread ("Meal plan · 7 days", "1 conflict", "Needs your approval")
+- the failure line "Something went wrong"
+
+**Fix.**
+- Chips, cards and prompts hold catalogue keys. They are worded when shown and when sent, so the message goes in the reader's language.
+- `cardChipLabel()` takes the translator and counts through the locale's plural rules.
+- A reader with no name gets a greeting without one.
+
+**Status:** FIXED. Scanner findings for `assistant-module` drop from 23 to 0. `tests/assistant-workspace.test.ts` pins the English chips and a German one ("Essensplan · 7 Tage").
+
+---
+
+### `[CLAUDE-1][MEDIUM][TRUST]` C1-S9-114 — Trust & Permissions showed its vocabulary in English in every locale
+
+**File/path:** `components/modules/trust-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/trust` (part of the `C1-S9-101` burn-down) showed English in every locale, although `trustDomain.*`, `trustCapability.*` and `trustRole.*` keys already existed and the sharing section used them:
+- tabs and stat tiles
+- every domain and capability name, including the permissions grid, the policy form, delegations and the emergency banner
+- policy effects, audit decisions, emergency kinds and approval models. Several were the raw stored value with its underscore replaced.
+- the empty-state explanations
+- the policy modal's title and buttons
+- "Role: …" and "Member: …"
+- every "Could not …" toast fallback
+
+**Fix.**
+- `domainLabel()`, `capabilityLabel()`, `effectLabel()`, `decisionLabel()`, `emergencyKindLabel()`, `approvalModelLabel()` and `roleLabel()` word each stored value through the catalogue. An unknown value still shows as itself.
+- The approval count is a plural.
+
+**Status:** FIXED. Scanner findings for `trust-module` drop from 21 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -49229,7 +49390,7 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); 🔄 B6b claimed 2026-09-27 18:30 | 2026-09-27 17:30 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-17 found and fixed, P-18 open) | 2026-09-27 19:05 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
@@ -49414,6 +49575,32 @@ call sites and fails on anything but a string literal or a catalogue string.
 turn and the stream and asserts the model received it and the ledger row did
 not. No SQL change.
 
+**P-11 · Medium · A client component's bare `toLocaleString()` failed
+hydration outside English (B8).** `/dashboard/social/accounts/connect` threw
+React #418 in `de-DE` and `es-ES`: `def.charLimit.toLocaleString()` with no
+locale drew "2,200" on the server (Node's default, en-US) and "2.200" in the
+browser. The same shape sat in eleven more client components — numbers that
+mismatch from 1,000 up, and dates that mismatch always (and took the
+browser's time zone): the admin notification list, social account sync
+times, nutrition calories, vehicle mileage, rental and warranty costs (also a
+literal `$`), wallet reconciliation, review and redemption dates, loyalty
+points, SEO counts. Each now formats through `useFormat()` (the reader's
+locale on both sides; money through `fmtMoney`).
+`tests/a-client-component-formats-in-the-readers-locale.test.ts` scans every
+client component and fails on a bare `toLocaleString()` /
+`toLocaleDateString()` / `toLocaleTimeString()` (red with the connect-grid
+line restored).
+
+**P-12 · Low · Three pages scrolled sideways in German at desktop width
+(B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
+header put the title and its "Öffnen" link in one flex row whose title could
+not shrink, so a long German title pushed the link off the card. The title
+group is now `min-w-0` with a wrapping title and the link `shrink-0`.
+`/dashboard/kitchen` (+13 px): the single word "ERNÄHRUNGSGESUNDHEIT", in
+wide-tracked capitals, ran 62 px out of its card — a text overflow no
+element's box shows, found by measuring text ranges. It is now in a
+shrinkable span that may break (`[overflow-wrap:anywhere]`).
+
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one
   502 on a prefetch, an API call or an asset — a different one each time,
@@ -49441,6 +49628,79 @@ not. No SQL change.
 - *`/dashboard/knowledge/seed`* is the knowledge-base seeding tool and is
   `notFound()` for everyone but a super administrator, by design; a family
   parent sees the not-found page (with the #419 above).
+
+**B6b — every form submitted (session_01TRY21ZKsFrfB3qtoP972A4, 2026-09-27).**
+`scripts/page-audit.mjs --submit`, local stack on `a5ad3045`, signed in as a
+Family+ parent who is also a super admin (a child in the household, so "for
+whom" selects have a choice). Every form in `<main>`, and every form an "Add /
+New / Create …" button opens, was filled with valid values in its empty fields
+and submitted by its own button — never a delete, payment, send or publish
+button. 350 routes, 155 with forms: 144 submissions saved or answered as
+designed, 22 skipped by that rule, 10 reported "invalid" by the first run (a
+saved form resets, and its required fields then read `:invalid`; the tool now
+checks validity before the click), and 15 errors, of which 7 were the tool's
+(a covered button; it now falls back to `requestSubmit`) and the rest are
+below. Re-run on the affected routes after the fixes: all save.
+
+**P-13 · High · Creating a marketplace circle has never worked on Supabase.**
+`/marketplace/community` → Create answered "Could not create the circle."
+`marketplace_create_circle` (0176, then 0314) pins `search_path = public` and
+calls pgcrypto's `gen_random_bytes`; Supabase, hosted and local, installs
+pgcrypto in `extensions`, so the call raised 42883 `function
+gen_random_bytes(integer) does not exist`. CI's replay is plain Postgres, where
+0001's `create extension pgcrypto` lands in `public`, so the 0314 probe (400
+circles) passed there. Production at `0176` carries the same pinned path.
+Fix: `0444_a_circle_can_be_created_where_pgcrypto_lives.sql` re-creates the
+function with `search_path = public, extensions`, body unchanged. Probe
+`docs/audit/circle-create-where-pgcrypto-lives-check.sql` moves pgcrypto into
+`extensions` inside a rolled-back transaction (control: `gen_random_bytes`
+must then NOT resolve from `public`) and creates a circle: red on the old
+function with the production error, green after 0444. Every other function
+that calls a pgcrypto function was checked: none else pins a path without
+`extensions`. **Not live until the operator's 0177 step lets 0178+ apply.**
+
+**P-14 · Medium · Social settings offered "Set" to people who may not grant roles.**
+`/dashboard/social/settings` enabled the access controls on
+`manage_settings`; `grantAccessAction` requires `manage_access`, which only a
+social *owner* holds (0348). A parent is a social admin by default, so the
+button worked and the action threw — a 500 and the section's error page. The
+controls now follow `manage_access`, with "Only an owner can change who has
+access." (7 catalogues). 🔒 **Owner decision, recorded here:** no household
+member is a social owner by default (parents default to admin since 0348), so
+no family can grant a social role from the app until an owner row exists.
+
+**P-15 · Low · A recipe photo that is not a URL requested a page.** A photo
+URL of plain text rendered as `<img src="Audit 6">`, a request for
+`/dashboard/Audit%206` (404) on every render of the card and the detail view.
+Photos render only through `safeWebLink` (http/https), and both recipe URL
+fields are `type="url"`.
+
+**P-16 · Low · Two URL fields let through what their action refuses by
+throwing.** `/dashboard/social/media-library` ("Asset URLs must use http or
+https") and `/admin/marketing/video` ("Enter a valid YouTube or Vimeo URL")
+took free text, and the refusal landed on the error page. Both are
+`type="url"` with the pattern the action accepts (the video one: youtube.com,
+youtu.be, vimeo.com, including subdomains; checked in both browser regex
+modes).
+
+**P-17 · Low · An automation workflow could be submitted with no action.**
+`/admin/marketing/automation` → the action throws "Choose at least one
+automation action." The first action now starts ticked. Tests for P-14 to
+P-17: `tests/a-form-a-page-offers-can-be-submitted.test.ts` (all four red
+with the fixes reverted).
+
+**P-18 · Medium · OPEN · The admin marketing console answers a refusal with
+its error page.** Its actions (`app/(app)/admin/marketing/actions.ts`: ten
+`throw new Error(…)` and `marketingActionFailure`) throw on an ordinary
+refusal — a name or slug already taken ("That already exists"), a value out
+of range, a missing choice — and a plain `<form action>` turns that into the
+section error page with a reference number; in production Next omits the
+message, so the admin is not told what to change. Seen here on
+`/admin/marketing/affiliates` and `/admin/marketing/landing-pages` (a second
+"Audit 1"). P-16 and P-17 remove the three cases a form can prevent; the rest
+needs the actions to return their refusal (`useActionState`, or a redirect
+carrying a catalogue-keyed notice), which touches every marketing form — a
+batch of its own, open for anyone to claim.
 
 ### Round 2 — the merged tree, after #588 and 339 other commits from main
 

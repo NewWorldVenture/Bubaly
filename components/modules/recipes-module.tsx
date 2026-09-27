@@ -327,9 +327,9 @@ export function RecipesModule() {
                 onKeyDown={(e) => openOnKey(e, () => setViewing(recipe))}>
                 {/* Photo / placeholder */}
                 <div className="relative aspect-video overflow-hidden rounded-t-2xl bg-gradient-to-br from-elevated to-surface">
-                  {recipe.photo_url ? (
+                  {safeWebLink(recipe.photo_url) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={recipe.photo_url} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    <img src={safeWebLink(recipe.photo_url) ?? undefined} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
                   )}
@@ -384,9 +384,9 @@ export function RecipesModule() {
           <div className="max-h-[80vh] overflow-y-auto -m-2 p-2">
             {/* Header */}
             <div className="relative mb-5">
-              {viewing.photo_url && (
+              {safeWebLink(viewing.photo_url) && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={viewing.photo_url} alt={viewing.name} className="mb-4 h-48 w-full rounded-2xl object-cover" />
+                <img src={safeWebLink(viewing.photo_url) ?? undefined} alt={viewing.name} className="mb-4 h-48 w-full rounded-2xl object-cover" />
               )}
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -700,7 +700,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder={tr('recipes.italianMexicanAmerican')} />}
           </Field>
           <Field label={tr('recipes.photoUrl')}>
-            {(id) => <Input id={id} name="photo_url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
+            {(id) => <Input id={id} name="photo_url" type="url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 
@@ -762,7 +762,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder={tr('recipesModule.chefSTipsSubstitutions')} className="min-h-[60px]" />}
           </Field>
           <Field label={tr('recipes.sourceUrl')}>
-            {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
+            {(id) => <Input id={id} name="source_url" type="url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 
