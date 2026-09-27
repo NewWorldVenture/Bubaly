@@ -163,7 +163,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then to 2,812 as the thirteen "Blocked by household policy: …" refusals in
 // the wallet, money and invest actions were translated — reason included: the
 // trust engine's deny paths now carry a catalogue key and code-valued params.
-const CEILING = 2812;
+//
+//
+// Then to 2,809 with the calendar-sync count and the admin campaign-send and
+// lead-score recompute toasts.
+const CEILING = 2809;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
