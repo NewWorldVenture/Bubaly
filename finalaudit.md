@@ -597,7 +597,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-27T16:06:00Z
-- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-08, and a status row for all 398 routes.
+- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-10, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Total Audit Items: 14183 — distinct IDs in Register B: all 14,180 incoming IDs, restored permanent COMPONENT-0337E00DA6ED and new SUPPORT-1A08672F87F3 / SUPPORT-827E4294FC10. The incoming 14,180-row table omitted that one earlier component record; no record was removed during reconciliation.
 - Not Started: 13877
@@ -48559,6 +48559,43 @@ the other request created and records against it; any other create failure,
 or a winner that cannot be read back, is still a 503.
 `tests/a-first-visit-with-two-events-records-both.test.ts` (4 cases; the race
 case fails with the fix reverted).
+
+**P-09 · Low · `/favicon.ico` answered 404 (production).** Pages name their
+icons in `<head>` (`/icons/icon-32.png`, `/icons/icon-192.png`), but a browser
+still asks for `/favicon.ico` where there is no page to read them from, and
+link unfurlers and search engines ask for it first. `https://www.bubaly.com/favicon.ico`
+answered 404; the B6a interaction pass logged it as a console error on
+`/dashboard/journeys`. The middleware already skipped the path as if the file
+existed. `public/favicon.ico` now holds the brand icon at 16, 32 and 48 px
+(the existing PNGs, byte for byte). `tests/a-browser-asking-for-favicon-ico-gets-one.test.ts`
+(2 cases; fails with the file removed).
+
+**P-10 · High · No AI feature request was ever recorded, so the Free plan's
+AI allowance never counted the assistant.** Found by B6a: clicking through the
+signed-in pages logged `[ai/runs] failed to create the request` 17 times with
+`new row violates row-level security policy for table "ai_requests"`, and
+afterwards the local database (every migration applied) held 13 `concierge`
+rows and **no `feature` row at all**, although the crawl had used the
+assistant, the morning brief, the habit coach and the relationship helper.
+Migration `0255` lets a member insert an `ai_requests` row of kind
+`concierge` and no other ("feature, routine, trigger and handle_it requests
+are filed by server code"), but `createRequest` filed every kind on the
+caller's own client. `withAiRequest`, which every AI surface goes through,
+files `kind: 'feature'` — refused every time, logged, and carried on with no
+row. Two consequences: no assistant turn, brief or coach run left the record
+§33 promises; and `assertAIAccess` meters the Free plan's monthly AI requests
+by counting these rows (Pass L, L-03), so an assistant turn was never counted
+and the allowance could never be reached. `createRequest` now files a
+non-concierge request on the ledger client (`ledgerClient`, which the store
+already uses for every other ledger write), with the family and requester
+still taken from the verified scope; a concierge request stays on the
+member's client, where RLS checks it. No migration: the policy was right, the
+client was wrong. Production is at migration 0177 (PROD-DB-0177) and has none
+of these tables yet, so this takes effect when those migrations are applied.
+`tests/an-ai-feature-request-is-recorded-not-refused.test.ts` (5 cases; the
+feature case fails with the fix reverted); `tests/assistant-engine.test.ts`
+now routes the service client to its fake, so it still asserts the payload
+the turn asks for.
 
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one

@@ -58,6 +58,13 @@ vi.mock('@/lib/ai/actions', () => ({
   ],
   runAction: (...args: unknown[]) => runAction(...args),
 }));
+// The turn's `ai_requests` row is a `feature` request, which server code files
+// on the ledger (service) client since P-10 — a member's client is refused it by
+// 0255. The same fake stands in for both, so the payload is still asserted.
+vi.mock('@/lib/supabase/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/supabase/server')>()),
+  createServiceClient: () => supabase,
+}));
 
 import {
   buildAssistantSystemPrompt, createAssistantStream, finalizeAssistantContent, persistAssistantTurn,

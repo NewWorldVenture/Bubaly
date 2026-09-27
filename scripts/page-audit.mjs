@@ -141,7 +141,12 @@ async function auditOne(context, path) {
   const consoleErrors = [];
   const badRequests = [];
   page.on('pageerror', (e) => pageErrors.push(String(e.message).slice(0, 300)));
-  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    // "Failed to load resource" names no URL in its text; its location does.
+    const where = /^Failed to load resource/.test(m.text()) && m.location()?.url ? ` <${m.location().url.replace(origin, '')}>` : '';
+    consoleErrors.push(m.text().slice(0, 300) + where);
+  });
   page.on('requestfailed', (r) => {
     const f = r.failure()?.errorText ?? '';
     if (r.url().startsWith(origin) && !/ERR_ABORTED|NS_BINDING_ABORTED/.test(f)) badRequests.push(`${f} ${r.url().replace(origin, '')}`);
