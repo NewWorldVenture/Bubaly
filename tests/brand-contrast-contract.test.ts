@@ -134,3 +134,29 @@ describe('semantic text colours meet WCAG AA', () => {
     expect(contrast([197, 142, 24], [245, 247, 252])).toBeCloseTo(2.70, 1);
   });
 });
+
+// Text ON a solid danger fill. The Button `danger` variant, every unread-count
+// badge and the tel:911 link put white on --danger; in the dark theme that is
+// 2.80:1 (bubaly.com's /auth/signout/complete, found by axe on 2026-09-27).
+// --danger-fg is the foreground for that fill, and the guard below keeps a new
+// site from going back to text-white.
+describe('text on a solid danger fill meets WCAG AA', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: --danger-fg on --danger clears 4.5:1`, () => {
+      const tokens = tokensOf(css, selector);
+      expect(tokens['danger-fg'], `--danger-fg missing from ${selector}`).toBeDefined();
+      expect(contrast(tokens['danger-fg'], tokens.danger)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it('no solid danger fill carries text-white', () => {
+    const offenders: string[] = [];
+    for (const dir of ['app', 'components']) {
+      for (const line of collectSource(dir).split('\n')) {
+        if (/\bbg-danger\b(?!\/)/.test(line) && /\btext-white\b(?!\/)/.test(line)) offenders.push(line.trim().slice(0, 140));
+      }
+    }
+    expect(offenders, 'use text-danger-fg on bg-danger').toEqual([]);
+  });
+});

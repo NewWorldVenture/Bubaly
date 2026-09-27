@@ -48,6 +48,10 @@
   --success: 74 201 155;
   --warning: 240 191 95;
   --danger: 245 113 113;
+  /* Text ON a solid --danger fill (destructive buttons, count badges, the 911
+     link). White on this coral is 2.80:1; the page ground is 7.1:1. Asserted in
+     tests/brand-contrast-contract.test.ts. */
+  --danger-fg: 3 9 15;
   --info: 96 165 250;
   --glass: 255 255 255;
   --glass-alpha: 0.04;
@@ -105,6 +109,7 @@
   --success: 24 129 95;
   --warning: 147 106 18;
   --danger: 210 55 55;
+  --danger-fg: 255 255 255;
   --info: 37 99 235;
   --glass: 16 22 40;
   --glass-alpha: 0.03;
