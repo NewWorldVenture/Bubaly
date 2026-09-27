@@ -54,3 +54,18 @@ describe('blog covers are free + unique (MKT-IMG / LB-016)', () => {
     expect(cleanup).toMatch(/where hero_image_url like '%loremflickr\.com%'/i);
   });
 });
+
+describe('a hero image that no longer exists falls back to the generated cover', () => {
+  // Lorem Picsum retired these ids (each answered 404 on 2026-09-27), so a
+  // post pointing at one rendered a broken image and a console 404 on
+  // bubaly.com. They drop to <BlogCover> like an unverified host.
+  it('drops a retired picsum id and keeps a live one', async () => {
+    const { freeLicensedImage } = await import('@/lib/blog/posts');
+    expect(freeLicensedImage('https://picsum.photos/id/624/1600/900')).toBeUndefined();
+    expect(freeLicensedImage('https://picsum.photos/id/968/1600/900')).toBeUndefined();
+    expect(freeLicensedImage('https://picsum.photos/id/625/1600/900')).toBe('https://picsum.photos/id/625/1600/900');
+    expect(freeLicensedImage('https://picsum.photos/seed/some-slug/1600/900')).toBe('https://picsum.photos/seed/some-slug/1600/900');
+    // An owned upload whose path merely contains a retired number is untouched.
+    expect(freeLicensedImage('https://x.supabase.co/storage/v1/object/public/blog/id/624/a.jpg')).toBe('https://x.supabase.co/storage/v1/object/public/blog/id/624/a.jpg');
+  });
+});
