@@ -110,11 +110,17 @@ export function FilesHubModule({ view }: { view: FileView }) {
     if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
-    // NOTE the order: the storage object is removed FIRST, so a row delete the
-    // database refuses leaves a row pointing at a file that no longer exists.
-    // Verifying the delete at least makes that visible instead of reporting it
-    // as done; the ordering itself is recorded in audit/claude-1.md.
-    if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
+    // SEC-015: the storage object goes FIRST, and the row stays if it did not
+    // go. `document_object_is_restricted` hides a secure file by finding its
+    // row, so a deleted row over a surviving object makes the file readable by
+    // every family member.
+    // A row delete the database refuses still leaves a row pointing at a file
+    // that is gone; verifying it makes that visible rather than reporting it as
+    // done. The ordering is recorded in audit/claude-1.md.
+    if (d.storage_path) {
+      const removed = await removeFamilyDocument(sb, d.storage_path);
+      if (removed.error) { setBusy(null); return toastError(t('filesHubModule.deleteFailed')); }
+    }
     const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));

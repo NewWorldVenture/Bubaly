@@ -452,8 +452,16 @@ export async function adminDeleteDocumentAction(documentId: string, _storagePath
   if (docError) return actionFailure(docError, t('actions.couldNotLoadThatDocument'));
   if (!doc) return { ok: false, error: t('actions.documentNotFound') };
 
-  const { error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);
+  // SEC-015: a refused delete and an absent object are both `error: null,
+  // data: []`, so the returned list is what says the object is gone.
+  const { data: removed, error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);
   if (storageError) return actionFailure(storageError, t('actions.couldNotRemoveTheDocument'));
+  if (!removed?.some((object) => object.name === doc.storage_path)) {
+    const listed = await supabase.storage.from('documents').list(doc.storage_path.slice(0, doc.storage_path.lastIndexOf('/')), { search: doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1), limit: 100 });
+    if (listed.data?.some((object) => object.name === doc.storage_path.slice(doc.storage_path.lastIndexOf('/') + 1))) {
+      return { ok: false, error: t('actions.couldNotRemoveTheDocument') };
+    }
+  }
 
   const { data: deleted, error } = await supabase
     .from('documents').delete().eq('id', documentId).select('id').maybeSingle();
