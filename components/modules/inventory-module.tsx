@@ -24,13 +24,20 @@ import {
 } from '@/lib/inventory/finder';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
 type Move = Tables<'inventory_moves'>;
 
-const moneyIn = (locale: LocaleCode) => (cents: number) => `$${(cents / 100).toLocaleString(locale, { maximumFractionDigits: 0 })}`;
+// inventory_items.value_cents has no currency column and the form takes dollars
+// ("Value ($)"), so the amount is USD. The reader's locale decides where the
+// symbol goes and how the digits group (I18N-003). Replacement values are shown
+// to the whole unit, as they always were here, so the cents are rounded away
+// BEFORE formatting rather than by a second formatter.
+const CURRENCY = 'USD';
+const moneyIn = (locale: LocaleCode) => (cents: number) => formatCents(Math.round(cents / 100) * 100, CURRENCY, locale);
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
   return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
@@ -189,7 +196,12 @@ export function InventoryModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
           <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents) : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
+          <p className="mt-1 text-xs text-muted">{value.valuedItems
+            ? tr('inventoryModule.valuedItemsTop', {
+              count: value.valuedItems,
+              top: value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', '),
+            })
+            : tr('inventoryModule.addValuesForInsurance')}</p>
         </div>
         <div className={cn('rounded-2xl border p-5', loans.some((l) => l.overdue) || warranties.length ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> {tr('inventory.needsAttention')}</div>

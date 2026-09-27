@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -7,6 +7,7 @@ import { FamilySignalsModule, type SignalView } from '@/components/modules/famil
 import { ErrorState } from '@/components/ui/states';
 import { SignalPrecisionCard } from '@/components/metrics/signal-precision-card';
 import { loadSignalPrecision } from '@/lib/metric/signal-precision-server';
+import { signalWordsFor } from '@/lib/intelligence/hard-signals';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -43,8 +44,14 @@ export default async function FamilySignalsPage() {
     id: string; kind: string; title: string; detail: string | null;
     score: number; evidence: Record<string, unknown> | null; status: string; last_seen_at: string;
   }[];
+  // A stored signal is worded for whoever triggered the scan that last wrote it —
+  // often the nightly cron, which has no reader and writes en-US. Budget drift
+  // carries money, so it is re-worded here from its evidence for THIS reader;
+  // a row whose evidence is incomplete keeps its stored words.
+  const { locale } = await getLocaleContext();
+  const t = await getTranslations();
   const toView = (r: (typeof rows)[number]): SignalView => ({
-    id: r.id, kind: r.kind, title: r.title, detail: r.detail,
+    id: r.id, kind: r.kind, ...signalWordsFor(r, locale.code, t),
     score: r.score, evidence: r.evidence ?? {}, status: r.status, lastSeenAt: r.last_seen_at,
   });
 

@@ -11,8 +11,12 @@
 //   70-89  → approve: do it, but confirm with the family first
 //   < 70   → ask   : surface as awareness / a question
 
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { buildMomentPrep } from '@/lib/moments/prep';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
+import { formatCents } from '@/lib/wallet/ledger';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type ConfidenceTier = 'auto' | 'approve' | 'ask';
 
@@ -310,15 +314,73 @@ export function monthlyCents(costCents: number, cadence: string): number {
   }
 }
 
-function fmtUsd(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+/**
+ * What a subscription suggestion's title SAYS, as facts rather than words.
+ *
+ * These are the only Autopilot titles that carry money, and a stored title is
+ * worded once, by whichever scan inserted it — usually the 06:30 UTC cron, which
+ * has no reader and writes en-US — and a later scan never rewrites it (scan.ts
+ * skips an existing dedupe key). So the facts ride along in the row's
+ * `payload.titleFacts`, and every surface that shows the title words it again
+ * for its own reader with {@link autopilotTitleFor}: components/modules/
+ * autopilot-module.tsx, components/dashboard/ai-home-dashboard.tsx and
+ * app/(app)/dashboard/calm/page.tsx.
+ *
+ * `inDays` is the scan's count, the same one the stored title says, so the
+ * re-worded title claims nothing the stored one does not. `amountCents` is USD:
+ * `subscriptions_tracked` has no currency column.
+ */
+export type SubscriptionTitleFacts =
+  | { kind: 'charge'; name: string; amountCents: number; inDays: number }
+  | { kind: 'unused'; name: string; amountCents: number };
+
+/**
+ * A subscription suggestion's title for a reader. The amount was
+ * `$${…toLocaleString('en-US')}` — the symbol typed by hand on the American side
+ * of American-grouped digits, whoever read it — inside an English sentence.
+ */
+export function subscriptionTitle(facts: SubscriptionTitleFacts, locale: LocaleCode, t: Translate): string {
+  const amount = formatCents(facts.amountCents, 'USD', locale);
+  if (facts.kind === 'unused') return t('autopilotEngine.subscriptionUnused', { name: facts.name, amount });
+  // "today" / "tomorrow" / "in 3 days" in the reader's language, plural rules
+  // included — the English ladder it replaces could not say "morgen".
+  const when = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(facts.inDays, 'day');
+  return t('autopilotEngine.subscriptionCharge', { amount, name: facts.name, when });
+}
+
+/** The facts back out of a stored row's `payload`, or null when they are not all there. */
+export function subscriptionTitleFacts(payload: unknown): SubscriptionTitleFacts | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const f = (payload as Record<string, unknown>).titleFacts;
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
+  const { kind, name, amountCents, inDays } = f as Record<string, unknown>;
+  if (typeof name !== 'string' || typeof amountCents !== 'number' || !Number.isFinite(amountCents)) return null;
+  if (kind === 'unused') return { kind, name, amountCents };
+  if (kind === 'charge' && typeof inDays === 'number' && Number.isInteger(inDays)) return { kind, name, amountCents, inDays };
+  return null;
+}
+
+/**
+ * The title a READER sees for a stored suggestion: re-worded from its facts when
+ * it carries money, the stored words otherwise. A row written before the facts
+ * were stored has none, and keeps its stored words.
+ */
+export function autopilotTitleFor(row: { title: string; payload?: unknown }, locale: LocaleCode, t: Translate): string {
+  const facts = subscriptionTitleFacts(row.payload);
+  return facts ? subscriptionTitle(facts, locale, t) : row.title;
 }
 
 /**
  * Financial future-awareness: upcoming subscription charges in the next 7 days,
  * plus "reduce waste" flags for active subscriptions unused for 60+ days.
+ *
+ * The only suggestions here that carry MONEY. `locale` and `t` word the title
+ * that gets STORED (and goes out as the push/email title), and come from
+ * lib/autopilot/scan.ts, whose two callers say whose they are (the member who
+ * pressed Rescan, or — for the cron, which has no reader — an explicit en-US).
+ * The screens do not trust those stored words: see SubscriptionTitleFacts.
  */
-export function expenseSuggestions(s: FamilySnapshot): SuggestionDraft[] {
+export function expenseSuggestions(s: FamilySnapshot, locale: LocaleCode, t: Translate): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   for (const sub of s.subscriptions) {
     if (sub.status !== 'active' && sub.status !== 'trial') continue;
@@ -326,15 +388,16 @@ export function expenseSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     if (sub.nextCharge) {
       const d = daysUntil(s.today, sub.nextCharge);
       if (d >= 0 && d <= 7) {
+        const titleFacts: SubscriptionTitleFacts = { kind: 'charge', name: sub.name, amountCents: sub.costCents, inDays: d };
         out.push({
           kind: 'finance',
-          title: `${fmtUsd(sub.costCents)} charge: ${sub.name} ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}`,
+          title: subscriptionTitle(titleFacts, locale, t),
           detail: 'Heads up so the bill is never a surprise.',
           confidence: 76,
           urgency: clampUrgency(d <= 1 ? 2 : 1),
           actionType: 'review_subscription',
           actionLabel: 'Review',
-          payload: { subscriptionId: sub.id, costCents: sub.costCents },
+          payload: { subscriptionId: sub.id, costCents: sub.costCents, titleFacts },
           sourceKind: 'subscriptions_tracked',
           sourceId: sub.id,
           memberId: null,
@@ -345,15 +408,16 @@ export function expenseSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     }
 
     if (sub.lastUsed && -daysUntil(s.today, sub.lastUsed) >= 60) {
+      const titleFacts: SubscriptionTitleFacts = { kind: 'unused', name: sub.name, amountCents: monthlyCents(sub.costCents, sub.cadence) };
       out.push({
         kind: 'finance',
-        title: `Unused: ${sub.name} — ${fmtUsd(monthlyCents(sub.costCents, sub.cadence))}/mo`,
+        title: subscriptionTitle(titleFacts, locale, t),
         detail: 'No activity in 60+ days. Keep it or cancel to cut waste?',
         confidence: 71,
         urgency: 1,
         actionType: 'review_subscription',
         actionLabel: 'Review',
-        payload: { subscriptionId: sub.id },
+        payload: { subscriptionId: sub.id, titleFacts },
         sourceKind: 'subscriptions_tracked',
         sourceId: sub.id,
         memberId: null,
@@ -578,7 +642,17 @@ export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
   return out;
 }
 
-export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string, MemberTraits>): SuggestionDraft[] {
+/**
+ * `locale` and `t` word the suggestions that carry money (see expenseSuggestions).
+ * Required: a default is how the cron and the Rescan button would both quietly
+ * write en-US, which is exactly the defect this parameter exists to close.
+ */
+export function buildSuggestions(
+  s: FamilySnapshot,
+  locale: LocaleCode,
+  t: Translate,
+  traitsByMember?: Map<string, MemberTraits>,
+): SuggestionDraft[] {
   let all = [
     ...renewalSuggestions(s),
     ...appointmentSuggestions(s),
@@ -586,7 +660,7 @@ export function buildSuggestions(s: FamilySnapshot, traitsByMember?: Map<string,
     ...birthdaySuggestions(s),
     ...grocerySuggestions(s),
     ...conflictSuggestions(s),
-    ...expenseSuggestions(s),
+    ...expenseSuggestions(s, locale, t),
     ...burnoutSuggestions(s),
     ...medicationSuggestions(s),
     ...mealSuggestions(s),

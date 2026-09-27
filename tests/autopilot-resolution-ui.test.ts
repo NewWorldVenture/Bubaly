@@ -2,7 +2,7 @@ import { createElement, isValidElement, type ReactElement, type ReactNode } from
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutopilotModule } from '@/components/modules/autopilot-module';
 import { getMessages, translate } from '@/lib/i18n/messages';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { localeOrDefault, type LocaleCode } from '@/lib/i18n/locales';
 import type { Tables } from '@/lib/database.types';
 
 const state = vi.hoisted(() => ({ slots: [] as unknown[], rootSlots: [] as unknown[], childSlots: [] as unknown[], childKey: '', cursor: 0,
@@ -30,7 +30,12 @@ vi.mock('@/app/(app)/dashboard/autopilot/actions', () => ({ resolveAutopilotSugg
 vi.mock('@/app/(app)/dashboard/trust/actions', () => ({ acceptPolicySuggestionAction: state.policy }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
 vi.mock('@/components/ai/why-this', () => ({ WhyThis: () => null }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(state.locale), key, params) }));
+vi.mock('@/components/i18n/locale-provider', () => ({
+  useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(state.locale), key, params),
+  // The rows word a subscription title for the reader (autopilotTitleFor), so
+  // they ask for the locale as well as the catalogue.
+  useLocale: () => localeOrDefault(state.locale),
+}));
 vi.mock('next/link', () => ({ default: (props: Record<string, unknown>) => createElement('a', props) }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));
 vi.mock('@/components/app/page-header', () => ({ PageHeader: ({ title, description, action }: Record<string, ReactNode>) => createElement('header', null, title, description, action) }));

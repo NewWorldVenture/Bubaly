@@ -14,7 +14,7 @@
 // closed. A single failed source renders a retryable error state rather than
 // a shorter, reassuring list.
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
@@ -37,6 +37,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function NeedsYouPage() {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -107,6 +108,9 @@ export default async function NeedsYouPage() {
     dueTodayReminders: 0,
     pendingChores: 0, lowGrocery: false, openTodos: 0,
     now,
+    // A money approval's or a paperwork payment's amount and the words around
+    // it, in this reader's locale.
+    reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
     awaitingRuns: (awaitingRunsRes.data ?? []) as AwaitingRunRow[],
     recommendations,

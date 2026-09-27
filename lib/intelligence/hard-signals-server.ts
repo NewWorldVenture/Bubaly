@@ -13,18 +13,32 @@ import {
   buildHardSignals, type HardSignalInputs, type ReminderRow, type ChoreRow, type RoutineRow, type RoutineCompletion,
 } from './hard-signals';
 import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type SignalDetectionResult = { ok: boolean; error?: string; signals: number };
 
 const DAY = 86_400_000;
 
-/** Recompute the family's hard signals from live data and upsert them. */
-export async function runSignalDetection(sb: DB, familyId: string, now: Date = new Date()): Promise<SignalDetectionResult> {
+/**
+ * Recompute the family's hard signals from live data and upsert them.
+ *
+ * `locale` and `t` word what gets STORED — the budget-drift sentence and its
+ * amounts. Required, and each caller says whose they are:
+ *   - app/(app)/dashboard/family-signals/actions.ts — the family member who
+ *     pressed Refresh, from getLocaleContext();
+ *   - app/api/cron/model-refresh/route.ts — nobody. There is no stored family
+ *     or member locale to read (I18N-001), so it passes en-US explicitly.
+ * Neither writer's words are trusted by a reader: the family-signals page and
+ * the reasoning report word budget drift again from `evidence` for theirs, and
+ * the proactive AI context in en-US (signalWordsFor in ./hard-signals).
+ */
+export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date = new Date()): Promise<SignalDetectionResult> {
   const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
   const windowStart = new Date(now.getTime() - 21 * DAY).toISOString();
   const windowEnd = new Date(now.getTime() + 14 * DAY).toISOString();
@@ -98,7 +112,7 @@ export async function runSignalDetection(sb: DB, familyId: string, now: Date = n
     budgets: (budgetsRes.data ?? []) as BudgetRow[],
     expenses: (expensesRes.data ?? []) as ExpenseRow[],
   };
-  const signals = buildHardSignals(inputs, now);
+  const signals = buildHardSignals(inputs, now, locale, t);
 
   // Preserve both decisions and their updated_at timestamp for X6. A scan is
   // not a new family decision; only the explicit Restore action reopens one.

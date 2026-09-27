@@ -15,13 +15,18 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type AutoService = Tables<'auto_service_records'>;
 type Vehicle = Tables<'vehicles'>;
 
 export function AutoServiceClient({ records, vehicles }: { records: AutoService[]; vehicles: Vehicle[] }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // In the reader's format. `auto_service_records.cost` is dollars (numeric, not
+  // cents) with no currency column beside it, so the currency is USD.
+  const money = (dollars: number) => formatCents(Math.round(dollars * 100), 'USD', locale.code);
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const { message: actionError, run } = useActionError();
@@ -40,7 +45,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
         <EmptyState icon={Wrench} title={t('serviceClient.noServiceHistory')} description={t('serviceClient.logMaintenanceAsItHappens')} action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>} />
       ) : (
         <>
-          <Badge tone="neutral">{t('serviceClient.totalLogged')}{totalSpend.toLocaleString()}</Badge>
+          <Badge tone="neutral">{t('serviceClient.totalLoggedAmount', { amount: money(totalSpend) })}</Badge>
           <div className="overflow-x-auto rounded-2xl border border-border">
             <table className="w-full min-w-[560px] text-sm">
               <thead className="bg-elevated text-left text-xs text-muted"><tr><th className="px-3 py-2 font-medium">{t('serviceClient.service')}</th><th className="px-3 py-2 font-medium">{t('serviceClient.vehicle')}</th><th className="px-3 py-2 font-medium">{t('serviceClient.date')}</th><th className="px-3 py-2 font-medium">{t('serviceClient.mileage')}</th><th className="px-3 py-2 font-medium">{t('serviceClient.cost')}</th><th /></tr></thead>
@@ -50,8 +55,8 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
                     <td className="px-3 py-2"><p className="font-medium">{r.title}</p>{r.provider && <p className="text-xs text-muted">{r.provider}</p>}</td>
                     <td className="px-3 py-2 text-muted">{vName(r.vehicle_id)}</td>
                     <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
-                    <td className="px-3 py-2 text-muted">{r.mileage != null ? `${r.mileage.toLocaleString()} mi` : '—'}</td>
-                    <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
+                    <td className="px-3 py-2 text-muted">{r.mileage != null ? `${r.mileage.toLocaleString(locale.code)} mi` : '—'}</td>
+                    <td className="px-3 py-2">{r.cost != null ? money(Number(r.cost)) : '—'}</td>
                     <td className="px-3 py-2 text-right"><button aria-label={t('a11y.delete')} onClick={() => start(async () => { await run(() => deleteAutoServiceAction(r.id)); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
                 ))}

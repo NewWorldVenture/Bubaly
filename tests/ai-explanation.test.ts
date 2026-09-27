@@ -8,6 +8,9 @@ import {
   isAcceptedPolicy,
   confidenceNarrative,
 } from '@/lib/ai/explanation';
+import { formatCents } from '@/lib/wallet/ledger';
+import { getMessages, getRawMessages, translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 describe('confidenceNarrative', () => {
   it('tiers on the autopilot thresholds', () => {
@@ -75,19 +78,59 @@ describe('explainAgentActivity', () => {
 });
 
 describe('explainConsensus', () => {
+  // The READER's real catalogue, as the app's provider hands it out — no English
+  // floor under it, so a key the catalogue lacks comes back as the bare key and
+  // the case fails. The two budget-cap cases are RED until the orchestrator's
+  // catalogue merge of i18n-asks/family-modules.json (explanation.budgetCap)
+  // lands, which happens in the same commit as this code.
+  const readerFor = (code: LocaleCode) =>
+    (key: string, params?: Record<string, string | number>) => translate(getMessages(code), key, params);
+
   it('reports votes, blended fit, agreement and budget', () => {
     const e = explainConsensus({
       label: 'Trattoria', rationale: '3 votes · within budget.', votes: 3, votePct: 60,
       blendedScore: 82, totalVotes: 5, consensusLevel: 0.6, budgetCents: 8000,
-    });
+    }, 'en-US', readerFor('en-US'));
     const byLabel = Object.fromEntries(e.factors.map((f) => [f.label, f.value]));
     expect(byLabel['Votes']).toBe('3 (60% of 5)');
     expect(byLabel['Overall fit']).toMatch(/82\/100/);
     expect(byLabel['Family agreement']).toMatch(/Strong Agreement/i);
-    expect(byLabel['Budget checked']).toBe('$80 cap');
+    // The catalogue's English sentence with the formatter's amount in it — not a
+    // hand-typed "$80 cap".
+    expect(byLabel['Budget checked']).toBe(`${formatCents(8000, 'USD', 'en-US')} cap`);
+  });
+  // The voting screen's "Why this?" shows this cap to the family, so it is in the
+  // READER's format AND the reader's words (I18N-003). It used to be
+  // `$${(cents / 100).toFixed(0)} cap`, which a German parent read as "$2769 cap":
+  // no grouping, the symbol on the American side, an English word glued on — and
+  // the first fix kept the word: "2.769 $ cap".
+  it('words the budget cap for a German reader: their format, inside the de-DE catalogue\'s own sentence', () => {
+    const e = explainConsensus({
+      label: 'Trattoria', rationale: '', votes: 3, votePct: 60,
+      blendedScore: 82, totalVotes: 5, consensusLevel: 0.6, budgetCents: 276_850,
+    }, 'de-DE', readerFor('de-DE'));
+    const cap = e.factors.find((f) => f.label === 'Budget checked')?.value;
+
+    // The German wording is the translator's, so it is read from the de-DE
+    // catalogue itself rather than typed here — and de-DE must carry the key,
+    // because an English fallback would pass the amount check while a German
+    // parent read "cap".
+    const de = getRawMessages('de-DE');
+    expect(de, 'de-DE has no "explanation.budgetCap": a German parent would read the English fallback').toHaveProperty(['explanation.budgetCap']);
+    const template = de['explanation.budgetCap'];
+    expect(template).toContain('{amount}');
+    // "cap" is an ordinary English word, so the German sentence cannot be the
+    // English one left as is (lib/i18n/messages/INVARIANT.txt).
+    expect(template).not.toBe(getRawMessages('en-US')['explanation.budgetCap']);
+
+    // 2,768.50 rounds to 2,769 whole units, grouped and placed the German way.
+    expect(cap).toBe(template.replace('{amount}', formatCents(276_900, 'USD', 'de-DE')));
+    expect(cap).toContain('2.769');
+    expect(cap).not.toMatch(/\$\s?\d/);
+    expect(cap).not.toMatch(/\bcap\b/);
   });
   it('omits budget when not provided and reports a split vote', () => {
-    const e = explainConsensus({ label: 'A', rationale: '', votes: 2, votePct: 40, blendedScore: 50, totalVotes: 5, consensusLevel: 0.3 });
+    const e = explainConsensus({ label: 'A', rationale: '', votes: 2, votePct: 40, blendedScore: 50, totalVotes: 5, consensusLevel: 0.3 }, 'en-US', readerFor('en-US'));
     expect(e.factors.some((f) => f.label === 'Budget checked')).toBe(false);
     expect(e.factors.find((f) => f.label === 'Family agreement')?.value).toMatch(/Split Vote/i);
     expect(e.reason).toMatch(/best balances/i); // fallback

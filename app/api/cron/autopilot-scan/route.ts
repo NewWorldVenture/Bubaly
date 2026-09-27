@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { getMessages, translate } from '@/lib/i18n/messages';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
@@ -10,6 +12,19 @@ const AUTOPILOT_FEATURE_HREF = '/dashboard/autopilot';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// The scan STORES suggestion titles, and the subscription ones carry money
+// ("$15.99 charge: Netflix tomorrow"). This cron has no reader to word them for:
+// a family's language lives only in the browsing member's cookie, with no column
+// on any family, member or profile row to read here (I18N-001). So it is en-US,
+// said out loud rather than inherited from a request that does not exist. What
+// these stored words still reach is the push/email notification the scan sends
+// (lib/autopilot/scan.ts, recipients 'family', with no per-recipient locale to
+// use) — not the screens: the Autopilot module, the home dashboard and the Calm
+// page word a subscription title again for their reader from the facts in its
+// payload (autopilotTitleFor in lib/autopilot/engine.ts).
+const SUGGESTION_LOCALE: LocaleCode = 'en-US';
+const suggestionText = (key: string, params?: Record<string, string | number>) => translate(getMessages(SUGGESTION_LOCALE), key, params);
 
 // Family Autopilot cron — the "invisible product". Runs the prediction engine
 // on a schedule so predictions and reversible auto-actions happen WITHOUT
@@ -59,7 +74,7 @@ export async function GET(req: NextRequest) {
         const entitlement = await resolveFeatureEntitlement(supabase, fam.id, AUTOPILOT_FEATURE_HREF, tiers);
         if (!entitlement.allowed) { skipped++; continue; }
 
-        const r = await runAutopilotScan(supabase, fam.id, null, fam.timezone || 'UTC');
+        const r = await runAutopilotScan(supabase, fam.id, null, fam.timezone || 'UTC', SUGGESTION_LOCALE, suggestionText);
         scanned += r.scanned;
         autoExecuted += r.autoExecuted;
         notified += r.notified;

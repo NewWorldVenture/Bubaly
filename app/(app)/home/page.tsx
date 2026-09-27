@@ -361,6 +361,8 @@ export default async function HomePage() {
     dueTodayReminders: 0,
     pendingChores: 0, lowGrocery: false, openTodos: 0,
     now,
+    // A money approval's amount and the words around it, in this reader's locale.
+    reader: { locale: locale.code, t: tr },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
     awaitingRuns: activeRuns as AwaitingRunRow[],
     recommendations,

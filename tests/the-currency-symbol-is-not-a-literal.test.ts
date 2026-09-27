@@ -1,5 +1,5 @@
 // I18N-003 — money values whose currency symbol is a LITERAL. Fifty-one when
-// this pin was written; thirty-eight now, and the ceiling below may only fall.
+// this pin was written; twenty now, and the ceiling below may only fall.
 //
 // THE DEFECT, and why the locale ratchet is blind to it.
 // tests/hardcoded-locales-only-go-down.test.ts counts `'en-US'` in a formatter
@@ -35,17 +35,22 @@
 // WHERE IT STANDS. The I18N-003 conversion is landing one verified unit at a
 // time, each doing both of those things — a reader's locale threaded from the
 // request or the provider, and the sentence around each amount moved to the
-// catalogue. Landed so far: the paperwork triage, and the plan price on
-// /pricing, the billing module, the upgrade modal, the trial gate and the
-// service fee (tests/a-german-family-reads-their-plan-price-in-their-own-
-// format.test.ts). `node scripts/audit-hand-written-currency.mjs` lists the
-// thirty-eight that remain, by file and line. A ceiling left at 51 over a count
-// of 38 would have let thirteen NEW hand-written symbols in without a word, so
-// SITES is the count, not the history, and every unit that lands lowers it.
+// catalogue. Landed so far: the paperwork triage; the plan price on /pricing,
+// the billing module, the upgrade modal, the trial gate and the service fee
+// (tests/a-german-family-reads-their-plan-price-in-their-own-format.test.ts);
+// the family modules, the home and auto surfaces, and the engines and digests
+// (tests/a-german-family-reads-its-closet-dining-inventory-poll-and-gift-money-
+// in-its-own-format.test.ts, tests/a-german-parent-reads-what-the-car-and-the-
+// house-cost-in-their-own-format.test.ts, tests/a-german-family-reads-engine-
+// money-in-their-own-format.test.ts). `node scripts/audit-hand-written-
+// currency.mjs` lists the twenty that remain, by file and line. A ceiling left
+// at 51 over a count of 20 would have let thirty-one NEW hand-written symbols in
+// without a word, so SITES is the count, not the history, and every unit that
+// lands lowers it.
 import { describe, expect, it } from 'vitest';
 import { findHandWrittenCurrency } from '../scripts/audit-hand-written-currency.mjs';
 
-const SITES = 38;
+const SITES = 20;
 
 describe('a currency symbol written as a literal', () => {
   const found = findHandWrittenCurrency() as { file: string; line: number }[];

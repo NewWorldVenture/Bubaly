@@ -5,31 +5,57 @@
 
 import type { NeedItem, NeedUrgency } from './needs-attention';
 import { runPagePath } from '@/lib/ai/chat-request';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 
-/** Compact USD from integer cents: $12 or $12.50. */
-export function usdFromCents(cents: number): string {
-  const v = cents / 100;
-  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
+/**
+ * Who is reading a "needs you" title.
+ *
+ * Two mappers below put MONEY in a title, and a title is prose: the amount has
+ * to be written in the reader's format AND the words around it in the reader's
+ * language, or a German parent reads "Card purchase to approve · $25" — the
+ * American symbol position inside an English sentence (finalaudit AQ-01 /
+ * I18N-003). So both halves travel together, and the field is REQUIRED with no
+ * default: every caller has a reader, and a defaulted locale is the parameter
+ * nobody passes. A page passes its request's (`getLocaleContext`); a cron or a
+ * model-read tool result passes an explicit, commented source locale.
+ */
+export type NeedsReader = {
+  locale: LocaleCode;
+  t: (key: string, params?: Record<string, string | number>) => string;
+};
+
+/**
+ * Compact USD from integer cents, in the reader's format: "$12" / "$12.50" for
+ * en-US, "12 $" / "12,50 $" for de-DE. `parent_approvals` carries no currency
+ * column — the wallet's approvals are dollars — so the currency is USD.
+ */
+export function usdFromCents(cents: number, locale: LocaleCode): string {
+  return formatCents(cents, 'USD', locale);
 }
 
-const APPROVAL_META: Record<string, { label: string; href: string }> = {
-  card_spend: { label: 'Card purchase', href: '/wallet/cards' },
-  withdrawal: { label: 'Withdrawal', href: '/wallet' },
-  gift: { label: 'Gift', href: '/wallet' },
-  chore_reward: { label: 'Chore reward', href: '/wallet' },
-  allowance_request: { label: 'Allowance request', href: '/wallet' },
+/** The wallet action each approval kind stands for; the label is a catalogue key. */
+const APPROVAL_META: Record<string, { labelKey: string; href: string }> = {
+  card_spend: { labelKey: 'needsSources.cardPurchase', href: '/wallet/cards' },
+  withdrawal: { labelKey: 'needsSources.withdrawal', href: '/wallet' },
+  gift: { labelKey: 'needsSources.gift', href: '/wallet' },
+  chore_reward: { labelKey: 'needsSources.choreReward', href: '/wallet' },
+  allowance_request: { labelKey: 'needsSources.allowanceRequest', href: '/wallet' },
 };
 
 export type ParentApprovalRow = { id: string; kind: string; amount_cents: number | null; created_at: string };
 
-/** A pending money approval → an urgent "needs you" decision card. */
-export function parentApprovalToNeed(r: ParentApprovalRow): NeedItem {
-  const meta = APPROVAL_META[r.kind] ?? { label: 'Approval', href: '/wallet' };
-  const amount = r.amount_cents != null && r.amount_cents > 0 ? ` · ${usdFromCents(r.amount_cents)}` : '';
+/** A pending money approval → an urgent "needs you" decision card, worded for `reader`. */
+export function parentApprovalToNeed(r: ParentApprovalRow, reader: NeedsReader): NeedItem {
+  const meta = APPROVAL_META[r.kind] ?? { labelKey: 'needsSources.approval', href: '/wallet' };
+  const label = reader.t(meta.labelKey);
+  const title = r.amount_cents != null && r.amount_cents > 0
+    ? reader.t('needsSources.toApproveWithAmount', { label, amount: usdFromCents(r.amount_cents, reader.locale) })
+    : reader.t('needsSources.toApprove', { label });
   return {
     id: `approval:${r.id}`,
     kind: 'approval',
-    title: `${meta.label} to approve${amount}`,
+    title,
     href: meta.href,
     urgency: 'urgent',
     createdAt: r.created_at,
@@ -152,9 +178,12 @@ export function recommendationToNeed(r: RecommendationRow): NeedItem {
 // is pure and keeps the same urgency vocabulary as the items above so the one
 // ranking (`rankNeedsAttention`) applies across all of them.
 
-/** Compact USD from a dollar amount (paperwork stores dollars, not cents). */
-function usdFromDollars(amount: number): string {
-  return Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
+/**
+ * Compact USD from a dollar amount (paperwork stores dollars, not cents), in the
+ * reader's format. An extracted paperwork action carries no currency, so USD.
+ */
+function usdFromDollars(amount: number, locale: LocaleCode): string {
+  return formatCents(Math.round(amount * 100), 'USD', locale);
 }
 
 function daysUntil(iso: string, now: Date): number | null {
@@ -257,8 +286,12 @@ type StoredPaperworkAction = { kind?: unknown; label?: unknown; due_on?: unknown
  * reminders and calendar sources — a second card would be the same task
  * twice). Urgent within 3 days of the due date, past due, or when the triage
  * marked the whole item urgent.
+ *
+ * The title is the action's own label and the item's own title (both data, in
+ * whatever language the paperwork was in), then the amount in the reader's
+ * format and the due date in the reader's words.
  */
-export function paperworkActionsToNeeds(r: PaperworkRow, now: Date): NeedItem[] {
+export function paperworkActionsToNeeds(r: PaperworkRow, now: Date, reader: NeedsReader): NeedItem[] {
   if (!PAPERWORK_OPEN_STATUSES.includes(r.status)) return [];
   if (!Array.isArray(r.actions)) return [];
   const out: NeedItem[] = [];
@@ -268,15 +301,20 @@ export function paperworkActionsToNeeds(r: PaperworkRow, now: Date): NeedItem[] 
     if (!PAPERWORK_DECISION_KINDS.includes(kind)) return;
     if (a.materialized_id) return;
     const label = typeof a.label === 'string' && a.label.trim() ? a.label.trim() : kind.toUpperCase();
-    const amount = typeof a.amount === 'number' && a.amount > 0 ? ` · ${usdFromDollars(a.amount)}` : '';
+    const amount = typeof a.amount === 'number' && a.amount > 0 ? usdFromDollars(a.amount, reader.locale) : null;
     const dueOn = typeof a.due_on === 'string' && a.due_on ? a.due_on : r.due_on;
     const days = dueOn ? daysUntil(dueOn, now) : null;
-    const when = days === null ? '' : days < 0 ? ' · overdue' : days === 0 ? ' · due today' : ` · due in ${days}d`;
+    const when = days === null
+      ? null
+      : days < 0 ? reader.t('needsSources.overdue')
+        : days === 0 ? reader.t('needsSources.dueToday')
+          : reader.t('needsSources.dueInDays', { days });
+    const details = [amount, when].filter((part): part is string => part !== null).map((part) => ` · ${part}`).join('');
     const urgency: NeedUrgency = (days !== null && days <= 3) || r.urgency === 'urgent' ? 'urgent' : 'normal';
     out.push({
       id: `paperwork:${r.id}:${index}`,
       kind: `paperwork_${kind}`,
-      title: `${label} — ${r.title}${amount}${when}`,
+      title: `${label} — ${r.title}${details}`,
       href: `/dashboard/paperwork#paperwork-${r.id}`,
       urgency,
       createdAt: r.created_at,

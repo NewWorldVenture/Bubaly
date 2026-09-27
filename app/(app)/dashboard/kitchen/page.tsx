@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function KitchenPage() {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const ctx = await requireFeature('/dashboard/kitchen');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -125,7 +126,7 @@ export default async function KitchenPage() {
     weeklyBudgetCents: null, // no household food budget table yet — sub-score skipped
     avgRating,
   };
-  const foodScore = computeFoodScore(scoreInput);
+  const foodScore = computeFoodScore(scoreInput, locale.code, t);
 
   const data: KitchenData = {
     tonight: tonight ? dishName(tonight) : null,

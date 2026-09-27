@@ -9,7 +9,7 @@ import {
   factSuggestionToNeed, inboxMessageToNeed, paperworkActionsToNeeds,
   type ParentApprovalRow, type RenewalRow, type DocumentRow,
   type AiApprovalRow, type AwaitingRunRow, type RecommendationRow,
-  type FactSuggestionRow, type InboxMessageRow, type PaperworkRow,
+  type FactSuggestionRow, type InboxMessageRow, type PaperworkRow, type NeedsReader,
 } from './needs-sources';
 
 export type HomeNeedsInput = {
@@ -25,6 +25,12 @@ export type HomeNeedsInput = {
   lowGrocery: boolean;
   openTodos: number;
   now: Date;
+  /**
+   * Who reads the titles. A money approval and a paperwork payment put an amount
+   * in the title, so it is written in this reader's format and words. Required:
+   * every caller has a reader — see `NeedsReader`.
+   */
+  reader: NeedsReader;
   /** Pending `approval_requests` Bubaly opened (§12) — optional so older callers keep working. */
   aiApprovals?: AiApprovalRow[];
   /** Runs parked in `awaiting_approval` / `awaiting_context`. */
@@ -50,7 +56,7 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
   const nowIso = data.now.toISOString();
   const plural = (n: number) => (n > 1 ? 's' : '');
 
-  for (const a of data.approvals) items.push(parentApprovalToNeed(a));
+  for (const a of data.approvals) items.push(parentApprovalToNeed(a, data.reader));
 
   // An approval that gates a run and the run parked on it are ONE decision:
   // the approval card is the actionable half (Approve / Edit / Decline resumes
@@ -73,7 +79,7 @@ export function buildHomeNeeds(data: HomeNeedsInput): NeedItem[] {
   // they come off the table.
   for (const r of data.factSuggestions ?? []) { const n = factSuggestionToNeed(r, data.now); if (n) items.push(n); }
   for (const r of data.inboxMessages ?? []) { const n = inboxMessageToNeed(r); if (n) items.push(n); }
-  for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.now));
+  for (const r of data.paperwork ?? []) items.push(...paperworkActionsToNeeds(r, data.now, data.reader));
   for (const r of data.renewals) { const n = renewalToNeed(r, data.now); if (n) items.push(n); }
   for (const d of data.documents) { const n = documentExpiryToNeed(d, data.now); if (n) items.push(n); }
   for (const c of data.conflicts)

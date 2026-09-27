@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane, Sparkles, DollarSign, MapPin, AlertTriangle, Leaf } from 'lucide-react';
+import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane, Sparkles, Wallet, MapPin, AlertTriangle, Leaf } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -19,7 +19,8 @@ import { WhyThis } from '@/components/ai/why-this';
 import { explainConsensus } from '@/lib/ai/explanation';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Poll = Tables<'family_polls'>;
 type Option = Tables<'family_poll_options'>;
@@ -42,10 +43,16 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const parseTags = (s: string): string[] =>
   s.split(',').map((t) => t.trim()).filter(Boolean);
-const usd = (cents: number) => `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+// family_polls.budget_cents, family_poll_options.cost_cents and budgets.amount
+// have no currency column, and the forms take dollars ("Cost $", "Budget cap ($)"),
+// so the money is USD. The reader's locale decides only where the symbol goes and
+// how the digits group (I18N-003).
+const CURRENCY = 'USD';
 
 export function VotingModule() {
   const tr = useTranslations();
+  const locale = useLocale();
+  const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const meId = selfMember?.id ?? null;
@@ -195,7 +202,7 @@ export function VotingModule() {
         const consensus = facilitateConsensus(consensusOptions, {
           budgetCents: budgetCents ?? undefined,
           requiredTags,
-        });
+        }, locale.code, tr);
         const rankById = new Map(consensus.ranked.map((r) => [r.id, r]));
         const hasMetrics = opts.some((o) => o.cost_cents != null || o.travel_minutes != null || (o.tags ?? []).length > 0);
         const facilitated = hasMetrics || typeof budgetCents === 'number' || requiredTags.length > 0;
@@ -213,7 +220,12 @@ export function VotingModule() {
                 <p className="mt-0.5 text-xs text-muted">
                   {p.kind === 'multi' ? 'Multiple choice' : 'Single choice'} · {voterCount(pollVotes as VoteLike[])} voted
                   {vac ? <> · <Plane className="inline h-3 w-3" /> {vac}</> : ''}
-                  {typeof budgetCents === 'number' ? <> · <DollarSign className="inline h-3 w-3" /> budget {usd(budgetCents)}{p.budget_cents == null ? ' (from your budget)' : ''}</> : ''}
+                  {/* A wallet, not a dollar-sign icon: the formatted amount already
+                      carries its symbol where the reader's locale puts it, and a
+                      "$" glyph in front would print it twice ("$ 2.768,50 $"). */}
+                  {typeof budgetCents === 'number' ? <> · <Wallet className="inline h-3 w-3" /> {p.budget_cents == null
+                    ? tr('voting.budgetFromYourBudget', { amount: money(budgetCents) })
+                    : tr('voting.budgetAmount', { amount: money(budgetCents) })}</> : ''}
                   {requiredTags.length > 0 ? <> · <Leaf className="inline h-3 w-3" /> {requiredTags.join(', ')}</> : ''}
                   {p.closes_at ? ` · closes ${fmtDate(p.closes_at)}` : ''}
                   {closed && <span className="ml-1 inline-flex items-center gap-1 text-amber-500"><Lock className="h-3 w-3" /> closed</span>}
@@ -252,7 +264,7 @@ export function VotingModule() {
                       totalVotes: consensus.totalVotes,
                       consensusLevel: consensus.consensusLevel,
                       budgetCents: budgetCents ?? null,
-                    })}
+                    }, locale.code, tr)}
                   />
                 </div>
               </div>
@@ -293,7 +305,7 @@ export function VotingModule() {
                     </span>
                     {facilitated && (opt?.cost_cents != null || opt?.travel_minutes != null || (opt?.tags?.length ?? 0) > 0 || (rank && !rank.feasible)) && (
                       <span className="relative mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                        {opt?.cost_cents != null && <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" />{usd(opt.cost_cents)}</span>}
+                        {opt?.cost_cents != null && <span className="inline-flex items-center gap-1"><Wallet className="h-3 w-3" />{money(opt.cost_cents)}</span>}
                         {opt?.travel_minutes != null && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{opt.travel_minutes}m</span>}
                         {(opt?.tags ?? []).map((tag) => <span key={tag} className="rounded-full bg-muted/10 px-1.5 py-0.5">{tag}</span>)}
                         {rank && !rank.feasible && <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-1.5 py-0.5 text-rose-300">{rank.violations[0]}</span>}

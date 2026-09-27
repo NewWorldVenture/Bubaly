@@ -7,11 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { buildHomeNeeds, type HomeNeedsInput } from '@/lib/home/needs-build';
 import { aiApprovalToNeed, awaitingRunToNeed, recommendationToNeed } from '@/lib/home/needs-sources';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 
 const base: HomeNeedsInput = {
   approvals: [], renewals: [], documents: [], conflicts: [],
   pendingApprovals: 0, overdueMeds: false, overdueReminders: 0, dueTodayReminders: 0,
   pendingChores: 0, lowGrocery: false, openTodos: 0, now: new Date('2026-09-05T12:00:00Z'),
+  reader: { locale: 'en-US', t: (key, params) => translate(SOURCE_MESSAGES, key, params) },
 };
 
 describe('buildHomeNeeds with Bubaly asks', () => {
