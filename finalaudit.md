@@ -49753,7 +49753,7 @@ because this audit has no production login and must not create data there.
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
-| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
+| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP (first pass); session_01DXw2nu25BjyRfA6Fg3YiMS (second pass) | ✅ done: first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px); second pass (a `/kid-login` PIN child and a teen, 354 signed-in routes each at 1280 and 390, in a household on no plan and then on Family+; P-19 to P-22 fixed, see "B7, second pass" below) | 2026-09-27 19:10 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
@@ -50123,6 +50123,63 @@ teen should see `/dashboard/trust` and the wallet's activation page at all is a
 product question (both are read-only there, and every write behind them is
 refused by the manager checks recorded in the AUTHZ units); it is left for B6,
 which clicks the controls.
+
+### B7, second pass — a `/kid-login` session, and a household without Family+
+
+*session_01DXw2nu25BjyRfA6Fg3YiMS, claimed on #585 at 14:25Z, run 2026-09-27 17:30–19:10Z.* The first pass (above) used teen and child accounts that sign in with email, in a Family+ household. This pass closes the two gaps it named or implied:
+- a child who signs in the way children do, through `/kid-login` with a username and PIN;
+- a household on no plan, where the plan gate is live.
+
+**Setup.** A local stack from `main` plus #586 (all 0446–0458 migrations applied, Node 24.21, `next build && next start`). The household was seeded with `scripts/seed-personas.mjs`: two parents, a teen with an email login, and a managed child. The child's login was created through the parent's own **Family access → Create login** row, and that child then signed in at `/kid-login`. Id-based routes got seeded rows (a vacation, a contact, a home asset, a run, a listing, a store, a chore assignment, a child wallet).
+
+| Pass | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| Teen, household on no plan, every signed-in route, 1280 px | 354 | 5 | **P-21** (sync accounts page never settles); four sidebar `Failed to fetch` on a redirect (**P-07**, #585, now on main) |
+| Child via `/kid-login`, household on no plan, every signed-in route, 1280 px | 354 | 3 | **P-21**; two sidebar aborts (**P-07**) |
+| Teen and child, the 27 routes the plan gate had redirected, after the household got Family+ | 27 × 2 | 0 | all render in place (`/parent` is an alias of `/dashboard/family-operations`) |
+| Teen and child, every signed-in route, 390 px, on the build with P-19 to P-22 fixed and the household on Family+ | 354 × 2 | 0 | every route renders with no sideways scroll and no console error; `/dashboard/assistant` (and its alias) and `/dashboard/grocery` had no `<h1>` on this build, which predates **P-06** (#585, now on main), and every other route had exactly one |
+
+Where the teen and the child were sent:
+- all 81 `/admin` routes and `/auth/step-up` go to `/dashboard`, correctly;
+- `/dashboard/family-access` goes to `/home`, correctly;
+- with no plan, 25 (teen) and 26 (child) routes go to the plan gate, which is **P-19**.
+
+Every other route renders the member's view.
+
+**P-19 · Medium · The plan gate landed every family on their balances, not on the plan.** `requirePlanLevel` and `requireFeature` send a family below the needed plan to `/dashboard/billing?upgrade=1&need=N`, and `BillingModule` reads both parameters: it highlights the plan that unlocks the feature and tells anyone but a parent to ask one. But `/dashboard/billing` renders `BillingModule` only for `?view=manage`, which the gate never sent. So Missions, Rewards, the Home hub, Sports, the weekly briefing and the rest landed a Free or Basic family on the Finances dashboard, with balances, "Add Transaction" and "Link Account", and no word about why. It was the same for a parent. Pass L's account of the gate ("a billing upsell") described a screen that was never shown.
+
+Fixed: the page shows the plan view for `?upgrade=1` and for the demo's `?checkout=…`, and the plan card renders first for those. Checked on a local build:
+- a parent lands on "Family+ unlocks the feature you tapped — pick a billing period below";
+- a teen lands on the card ending "Contact your family admin to manage billing."
+
+`tests/a-plan-gate-lands-on-the-plan.test.ts` evaluates the page's own routing condition. It fails 3 of 4 on the previous code.
+
+**P-20 · Low · The plan card ticked features the plan does not include.** Under the subscription card, one fixed English list rendered for every plan. A Free family whose card said "The default family organizer for up to 5 members" saw "Unlimited family members", "All modules" and "Priority support" ticked beside it. Fixed: the grid shows the current tier's own features, the same list the plan picker uses, and nothing on Free. Held by the same test file.
+
+**P-21 · Medium · Opening the sync accounts page started an OAuth flow.** `/dashboard/sync/accounts/google` never settled for the teen or the child. Its "Connect Google" (and "Connect Microsoft") button was a Next `<Link>` to `/api/sync/google/auth`, a route handler that:
+- mints an OAuth state and sets its cookie;
+- clears the calendar-onboarding continuation cookie;
+- redirects to the provider.
+
+`<Link>` prefetches what is on screen, so viewing the page did all of that, and a click went through an RSC fetch that fails cross-origin before falling back to a full navigation. The calendar module already links the same starts with a plain `<a>`.
+
+Fixed with a plain `<a>`. On a local build the page settles and makes no OAuth request on view. `tests/a-link-never-prefetches-a-route-handler.test.ts` derives every route handler's path from `app/**/route.ts` and fails any `<Link>` whose literal `href` is one; its sync-page check fails on the previous code.
+
+**P-22 · Low · The child-login controls were unnamed or English.**
+- **`/dashboard/family-access`, "Create login" row:** it renders only after its button is pressed, so no render crawl reached it. The username and PIN inputs were named only by English placeholders ("username", "PIN"), and the confirm button held nothing but a check-mark icon, so a screen reader announced "button" for the step that creates a child's login.
+- **The reset row:** its "Save" was a literal, and the button lost its name while the spinner replaced it.
+- **`/kid-login`:** the show/hide PIN control said "Show PIN" in English in every household.
+
+Fixed: every input and button in both rows is named from the catalogue. The new keys reuse each locale's existing wording for username, PIN, save and show/hide PIN. On a local build `/kid-login` in German reads "PIN anzeigen", and the reset row reads "New PIN for Maya Rivera" / "Save Maya Rivera's new PIN". `tests/a-kid-login-control-is-named-in-the-familys-language.test.ts` fails 3 of 5 on the previous code.
+
+**Seen, and already the owner's call (PROD-002).** A child's `/kid-login` session opens Tax Vault with every row, and the database lets that session edit and delete them too. `tax_documents` is `FOR ALL is_family_member`, and `0391`'s step-up guard binds only managers (`… or not can_manage_family`). So a parent must present a code to read tax documents that their ten-year-old reads without one.
+
+PROD-002 records `tax_documents` among the surfaces whose member access is the owner's decision. Nothing is changed here; this adds the measurement that a PIN-only child session reaches it.
+
+The neighbouring tables hold:
+- `household_info` keeps its sensitive rows (the alarm code) manager-only;
+- `family_insurance_policies` is member-readable and manager-writable;
+- stored passwords (`family_credentials`) are manager-only, and the child's Passwords page shows none.
 
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 
