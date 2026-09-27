@@ -131,6 +131,39 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 create extension if not exists dblink;
+-- dblink lands in `public`, and pg-bootstrap.sh's `alter default privileges in
+-- schema public grant all on functions` hands every function it creates to anon
+-- and authenticated, including the SECURITY DEFINER dblink_connect_u, which
+-- opens a connection as the definer with no password. That grant then outlived
+-- the probe: the next run of definer-functions-check-their-caller-check.sql
+-- (which runs in the same pass) reported
+--
+--   BREACH: anon can execute definer function(s) that check no caller:
+--   dblink_connect_u(text), dblink_connect_u(text,text)
+--
+-- which was true of the scratch database and was this probe's doing. Only the
+-- probe itself, as the owner, calls dblink, so no client role keeps any of it.
+-- On Supabase the extension belongs to supabase_admin and the client roles
+-- never held it, so there is nothing to take back and no right to try (the
+-- revoke itself is refused): only functions this role owns and a client role
+-- can actually execute are touched.
+do $$
+declare f regprocedure;
+begin
+  for f in
+    select p.oid::regprocedure
+    from pg_proc p
+    join pg_depend d on d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e'
+    join pg_extension e on e.oid = d.refobjid
+    where e.extname = 'dblink'
+      and p.proowner = (select oid from pg_roles where rolname = current_user)
+      and (has_function_privilege('anon', p.oid, 'execute')
+           or has_function_privilege('authenticated', p.oid, 'execute'))
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+  end loop;
+end $$;
+
 
 -- ── One run at a time on a shared database ──────────────────────────────────
 -- Observed, not anticipated: two runs of this probe overlapped on the shared
