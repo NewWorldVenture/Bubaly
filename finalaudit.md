@@ -48614,6 +48614,16 @@ question — only after the family was refused, and a lookup that fails
 stays a refusal. A real Family+ family was already served both (verified
 with a Family+ account: all 23 Family+ routes pass).
 `tests/a-super-admin-page-and-its-endpoint-agree.test.ts`. Commit 87fcdd53.
+*Corrected after review on #585:* the gate asked `isSuperAdmin()`, which
+builds its own cookie-bound client, while `/api/ai` authenticates a bearer
+token first and hands the gate that client. An ordinary bearer with an
+admin's cookie in the same browser was let through; an admin's bearer with
+no cookie was refused. `isSuperAdmin` now takes an optional client
+(defaulting to the cookie session, so every page is unchanged) and the gate
+passes the `db` the endpoint authenticated. The test runs the real
+`isSuperAdmin` against fake bearer and cookie clients: the mixed-credential,
+bearer-only and "never consults the cookie" cases fail with the fix
+reverted (4 of 7).
 
 **P-06 · Low · Seventeen routes had no `<h1>`, five had two.** Eleven
 single-use modules drew their page title as an `<h3>` (now an `<h1>`, same

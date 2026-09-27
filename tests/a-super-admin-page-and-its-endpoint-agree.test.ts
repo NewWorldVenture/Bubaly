@@ -4,48 +4,86 @@
 // rendered and then got 403 from /api/autopilot/scan and /api/ai/briefing
 // (2026-09-27 page audit). The endpoint gate now asks the same question, but
 // only after the family itself was refused, and a failed lookup stays a refusal.
+//
+// Review on #585: the question must be asked of the caller the endpoint
+// authenticated. /api/ai takes a bearer token ahead of cookies and hands the
+// gate that bearer-bound client; asking a fresh cookie client instead let an
+// ordinary bearer through on an admin's cookie and refused an admin's bearer
+// with no cookie. `isSuperAdmin` itself runs here (only the clients are fake),
+// so its credential choice is what is exercised.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+type User = { id: string; email: string } | null;
+
+function client(user: User, opts: { fail?: boolean } = {}) {
+  return {
+    auth: {
+      getUser: vi.fn(async () => {
+        if (opts.fail) throw new Error('auth unavailable');
+        return { data: { user }, error: null };
+      }),
+    },
+    rpc: vi.fn(async () => ({ data: false, error: null })),
+  };
+}
+
+const ADMIN = { id: 'admin', email: 'site-admin@example.test' };
+const ORDINARY = { id: 'ordinary', email: 'parent@example.test' };
 
 const h = vi.hoisted(() => ({
   entitlement: { allowed: false, reason: 'plan', needLevel: 2, planLevel: 1 } as Record<string, unknown>,
-  superAdmin: vi.fn<() => Promise<boolean>>(),
+  cookie: null as unknown,
 }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/server/feature-entitlement', () => ({ resolveFeatureEntitlement: async () => h.entitlement }));
-vi.mock('@/lib/supabase/auth', () => ({ isSuperAdmin: () => h.superAdmin() }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.cookie }));
 
-import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+const { refuseUnlessEntitled } = await import('@/lib/server/route-feature-gate');
 
-const db = {} as never;
+const gate = (db: unknown) => refuseUnlessEntitled(db as never, 'fam', ['/dashboard/autopilot']);
 
 describe('a feature endpoint and the page in front of it', () => {
   beforeEach(() => {
+    vi.stubEnv('SUPER_ADMIN_EMAILS', ADMIN.email);
     h.entitlement = { allowed: false, reason: 'plan', needLevel: 2, planLevel: 1 };
-    h.superAdmin.mockReset();
+    h.cookie = client(null);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   it('refuses a family below the plan (control)', async () => {
-    h.superAdmin.mockResolvedValue(false);
-    const res = await refuseUnlessEntitled(db, 'fam', ['/dashboard/autopilot']);
-    expect(res?.status).toBe(403);
+    expect((await gate(client(ORDINARY)))?.status).toBe(403);
   });
 
   it('lets a super administrator through, as the page does', async () => {
-    h.superAdmin.mockResolvedValue(true);
-    expect(await refuseUnlessEntitled(db, 'fam', ['/dashboard/autopilot'])).toBeNull();
+    expect(await gate(client(ADMIN))).toBeNull();
   });
 
   it('does not ask who the caller is when the family is entitled', async () => {
     h.entitlement = { allowed: true, planLevel: 2 };
-    expect(await refuseUnlessEntitled(db, 'fam', ['/dashboard/autopilot'])).toBeNull();
-    expect(h.superAdmin).not.toHaveBeenCalled();
+    const db = client(ORDINARY);
+    expect(await gate(db)).toBeNull();
+    expect(db.auth.getUser).not.toHaveBeenCalled();
   });
 
   it('treats a failed super-admin lookup as a refusal, never as access', async () => {
-    h.superAdmin.mockRejectedValue(new Error('auth unavailable'));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await refuseUnlessEntitled(db, 'fam', ['/dashboard/autopilot']);
-    expect(res?.status).toBe(403);
+    expect((await gate(client(ADMIN, { fail: true })))?.status).toBe(403);
+  });
+
+  it('refuses an ordinary bearer even when the browser also carries an admin cookie', async () => {
+    h.cookie = client(ADMIN);
+    expect((await gate(client(ORDINARY)))?.status).toBe(403);
+  });
+
+  it('lets an admin bearer through with no cookie at all', async () => {
+    h.cookie = client(null);
+    expect(await gate(client(ADMIN))).toBeNull();
+  });
+
+  it('asks the client it was given, not the cookie session', async () => {
+    const cookie = client(ADMIN);
+    h.cookie = cookie;
+    await gate(client(ORDINARY));
+    expect(cookie.auth.getUser).not.toHaveBeenCalled();
   });
 });

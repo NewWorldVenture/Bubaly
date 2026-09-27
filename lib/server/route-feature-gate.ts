@@ -56,7 +56,9 @@ export async function refuseUnlessEntitled(
   // /dashboard/briefing rendered and then got 403 from their own endpoints
   // (2026-09-27 page audit). Asked only once the family itself was refused,
   // and a lookup that fails is "no" — never a reason to let a request through.
-  if (await callerIsSuperAdmin()) return null;
+  // Asked of `db` — the client this endpoint authenticated (a bearer token on
+  // /api/ai), never a separate cookie session the same browser may carry.
+  if (await callerIsSuperAdmin(db)) return null;
 
   if (outcomes.every((o) => o.reason === 'off')) {
     return NextResponse.json({ error: 'Not found.', code: 'feature_off' }, { status: 404 });
@@ -75,9 +77,9 @@ export async function refuseUnlessEntitled(
   );
 }
 
-async function callerIsSuperAdmin(): Promise<boolean> {
+async function callerIsSuperAdmin(db: DB): Promise<boolean> {
   try {
-    return await isSuperAdmin();
+    return await isSuperAdmin(db);
   } catch (error) {
     console.error('[route-feature-gate] super-admin check failed; applying the family gate', error);
     return false;
