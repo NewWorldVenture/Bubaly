@@ -24,6 +24,7 @@ import {
 } from '@/lib/utils/format';
 import { LOCALES } from '@/lib/i18n/locales';
 import DE from '@/lib/i18n/messages/de-DE.json';
+import { at } from './helpers/source-order';
 
 const AT = '2026-07-14T14:30:00Z';
 const through = (messages: Record<string, string>) =>
@@ -52,7 +53,7 @@ describe('the shared formatter follows the locale', () => {
       const de = createFormat('de-DE').fmtDate(AT);
       expect(de).toContain('Juli');
       // The order is the point. date-fns with a German locale would give "Juli 14".
-      expect(de.indexOf('14')).toBeLessThan(de.indexOf('Juli'));
+      expect(at(de, '14')).toBeLessThan(at(de, 'Juli'));
     });
 
     it('French is French, and is not English', () => {

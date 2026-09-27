@@ -10,7 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -19,15 +19,26 @@ function actionFailure<T = undefined>(operation: string, message: string, error:
   return { ok: false, error: describeActionError(error, message) };
 }
 
+/**
+ * Refusal reasons → catalogue KEYS. Every value here is passed to `t()`.
+ *
+ * Eight of these were English sentences, and `translate()` falls back to the
+ * key when it resolves nothing — so a sentence passed as a key renders as
+ * itself. It looked correct in en-US and was untranslated in the other ten
+ * locales, which is the failure mode that hides: a key that renders as readable
+ * English is far harder to notice than one that renders as
+ * `siteFooter.acceptableUse`. Nine refusal messages on a money-adjacent flow,
+ * in English, inside an otherwise fully localised screen. Audit C1-S4-03.
+ */
 const COMPLETE_REASON: Record<string, string> = {
-  unauthenticated: 'Please sign in to complete the pickup.',
-  invalid_request: 'Enter a valid hand-off code.',
+  unauthenticated: 'actions.pleaseSignInToComplete',
+  invalid_request: 'actions.enterAValidHandOff',
   order_not_found: 'actions.orderNotFound',
-  forbidden: 'You are not part of this marketplace exchange.',
-  order_not_open: 'This order is already closed.',
-  handoff_not_found: 'This pickup could not be found.',
-  handoff_not_ready: 'This pickup is not ready to complete.',
-  code_mismatch: 'That code doesn’t match. Check with the other person.',
+  forbidden: 'actions.youAreNotPartOf',
+  order_not_open: 'actions.thisOrderIsAlreadyClosed',
+  handoff_not_found: 'actions.thisPickupCouldNotBe',
+  handoff_not_ready: 'actions.thisPickupIsNotReady',
+  code_mismatch: 'actions.thatCodeDoesnTMatch',
 };
 
 async function loadOrderRole(orderId: string) {
@@ -40,11 +51,13 @@ async function loadOrderRole(orderId: string) {
   // Only the two people in the exchange arrange its pickup. Anyone else in the
   // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
   // so a sibling could propose, confirm - minting the hand-off code - or cancel
-  // someone else's pickup. 0372 enforces the same in RLS.
-  const me = ctx.active.member.id;
-  const role: 'buyer' | 'seller' | null = order
-    ? (order.seller_member === me ? 'seller' : order.buyer_member === me ? 'buyer' : null)
-    : null;
+  // someone else's pickup. 0372 enforces the same in RLS; `null` means not a
+  // party, and returning it from the loader means no call site can forget the
+  // check. Audit C3-S4-02.
+  const role: 'seller' | 'buyer' | null =
+    order?.seller_member === ctx.active.member.id ? 'seller'
+      : order?.buyer_member === ctx.active.member.id ? 'buyer'
+        : null;
   return { ctx, sb, order, orderError, role };
 }
 
@@ -80,6 +93,8 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   const { ctx, sb, order, orderError, role } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  // This action MINTS AND RETURNS the hand-off code, so it is the one a
+  // non-party most wanted to reach.
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
@@ -106,11 +121,20 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
     } catch { /* calendar optional — confirmation still succeeds */ }
   }
 
-  const { error } = await sb.from('marketplace_handoffs').update({
+  // The `.eq('status', 'proposed')` predicate is what makes zero rows ORDINARY
+  // here rather than exotic: if the other party confirmed or cancelled a moment
+  // earlier, this matches nothing and returns no error. Without `.select('id')`
+  // the action still answered `{ ok: true, data: { code } }` — handing back a
+  // freshly minted hand-off code that was never stored. `completeHandoffAction`
+  // validates against the STORED `confirm_code`, so the two of them would meet
+  // in person, for a marketplace pickup with a stranger, holding a code that
+  // could never work. Audit C1-S9-23.
+  const { data: confirmed, error } = await sb.from('marketplace_handoffs').update({
     status: 'confirmed', confirmed_at: new Date().toISOString(), confirm_code: code,
     calendar_event_id: calendarEventId,
-  }).eq('order_id', orderId).eq('status', 'proposed');
+  }).eq('order_id', orderId).eq('status', 'proposed').select('id');
   if (error) return actionFailure('confirm the pickup', t('handoff.couldNotConfirmThePickup'), error);
+  if (wroteNoRows(confirmed)) return { ok: false, error: t('handoff.couldNotConfirmThePickup') };
 
   revalidatePath('/marketplace/orders');
   return { ok: true, data: { code } };
@@ -123,9 +147,15 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
-  const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
-    .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
+  // The Cancel control only renders for `proposed` or `confirmed`, so this filter
+  // matching nothing means the state moved under the viewer — most often the other
+  // party COMPLETED the pickup. Answering `{ ok: true }` then popped "Pickup
+  // cancelled" over a hand-off that just finished, and the two of them would be
+  // reading opposite outcomes of the same meeting. Audit C1-S9-59.
+  const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
+    .eq('order_id', orderId).in('status', ['proposed', 'confirmed']).select('id');
   if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);
+  if (wroteNoRows(cancelled)) return { ok: false, error: t('handoff.couldNotCancelThePickup') };
   revalidatePath('/marketplace/orders');
   return { ok: true };
 }

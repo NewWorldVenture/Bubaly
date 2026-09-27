@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -44,8 +45,9 @@ export function DrivingSafetyView() {
 
   async function remove(id: string) {
     if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
     const { data, error } = await createClient().from('driving_trips').delete().eq('id', id).eq('family_id', familyId).select('id');
-    if (error) toastError(error.message);
+    if (error) toastError(describeDbError(error));
     else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
     else success(tr('drivingSafetyView.deleted'));
   }
@@ -129,7 +131,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
       phone_use_seconds: Math.round(num(v.phone_use_seconds)), score: preview, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(tr('drivingSafetyView.tripLogged'));
     onClose();
   }

@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -55,8 +55,10 @@ export function JournalModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: removed, error: delErr } = await supabase.from('journal_entries').delete().eq('id', id).select('id');
     if (delErr) return toastError(describeDbError(delErr));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('journalModule.entryDeleted'));
     void refresh();
   }
@@ -189,11 +191,12 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     setLoading(true);
     const supabase = createClient();
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };
-    const { error: saveErr } = entry
-      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id)
-      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch });
+    const { data: saved2, error: saveErr } = entry
+      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id).select('id')
+      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch }).select('id');
     setLoading(false);
     if (saveErr) return toastError(describeDbError(saveErr));
+    if (wroteNoRows(saved2)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(entry ? 'Entry saved' : 'Entry added');
     onSaved();
   }

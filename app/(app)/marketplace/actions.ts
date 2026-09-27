@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -25,12 +25,14 @@ export async function setMatchStatusAction(id: string, status: 'dismissed' | 'ac
   if (!id) return { ok: false, error: t('actions.invalidMatch') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  const { data: matched, error } = await supabase
     .from('marketplace_matches')
     .update({ status })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the match', t('marketplace.couldNotUpdateTheMatch'), error);
+  if (wroteNoRows(matched)) return { ok: false, error: t('marketplace.couldNotUpdateTheMatch') };
   revalidatePath(MARKETPLACE);
   return { ok: true };
 }
@@ -52,8 +54,12 @@ export async function toggleSaveAction(listingId: string): Promise<Result | { ok
 
   if (readError) return actionFailure('check the saved listing', t('marketplace.couldNotCheckTheSavedListing'), readError);
   if (existing) {
-    const { error } = await supabase.from('marketplace_saves').delete().eq('id', existing.id);
+    // `existing` came from a family-scoped read, so the id is already proven to
+    // belong — but the row can be gone by the time this runs, and the caller is
+    // told `saved: false` either way. Audit C1-S9-56.
+    const { data: unsaved, error } = await supabase.from('marketplace_saves').delete().eq('id', existing.id).select('id');
     if (error) return actionFailure('remove the saved listing', t('marketplace.couldNotRemoveTheSavedListing'), error);
+    if (wroteNoRows(unsaved)) return { ok: false, error: t('marketplace.couldNotRemoveTheSavedListing') };
     revalidatePath(MARKETPLACE);
     return { ok: true, saved: false };
   }
@@ -82,8 +88,9 @@ export async function toggleFollowAction(storeId: string): Promise<Result | { ok
 
   if (readError) return actionFailure('check the followed store', t('marketplace.couldNotCheckTheFollowedStore'), readError);
   if (existing) {
-    const { error } = await supabase.from('marketplace_follows').delete().eq('id', existing.id);
+    const { data: unfollowed, error } = await supabase.from('marketplace_follows').delete().eq('id', existing.id).select('id');
     if (error) return actionFailure('unfollow the store', t('marketplace.couldNotUnfollowTheStore'), error);
+    if (wroteNoRows(unfollowed)) return { ok: false, error: t('marketplace.couldNotUnfollowTheStore') };
     revalidatePath(MARKETPLACE);
     return { ok: true, following: false };
   }
@@ -144,8 +151,25 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
     return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
   }
 
-  const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);
+  // CLAIM the transition rather than assuming it. The status was validated
+  // against `order.status` read a moment ago, and nothing stopped that changing
+  // in between: two concurrent calls could both read `requested` and both
+  // advance, or advance along divergent branches of ORDER_FLOW. Predicating the
+  // update on the status it was validated against makes the check and the write
+  // one atomic step — the same fix the allowance claim in wallet/actions.ts
+  // already uses to stop a double credit (C1-S9-53).
+  //
+  // The `family_id` filter is defence in depth: ownership is already proven by
+  // the read above and by RLS, but a write that carries its own scope cannot be
+  // detached from its guard by a later edit. Audit C1-S9-56.
+  const { data: advanced, error } = await supabase.from('marketplace_orders')
+    .update({ status })
+    .eq('id', orderId)
+    .eq('family_id', ctx.active.familyId)
+    .eq('status', order.status)
+    .select('id');
   if (error) return actionFailure('update the order', t('marketplace.couldNotUpdateTheOrder'), error);
+  if (wroteNoRows(advanced)) return { ok: false, error: t('actions.orderNotFound') };
   revalidatePath(`${MARKETPLACE}/orders`);
   return { ok: true };
 }

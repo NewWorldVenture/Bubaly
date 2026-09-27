@@ -92,7 +92,9 @@ export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: s
       }));
 
     if (toUpsert.length > 0) {
-      await sb.from('marketplace_matches').upsert(toUpsert as never, { onConflict: 'family_id,wanted_id,supply_id' });
+      // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+      const { error: marketplaceMatchesWriteError } = await sb.from('marketplace_matches').upsert(toUpsert as never, { onConflict: 'family_id,wanted_id,supply_id' });
+      if (marketplaceMatchesWriteError) console.error('[marketplace-matches] marketplace_matches upsert failed', marketplaceMatchesWriteError);
     }
 
     // Re-read the active rows (now carrying their real ids) to return to the strip.

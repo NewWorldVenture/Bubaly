@@ -90,9 +90,15 @@ vi.mock('@/app/(app)/dashboard/inbox/actions', () => ({ handleInboxMessageAction
 
 const { PaperworkModule } = await import('@/components/modules/paperwork-module');
 const { default: InboxPage } = await import('@/app/(app)/dashboard/inbox/page');
-const { paperworkInsertRow, materializePaperworkActionAction } = await vi.importActual<
+const { materializePaperworkActionAction } = await vi.importActual<
   typeof import('@/app/(app)/dashboard/paperwork/actions')
 >('@/app/(app)/dashboard/paperwork/actions');
+// The paste action's row builder lives in lib/paperwork/triage.ts: a pure helper
+// exported from a 'use server' module is a public endpoint (C1-S7-02), so the
+// audit branch moved it there (merged with main in Audit C1-S9-89).
+const { paperworkInsertRow } = await vi.importActual<
+  typeof import('@/lib/paperwork/triage')
+>('@/lib/paperwork/triage');
 
 /** Intl separates number and symbol (and French thousands) with no-break spaces; compare the words. */
 const plain = (s: string) => s.replace(/[  ]/g, ' ');

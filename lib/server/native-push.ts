@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { connect, constants, sensitiveHeaders, type ClientHttp2Session, type ClientHttp2Stream } from 'node:http2';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 type Payload = { title: string; body?: string | null; url?: string | null };
@@ -67,7 +67,7 @@ async function mintFcmToken(config: FcmConfig, identity: string): Promise<Cached
   const key = createPrivateKey(config.key);
   if (key.asymmetricKeyType !== 'rsa') throw new Error('Invalid FCM signing key type');
   const assertion = `${content}.${sign('RSA-SHA256', Buffer.from(content), key).toString('base64url')}`;
-  const response = await fetchExternal(GOOGLE_TOKEN_URL, {
+  const response = await fetchWithDeadline(GOOGLE_TOKEN_URL, {
     method: 'POST', redirect: 'error',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }).toString(),
@@ -104,7 +104,7 @@ async function sendFcm(config: FcmConfig, token: string, payload: Payload): Prom
   } });
   if (Buffer.byteLength(body) > 4096) return 'failed';
   const credential = await fcmAccessToken(config);
-  const response = await fetchExternal(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.project)}/messages:send`, {
+  const response = await fetchWithDeadline(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.project)}/messages:send`, {
     method: 'POST', redirect: 'error',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${credential.token}` }, body,
   }, TIMEOUT_MS);

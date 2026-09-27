@@ -132,11 +132,11 @@ export async function PlatformBadges() {
 export async function HeroPhoneMockup({ className }: { className?: string }) {
   const t = await getTranslations();
   const schedule = [
-    { time: '8:00 AM', title: t('visualMocks.dentistAppointment'), person: t('visualMocks.emma'), avatar: 3, color: 'bg-rose-400' },
-    { time: '9:30 AM', title: t('visualMocks.dadFlightToChicago'), person: t('visualMocks.mike'), avatar: 0, color: 'bg-blue-400' },
-    { time: '3:00 PM', title: t('visualMocks.jacksonSoccerPractice'), person: t('visualMocks.jackson'), avatar: 1, color: 'bg-emerald-400' },
+    { time: '8:00 AM', title: t('visualMocks.dentistAppointment'), person: 'Emma', avatar: 3, color: 'bg-rose-400' },
+    { time: '9:30 AM', title: t('visualMocks.dadFlightToChicago'), person: 'Mike', avatar: 0, color: 'bg-blue-400' },
+    { time: '3:00 PM', title: t('visualMocks.jacksonSoccerPractice'), person: 'Jackson', avatar: 1, color: 'bg-emerald-400' },
     { time: '5:00 PM', title: t('visualMocks.groceryPickup'), person: 'H-E-B', avatar: 2, color: 'bg-orange-400' },
-    { time: '7:00 PM', title: t('visualMocks.familyDinner'), person: t('visualMocks.theJohnsons'), avatar: 4, color: 'bg-violet-400' },
+    { time: '7:00 PM', title: t('visualMocks.familyDinner'), person: 'The Johnsons', avatar: 4, color: 'bg-violet-400' },
   ];
 
   return (

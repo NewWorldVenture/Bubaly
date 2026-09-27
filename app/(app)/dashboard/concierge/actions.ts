@@ -19,14 +19,15 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
-import { decide, materializeConciergePlan } from '@/lib/services/approvals';
+import { decide, materializeConciergePlan, type MaterializeResult } from '@/lib/services/approvals';
 import { classifyPayload } from '@/lib/approvals/card-data';
+import { legacyStatusFor } from '@/lib/ai/runs/states';
 import {
   AUTOPILOT_AGENT, AUTOPILOT_CAPABILITY, AUTOPILOT_DOMAIN, AUTOPILOT_POLICY_NAME,
-  approvalTitle, autonomyMode, dialEffect, isAcceptance, runSummary,
+  approvalTitle, autonomyMode, dialEffect, isAcceptance, runFailureSummary, runSummary,
   type AutonomyMode, type AutopilotLevel,
 } from '@/lib/autonomy/loop';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -53,7 +54,7 @@ type DB = Awaited<ReturnType<typeof createServer>>;
  */
 async function materializePlan(
   sb: DB, familyId: string, userId: string, plan: PlanRow, kinds: WriteBackKind[],
-): Promise<WriteBackKind[]> {
+): Promise<MaterializeResult> {
   return materializeConciergePlan(sb, familyId, userId, plan, kinds);
 }
 
@@ -69,16 +70,22 @@ export async function applyConciergePlanAction(planId: string, kinds: WriteBackK
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const { data: plan } = await sb
+  // A refused read answered "Plan not found" — a claim about the plan, from a
+  // read that never saw it. Audit C1-S9-72.
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', planId)
     .eq('family_id', ctx.active.familyId)
     .maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNotFound') };
 
-  const applied = await materializePlan(sb, ctx.active.familyId, ctx.user.id, plan, requested);
+  const { applied, failed } = await materializePlan(sb, ctx.active.familyId, ctx.user.id, plan, requested);
   revalidatePath(PATH);
+  // The button reads an empty `applied` as "already applied" and ticks itself
+  // done, so a refused write must not reach it as ok. Audit C1-S9-72.
+  if (failed.length) return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
   return { ok: true, applied };
 }
 
@@ -107,19 +114,30 @@ export async function planAcceptedAction(
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const { data: plan } = await sb
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
-    .select('id, title, description, location, planned_for, budget_cents')
+    .select('id, title, description, location, planned_for, budget_cents, status')
     .eq('id', planId)
     .eq('family_id', familyId)
     .maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNotFound') };
+  // `nextStatus` is the caller's word. The loop acts on the plan's persisted
+  // status, so an acceptance that never landed — or a call that only claims
+  // one — materialises nothing. Audit C1-S9-77.
+  if (plan.status !== nextStatus) return { ok: true, mode: 'off', applied: [], summary: null };
 
   // Nothing new to do? Don't open approvals for a no-op.
+  //
+  // This is a pre-check, not the authority: materializePlan re-reads the same
+  // ledger and refuses on error. So a refused read here is logged and treated
+  // as "nothing applied yet" — the worst case is an approval that turns out to
+  // be a no-op, which is smaller than dropping an accepted plan. Audit C1-S9-72.
   const kinds = availableWriteBackKinds(plan);
-  const { data: existing } = await sb
+  const { data: existing, error: existingErr } = await sb
     .from('concierge_plan_actions').select('action_kind')
     .eq('family_id', familyId).eq('plan_id', planId);
+  if (existingErr) console.error('[concierge] write-back ledger pre-check failed; proceeding', { planId, familyId, error: existingErr });
   const already = new Set((existing ?? []).map((r) => r.action_kind));
   const pendingKinds = kinds.filter((k) => !already.has(k));
   if (pendingKinds.length === 0) return { ok: true, mode: 'off', applied: [], summary: null };
@@ -158,32 +176,44 @@ export async function planAcceptedAction(
         : autonomyMode(decision);
 
   if (mode === 'auto') {
-    const applied = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
-    const summary = runSummary(plan.title, applied);
+    const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, pendingKinds);
+    // A failure used to be recorded as `executed` / `completed` under
+    // "everything was already in place". It is recorded as what it was, and
+    // the plan's own buttons stay the retry. Audit C1-S9-72.
+    const state = failed.length === 0 ? 'completed' : applied.length ? 'partially_completed' : 'failed';
+    const summary = failed.length ? runFailureSummary(plan.title, applied, failed) : runSummary(plan.title, applied);
     // Written by the server: 0252 only lets a member file their own unplanned
-    // queued run, and this row records work Bubaly already did.
+    // queued run, and this row records work Bubaly already did. Logged, not
+    // raised: the records exist by now, and failing the action would report
+    // failure for work that succeeded.
     // `completed_at` is not decoration: it is the only column the family's value
     // metric will count. lib/metric/completed-plans.ts filters the 7-day
     // headline on `completed_at`, and a row without one lands in the "excluded,
     // week unknown" bucket permanently — so the Finances card, the upgrade
     // paywall's value card and the Display's "Handled today" tile all read 0
-    // for work Bubaly just did. The row records work already finished, so the
-    // completion time is now.
-    await createServiceClient().from('family_automation_runs').insert({
-      family_id: familyId, trigger_type: 'plan_accepted', status: 'executed', state: 'completed',
+    // for work Bubaly just did. The row records a run that has already ended —
+    // completed, partially completed or failed are each terminal (C1-S9-72) —
+    // so the end time is now; only `state = 'completed'` is counted as done.
+    const { error: recordErr } = await createServiceClient().from('family_automation_runs').insert({
+      family_id: familyId, trigger_type: 'plan_accepted', status: legacyStatusFor(state), state,
       completed_at: new Date().toISOString(),
       requested_by_member_id: ctx.active.member.id,
-      summary, result: { steps: applied } as never,
+      summary, result: { steps: applied, failed } as never,
       metadata: { plan_id: planId, basis: decision.basis, reason: decision.reason } as never,
       created_by: ctx.user.id,
     });
+    if (recordErr) console.error('[concierge] autopilot run record failed', { planId, familyId, state, error: recordErr });
     revalidatePath(PATH);
+    if (failed.length) return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
     return { ok: true, mode, applied, summary };
   }
 
   if (mode === 'ask') {
     const summary = `Waiting for approval: ${approvalTitle(plan.title)}`;
-    await createServiceClient().from('family_automation_runs').insert({
+    // The caller answers "check the Autopilot panel", and this row is the only
+    // thing that panel reads — so a refused insert is not a queued plan.
+    // Audit C1-S9-72.
+    const { error: queueErr } = await createServiceClient().from('family_automation_runs').insert({
       family_id: familyId, trigger_type: 'plan_accepted', status: 'pending', state: 'awaiting_approval',
       requested_by_member_id: ctx.active.member.id,
       summary,
@@ -194,6 +224,10 @@ export async function planAcceptedAction(
       } as never,
       created_by: ctx.user.id,
     });
+    if (queueErr) {
+      console.error('[concierge] autopilot queue insert failed', { planId, familyId, approvalId: approvalId ?? null, error: queueErr });
+      return { ok: false, error: describeActionError(queueErr, t('actions.couldNotQueuePlanForApproval')) };
+    }
     revalidatePath(PATH);
     return { ok: true, mode, applied: [], summary };
   }
@@ -264,13 +298,16 @@ async function governingApprovalFor(
  */
 async function markRunExecuted(
   sb: DB, runId: string, familyId: string, userId: string, summary: string, applied: WriteBackKind[],
-): Promise<PostgrestError | null> {
+): Promise<{ error: PostgrestError | null; stamped: boolean }> {
   const now = new Date().toISOString();
-  const { error } = await sb.from('family_automation_runs').update({
+  const { data, error } = await sb.from('family_automation_runs').update({
     status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
     approved_by: userId, approved_at: now, completed_at: now,
-  }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending');
-  return error;
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id');
+  // `stamped` is false when the row was no longer pending. After decide() that
+  // is expected (it closes the runs naming its approval); on the direct path it
+  // is the caller's to report.
+  return { error, stamped: !error && !wroteNoRows(data) };
 }
 
 /**
@@ -303,9 +340,13 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const { data: run } = await sb
+  // A refused read left `run` null and answered "run not found or already
+  // decided" — a claim about the run's state, from a read that never saw it.
+  // Audit C1-S9-48.
+  const { data: run, error: runReadErr } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', familyId).maybeSingle();
+  if (runReadErr) return { ok: false, error: describeActionError(runReadErr, t('actions.couldNotLoadThatRun')) };
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   const meta = (run.metadata ?? {}) as RunMeta;
@@ -340,7 +381,7 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     // run whose metadata was scrubbed does not sit on the panel as pending
     // after its plan has been done. Idempotent on `status = 'pending'`.
     const applied = decided.data.applied ?? [];
-    const closeErr = await markRunExecuted(sb, runId, familyId, ctx.user.id, decided.data.summary, applied);
+    const { error: closeErr } = await markRunExecuted(sb, runId, familyId, ctx.user.id, decided.data.summary, applied);
     if (closeErr) {
       console.error('[concierge] executed-run status update failed after decide', { runId, familyId, error: closeErr });
       return { ok: false, error: describeActionError(closeErr, t('actions.appliedThePlanButCould')) };
@@ -356,30 +397,52 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
     return { ok: false, error: t('actions.runClaimsMissingApproval') };
   }
 
-  const { data: plan } = await sb
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', meta.plan_id).eq('family_id', familyId).maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
-  const applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  if (failed.length) {
+    // Left `pending`: stamping it executed would retire the one button that
+    // retries, over a plan that did not land. Audit C1-S9-72.
+    console.error('[concierge] queued run materialization incomplete; left pending', { runId, familyId, applied, failed });
+    revalidatePath(PATH);
+    return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
+  }
   const summary = runSummary(plan.title, applied);
 
   // Record the run as executed. materializePlan is idempotent (it skips kinds
   // already in concierge_plan_actions), so surfacing this failure lets the
   // manager safely retry rather than leaving the run stuck "pending" with the
   // plan already applied — which would look like the approval did nothing.
-  const runErr = await markRunExecuted(sb, runId, familyId, ctx.user.id, summary, applied);
+  //
+  // The reasoning above covers the ERROR path and stops one step short of the
+  // zero-rows one, which lands in the same place: the plan is applied, the run
+  // stays `pending`, and the manager sees a queued run for work already done —
+  // so they approve it again. Idempotence makes the retry safe; reporting
+  // success here is what makes it necessary. (markRunExecuted is a
+  // compare-and-set on 'pending', so zero rows also covers a run someone else
+  // resolved between the read above and this write.)
+  const { error: runErr, stamped } = await markRunExecuted(sb, runId, familyId, ctx.user.id, summary, applied);
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
+  }
+  if (!stamped) {
+    console.error('[concierge] executed-run status update matched no rows', { runId, familyId });
+    return { ok: false, error: t('actions.appliedThePlanButCould') };
   }
 
   // No approval stamp here on purpose. This branch is only reached when NO
   // approval row names the plan, so there is no approval to decide; the one
   // that used to live here wrote `status = 'approved'` with no votes, which is
-  // exactly the threshold bypass the block above closes.
+  // exactly the threshold bypass the block above closes. (C1-S9-60 had
+  // confirmed that stamp for its log; with the stamp gone, the approval's own
+  // write is `decide()`'s, in lib/services/approvals.)
   revalidatePath(PATH);
   return { ok: true, mode: 'auto', applied, summary };
 }
@@ -392,9 +455,10 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanDecline') };
   const sb = await createServer();
 
-  const { data: run } = await sb
+  const { data: run, error: runReadErr } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (runReadErr) return { ok: false, error: describeActionError(runReadErr, t('actions.couldNotLoadThatRun')) };
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   // The decline half of the same rule as the approve half above. When the run
@@ -452,7 +516,9 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
   }
-  if (!declinedHere && (!dismissedRows || dismissedRows.length === 0)) {
+  // A dismissal that matched nothing leaves the run queued while telling the
+  // manager it is gone — and the next tick offers it to them again.
+  if (!declinedHere && wroteNoRows(dismissedRows)) {
     return { ok: false, error: t('actions.runNotFoundOrAlready') };
   }
 
@@ -517,14 +583,19 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
     // winner already carries a level the parent chose; re-apply ours over it
     // rather than reporting a failure for a dial that is about to be right.
     if (insertError?.code === '23505') {
-      const { error: retryError } = await sb.from('trust_policies')
+      // Four equalities against a row the RACING request just wrote. If that
+      // winner does not match all four, this matches nothing — and the parent
+      // was told the dial moved. Same confirmation as the direct branch above.
+      const { data: retried, error: retryError } = await sb.from('trust_policies')
         .update({ effect, enabled: true })
         .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
-        .eq('is_system', true).eq('enabled', true);
+        .eq('is_system', true).eq('enabled', true)
+        .select('id');
       if (retryError) {
         console.error('[concierge] autopilot policy insert-race update failed', { familyId, effect, error: retryError });
         return { ok: false, error: retryError.message };
       }
+      if (!retried?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
     } else if (insertError) {
       console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
       return { ok: false, error: insertError.message };

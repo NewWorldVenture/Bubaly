@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 /**
  * A server page that could not read must not answer as if it had.
@@ -35,14 +36,14 @@ describe('a page that could not read says so', () => {
     expect(source).toMatch(/if \(readError\)/);
     expect(source).toContain("conflicts.couldNotCheckForClashes");
     // The check must come BEFORE the detector runs, or it is decoration.
-    expect(source.indexOf('if (readError)')).toBeLessThan(source.indexOf('const conflicts = detectConflicts('));
+    expect(at(source, 'if (readError)')).toBeLessThan(at(source, 'const conflicts = detectConflicts('));
   });
 
   it('the kid-login page refuses to show an empty roster it cannot support', () => {
     const source = readFileSync('app/(app)/dashboard/family-access/page.tsx', 'utf8');
     expect(source).toMatch(/error: loginsError/);
     expect(source).toContain('familyAccess.couldNotLoadChildLogins');
-    expect(source.indexOf('if (readError)')).toBeLessThan(source.indexOf('const usernameByMember'));
+    expect(at(source, 'if (readError)')).toBeLessThan(at(source, 'const usernameByMember'));
   });
 
   it('the guardian pages keep degrading, but no longer in silence', () => {

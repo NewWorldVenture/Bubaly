@@ -45,6 +45,27 @@ function mediaHref(itemId: string): string {
   return `/library/media/${encodeURIComponent(itemId)}`;
 }
 
+/**
+ * A progress write nobody waits for. Each of these used to be
+ * `void saveProgressAction(...)`: a refused write (`ok: false`) and a failed
+ * call (a rejection) both vanished. `onFail` lets the caller take back what it
+ * assumed — for the position saves, that `lastSaved` already held the unsaved
+ * position, which is the number the unmount check trusts to decide there is
+ * nothing left to save. Audit C1-S9-74.
+ */
+function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFail?: () => void): void {
+  saveProgressAction(input)
+    .then((res) => {
+      if (res.ok) return;
+      console.warn('[library] background progress save refused', res.error);
+      onFail?.();
+    })
+    .catch((err: unknown) => {
+      console.warn('[library] background progress save failed', err);
+      onFail?.();
+    });
+}
+
 export function ItemRow({ item }: { item: PlayableItem }) {
   const { success, error } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -87,7 +108,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     if (!shouldPersistOnUnmount({
       touched: touched.current, currentTime: audio.currentTime, lastSaved: lastSaved.current,
     })) return;
-    void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
+    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
   }, [item.id]);
 
   function toggle() {
@@ -126,10 +147,17 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     if (!audio) return;
     releasePlayback(audio);
     // Whatever stopped it, this is where they got to.
-    if (touched.current) {
-      lastSaved.current = audio.currentTime;
-      void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
-    }
+    if (touched.current) savePosition(audio.currentTime);
+  }
+
+  // Claims the position as saved, and takes the claim back if the write does
+  // not land — unless a later save has claimed a newer one meanwhile.
+  function savePosition(at: number) {
+    const previous = lastSaved.current;
+    lastSaved.current = at;
+    saveInBackground({ itemId: item.id, positionSeconds: Math.floor(at) }, () => {
+      if (lastSaved.current === at) lastSaved.current = previous;
+    });
   }
 
   function onTimeUpdate() {
@@ -137,10 +165,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     if (!audio) return;
     setPosition(audio.currentTime);
     touched.current = true;
-    if (audio.currentTime - lastSaved.current >= SAVE_EVERY_SECONDS) {
-      lastSaved.current = audio.currentTime;
-      void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
-    }
+    if (audio.currentTime - lastSaved.current >= SAVE_EVERY_SECONDS) savePosition(audio.currentTime);
   }
 
   function toggleSaved() {
@@ -174,7 +199,11 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         // The flag was written before the bytes were fetched, and used to stay
         // written when the fetch failed — so the row claimed a download that
         // did not exist and the tick asserted it. Put it back.
-        if (next) void saveProgressAction({ itemId: item.id, offline: false }).then(() => setOffline(false));
+        // The rollback is itself a write; if it fails the flag stays set, and the
+        // next visit says "Marked for offline, but not stored on this device
+        // yet" rather than asserting a download — so it is logged, not raised.
+        if (next) saveInBackground({ itemId: item.id, offline: false });
+        if (next) setOffline(false);
         error(next ? 'That file could not be stored offline.' : 'That file could not be removed.');
       }
     });
@@ -222,7 +251,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
       {item.mediaUrl && (
         <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
           onPlay={onPlay} onPause={onPause}
-          onEnded={() => { void saveProgressAction({ itemId: item.id, completed: true }); }} />
+          onEnded={() => saveInBackground({ itemId: item.id, completed: true })} />
       )}
       {offline && cached === false && (
         <p className="mt-1.5 text-xs text-warning">Marked for offline, but not stored on this device yet.</p>

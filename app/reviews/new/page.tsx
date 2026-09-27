@@ -10,7 +10,12 @@ export const dynamic = 'force-dynamic';
 export default async function NewReviewPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: s } = await supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle();
+  // Smaller answer: the external review links disappear, the internal review
+  // form still works. Logged rather than raised. Audit C1-S9-45.
+  const { data: s, error: settingsError } = await supabase.from('reputation_settings').select('*').eq('singleton', true).maybeSingle();
+  if (settingsError) {
+    console.warn('[reviews/new] reputation settings read failed; external links hidden', { error: settingsError.message });
+  }
 
   const publicLinks: PublicLink[] = [
     s?.google_url ? { label: 'Google', url: s.google_url } : null,

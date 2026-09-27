@@ -100,6 +100,9 @@ vi.mock('@/lib/services/reminders', () => ({
   createReminder: async () => { h.reached.reminders += 1; return { ok: true, data: { id: 'rem-1' } }; },
 }));
 vi.mock('@/lib/ai/safety/untrusted', () => ({ fenceUntrustedBlock: (_kind: string, text: string) => text, UNTRUSTED_CONTENT_RULE: '' }));
+// The draft path carries the AI rate-limit budget (C3-S4-01, merged from main);
+// this suite is about the step-up gate, so the budget always has room.
+vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 
 const actions = await import('@/app/(app)/dashboard/paperwork/actions');
 
@@ -127,7 +130,27 @@ beforeEach(() => {
   h.aiDraft = null;
   h.reached.ai = 0;
   h.reached.reminders = 0;
-  db = createInMemorySupabase();
+  db = createInMemorySupabase({
+    rpc: {
+      // 0415's paperwork_stamp_action, modelled: stamp ONE element unless it is
+      // already stamped, recompute the status, answer whether it stamped. It is
+      // SECURITY INVOKER, so the write goes through the same row-level security
+      // a direct update does — here, through `db.from`, which filterUpdatesTo
+      // below replaces — and a filtered update stamps nothing and answers false.
+      paperwork_stamp_action: async (args, inner) => {
+        const row = (inner.table('paperwork_items') as Record<string, unknown>[]).find((r) => r.id === args.p_item_id);
+        if (!row || !Array.isArray(row.actions)) return false;
+        const list = structuredClone(row.actions) as Record<string, unknown>[];
+        const target = list[args.p_index as number];
+        if (!target || target.materialized_id) return false;
+        target.materialized_id = args.p_id;
+        target.materialized_as = args.p_as;
+        const status = row.status === 'archived' ? row.status : (list.every((a) => a.materialized_id) ? 'done' : 'in_progress');
+        const { data } = await inner.from('paperwork_items').update({ actions: list, status } as never).eq('id', args.p_item_id as string).select('id');
+        return Array.isArray(data) && data.length > 0;
+      },
+    },
+  });
   db.seed('paperwork_items', [structuredClone(SLIP)]);
   Object.assign(db, { auth: { mfa: { getAuthenticatorAssuranceLevel: h.getAal } } });
   h.db = db;

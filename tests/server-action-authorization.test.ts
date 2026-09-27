@@ -75,8 +75,6 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
     'public gift page; the unguessable link token IS the authorization, pledges are written pending a parent approval, and pending pledges per link are capped',
   'app/(auth)/actions.ts:childSignInAction':
     'a sign-in cannot require a session; throttled per username via child_login_throttle so a 4-digit PIN cannot be enumerated',
-  'app/(app)/dashboard/inbox/actions.ts:inboxRequestText':
-    'not an endpoint in the meaningful sense — a pure string composer over its own arguments, exported only so a test can pin it without a database. It reads nothing and writes nothing',
 };
 
 type Action = {

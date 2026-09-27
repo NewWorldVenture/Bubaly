@@ -11,7 +11,12 @@ import { describe, expect, it } from 'vitest';
 //   1. Regression-locks the A-11 fix: messages-module must never reintroduce it.
 //   2. Ratchets the class DOWN: the offending-file set must stay a SUBSET of the
 //      known baseline — a NEW file introducing the pattern fails CI. As owners
-//      fix files they delete them from BASELINE; when it hits [], delete this test.
+//      fix files they delete them from BASELINE.
+//
+// BASELINE reached [] under C1-S9-71. The header used to say "when it hits [],
+// delete this test"; it is KEPT instead, because with an empty baseline check 1
+// is no longer a ratchet but a ban — any .tsx that drops a read error in this
+// shape fails CI — and deleting it would have removed exactly that.
 
 const SHAPE = /const \{ data \} = await/;
 
@@ -44,22 +49,29 @@ function offendingFiles(): string[] {
 // Known offenders as of PLA-0625 (2026-07-17). ONLY REMOVE entries as they are
 // fixed — never add. New entries here mean the class grew, which defeats the point.
 const BASELINE = new Set<string>([
-  'app/(app)/dashboard/billing/page.tsx',
+  // billing fixed under C1-S9-71 — a refused fee-settings read now shows a
+  // cautious "any fee is shown at checkout" notice instead of saying nothing
+  // about a fee that may apply; removed.
   // concierge-calls page fixed under M26 honesty (wave 3b) — a failed read now
   // renders a retryable ErrorState instead of an empty queue; removed.
-  'app/(app)/dashboard/independence/page.tsx',
   // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
   // and render MiniError instead of a false-empty; removed from baseline.
-  'app/(app)/dashboard/money-timeline/page.tsx',
-  'app/(app)/dashboard/paperwork/page.tsx',
+  // money-timeline fixed under C1-S9-71 — the insight-status read error is
+  // logged (a smaller answer: all insights shown unacknowledged); removed.
+  // paperwork fixed under C1-S9-30 — the try/catch that caught nothing is gone;
+  // a refused read now renders a retryable ErrorState instead of "Inbox zero 🎉".
+  // Removed from baseline.
   // feedback-board comment thread fixed under A-17 §3e (PLA-0796) — a failed
   // read now shows a retryable message, not a silent empty discussion. Removed.
-  'app/(app)/missions/page.tsx',
+  // missions fixed under C1-S9-71 — the proof-signing error is logged; the gap
+  // itself was already stated to the parent (C1-S9-29); removed.
   // marketing lp/[slug] + f/[id] fixed under A-17 §3e slice (PLA-0793) — loaders
   // now throw on a real read error (retryable 5xx) instead of 404-ing a live page;
   // notFound() reserved for a genuinely missing row. Removed from baseline.
-  'components/app/app-context.tsx',
-  'components/concierge/plan-write-backs.tsx',
+  // app-context fixed under C1-S9-71 — a refused roster refresh keeps the
+  // roster on screen and logs; removed.
+  // plan-write-backs fixed under C1-S9-71 — the applied-ledger read error is
+  // logged; the server re-reads the ledger and refuses on error; removed.
   // assistant-module fixed under A-05 (PLA-0792) — conversation-list + message
   // reads keep prior state on error instead of false-emptying; removed.
   // concierge-calls-module fixed under M26 honesty (wave 3b) — the realtime

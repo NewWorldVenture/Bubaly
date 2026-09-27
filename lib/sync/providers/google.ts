@@ -8,7 +8,7 @@
 // SERVER ONLY.
 
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -105,7 +105,7 @@ export function googleCalendarReadAuthUrl(redirectUri: string, state: string): s
 }
 
 export async function exchangeCode(code: string, redirectUri: string): Promise<OAuthTokens> {
-  const res = await fetchExternal(TOKEN_URL, {
+  const res = await fetchWithDeadline(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -129,7 +129,7 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<O
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
-  const res = await fetchExternal(TOKEN_URL, {
+  const res = await fetchWithDeadline(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -153,7 +153,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
 
 export async function revokeToken(token: string): Promise<void> {
   // Best-effort; ignore failures (token may already be invalid).
-  await fetchExternal(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }, 15_000).catch(() => {});
+  await fetchWithDeadline(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: 'POST' }, 15_000).catch(() => {});
 }
 
 /** The connected account's email, for display + as the account's external_id. */
@@ -167,7 +167,7 @@ export async function getGoogleUserEmail(accessToken: string): Promise<string | 
 }
 
 async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {
-  const res = await fetchExternal(url, {
+  const res = await fetchWithDeadline(url, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

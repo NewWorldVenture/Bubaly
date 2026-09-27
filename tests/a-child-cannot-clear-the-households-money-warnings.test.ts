@@ -57,6 +57,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import type { CashflowTimeline, TimelineInsight } from '@/lib/finance/timeline';
 import { LOCALE_COOKIE, localeOrDefault } from '@/lib/i18n/locales';
+import { at } from './helpers/source-order';
 
 const FAMILY = 'fam-money-1';
 const WARNING_TITLE = 'Balance runs thin the week of Mar 2';
@@ -461,7 +462,7 @@ describe('0352 puts the boundary where a client cannot route around it', () => {
     expect(sql).toMatch(/raise exception '0352:/);
     // The select policy is re-asserted before anything is dropped, so no read is
     // ever left uncovered mid-transaction.
-    expect(sql.indexOf('for select using')).toBeLessThan(sql.indexOf('from pg_policy p'));
+    expect(at(sql, 'for select using')).toBeLessThan(at(sql, 'from pg_policy p'));
   });
 
   it('is proven against a real Postgres by a boundary probe CI runs', () => {

@@ -6,7 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { aal2Verdict } from '@/lib/auth/require-aal2';
 import {
-  triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
+  paperworkInsertRow, type PaperworkAction, kindLabel, type PaperworkKind,
   formatPaperworkAmount, paperworkActionLabel, paperworkSummary, paperworkSummaryFacts, type PaperworkReader,
 } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
@@ -16,6 +16,7 @@ import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 const PATH = '/dashboard/paperwork';
 
@@ -65,46 +66,6 @@ async function paperworkScope(): Promise<PaperworkGate> {
   return { ok: true, ctx, supabase };
 }
 
-/**
- * The row a captured piece of paperwork becomes.
- *
- * It exists as its own exported function — async, which is all a `'use server'`
- * module may export — because of the one mistake tsc cannot catch here: the
- * generated Insert type for `kind` is a plain `string`, while 0169's CHECK
- * admits seven values and triage now recognises nine. Writing 'receipt' or
- * 'reservation' straight from `triagePaperwork` is a 23514 at runtime that
- * loses the pasted paperwork entirely, so the mapping goes through
- * `paperworkKindFields` (admitted value on the column, finer kind kept in
- * `meta`) and a test pins the payload without needing a database.
- */
-export async function paperworkInsertRow(input: {
-  familyId: string;
-  userId: string;
-  text: string;
-  sender?: string | null;
-  now?: Date;
-}) {
-  const t = triagePaperwork(input.text, input.now ?? new Date());
-  const fields = paperworkKindFields(t.kind);
-  return {
-    family_id: input.familyId,
-    kind: fields.kind,
-    title: t.title,
-    summary: t.summary,
-    raw_text: input.text.slice(0, 20_000),
-    sender: input.sender ?? null,
-    due_on: t.due_on,
-    amount: t.amount,
-    urgency: t.urgency,
-    status: 'needs_action',
-    actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
-    // What triage actually saw, so a receipt filed as a payment is still
-    // recoverable as a receipt when the column is widened.
-    meta: { ...fields.meta },
-    created_by: input.userId,
-  };
-}
-
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<PaperworkActionResult> {
   const tr = await getTranslations();
@@ -142,9 +103,13 @@ export async function materializePaperworkActionAction(input: {
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
 
-  const { data: item } = await supabase
+  // A refused read returned here as silently as a missing item, so "Add to
+  // calendar" did nothing and said nothing; every other failure in this
+  // action throws. A missing item stays a quiet no-op. Audit C1-S9-73.
+  const { data: item, error: itemError } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (itemError) throw new Error(describeActionError(itemError, tr('actions.couldNotLoadThatDocument')));
   if (!item) return { ok: true }; // nothing to do — unchanged from the void form
   if (isPaperworkExtractionPartial(item.meta)) throw new Error(tr('paperwork.partialExtractionWarning'));
 
@@ -213,23 +178,39 @@ export async function materializePaperworkActionAction(input: {
   }
 
   if (materializedId) {
-    const next = actions.map((a, i) =>
-      i === input.actionIndex ? { ...a, materialized_as: materializedAs, materialized_id: materializedId } : a);
-    const allDone = next.every((a) => a.materialized_id);
-    // The record was already created above. The stamp-back is what makes a
-    // second tap a no-op, so it has to be CONFIRMED, not assumed: row-level
-    // security FILTERS an update it refuses (zero rows, no error), and without
-    // `.select('id')` PostgREST answers `data: null` whether a row changed or
-    // not (lib/supabase/errors.ts wroteNoRows). When it did not land the family
-    // is told what DID happen — the event or reminder exists, the slip is not
-    // marked — so the next tap is a decision, not a silent duplicate.
-    const { data: stamped, error: stampError } = await supabase.from('paperwork_items')
-      .update({ actions: next as never, status: allDone ? 'done' : 'in_progress' })
-      .eq('id', item.id)
-      .select('id');
-    if (stampError || wroteNoRows(stamped)) {
+    // 0415. This used to rewrite the WHOLE actions array from the copy read at
+    // the top of this function, so two overlapping taps — "Add to calendar"
+    // then "Remind me" on the same letter, which the module's per-action
+    // buttons invite — each erased the other's stamp, and the next tap created
+    // a second record. The function stamps one element and recomputes `status`
+    // from the row as it stands, so a sibling that landed in between counts.
+    //
+    // The record was already created above, and the stamp-back is what makes a
+    // second tap a no-op, so it has to be CONFIRMED, not assumed: when it did
+    // not land the family is told what DID happen — the event or reminder
+    // exists, the slip is not marked — so the next tap is a decision, not a
+    // silent duplicate.
+    const { data: stamped, error: stampError } = await supabase.rpc('paperwork_stamp_action', {
+      p_item_id: item.id,
+      p_index: input.actionIndex,
+      p_as: materializedAs,
+      p_id: materializedId,
+    });
+    let landed = !stampError && stamped !== false;
+    if (!stampError && stamped === false) {
+      // 0415 answers `false` both when a concurrent tap stamped this element
+      // first (its record stands, and this one is the duplicate) and when
+      // row-level security FILTERED the update (SECURITY INVOKER: nothing was
+      // stamped). Read the element back to tell them apart.
+      const { data: after } = await supabase.from('paperwork_items')
+        .select('actions').eq('id', item.id).maybeSingle();
+      const now = (Array.isArray(after?.actions) ? after.actions : []) as unknown as StoredAction[];
+      landed = Boolean(now[input.actionIndex]?.materialized_id);
+      if (landed) console.warn('[paperwork] action was already stamped by a concurrent tap', { itemId: item.id, actionIndex: input.actionIndex });
+    }
+    if (!landed) {
       console.error('[paperwork] materialization stamp-back did not land', {
-        itemId: item.id, materializedAs, materializedId, error: stampError ?? 'no paperwork row was updated',
+        itemId: item.id, materializedAs, materializedId, error: stampError ?? 'no paperwork row was stamped',
       });
       revalidatePath(PATH);
       return {
@@ -243,6 +224,9 @@ export async function materializePaperworkActionAction(input: {
   revalidatePath(PATH);
   return { ok: true };
 }
+
+/** Matches the inbox intake's budget — see app/(app)/dashboard/inbox/actions.ts. */
+const AI_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 
 type DraftResult = { ok: true; draft: string } | { ok: false; error: string; stepUp?: string };
 
@@ -260,9 +244,16 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
 
-  const { data: item } = await supabase
+  // Reaches a paid provider, so it carries the same budget as every API route
+  // that does and as the inbox intake. Audit C3-S4-01.
+  const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
+  if (!limited.ok) return { ok: false, error: tr('inboxActions.tooManyRequestsRightNow') };
+
+  const { data: item, error: itemReadError } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', itemId).eq('family_id', ctx.active.familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (itemReadError) return { ok: false, error: describeActionError(itemReadError, tr('actions.couldNotCheckThatRefresh')) };
   if (!item) return { ok: false, error: tr('actions.paperworkNotFound') };
   if (isPaperworkExtractionPartial(item.meta)) return { ok: false, error: tr('paperwork.partialExtractionWarning') };
 
@@ -311,13 +302,16 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
 
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
   // Persisting the draft is best-effort — it is returned to the caller regardless —
-  // but log a failure so a broken write isn't invisible. "Failure" includes an
-  // update row-level security FILTERED (zero rows, no error), which only the
-  // returned rows can show.
+  // but log a failure so a broken write isn't invisible.
+  // Confirmed for the LOG, not for a bail: the draft is in the caller's hands
+  // either way, but a persist that matched nothing means it is gone the moment
+  // they navigate, and only an ERROR was reaching the log. Audit C1-S9-60.
   const { data: persisted, error: metaError } = await supabase.from('paperwork_items')
     .update({ meta: meta as never }).eq('id', item.id).select('id');
   if (metaError || wroteNoRows(persisted)) {
-    console.error('[paperwork] draft_reply persist failed', { itemId: item.id, error: metaError ?? 'no paperwork row was updated' });
+    console.error('[paperwork] draft_reply persist failed', {
+      itemId: item.id, error: metaError?.message ?? 'no rows updated',
+    });
   }
   revalidatePath(PATH);
   return { ok: true, draft };
@@ -332,6 +326,10 @@ export async function setPaperworkStatusAction(input: {
   const gate = await paperworkScope();
   if (!gate.ok) return gate;
   const { ctx, supabase } = gate;
+  // Marking a permission slip done is the one action that takes it out of the
+  // deadline inbox C1-S9-30 had to stop lying about. A silent no-op leaves the
+  // parent believing it is handled while the item keeps its deadline.
+  // Audit C1-S9-49.
   const { data: rows, error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId)

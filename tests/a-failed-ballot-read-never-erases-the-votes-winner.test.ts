@@ -45,8 +45,10 @@ function fakeClient() {
       updates.push(values);
       return chain;
     };
+    // The close is confirmed with `.select('id')` (merge with the audit branch,
+    // Audit C1-S9-89), so a landed close answers with the row it changed.
     const settled = () => (table === 'meal_votes'
-      ? Promise.resolve({ data: null, error: null, count: null })
+      ? Promise.resolve({ data: updates.length ? [{ id: 'vote-1' }] : null, error: null, count: null })
       : answer(table));
     chain.maybeSingle = settled;
     chain.single = settled;

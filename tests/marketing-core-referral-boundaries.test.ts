@@ -16,16 +16,16 @@ describe('marketing core and referral action boundaries', () => {
   });
 
   it('sanitizes referral configuration and public referral failures', () => {
-    expect(referralsAdmin).toContain('marketingActionFailure');
+    expect(referralsAdmin).toContain('marketingActionFailure(');
     expect(referrals).toContain(".select('key').maybeSingle()");
     expect(referrals).toContain('We could not apply that referral code right now.');
     expect(referrals).not.toContain('reason: error.message');
   });
 
   it('fails closed and audits lead-score recomputation', () => {
-    expect(leadScores).toContain('requireMarketingAdmin');
-    expect(leadScores).toContain('marketingActionFailure');
-    expect(leadScores).toContain('logMarketingAudit');
+    expect(leadScores).toContain('requireMarketingAdmin(');
+    expect(leadScores).toContain('marketingActionFailure(');
+    expect(leadScores).toContain('logMarketingAudit(');
     expect(scoreCompute).toContain('if (contactError) throw contactError');
     expect(scoreCompute).toContain('if (contactsError) throw contactsError');
     expect(scoreCompute).toContain('if (error) throw error');

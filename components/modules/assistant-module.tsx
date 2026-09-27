@@ -23,7 +23,7 @@ import { ResultPane, cardId, type ConversationMessage } from '@/components/assis
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { isManager } from '@/lib/constants/roles';
@@ -282,12 +282,15 @@ export function AssistantModule() {
 
   async function deleteConversation(id: string) {
     if (!confirm(t('assistantModule.deleteThisConversation'))) return;
-    const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
+    // Under RLS a refused row is no error and zero rows; the conversation was
+    // taken off the list and came back on the next load. Audit C1-S9-86.
+    const { data: removed, error } = await createClient().from('ai_conversations').delete().eq('id', id).select('id');
     if (error) {
       console.error('[assistant] conversation delete failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
       return;
     }
+    if (wroteNoRows(removed)) { setConversationsError(t('assistantModule.couldNotDeleteThatConversation')); return; }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     if (id === convId) newChat();
   }
@@ -295,12 +298,13 @@ export function AssistantModule() {
   async function renameConversation(id: string, current: string) {
     const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
-    const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
+    const { data: renamed, error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id).select('id');
     if (error) {
       console.error('[assistant] conversation rename failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
       return;
     }
+    if (wroteNoRows(renamed)) { setConversationsError(t('assistantModule.couldNotRenameThatConversation')); return; }
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }
 

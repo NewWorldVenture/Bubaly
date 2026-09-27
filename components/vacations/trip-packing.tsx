@@ -5,6 +5,7 @@ import { Luggage, Plus, Trash2, Wand2, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -61,7 +62,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     const master = lists.find((l) => l.is_master);
     if (master) return master.id;
     const { data, error } = await createClient().from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: userId }).select('id').single();
-    if (error) { toastError(error.message); return null; }
+    if (error) { toastError(describeDbError(error)); return null; }
     return data.id;
   }
 
@@ -85,24 +86,27 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
+    if (error) toastError(describeDbError(error)); else success(`Added ${toAdd.length} suggested items`);
   }
 
   async function toggle(it: PackItem) {
-    const { error } = await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id);
-    if (error) toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: updated, error } = await createClient().from('vacation_packing_items').update({ packed: !it.packed }).eq('id', it.id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!form?.name.trim()) return;
     const listId = await ensureMasterList();
     const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-    if (error) toastError(error.message); else success(tr('tripPacking.added'));
+    if (error) toastError(describeDbError(error)); else success(tr('tripPacking.added'));
     setForm(null);
   }
   async function remove(id: string) {
-    const { error } = await createClient().from('vacation_packing_items').delete().eq('id', id);
-    if (error) toastError(error.message);
+    const { data: removed, error } = await createClient().from('vacation_packing_items').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   if (loading) return <LoadingBlock />;

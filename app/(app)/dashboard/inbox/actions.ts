@@ -52,7 +52,7 @@ const MAX_HANDLE_CHARS = 4_000;
  * Compose the text the planner sees from the row's own words. Kept pure and
  * exported so a test can pin it without a database.
  */
-export async function inboxRequestText(input: { subject?: string | null; body?: string | null }): Promise<string> {
+async function inboxRequestText(input: { subject?: string | null; body?: string | null }): Promise<string> {
   const subject = (input.subject ?? '').replace(/\s+/g, ' ').trim();
   const body = (input.body ?? '').trim();
   return [subject, body].filter(Boolean).join('\n\n').slice(0, MAX_HANDLE_CHARS);

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -187,7 +188,7 @@ describe('the first-run card persists its dismissal in display_layouts.settings'
     const dismiss = grid.slice(grid.indexOf('async function dismissSetup'), grid.indexOf('const dayIcon'));
     // The error path logs, toasts and RETURNS before setSetupDismissed(true).
     expect(dismiss).toContain("console.error('[display] setup card dismissal write failed'");
-    expect(dismiss.indexOf('return;')).toBeLessThan(dismiss.indexOf('setSetupDismissed(true)'));
+    expect(at(dismiss, 'return;')).toBeLessThan(at(dismiss, 'setSetupDismissed(true)'));
   });
 
   it('targets a column that exists', () => {

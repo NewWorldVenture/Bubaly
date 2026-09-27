@@ -124,6 +124,9 @@ export async function GET(req: NextRequest) {
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
+        // Rows deliberately not checked: on the service role zero rows means the
+        // rule was deleted mid-run, and a deleted rule has no schedule to restore
+        // and no run to skip. Audit C1-S9-63.
         const { error: rollbackError } = await supabase
           .from('allowance_rules')
           .update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })

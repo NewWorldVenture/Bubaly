@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -13,7 +14,15 @@ export const maxDuration = 120;
 // Nudges families about borrowed/rented items coming due, and alerts both sides
 // when one goes overdue. Each order gets at most one due-soon nudge and one
 // overdue alert (dedupe stamps on the order). Best-effort notifications.
-const BATCH = 200;
+//
+// The read below is PAGED rather than capped at a batch, because which orders
+// need a nudge is decided in code and not by the query: nothing filters on
+// `ends_on`, so a plain `.limit(200)` filled itself with open borrows due
+// months from now and stopped. PostgREST orders a query with no ORDER BY
+// arbitrarily, so an item due today could fall outside that slice on every run
+// and never be nudged, while the run answered 200. See lib/supabase/read-all.ts
+// for why `.limit()` is not a bound either.
+const MAX_OPEN_ORDERS = 5000;
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
@@ -42,14 +51,24 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const nowIso = now.toISOString();
 
-    // Open rent/borrow orders with a due date; the partial index backs this.
-    const { data: due, error } = await admin
+    // Open rent/borrow orders with a due date; the partial index backs this,
+    // and soonest-due first means the most urgent order is served first even if
+    // the ceiling is ever reached. `id` breaks ties so a page boundary between
+    // two orders sharing a due date cannot skip or repeat one.
+    const { rows: due, error } = await readAll((from, to) => admin
       .from('marketplace_orders')
       .select('id, family_id, listing_id, buyer_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
       .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
       .not('ends_on', 'is', null)
-      .limit(BATCH);
-    if (error) return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadOrders') }, { status: 500 });
+      .order('ends_on', { ascending: true })
+      .order('id')
+      .range(from, to), { max: MAX_OPEN_ORDERS });
+    // readAll reports the ceiling as an error rather than returning a prefix, so
+    // an unserved tail fails the run instead of reading as a clean one.
+    if (error) {
+      console.error('Return-reminders order read failed:', error);
+      return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadOrders') }, { status: 500 });
+    }
 
     // Titles for friendlier copy. A failed lookup is a failed batch because the
     // job must not acknowledge a partial notification run as healthy.
@@ -79,6 +98,9 @@ export async function GET(req: NextRequest) {
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // Rows deliberately not checked: the stamp exists so the NEXT run does not
+        // notify again, and on the service role zero rows means the order was
+        // deleted — which no run will sweep. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };
@@ -98,6 +120,7 @@ export async function GET(req: NextRequest) {
           body: `Time to return this ${verb}. Tap to see the exchange details.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // As above. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };

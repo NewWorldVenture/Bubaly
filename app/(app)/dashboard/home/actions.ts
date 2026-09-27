@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
 
 async function ctx() {
@@ -55,10 +55,14 @@ export async function saveWarrantyAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  const { error } = id
-    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId)
+  // Only the UPDATE branch needs confirming: an insert either inserts or
+  // errors, so it cannot match zero rows. Same split as `saveRow` in
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  const { data: saved, error } = id
+    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatWarranty')));
+  if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatWarranty'));
   revalidatePath('/dashboard/home/warranties');
   revalidatePath('/dashboard/home');
   revalidateAsset(row.asset_id);
@@ -67,8 +71,11 @@ export async function saveWarrantyAction(fd: FormData) {
 export async function deleteWarrantyAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatWarranty')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatWarranty'));
   revalidatePath('/dashboard/home/warranties');
 }
 
@@ -89,18 +96,25 @@ export async function saveContractorAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  const { error } = id
-    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId)
+  // Only the UPDATE branch needs confirming: an insert either inserts or
+  // errors, so it cannot match zero rows. Same split as `saveRow` in
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  const { data: saved, error } = id
+    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatContractor')));
+  if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatContractor'));
   revalidatePath('/dashboard/home/pros');
 }
 
 export async function deleteContractorAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatContractor')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatContractor'));
   revalidatePath('/dashboard/home/pros');
 }
 
@@ -126,8 +140,17 @@ export async function saveServiceRecordAction(fd: FormData) {
   // (the record itself is already saved), but log a failure so a broken update is
   // observable instead of silently drifting the forecast math.
   if (assetId && serviceDate) {
-    const { error: assetError } = await supabase.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId);
-    if (assetError) console.error('[home] home_assets last_serviced_on update failed', { familyId, assetId, error: assetError });
+    // Confirmed for the LOG, not for a bail — the same treatment as the vehicle
+    // odometer. An asset id matching no row in this family is the commonest way
+    // this quietly does nothing, and only an ERROR was reaching the log that
+    // exists to keep the forecast math from drifting unobserved. Audit C1-S9-60.
+    const { data: assetTouched, error: assetError } = await supabase.from('home_assets')
+      .update({ last_serviced_on: serviceDate }).eq('id', assetId).eq('family_id', familyId).select('id');
+    if (assetError || wroteNoRows(assetTouched)) {
+      console.error('[home] home_assets last_serviced_on update failed', {
+        familyId, assetId, error: assetError?.message ?? 'no rows updated',
+      });
+    }
   }
   revalidatePath('/dashboard/home/service');
   revalidatePath('/dashboard/home');
@@ -137,8 +160,11 @@ export async function saveServiceRecordAction(fd: FormData) {
 export async function deleteServiceRecordAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatService')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatService'));
   revalidatePath('/dashboard/home/service');
 }
 
@@ -146,23 +172,35 @@ export async function deleteServiceRecordAction(id: string) {
 export async function scheduleRecommendedTasksAction(assetId: string): Promise<{ ok: boolean; created: number; error?: string }> {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { data: asset } = await supabase
+  const { data: asset, error: assetReadError } = await supabase
     .from('home_assets')
     .select('id, name, category, last_serviced_on')
     .eq('id', assetId)
     .eq('family_id', familyId)
     .maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (assetReadError) return { ok: false, created: 0, error: describeActionError(assetReadError, tr('actions.couldNotCheckThatRefresh')) };
   if (!asset) return { ok: false, created: 0, error: tr('actions.assetNotFound') };
 
   const cadences = DEFAULT_CADENCES[asset.category ?? ''] ?? [];
   if (cadences.length === 0) return { ok: false, created: 0, error: tr('actions.noRecommendedScheduleForThis') };
 
   // Avoid duplicating tasks we already created for this asset.
-  const { data: existing } = await supabase
+  //
+  // This read IS the de-dupe set, so `?? []` on a failed read means "nothing is
+  // scheduled yet" and the whole recommended cadence is written a second time —
+  // the family gets every task twice, and a third press gives them three. The
+  // same hazard app/(app)/dashboard/migrate/actions.ts names on its own de-dupe
+  // reads: a short or failed read is duplication, not emptiness.
+  const { data: existing, error: existingError } = await supabase
     .from('maintenance_tasks')
     .select('title')
     .eq('family_id', familyId)
     .eq('asset_id', assetId);
+  if (existingError) {
+    console.error('[home] maintenance de-dupe read failed', { familyId, assetId, error: existingError });
+    return { ok: false, created: 0, error: describeActionError(existingError, tr('actions.couldNotAddThatTask')) };
+  }
   const have = new Set((existing ?? []).map((t) => t.title.toLowerCase()));
 
   const base = asset.last_serviced_on ? new Date(asset.last_serviced_on) : new Date();

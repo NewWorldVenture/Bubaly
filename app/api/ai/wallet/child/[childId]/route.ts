@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -37,14 +37,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const unavailable = () => NextResponse.json({ error: tr('child.failedToGenerateCoaching') }, { status: 503 });
 
     // Verify the child wallet belongs to this family (RLS also enforces this)
-    const { data: cw, error: walletError } = await supabase
+    // A refused read left the binding null and took the same branch as a row
+    // that genuinely is not there, so the caller was told their own child wallet
+    // does not exist. "Not found" is a claim about their data; it has to come
+    // from an answer, not from the absence of one. Fails closed either way —
+    // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+    const { data: cw, error: cwError } = await supabase
       .from('child_wallets')
       .select('id, member_id')
       .eq('id', childId)
       .eq('family_id', familyId)
       .eq('is_active', true)
       .maybeSingle();
-    if (walletError) { console.error('[ai-wallet-child] wallet read failed', walletError); return unavailable(); }
+    if (cwError) {
+      console.error('[ai/wallet/child] wallet read failed', { familyId, error: describeReadError(cwError) });
+      return NextResponse.json({ error: tr('child.walletDataIsTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!cw) return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
 
     // Tier gate
@@ -88,8 +96,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
 
-    if (memberError || bucketsError || txnsError || goalsError) {
-      console.error('[ai-wallet-child] ledger read failed', memberError ?? bucketsError ?? txnsError ?? goalsError);
+    // Same defect as the family-level route: readAllAsQuery reports a truncated
+    // or failed read as `data: null`, and destructuring only `data` turned that
+    // into a $0.00 balance the model then wrote coaching prose about. This is a
+    // child's money — refuse rather than invent a number. Audit C4-S4-02.
+    if (txnsError) {
+      console.error('[ai/wallet/child] transaction read failed or truncated', { childId, error: txnsError });
+      return NextResponse.json({ error: tr('child.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
+    // The other three reads are held to the same standard (see `unavailable`).
+    if (memberError || bucketsError || goalsError) {
+      console.error('[ai-wallet-child] ledger read failed', memberError ?? bucketsError ?? goalsError);
       return unavailable();
     }
 

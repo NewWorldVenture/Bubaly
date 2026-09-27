@@ -47,6 +47,7 @@ import type { Database } from '@/lib/database.types';
 import { forgetFact, rememberFact, updateFact } from '@/lib/services/memory';
 import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { at } from './helpers/source-order';
 
 const FAMILY = 'family-1';
 let db: ReturnType<typeof createInMemorySupabase<SupabaseClient<Database>>>;
@@ -281,7 +282,7 @@ describe('the migration text (static guard only — the behaviour is proven by t
     for (const name of created) {
       const drop = sql.indexOf(`drop policy if exists ${name} on public.family_facts;`);
       expect(drop, `${name} is created without a drop first`).toBeGreaterThanOrEqual(0);
-      expect(drop).toBeLessThan(sql.indexOf(`create policy ${name} on public.family_facts`));
+      expect(drop).toBeLessThan(at(sql, `create policy ${name} on public.family_facts`));
     }
   });
 

@@ -11,7 +11,7 @@ describe('marketing competitive, CRM, and proposal action boundaries', () => {
   it('routes every mutation cluster through sanitized failure handling', () => {
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
-      expect(source, path).toContain('marketingActionFailure');
+      expect(source, path).toContain('marketingActionFailure(');
       expect(source, path).toContain("import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure }");
       expect(source, path).not.toMatch(/const \{ data \} = await/);
     }

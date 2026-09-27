@@ -33,7 +33,7 @@ import {
 import { dateRange, tripNights } from '@/lib/vacations/dates';
 import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness as scoreReadiness, type ReadinessResult } from '@/lib/vacations/readiness';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { createEvent, searchEvents, type CalendarEvent } from '../calendar';
@@ -352,16 +352,24 @@ export async function buildPlan(scope: ServiceScope, vacationId: string, input: 
   const rollback = async () => {
     const remove = async (table: 'vacation_itinerary_items' | 'vacation_itinerary_days' | 'vacation_activities' | 'vacation_budgets', ids: string[]) => {
       if (!ids.length) return;
-      const { error } = await scope.db.from(table).delete().eq('family_id', scope.familyId).eq('vacation_id', vacationId).in('id', ids);
+      // Ids this call created, so an exact count is right; fewer removed leaves
+      // part of a failed plan in the trip. Logged, not raised. Audit C1-S9-65.
+      const { data: removed, error } = await scope.db.from(table).delete().eq('family_id', scope.familyId).eq('vacation_id', vacationId).in('id', ids).select('id');
       if (error) console.error(`[service:trips] rollback of ${table} failed`, error);
+      else if ((removed?.length ?? 0) !== ids.length) {
+        console.error(`[service:trips] rollback of ${table} was partial`, { removed: removed?.length ?? 0, created: ids.length });
+      }
     };
     await remove('vacation_itinerary_items', created.items);
     await remove('vacation_itinerary_days', created.days);
     await remove('vacation_activities', created.activities);
     await remove('vacation_budgets', created.budgets);
     for (const [, previous] of changedBudgets) {
-      const { error } = await scope.db.from('vacation_budgets').update({ planned_cents: previous.planned_cents, notes: previous.notes }).eq('id', previous.id).eq('family_id', scope.familyId);
-      if (error) console.error('[service:trips] rollback of a budget line failed', error);
+      const { data: restored, error } = await scope.db.from('vacation_budgets')
+        .update({ planned_cents: previous.planned_cents, notes: previous.notes }).eq('id', previous.id).eq('family_id', scope.familyId).select('id');
+      if (error || wroteNoRows(restored)) {
+        console.error('[service:trips] rollback of a budget line failed', error ?? { budgetId: previous.id, error: 'no rows updated' });
+      }
     }
   };
   const failAndRollback = async (message: string, error: unknown) => {
@@ -1104,17 +1112,22 @@ export async function reportTripDisruption(
       end_time: move.toEnd,
     };
     if (target.data) patch.day_id = target.data;
-    const { error } = await scope.db
+    // `shifted` is reported back as how much of the itinerary moved, and it was
+    // incremented for items that matched nothing (deleted since the plan was
+    // read). Counted only when a row moved; the rest of the disruption goes on.
+    // Audit C1-S9-65.
+    const { data: shiftedRow, error } = await scope.db
       .from('vacation_itinerary_items')
       .update(patch)
       .eq('id', move.id)
       .eq('family_id', scope.familyId)
-      .eq('vacation_id', vacationId);
+      .eq('vacation_id', vacationId)
+      .select('id');
     if (error) {
       console.error('[service:trips] itinerary shift failed', error);
       return fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db });
     }
-    shifted += 1;
+    if (!wroteNoRows(shiftedRow)) shifted += 1;
   }
 
   // The record of the disruption itself. `vacation_itinerary_items` already

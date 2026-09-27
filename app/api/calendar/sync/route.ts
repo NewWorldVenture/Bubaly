@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
 // ICS parser — no external dep, pure hand-rolled RFC 5545 parser
@@ -84,6 +85,16 @@ export async function POST(req: NextRequest) {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    // This route fetches a URL the caller chooses and then writes as many
+    // calendar rows as that URL returns, and it was the only import path with
+    // no limiter — `/api/sync/run` and `/api/sync/google/sync` both gate the
+    // same work with this helper. Same key shape, before the body is read so a
+    // rejected caller costs neither the outbound fetch nor the parse.
+    const limited = await enforceRequestRateLimit(supabase, `calendar-ics:${familyId}:${ctx.user.id}`, { limit: 10 });
+    if (!limited.ok) return NextResponse.json(
+      { error: t('sync.tooManySyncRequestsPlease') },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
     const boundedBody = await readBoundedRequestText(req, 16_384);
     if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body too large' : 'Unable to read request body' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
     const rawBody = boundedBody.text;
@@ -112,7 +123,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ imported: 0, message: 'Calendar is empty or no events found' });
     }
 
-    // Upsert events — dedup by (family_id, external_uid)
+    // NOT deduped. This comment used to say "Upsert events — dedup by
+    // (family_id, external_uid)" and none of that was true: the write below is
+    // a plain `.insert`, and `external_uid` (added in 0045, with the
+    // `(feed_id, external_uid)` unique index 0285 made inferable) is never
+    // written — the ICS UID goes into `description` as text. Re-importing the
+    // same URL therefore duplicates the family's whole calendar. The subscribed
+    // -feed path in `lib/server/calendar-feeds.ts` does it properly, via a
+    // `calendar_feeds` row this one-shot importer never creates; deduping here
+    // needs that row, which is more than a comment fix. What is fixed is the
+    // claim, so the next reader is not told this is idempotent when it is not.
     const rows = events.map((e) => ({
       family_id: familyId,
       title: e.title ?? 'Untitled',
@@ -125,15 +145,30 @@ export async function POST(req: NextRequest) {
       category: 'general' as const,
     }));
 
-    // Batch insert in chunks of 200 (skip duplicates by catching errors)
+    // Batch insert in chunks of 200. A Postgres insert is atomic per statement,
+    // so a refused chunk is 200 events lost — and the discarded `error` meant
+    // every one of them could be refused and this route still answered 200 with
+    // a cheerful `{ imported: 0 }`. The importer is the only thing that knows
+    // the write failed, so it is the only thing that can say so.
     let imported = 0;
+    let failed = 0;
+    let firstError: unknown = null;
     for (let i = 0; i < rows.length; i += 200) {
       const chunk = rows.slice(i, i + 200);
       const { error } = await supabase.from('calendar_events').insert(chunk);
-      if (!error) imported += chunk.length;
+      if (error) {
+        failed += chunk.length;
+        firstError ??= error;
+        console.error('[calendar-sync] imported event write failed', error);
+        continue;
+      }
+      imported += chunk.length;
+    }
+    if (imported === 0 && failed > 0) {
+      return NextResponse.json({ error: t('sync.couldNotSaveImportedCalendar') }, { status: 503 });
     }
 
-    return NextResponse.json({ imported, total: events.length });
+    return NextResponse.json({ imported, total: events.length, ...(failed ? { failed } : {}) });
   } catch (err: unknown) {
     console.error('ICS sync error:', err);
     return NextResponse.json({ error: 'Could not import the calendar.' }, { status: 500 });
