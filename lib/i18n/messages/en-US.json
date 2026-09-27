@@ -2908,6 +2908,7 @@
   "platform.activeFedToEveryGeneration": "Active — fed to every generation",
   "platform.addABrandRule": "Add a brand rule",
   "platform.addATemplate": "Add a template",
+  "platform.pageType": "Page type",
   "platform.saveChanges": "Save changes",
   "platform.usedForGeneration": "Used for generation",
   "playbookActions.couldNotCountNewInsights": "Bubaly saved what it learned, but could not tell how much of it was new. Reload the page to see your inbox.",

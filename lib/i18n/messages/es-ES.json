@@ -2918,6 +2918,7 @@
   "platform.activeFedToEveryGeneration": "Activa: se incluye en cada generación",
   "platform.addABrandRule": "Añadir una regla de marca",
   "platform.addATemplate": "Añadir una plantilla",
+  "platform.pageType": "Tipo de página",
   "platform.saveChanges": "Guardar cambios",
   "platform.usedForGeneration": "Se usa para la generación",
   "playbookActions.couldNotCountNewInsights": "Bubaly ha guardado lo que ha aprendido, pero no ha podido saber cuánto era nuevo. Recarga la página para ver tu bandeja de entrada.",

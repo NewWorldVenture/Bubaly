@@ -180,9 +180,14 @@ describe('the counts are bounded, and shrink', () => {
     // a caption. That select sets one member's social role; naming it after the
     // member would be wrong, and the right name ("Social role") is copy that
     // does not exist yet. Left alone deliberately.
+    //
+    // 62 after main's template editor on the marketing platform page arrived
+    // as a 67th. That page's four page-type selects now share one name, "Page
+    // type" (platform.pageType, seven catalogues), and its page editor's status
+    // select reuses the adminMarketingPlatform.status the page already had.
     expect(
       found.length,
       `selects with no accessible name:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(66);
+    ).toBeLessThanOrEqual(62);
   });
 });

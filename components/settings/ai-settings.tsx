@@ -94,7 +94,10 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       },
       (err: unknown) => {
         console.error('[ai-settings] load failed', err);
-        if (alive) setLoadError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+        // '' means "no message of its own": the render below words it, so this
+        // effect does not depend on `t` (which is a fresh function outside a
+        // provider, and would re-run the load on every render).
+        if (alive) setLoadError(err instanceof Error && err.message ? err.message : '');
       },
     );
     return () => { alive = false; };
@@ -124,7 +127,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     }
   }, [success, toastError, t]);
 
-  if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
+  if (loadError !== null) return <Card className="p-4 text-sm text-muted">{loadError || t('globalError.somethingWentWrong')}</Card>;
   if (!settings) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">

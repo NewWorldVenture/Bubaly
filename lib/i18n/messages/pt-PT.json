@@ -2918,6 +2918,7 @@
   "platform.activeFedToEveryGeneration": "Ativa — incluída em todas as gerações",
   "platform.addABrandRule": "Adicionar uma regra da marca",
   "platform.addATemplate": "Adicionar um modelo",
+  "platform.pageType": "Tipo de página",
   "platform.saveChanges": "Guardar alterações",
   "platform.usedForGeneration": "Usado na geração",
   "playbookActions.couldNotCountNewInsights": "O Bubaly guardou o que aprendeu, mas não conseguiu perceber quanto disso era novo. Recarregue a página para ver a sua caixa de entrada.",

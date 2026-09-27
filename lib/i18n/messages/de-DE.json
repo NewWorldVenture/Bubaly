@@ -2918,6 +2918,7 @@
   "platform.activeFedToEveryGeneration": "Aktiv – fließt in jede Generierung ein",
   "platform.addABrandRule": "Markenregel hinzufügen",
   "platform.addATemplate": "Vorlage hinzufügen",
+  "platform.pageType": "Seitentyp",
   "platform.saveChanges": "Änderungen speichern",
   "platform.usedForGeneration": "Für die Generierung verwendet",
   "playbookActions.couldNotCountNewInsights": "Bubaly hat gespeichert, was es gelernt hat, konnte aber nicht feststellen, wie viel davon neu ist. Laden Sie die Seite neu, um Ihren Posteingang zu sehen.",

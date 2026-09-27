@@ -2918,6 +2918,7 @@
   "platform.activeFedToEveryGeneration": "Actief — wordt bij elke generatie meegegeven",
   "platform.addABrandRule": "Een merkregel toevoegen",
   "platform.addATemplate": "Een sjabloon toevoegen",
+  "platform.pageType": "Paginatype",
   "platform.saveChanges": "Wijzigingen opslaan",
   "platform.usedForGeneration": "Gebruikt voor generatie",
   "playbookActions.couldNotCountNewInsights": "Bubaly heeft opgeslagen wat het heeft geleerd, maar kon niet bepalen hoeveel daarvan nieuw was. Laad de pagina opnieuw om je inbox te zien.",
