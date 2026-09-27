@@ -46075,6 +46075,32 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SIGNALS/SOCIAL/VOICE]` C1-S9-122 — family signals, the social feed and voice capture labels were English in every locale; the voice classifier reads only English
+
+**File/path:** `components/modules/family-signals-module.tsx`, `components/modules/social-feed-module.tsx`, `components/modules/voice-module.tsx`, `lib/voice/command-router.ts`; seven catalogues.
+
+**Problem.** English in every locale:
+- `/dashboard/signals`: pattern kinds and stat tiles.
+- `/dashboard/social`: feed tabs, quick filters and "Add {platform}".
+- `/dashboard/voice`:
+  - capture kinds
+  - the confirmation toast ("Added task · 3 items") and its Undo action
+  - history rows, including "Failed"
+
+**Separate finding (OPEN).** `classifyVoiceCommand()` recognises only English phrasing, such as "remind me to", "add … to the shopping list" and "schedule". A command spoken or typed in another language is filed as a note, whatever it asks for.
+
+**Fix.**
+- The labels, toasts and history rows above are now catalogue keys.
+- The voice module words each route itself (`voiceModule.route.*`).
+- `describeRoute()` in `lib/voice/command-router.ts` stays English, because the command bar and its test use it.
+- The four example commands stay English on purpose. Tapping one feeds the classifier, and a translated example would be filed as a note.
+
+**Status:**
+- **FIXED** for the labels. Scanner findings drop to 0 for `family-signals-module` and `social-feed-module`. `voice-module` has 4 left: the deliberate English examples.
+- **OPEN** for the classifier. Making it multilingual means per-locale intent rules or model classification. That is a feature decision for the owner, not a label fix.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
