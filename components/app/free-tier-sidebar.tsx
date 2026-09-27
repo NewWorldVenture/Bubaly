@@ -138,7 +138,10 @@ function useSidebarNav() {
       // `nav == null` with no error is the legitimate "nothing saved yet" case —
       // authoritative, and writable.
       setLoaded(true);
-    }).catch(() => { if (active) { setLoadError(true); setLoaded(false); } });
+    }).catch((err) => {
+      console.error('[sidebar] preference read failed', err);
+      if (active) { setLoadError(true); setLoaded(false); }
+    });
     return () => { active = false; };
   }, [reload]);
 

@@ -165,7 +165,7 @@ export async function GET(req: NextRequest) {
     const schedule = scheduleOf(rule);
     const held = !read.ok || !read.data.enabled;
     if (held || !schedule) {
-      await db.from('routine_runs').update({
+      const { error: writeError1 } = await db.from('routine_runs').update({
         status: 'skipped',
         detail: !held
           ? 'The routine no longer has a readable schedule.'
@@ -173,6 +173,7 @@ export async function GET(req: NextRequest) {
             ? 'Bubaly is switched off for this family.'
             : "Bubaly could not read this family's settings, so this occurrence was not filed.",
       }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError1) console.error('[cron/family-routines] routine_runs write failed', writeError1);
       if (!read.ok) problems.push(rule.id);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
@@ -212,11 +213,13 @@ export async function GET(req: NextRequest) {
     // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
     if (!request.ok) {
-      await db.from('routine_runs').update({ status: 'failed', detail: request.error }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      const { error: writeError2 } = await db.from('routine_runs').update({ status: 'failed', detail: request.error }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError2) console.error('[cron/family-routines] routine_runs write failed', writeError2);
       problems.push(rule.id);
     } else {
       const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
-      await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      const { error: writeError3 } = await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError3) console.error('[cron/family-routines] routine_runs write failed', writeError3);
       if (run.ok) kickRun(run.data.id, { budgetMs: 20_000 });
       filed += 1;
     }

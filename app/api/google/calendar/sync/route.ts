@@ -57,9 +57,10 @@ export async function POST() {
       // so null already answers `connected: false`, and it keeps the same shape
       // the refresh path writes a line below instead of two ways to say "gone".
       const cleared = { ...np, googleCalendarToken: null };
-      await supabase
+      const { error: writeError1 } = await supabase
         .from('user_preferences')
         .upsert({ user_id: ctx.user.id, notification_prefs: cleared }, { onConflict: 'user_id' });
+      if (writeError1) console.error('[google/calendar/sync] user_preferences write failed', writeError1);
       // 409, not 500: nothing is broken on our side and retrying will not help.
       // `reconnect` is the machine-readable half the client keys off.
       return NextResponse.json(
@@ -71,9 +72,10 @@ export async function POST() {
     // Persist refreshed token if it changed
     if (refreshedToken.accessToken !== stored.accessToken) {
       const merged = { ...np, googleCalendarToken: refreshedToken };
-      await supabase
+      const { error: writeError2 } = await supabase
         .from('user_preferences')
         .upsert({ user_id: ctx.user.id, notification_prefs: merged }, { onConflict: 'user_id' });
+      if (writeError2) console.error('[google/calendar/sync] user_preferences write failed', writeError2);
     }
 
     const events = await fetchGoogleCalendarEvents(accessToken, timeMin, timeMax);

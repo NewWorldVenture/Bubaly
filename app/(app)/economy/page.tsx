@@ -83,6 +83,7 @@ export default async function EconomyPage() {
       rewards={rewardList}
       redemptions={redemptionList}
       canManage={isManager(ctx.active.role)}
+      selfMemberId={ctx.active.member.id}
     />
   );
 }

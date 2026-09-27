@@ -84,11 +84,19 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
 
   useEffect(() => {
     let alive = true;
-    void loadAISettingsAction().then((res) => {
-      if (!alive) return;
-      if (res.ok) setSettings(res.settings);
-      else setLoadError(res.error);
-    });
+    // `{ ok: false }` was handled; a REJECTION was not, and left the skeleton
+    // on screen forever with nothing said.
+    void loadAISettingsAction().then(
+      (res) => {
+        if (!alive) return;
+        if (res.ok) setSettings(res.settings);
+        else setLoadError(res.error);
+      },
+      (err: unknown) => {
+        console.error('[ai-settings] load failed', err);
+        if (alive) setLoadError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      },
+    );
     return () => { alive = false; };
   }, []);
 

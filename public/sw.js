@@ -7,8 +7,16 @@
    offline to whoever next opens the app on a shared/family device — so only the
    public app shell below is ever cached for navigations; every other page is
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
-   previous worker cached, via the activate-time cleanup.) */
-const CACHE = 'bubaly-v4';
+   previous worker cached, via the activate-time cleanup.)
+
+   The same holds for bytes that are not HTML (SEC-001). Family photos live on
+   the Supabase origin and were never cached here, but Next's image optimizer
+   re-serves them from THIS origin at /_next/image, and the worker cached every
+   same-origin image cache-first with no partition by session: after logout the
+   next person on the device was served the previous family's photos offline.
+   So an optimizer response is never cached, nor is anything the server marks
+   private or no-store. (The v4→v5 bump purges what v4 already holds.) */
+const CACHE = 'bubaly-v5';
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown

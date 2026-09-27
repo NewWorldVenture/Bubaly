@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   // email delivery is unavailable. Best-effort: never block the user on it.
   const ticketNumber = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   try {
-    await supabase
+    const { error: writeError1 } = await supabase
       .from('support_tickets')
       .insert({
         ticket_number: ticketNumber,
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
         requester_email: email,
         tags: ['contact-form', `topic:${topic}`],
       });
+    if (writeError1) console.error('[contact] support_tickets write failed', writeError1);
     // Surface it in the Super Admin Notification Center.
     const { recordAdminNotification } = await import('@/lib/admin/notify');
     await recordAdminNotification(supabase, {

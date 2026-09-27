@@ -55,15 +55,16 @@ export async function POST(req: Request) {
     console.error('Social AI generation error:', err);
     const message = describeAIError(err).message;
     // Persist the failed attempt for auditability.
-    await supabase.from('social_ai_generations').insert({
+    const { error: writeError1 } = await supabase.from('social_ai_generations').insert({
       family_id: familyId, user_id: ctx.user.id, kind, platform, prompt: topic,
       input: { tone: tone ?? null, hasSource: Boolean(source) }, status: 'failed',
       output: { error: message }, created_by: ctx.user.id,
     });
+    if (writeError1) console.error('[social/ai] social_ai_generations write failed', writeError1);
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  await supabase.from('social_ai_generations').insert({
+  const { error: writeError2 } = await supabase.from('social_ai_generations').insert({
     family_id: familyId,
     user_id: ctx.user.id,
     kind,
@@ -75,9 +76,11 @@ export async function POST(req: Request) {
     status: 'succeeded',
     created_by: ctx.user.id,
   });
-  await supabase.from('social_usage_events').insert({
+  if (writeError2) console.error('[social/ai] social_ai_generations write failed', writeError2);
+  const { error: writeError3 } = await supabase.from('social_usage_events').insert({
     family_id: familyId, user_id: ctx.user.id, kind: 'ai_generation', quantity: 1,
   });
+  if (writeError3) console.error('[social/ai] social_usage_events write failed', writeError3);
 
   return NextResponse.json({ text: result.text, model: result.model, kind });
 }

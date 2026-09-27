@@ -471,9 +471,15 @@ begin
       failures := array_append(failures, format('%s: %s permissive SELECT-covering policies, the header credits exactly one (%L)', t, n_perm, expected));
     end if;
 
+    -- 0377 (C1-K-55, merged after this was written) split behavior_logs' FOR
+    -- ALL into per-command policies to make edits and deletes a manager's. The
+    -- read half is behavior_logs_select, USING is_family_member(family_id)
+    -- exactly as before, so the same predicate is credited under its new name.
     select replace(p.qual, 'public.', '') into got_qual from pg_policies p
-     where p.schemaname = 'public' and p.tablename = t and p.policyname = expected
-       and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL'
+     where p.schemaname = 'public' and p.tablename = t
+       and p.permissive = 'PERMISSIVE'
+       and ((p.policyname = expected and p.cmd = 'ALL')
+            or (t = 'behavior_logs' and p.policyname = 'behavior_logs_select' and p.cmd = 'SELECT'))
        and 'authenticated' = any (p.roles::text[]);
     if got_qual is null then
       failures := array_append(failures, format('%s: no permissive FOR ALL policy named %L granted to authenticated — the policy the header cites has been dropped, renamed or re-scoped; re-derive the attribution', t, expected));
@@ -502,7 +508,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception 'K-01 attribution UNPINNED (the boundary held above, but not for the reason this file credits): %', array_to_string(failures, ' | ');
   end if;
-  raise notice 'OK member-scope (attribution pin): one permissive FOR ALL policy per table, USING is_family_member(family_id) exactly, no restrictive SELECT policy on either, and the predicate is still 0003''s security-definer three-column test';
+  raise notice 'OK member-scope (attribution pin): one permissive SELECT-covering policy per table (FOR ALL, or 0377''s behavior_logs_select), USING is_family_member(family_id) exactly, no restrictive SELECT policy on either, and the predicate is still 0003''s security-definer three-column test';
 end $$;
 
 -- Leave the database exactly as it was found: every row above, and the grant,

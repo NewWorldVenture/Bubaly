@@ -112,7 +112,8 @@ export async function POST(req: NextRequest) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
         status = 'Request failed.';
       }
-      await supabase.from('weekend_feeds').update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      const { error: writeError1 } = await supabase.from('weekend_feeds').update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      if (writeError1) console.error('[weekend/discover] weekend_feeds write failed', writeError1);
     }));
   }
 
@@ -140,7 +141,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  const { error: writeError2 } = await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  if (writeError2) console.error('[weekend/discover] weekend_searches write failed', writeError2);
 
   return NextResponse.json({ count: merged.length, zip: zip.trim(), radius: radiusMiles, days: windowDays, sources: sourcesUsed, errors: sourceErrors });
 }

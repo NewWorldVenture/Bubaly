@@ -91,11 +91,26 @@ export function MoneyCardsView({
 
   async function issueAllVirtual() {
     setBusy('issue-all');
-    for (const child of childrenWithoutCards) {
-      await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+    // Every other handler in this file checks `res`; this loop did not. A throw
+    // part-way left `setBusy(null)` unreached (the button stuck), skipped the
+    // remaining children, and said nothing — and the count in the toast was the
+    // number INTENDED, not the number issued. Report what actually happened.
+    let issued = 0;
+    try {
+      for (const child of childrenWithoutCards) {
+        const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+        if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+          toastError(('error' in res && typeof res.error === 'string' && res.error) || t('globalError.somethingWentWrong'));
+          break;
+        }
+        issued += 1;
+      }
+    } catch (err) {
+      toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
-    success(`Issued ${childrenWithoutCards.length} virtual card${childrenWithoutCards.length !== 1 ? 's' : ''}!`);
+    if (issued > 0) success(`Issued ${issued} virtual card${issued !== 1 ? 's' : ''}!`);
     router.refresh();
   }
 
