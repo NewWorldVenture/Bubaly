@@ -31038,6 +31038,29 @@ role changes that touch `parent` need `is_family_admin`, in the fm_update
 policy (a trigger comparing OLD/NEW role) and in the module's role options.
 Not changed without that answer.
 
+*Added 2026-09-27 (PORT-001).* Two facts for that answer.
+
+- **What a self-promoted adult can do.** `families_delete` checks
+  `is_family_admin` and nothing else. So an adult who promotes themselves to
+  parent can **delete the whole family**, and the delete cascades to every
+  member, wallet and document. They can also demote, deactivate or delete the
+  parents first. The audit branch measured seven such breaches as an invited
+  adult.
+- **A fix is ready if the answer is "adult is not a co-owner".** It is commit
+  `f20ebbed` on `claude/logged-in-pages-supabase-7q6vtf` (SEC-026):
+  - a SECURITY INVOKER trigger on `family_members`, under which only a parent
+    may make, change or remove a parent's row, unless the family has no active
+    parent;
+  - the family module hiding Edit/Remove on parent cards from non-parents, and
+    offering Parent in the picker only to someone who may make one;
+  - a probe with controls for adults managing non-parents, parents managing
+    parents, a parentless family making one, and a parent's family delete still
+    cascading.
+
+  It is deliberately **not** in the port (#586), because this entry leaves it to
+  the owner. It re-applies onto main in one step, taking the next free
+  migration number.
+
 ## C1-K-46 · LOW · A sibling could make someone's marketplace offer vanish
 
 `marketplace_offers` INSERT and UPDATE were already the offerer's, or the
@@ -31492,6 +31515,8 @@ here rather than half-fixed.
 | `0402` | `0334` | no auction could ever close | carried whole |
 
 The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
+
+The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **deferred, not dropped**. Main records exactly this as an owner decision ("an adult can make themselves the family's Admin, or demote the parents": not changed without that answer). That entry now also notes that the escalation reaches `families_delete` and points at the ready fix.
 
 **Found by the port itself** (on main, not on the branch):
 - The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
