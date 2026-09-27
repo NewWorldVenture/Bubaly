@@ -9,7 +9,7 @@ import { getUserContext, requireUserContext } from '@/lib/supabase/auth';
 const mocks = vi.hoisted(() => ({
   retrievePrice: vi.fn(), createCustomer: vi.fn(), createCheckout: vi.fn(), retrieveSubscription: vi.fn(), updateSubscription: vi.fn(),
   constructEvent: vi.fn(), recordEvent: vi.fn(), markProcessed: vi.fn(), markError: vi.fn(),
-  role: 'parent', trace: [] as string[], writes: [] as { table: string; operation: string; value: unknown }[],
+  role: 'parent', trace: [] as string[], writes: [] as { table: string; operation: string; value: unknown; options?: unknown }[],
   rows: {} as Record<string, Record<string, unknown> | null>,
   contextState: 'ready' as 'ready' | 'needsFamily' | 'signedOut' | 'unavailable',
   memberships: [{ familyId: 'family-a', role: 'parent' }],
@@ -37,7 +37,35 @@ vi.mock('@/lib/supabase/server', () => {
     const builder = {
       select: () => builder, eq: () => builder,
       maybeSingle: async () => ({ data: mocks.rows[table] ?? null, error: mocks.errors[table] ?? null }),
-      upsert: async (value: unknown) => { mocks.writes.push({ table, operation: 'upsert', value }); return { error: null }; },
+      // Chainable AND awaitable, for the same reason `update` below is: a real
+      // PostgREST upsert supports `.upsert(v)` and `.upsert(v).select().maybeSingle()`,
+      // and the billing-customer writer uses the second form to learn what the
+      // row now holds. Modelled as `async` this answered 500 to something
+      // production handles — and, worse, no unit test in the suite could observe
+      // whether an upsert's result was read at all.
+      upsert: (value: unknown, options?: unknown) => {
+        const settle = () => {
+          mocks.writes.push({ table, operation: 'upsert', value, options });
+          return { error: null };
+        };
+        const chain = {
+          select: () => chain,
+          maybeSingle: async () => {
+            const { error } = settle();
+            return { data: { ...(value as Record<string, unknown>) }, error };
+          },
+          single: async () => {
+            const { error } = settle();
+            return { data: { ...(value as Record<string, unknown>) }, error };
+          },
+          then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+            let settled;
+            try { settled = settle(); } catch (error) { return Promise.reject(error).then(resolve, reject); }
+            return Promise.resolve(settled).then(resolve, reject);
+          },
+        };
+        return chain;
+      },
       insert: async (value: unknown) => { mocks.writes.push({ table, operation: 'insert', value }); return { error: null }; },
       // A real PostgREST builder is chainable AND awaitable, so `.update().eq()`
       // and `.update().eq().select()` are both valid. The subscription webhook
@@ -127,6 +155,26 @@ describe.each([['checkout', checkout], ['change-plan', changePlan]] as const)('%
     mocks.role = 'child';
     expect((await route(request('basic_annual'))).status).toBe(403);
     expect(mocks.retrievePrice).not.toHaveBeenCalled(); noPaidMutation();
+  });
+
+  it('records the new Stripe customer against a conflict target that can fire', async () => {
+    // DATA-014, observed at runtime rather than read out of the source.
+    // `billing_customers` keys on `id uuid default gen_random_uuid()` with a
+    // separate `unique (family_id)`, so an upsert that does not name the target
+    // gets `on conflict (id)` — which the payload never supplies, so the insert
+    // is attempted in full and collides with the family_id constraint instead.
+    // Both routes used to do exactly that, and the second write for a family
+    // failed with 23505 after a real Stripe customer had already been created.
+    // Both routes reach the customer-creation branch only when there is no
+    // subscription to change in place; change-plan otherwise updates the
+    // existing Stripe subscription and never gets here.
+    mocks.rows = { ...mocks.rows, subscriptions: { plan: 'free', status: 'active', provider_ref: null, cancel_at_period_end: false }, billing_customers: null };
+    expect((await route(request('basic_annual'))).status).toBe(200);
+    expect(mocks.createCustomer, 'the fixture must actually take the create-customer branch').toHaveBeenCalled();
+    const write = mocks.writes.find(w => w.table === 'billing_customers');
+    expect(write, 'the route must record the customer it just created').toBeDefined();
+    expect(write!.operation).toBe('upsert');
+    expect(write!.options).toEqual({ onConflict: 'family_id' });
   });
 
   it.each([

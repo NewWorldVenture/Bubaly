@@ -6,6 +6,7 @@ import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace, slugToStripePlan } from '@/lib/billing/plans';
 import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
+import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -160,11 +161,13 @@ export async function POST(req: NextRequest) {
       });
       customerId = customer.id;
       // Service client, per 0300 — see the note in app/api/billing/checkout.
-      const { error: customerWriteError } = await createServiceClient().from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
-      if (customerWriteError) {
-        console.error('[billing-change-plan] Billing customer write failed', customerWriteError);
+      // rememberStripeCustomer owns the conflict target; see lib/billing/customer-ref.
+      const written = await rememberStripeCustomer(createServiceClient(), familyId, customerId);
+      if (!written.ok) {
+        console.error('[billing-change-plan] Billing customer write failed', written.error);
         return NextResponse.json({ error: t('changePlan.couldNotSaveTheBilling') }, { status: 503 });
       }
+      customerId = written.customerRef;
     }
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.

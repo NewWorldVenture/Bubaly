@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
 import { isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
+import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
@@ -75,15 +76,13 @@ export async function POST(req: NextRequest) {
       // It goes through the service client because 0300 took the client's write
       // grant away: billing_customers chooses whose Stripe portal opens, and
       // that is not a row a browser should be able to PATCH.
-      const { error: customerWriteError } = await createServiceClient().from('billing_customers').upsert({
-        family_id: familyId,
-        provider: 'stripe',
-        customer_ref: customerId,
-      });
-      if (customerWriteError) {
-        console.error('[billing-checkout] Billing customer write failed', customerWriteError);
+      // rememberStripeCustomer owns the conflict target; see lib/billing/customer-ref.
+      const written = await rememberStripeCustomer(createServiceClient(), familyId, customerId);
+      if (!written.ok) {
+        console.error('[billing-checkout] Billing customer write failed', written.error);
         return NextResponse.json({ error: t('checkout.couldNotSaveTheBilling') }, { status: 503 });
       }
+      customerId = written.customerRef;
     }
 
     // PAY-5: build success/cancel URLs from the trusted configured base, not the
