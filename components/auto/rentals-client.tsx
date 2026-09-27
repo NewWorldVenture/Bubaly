@@ -16,6 +16,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Rental = Tables<'rental_cars'>;
 const TONE: Record<string, 'success' | 'brand' | 'neutral' | 'danger'> = { active: 'success', upcoming: 'brand', returned: 'neutral', cancelled: 'danger' };
@@ -23,6 +24,7 @@ const toLocal = (iso: string | null) => (iso ? new Date(iso).toISOString().slice
 
 export function RentalsClient({ rentals }: { rentals: Rental[] }) {
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Rental | null>(null);
   const [pending, start] = useTransition();
@@ -49,7 +51,7 @@ export function RentalsClient({ rentals }: { rentals: Rental[] }) {
               <div className="mt-2 space-y-1 text-xs text-muted">
                 {r.pickup_at && <p><MapPin className="mr-1 inline h-3 w-3" />Pick up {fmtDate(r.pickup_at)}{r.pickup_location ? ` · ${r.pickup_location}` : ''}</p>}
                 {r.return_at && <p><MapPin className="mr-1 inline h-3 w-3" />Return {fmtDate(r.return_at)}{r.dropoff_location ? ` · ${r.dropoff_location}` : ''}</p>}
-                {r.total_cost != null && <p>Total ${Number(r.total_cost).toLocaleString()}</p>}
+                {r.total_cost != null && <p>Total {fmtMoney(Math.round(Number(r.total_cost) * 100))}</p>}
               </div>
               <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                 <button onClick={() => { setEditing(r); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('rentalsClient.edit')}</button>
