@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { createServer } from '@/lib/supabase/server';
+import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { sendReactEmail } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import * as React from 'react';
@@ -52,8 +52,15 @@ export async function POST(req: NextRequest) {
     // reason — has a dedicated per-family policy of its own. This was the one
     // that had neither. Keyed per FAMILY, because the thing to bound is that
     // household's total outbound, not one member's share of it.
+    //
+    // Evaluated with the service client. `rate_limit_hit` (0179) refuses a key
+    // from a signed-in caller unless it names that caller's own id, so a family
+    // key sent on the member's session raised, the limiter failed closed, and
+    // every invite email answered 429: the invite form said it could not send
+    // the invite, every time. The family key is the right bound; it is only
+    // this server code, with no `auth.uid()`, that may reserve it.
     const limited = await enforceRequestRateLimit(
-      supabase, `email:invite:${ctx.active.familyId}`, { limit: 20, windowMs: 3_600_000 },
+      createServiceClient(), `email:invite:${ctx.active.familyId}`, { limit: 20, windowMs: 3_600_000 },
     );
     if (!limited.ok) {
       return NextResponse.json(
