@@ -148,7 +148,7 @@ saved from a signed-in browser.
 
 | Lane | Routes | Rows | Claim |
 |---|---|---|---|
-| A | public, auth and marketing pages (everything outside the signed-in app) | 44 | session_01TRY21ZKsFrfB3qtoP972A4, 2026-09-27 16:35Z (the session behind #588, #589, #590) |
+| A | public, auth and marketing pages (everything outside the signed-in app) | 44 | — (released 2026-09-27 16:45Z by session_01TRY21ZKsFrfB3qtoP972A4: all 44 rows ✅ CLEAN on production at `e14b12e8`) |
 | B | `/admin/**` | 80 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
 | C | `/dashboard/a…h**` | 95 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
 | D | `/dashboard/i…r**` | 53 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
@@ -192,6 +192,10 @@ defects below. Every one is fixed or recorded; none is left unexplained.
 | CI typecheck: `config.redirects` possibly undefined in the redirect test | — | `6d247466` | ✅ live at `7563462e` (#591, 16:06Z); production re-crawl pending |
 | An intermittent React #418 (hydration, "HTML": an element, not text) on a different page each time: `/economy`, `/dashboard/setup` (desktop sweeps), `/dashboard/social/settings`, `/dashboard/wishlists`, `/admin/marketing/video`, `/dashboard/school` (one each across three phone crawls of 393 pages), `/dashboard/auto/rentals`, `/dashboard/language` (a hunt of 546 signed-in loads, four at a time: 2 hits) | 8 | ⚠️ **OPEN.** Not reproduced alone, nor in 30 loads of those six pages with the CPU slowed 4×. A captured server response and the hydrated page have the same tree, so the difference exists only at the instant of hydration — a streaming race rather than wrong markup is the working theory; the relative-time cause above was one such race and is fixed. The CI sweep retries once and names the page when it recurs | — |
 | `/display`: one image request failed | 1 | this sandbox's proxy certificate; the Unsplash image answers 200 and the CSP allows `https:` images — not a site defect | — |
+| **Signed in, desktop** (a 1280 px axe run over 328 signed-in routes on a local build of a30e6b3f by the lane A session; the phone sweep stacks tiles and hides these): the family display's list tiles scroll inside a fixed-height cell with no keyboard stop (axe `scrollable-region-focusable`), and two empty-state links told from their sentence by colour alone (`link-in-text-block`: `/dashboard/calm`'s "Family Assistant", the wallet child view's "Create one") | `/display`, `/dashboard/calm`, `/wallet/children/[childId]` | this PR: each scrolling tile is a named `role="region"` with `tabIndex={0}` and a focus ring, and the grocery list, members row and handled-today list inside a tile no longer scroll on their own (the re-crawl after the first fix still failed on them: one scroller per tile, the reachable one); both links underlined; cases added to `tests/a-signed-in-control-has-a-name.test.ts` (red with the fixes reverted). Re-crawled at 1280 px on a local build of `f03a5457` plus this change | not yet |
+| **Lane A re-crawl on production** at `e14b12e8` (#591 live): all 44 public, auth and marketing routes, phone and desktop, axe WCAG 2.1 A/AA — 0 serious/critical, no console or page error, no failed subresource, no overflow; every no-such-id path 404s. The first desktop pass showed a 502 on one image (`/`) and one script chunk (`/terms`, whose error boundary then rendered); both answered clean on an immediate serial re-crawl, as did 49 blog posts whose earlier failures were the same proxy 502s — the sandbox proxy, not Vercel | 44 | — | ✅ live |
+| Three locator failure messages were defined twice in seven catalogues (two sessions added them independently; the merge kept both), and JSON keeps the last, so a failed geofence switch said "Could not update that geofence." instead of "… The alert setting has not changed — refresh and try again."; pt-PT's surviving copy also said *geovalla* (Spanish) where the rest of pt-PT says *geocerca* | `/dashboard/locator` | this PR: the later duplicates dropped, pt-PT term fixed; `tests/a-catalogue-says-each-key-once.test.ts` (9 catalogues red before) | not yet |
+| `/pricing` is titled "Pricing — The AI Family Operating System \| Bubaly": the title comes from production's SEO row for `/pricing`, which uses a pipe where every other page's template uses a middle dot. Not a defect in code (`titleWithoutDoubledBrand` correctly leaves the brand once); the owner can change the row in Admin → SEO | 1 | 🔒 owner data | — |
 
 All 433 internal links found on the crawled pages resolve. All 1,048 blog posts in the
 sitemap answer 200 on production (checked one by one, 2026-09-27 13:40Z; 13 that timed
@@ -200,14 +204,14 @@ posts is the parallel session's work (#588, #590).
 
 ### Every page
 
-*398 routes (every `app/**/page.tsx` at 06dd3f7e, plus the five aliases now answered by `next.config.mjs`).* ✅ CLEAN **32** · 🔧 FIXED, LIVE — re-crawl pending **358** · 🔧 FIXED, NOT LIVE **0** · ⚠️ OPEN **8** · 🔒 OWNER **0** · 🔄 CLAIMED **0** · ⬜ NOT CHECKED **0**
+*398 routes (every `app/**/page.tsx` at 06dd3f7e, plus the five aliases now answered by `next.config.mjs`).* ✅ CLEAN **44** · 🔧 FIXED, LIVE — re-crawl pending **346** · 🔧 FIXED, NOT LIVE **0** · ⚠️ OPEN **8** · 🔒 OWNER **0** · 🔄 CLAIMED **0** · ⬜ NOT CHECKED **0**
 
 IDs link each route to its row in the Session A register (`PAGE-`) and the Session B summary (`UI-ROUTE-`). "Signed out · production" is the desktop answer of the crawl; "Signed in · sweep" is `tests/e2e/every-page-signed-in.spec.ts` on a local build of this branch; "Signed in · phone" is the crawler at 375 px with that signed-in session (axe, overflow, errors), before the fixes named in the row.
 
 | Route | IDs | Lane | Signed out · production | Signed in · sweep | Signed in · phone | Findings → fix | Status |
 |---|---|---|---|---|---|---|---|
-| `/` | PAGE-380 UI-ROUTE-0377 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/acceptable-use` | PAGE-359 UI-ROUTE-0356 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/` | PAGE-380 UI-ROUTE-0377 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/acceptable-use` | PAGE-359 UI-ROUTE-0356 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/admin` | PAGE-060 UI-ROUTE-0059 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/admin/admins` | PAGE-001 UI-ROUTE-0001 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe color-contrast (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/admin/ai` | PAGE-003 UI-ROUTE-0003 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -288,21 +292,21 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/admin/users` | PAGE-078 UI-ROUTE-0077 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/admin/wallet` | PAGE-079 UI-ROUTE-0078 | B | → /login | clean | clean | axe button-name (phone) → `00850725`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/admin/wallet/reconciliation` | PAGE-080 UI-ROUTE-0079 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/ai` | PAGE-360 UI-ROUTE-0357 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/alternatives/[slug]` | PAGE-361 UI-ROUTE-0358 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
-| `/audiences/[slug]` | PAGE-362 UI-ROUTE-0359 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
-| `/auth/complete` | PAGE-396 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/auth/recovery` | PAGE-397 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/auth/signout/complete` | PAGE-398 | A | 200 | clean | clean | axe color-contrast (white on danger, 2.80:1) → #590 (parallel session) | ✅ CLEAN |
-| `/auth/step-up` | PAGE-081 UI-ROUTE-0080 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/blog` | PAGE-364 UI-ROUTE-0361 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/blog/[slug]` | PAGE-363 UI-ROUTE-0360 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/ai` | PAGE-360 UI-ROUTE-0357 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/alternatives/[slug]` | PAGE-361 UI-ROUTE-0358 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/audiences/[slug]` | PAGE-362 UI-ROUTE-0359 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/auth/complete` | PAGE-396 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/auth/recovery` | PAGE-397 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/auth/signout/complete` | PAGE-398 | A | 200 | clean | clean | axe color-contrast (white on danger, 2.80:1) → #590 (parallel session); re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/auth/step-up` | PAGE-081 UI-ROUTE-0080 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/blog` | PAGE-364 UI-ROUTE-0361 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/blog/[slug]` | PAGE-363 UI-ROUTE-0360 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/capture` | PAGE-083 UI-ROUTE-0082 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/capture/link` | PAGE-082 UI-ROUTE-0081 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/compare/[slug]` | PAGE-365 UI-ROUTE-0362 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
-| `/contact` | PAGE-366 UI-ROUTE-0363 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/cookies` | PAGE-367 UI-ROUTE-0364 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/customers/[slug]` | PAGE-368 UI-ROUTE-0365 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/compare/[slug]` | PAGE-365 UI-ROUTE-0362 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/contact` | PAGE-366 UI-ROUTE-0363 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/cookies` | PAGE-367 UI-ROUTE-0364 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/customers/[slug]` | PAGE-368 UI-ROUTE-0365 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/dashboard` | PAGE-210 UI-ROUTE-0207 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/activity` | PAGE-084 UI-ROUTE-0083 | C | → /login | clean | clean | relative time rendered on the server could fail hydration at a minute boundary (same cause as /admin/notifications) → `04e55736`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/agents` | PAGE-085 UI-ROUTE-0084 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -521,34 +525,34 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/display` | PAGE-299 UI-ROUTE-0296 | F | → /login | clean (sandbox-only failure) | clean | axe color-contrast (phone) → `98bcbd0b`; the sweep's one failure is an Unsplash image this sandbox's proxy certificate blocks; the image answers 200 and the CSP allows it | 🔧 FIXED, LIVE — re-crawl pending |
 | `/display/setup` | PAGE-300 UI-ROUTE-0297 | F | → /login | clean | clean | axe listitem (phone) → `98bcbd0b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/economy` | PAGE-301 UI-ROUTE-0298 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 in the first sweep; clean in the second and in nine re-runs | ⚠️ OPEN |
-| `/f/[id]` | PAGE-369 UI-ROUTE-0366 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
-| `/family-display` | PAGE-370 UI-ROUTE-0367 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
+| `/f/[id]` | PAGE-369 UI-ROUTE-0366 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/family-display` | PAGE-370 UI-ROUTE-0367 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/family/activity` | PAGE-302 UI-ROUTE-0299 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/family/members` | PAGE-303 UI-ROUTE-0300 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/family/notifications` | PAGE-304 UI-ROUTE-0301 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/family/permissions` | PAGE-305 UI-ROUTE-0302 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/family/reports` | PAGE-306 UI-ROUTE-0303 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/family/settings` | PAGE-307 UI-ROUTE-0304 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/faq` | PAGE-371 UI-ROUTE-0368 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/features` | PAGE-373 UI-ROUTE-0370 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/features/[slug]` | PAGE-372 UI-ROUTE-0369 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/faq` | PAGE-371 UI-ROUTE-0368 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/features` | PAGE-373 UI-ROUTE-0370 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/features/[slug]` | PAGE-372 UI-ROUTE-0369 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/feedback` | PAGE-308 UI-ROUTE-0305 | F | → /login | clean | clean | relative time rendered on the server could fail hydration at a minute boundary (same cause as /admin/notifications) → `04e55736`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/gift/[token]` | PAGE-388 UI-ROUTE-0385 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; dead link drawn as a live gift page → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/glossary/[slug]` | PAGE-374 UI-ROUTE-0371 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/gift/[token]` | PAGE-388 UI-ROUTE-0385 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; dead link drawn as a live gift page → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/glossary/[slug]` | PAGE-374 UI-ROUTE-0371 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/guardian` | PAGE-311 UI-ROUTE-0308 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/guardian/contacts` | PAGE-309 UI-ROUTE-0306 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/guardian/history` | PAGE-310 UI-ROUTE-0307 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/guardian/rules` | PAGE-312 UI-ROUTE-0309 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/guardian/settings` | PAGE-313 UI-ROUTE-0310 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/guides/[slug]` | PAGE-375 UI-ROUTE-0372 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/guides/[slug]` | PAGE-375 UI-ROUTE-0372 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/home` | PAGE-314 UI-ROUTE-0311 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/how-it-works` | PAGE-376 UI-ROUTE-0373 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/join` | PAGE-389 UI-ROUTE-0386 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/kid-login` | PAGE-355 UI-ROUTE-0352 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/how-it-works` | PAGE-376 UI-ROUTE-0373 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/join` | PAGE-389 UI-ROUTE-0386 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/kid-login` | PAGE-355 UI-ROUTE-0352 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/kids` | PAGE-315 UI-ROUTE-0312 | F | → /login | clean | clean | axe color-contrast (phone) → `98bcbd0b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/kids/submit/[assignmentId]` | PAGE-316 UI-ROUTE-0313 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/login` | PAGE-356 UI-ROUTE-0353 | A | → /login | clean | clean | — | ✅ CLEAN |
-| `/lp/[slug]` | PAGE-377 UI-ROUTE-0374 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/login` | PAGE-356 UI-ROUTE-0353 | A | → /login | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/lp/[slug]` | PAGE-377 UI-ROUTE-0374 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/marketplace` | PAGE-330 UI-ROUTE-0327 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/marketplace/alerts` | PAGE-317 UI-ROUTE-0314 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/marketplace/auctions` | PAGE-318 UI-ROUTE-0315 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -571,26 +575,26 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/marketplace/store` | PAGE-336 UI-ROUTE-0333 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/missions` | PAGE-338 UI-ROUTE-0335 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/missions/new` | PAGE-337 UI-ROUTE-0334 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/mobile` | PAGE-378 UI-ROUTE-0375 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/offline` | PAGE-390 UI-ROUTE-0387 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/mobile` | PAGE-378 UI-ROUTE-0375 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/offline` | PAGE-390 UI-ROUTE-0387 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/onboarding` | PAGE-391 UI-ROUTE-0388 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/p/[slug]` | PAGE-379 UI-ROUTE-0376 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/p/[slug]` | PAGE-379 UI-ROUTE-0376 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/parent` | PAGE-339 UI-ROUTE-0336 | F | 308 → /dashboard/family-operations (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, LIVE — re-crawl pending |
-| `/pay/[handle]` | PAGE-392 UI-ROUTE-0389 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/pricing` | PAGE-381 UI-ROUTE-0378 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/privacy` | PAGE-382 UI-ROUTE-0379 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/questions/[slug]` | PAGE-383 UI-ROUTE-0380 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/pay/[handle]` | PAGE-392 UI-ROUTE-0389 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/pricing` | PAGE-381 UI-ROUTE-0378 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/privacy` | PAGE-382 UI-ROUTE-0379 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/questions/[slug]` | PAGE-383 UI-ROUTE-0380 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/referrals` | PAGE-340 UI-ROUTE-0337 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/resources/[slug]` | PAGE-384 UI-ROUTE-0381 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
-| `/resources/benchmarks` | PAGE-385 UI-ROUTE-0382 | A | 404 (unpublished, by design) | clean | clean | 404 by design but kept its real title → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/reviews` | PAGE-394 UI-ROUTE-0391 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/reviews/new` | PAGE-393 UI-ROUTE-0390 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; seeder placeholder text on the public page → #589 (parallel session) | 🔧 FIXED, LIVE — re-crawl pending |
-| `/s/[slug]` | PAGE-395 UI-ROUTE-0392 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/security` | PAGE-386 UI-ROUTE-0383 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/resources/[slug]` | PAGE-384 UI-ROUTE-0381 | A | 404 (no-such-id path) | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/resources/benchmarks` | PAGE-385 UI-ROUTE-0382 | A | 404 (unpublished, by design) | clean | clean | 404 by design but kept its real title → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/reviews` | PAGE-394 UI-ROUTE-0391 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/reviews/new` | PAGE-393 UI-ROUTE-0390 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; seeder placeholder text on the public page → #589 (parallel session); re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/s/[slug]` | PAGE-395 UI-ROUTE-0392 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/security` | PAGE-386 UI-ROUTE-0383 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/services` | PAGE-342 UI-ROUTE-0339 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/services/[category]` | PAGE-341 UI-ROUTE-0338 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/signup` | PAGE-357 UI-ROUTE-0354 | A | 200 | clean | clean | — | ✅ CLEAN |
-| `/terms` | PAGE-387 UI-ROUTE-0384 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/signup` | PAGE-357 UI-ROUTE-0354 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
+| `/terms` | PAGE-387 UI-ROUTE-0384 | A | 200 | clean | clean | re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 | `/wallet` | PAGE-351 UI-ROUTE-0348 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/wallet/activity` | PAGE-343 UI-ROUTE-0340 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/wallet/allowance` | PAGE-344 UI-ROUTE-0341 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -603,7 +607,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/wallet/send` | PAGE-352 UI-ROUTE-0349 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/wallet/settings` | PAGE-353 UI-ROUTE-0350 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/wallet/treasury` | PAGE-354 UI-ROUTE-0351 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/welcome` | PAGE-358 UI-ROUTE-0355 | A | 200 | clean | clean | title "Welcome to Bubaly · Bubaly" → `17c86fb1` | 🔧 FIXED, LIVE — re-crawl pending |
+| `/welcome` | PAGE-358 UI-ROUTE-0355 | A | 200 | clean | clean | title "Welcome to Bubaly · Bubaly" → `17c86fb1`; re-crawled on production at `e14b12e8`, phone and desktop, 2026-09-27 16:30Z: right answer, 0 axe serious/critical, no console or page errors, no failed subresource, no overflow | ✅ CLEAN |
 <!-- page-audit:end -->
 
 ## Audit Status — Session A (this register)
@@ -46351,6 +46355,27 @@ An earlier probe run showed `family-facts-provenance` red. That run's bootstrap 
 
   Permanent IDs are not renumbered, so they are told apart by their tag lines. `claude-2.md` already carried four duplicated headings (C2-15 to C2-18) on this branch, and `claude-3.md` one (`Findings`) on `main`; neither was introduced here.
 - PRODUCTION READY stays **NO**. SEC-001 is an operator step, and migrations from 0177 on wait on the operator-owned 0177 statement timeout (see *Release · #579*).
+
+## Q74 — #548 released; then the live-page fixes #588, #589, #590 and lane A
+
+**#548** merged to `main` at `338b6b12` (~11:55Z, 2026-09-27) on the owner's "merge now, skip CI wait". Production answered `{"revision":"338b6b12…"}` at 12:02Z. `/api/health` was `degraded` only on the four unset feature secrets. The owner's "Supabase production migrations" run on that push stopped at `0177`, as every run has since #541 (PROD-DB-0177, operator-owned). `main`'s CI on `338b6b12` had Database and Mobile green, with E2E and the web job still running at the last check.
+
+**Then three small PRs from a crawl of every page on www.bubaly.com** (`scripts/audit-live-pages.mjs`: 1,082 public pages reached by following links from `/`, plus the sitemap; every signed-in route checked signed out):
+- **#588 → `19a24333`:** 16 blog hero images pointed at Picsum ids that now 404. `freeLicensedImage()` drops them (`tests/blog-cover-free-images.test.ts`).
+- **#589 → `566a887f`:** `/reviews/new` showed the seeder's placeholder copy ("Important task #1"). `realTextOr()` falls back to the default copy (`tests/a-seeded-settings-row-is-not-shown-to-the-public.test.ts`). The production row itself is still the owner's to replace.
+- **#590 → `a30e6b3f`:** axe `color-contrast` on every blog post (`text-white/30` and `/40`), and white text on the dark theme's danger fill at 2.80:1. There is now a `danger-fg` token, pinned in `tests/brand-contrast-contract.test.ts`. Every CI job was green on its head.
+
+Each merge reached production (`/api/build-info` answered each revision). A re-crawl after #590 found the public side clean, apart from proxy 502s that answered clean on a serial retry.
+
+**Then lane A of the Page Audit** (claimed in #594): all 44 public, auth and marketing routes were re-crawled on production at `e14b12e8`, at phone and desktop width with axe. All 44 are now ✅ CLEAN in *Every page*.
+
+A signed-in desktop axe run over 328 routes on a local build of `a30e6b3f` found what the parallel session's phone sweep found, and they had already fixed it on `main` (#591). It also found three things the phone sweep could not see:
+- the family display's scrolling list tiles, which had no keyboard stop;
+- two empty-state links distinguished from their sentence by colour alone.
+
+These are fixed in the PR that carries this entry, and recorded in the Page Audit's findings table. **The fixes this session drafted in parallel were dropped**, because `main` already had equivalents for them: avatar initials, the shared realtime channel, the New-trip hydration, and a batch of names and roles. Nothing was merged twice.
+
+PRODUCTION READY stays **NO** (migrations from `0177` on, SEC-001, the four production secrets).
 
 # Final Regression
 
