@@ -25,6 +25,17 @@
 //                 showed an error boundary is listed with what it did. This
 //                 one writes (to whatever `--base` is), so it is for a local
 //                 stack, not production.
+//   submissions   with --submit (batch B6b): every form in <main>, and every
+//                 form a dialog opens when an "Add / New / Create …" button
+//                 in <main> is clicked (up to 6 openers), is filled with valid
+//                 synthetic values (only fields that are empty) and submitted
+//                 by its own submit button — never one labelled like a delete,
+//                 payment, send or publish. Each submit records what it did:
+//                 an uncaught error, a console error, a failed or >= 400
+//                 request, an error boundary, an error toast or alert
+//                 ("error"); fields the browser refused ("invalid", with their
+//                 names — a gap in the filler, not the page); or nothing wrong
+//                 ("ok", with any success message). Local stack only.
 //
 // It judges nothing itself; `verdict` is a mechanical summary (PASS when the
 // document answered < 400 and none of the lists above has an entry), and a
@@ -49,8 +60,9 @@ const mobile = flag('mobile');
 const locale = opt('locale', 'en-US');
 const origin = new URL(base).origin;
 const interact = flag('interact');
-if (interact && /bubaly\.com$/.test(new URL(base).hostname)) {
-  console.error('--interact clicks controls that can write; point it at a local stack, not production');
+const submit = flag('submit');
+if ((interact || submit) && /bubaly\.com$/.test(new URL(base).hostname)) {
+  console.error('--interact and --submit write data; point them at a local stack, not production');
   process.exit(2);
 }
 
@@ -135,6 +147,166 @@ async function clickThrough(page, path, seen) {
   return { controls: count, clicked, failed };
 }
 
+// --submit (B6b). The buttons that open a form, and the synthetic values a
+// form is filled with. Only empty fields are filled, so a form's own defaults
+// (a pre-selected member, today's date) stay what a person would submit.
+const OPENERS = /^(\+\s*)?(add|new|create|log|record|plan|schedule|track|start|write|upload|set ?up)\b/i;
+const FAILURE_TEXT = /could ?n[o']t|couldn’t|failed|went wrong|unable to|error|not allowed|try again|refresh and/i;
+
+async function fillAndSubmit(page, formSel) {
+  const plan = await page.evaluate(([sel, never]) => {
+    const form = document.querySelector(sel);
+    if (!form) return { skipped: 'gone' };
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    const ymd = tomorrow.toISOString().slice(0, 10);
+    const setValue = (el, value) => {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
+        : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    let n = 0;
+    const filled = [];
+    for (const el of form.querySelectorAll('input,select,textarea')) {
+      if (el.disabled || el.readOnly || !visible(el)) continue;
+      const name = el.name || el.id || el.getAttribute('aria-label') || el.type;
+      if (el instanceof HTMLSelectElement) {
+        if (!el.value) { const o = [...el.options].find((x) => x.value && !x.disabled); if (o) { setValue(el, o.value); filled.push(name); } }
+        continue;
+      }
+      if (el.value) continue;
+      const t = (el.type || 'text').toLowerCase();
+      n += 1;
+      const v = t === 'email' ? `audit+${n}@local.test`
+        : t === 'tel' ? '+15555550123'
+        : t === 'url' ? 'https://example.com'
+        : t === 'number' || t === 'range' ? String(el.min && Number(el.min) > 0 ? el.min : 1)
+        : t === 'date' ? ymd
+        : t === 'datetime-local' ? `${ymd}T${/end|until|to$|finish/i.test(name) ? '11' : '10'}:00`
+        : t === 'time' ? (/end|until|to$|finish/i.test(name) ? '11:00' : '10:00')
+        : t === 'month' ? ymd.slice(0, 7)
+        : t === 'password' ? 'Audit-pass-1234!'
+        : ['checkbox', 'radio', 'file', 'hidden', 'submit', 'button', 'image', 'reset', 'color', 'week'].includes(t) ? null
+        : el instanceof HTMLTextAreaElement ? 'Audit note, safe to delete.'
+        : `Audit ${n}`;
+      if (v === null) {
+        if (t === 'radio' && el.required && !form.querySelector(`input[type=radio][name="${el.name}"]:checked`)) { el.click(); filled.push(name); }
+        continue;
+      }
+      setValue(el, v);
+      filled.push(name);
+    }
+    const buttons = [...form.querySelectorAll('button,input[type=submit]')].filter((b) => visible(b) && !b.disabled
+      && (b.type === 'submit' || (b.tagName === 'BUTTON' && !b.getAttribute('type'))));
+    const btn = buttons[buttons.length - 1];
+    if (!btn) return { skipped: 'no submit button', filled };
+    const label = (btn.getAttribute('aria-label') || btn.textContent || btn.value || '').replace(/\s+/g, ' ').trim();
+    if (new RegExp(never, 'i').test(label)) return { skipped: `submit is "${label.slice(0, 40)}"`, filled };
+    // Checked BEFORE the click: a form that saved resets, and its required
+    // fields then read as :invalid, which would look like a refusal.
+    const invalid = [...form.querySelectorAll(':invalid')].filter((el) => el.matches('input,select,textarea'))
+      .map((el) => el.name || el.id || el.getAttribute('aria-label') || el.type);
+    if (invalid.length) return { label: label.slice(0, 60), filled, invalid, skipped: undefined, blocked: true };
+    for (const el of document.querySelectorAll('[data-audit-submit]')) el.removeAttribute('data-audit-submit');
+    btn.setAttribute('data-audit-submit', '1');
+    return { label: label.slice(0, 60), filled };
+  }, [formSel, NEVER.source]);
+  if (plan.skipped || plan.blocked) return plan;
+  // A sticky bar or an open popover can cover the button; submitting the form
+  // through it is what a keyboard user's Enter does, so fall back to that.
+  await page.locator('[data-audit-submit="1"]').click({ timeout: 3_000 }).catch(async () => {
+    plan.via_requestSubmit = true;
+    await page.evaluate(() => { const b = document.querySelector('[data-audit-submit="1"]'); b?.form?.requestSubmit(b); })
+      .catch((e) => { plan.clickError = String(e.message).split('\n')[0].slice(0, 120); });
+  });
+  await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  const after = await page.evaluate((sel) => {
+    const form = document.querySelector(sel);
+    const messages = [...document.querySelectorAll('[role="alert"],[role="status"]')]
+      .map((el) => ({ role: el.getAttribute('role'), text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160) }))
+      .filter((m) => m.text);
+    const boundary = /Something went wrong|This page hit a snag|Application error/i.test(document.body?.innerText ?? '');
+    return { messages, boundary, formStillThere: !!form };
+  }, formSel);
+  return { ...plan, ...after };
+}
+
+async function submitForms(page, path, seen) {
+  const results = [];
+  const snapshot = () => [seen.pageErrors.length, seen.consoleErrors.length, seen.badRequests.length];
+  const judge = (r, before) => {
+    r.threw = seen.pageErrors.slice(before[0]);
+    r.logged = seen.consoleErrors.slice(before[1]);
+    r.requests = seen.badRequests.slice(before[2]);
+    const alerts = (r.messages ?? []).filter((m) => m.role === 'alert' && FAILURE_TEXT.test(m.text));
+    r.outcome = r.skipped ? 'skipped'
+      : (r.boundary || r.threw.length || r.logged.length || r.requests.length || alerts.length || r.clickError) ? 'error'
+      : r.invalid?.length ? 'invalid' : 'ok';
+    return r;
+  };
+  // Forms already on the page.
+  const onPage = await page.evaluate(() => {
+    const main = document.querySelector('main') ?? document.body;
+    let i = 0;
+    for (const f of main.querySelectorAll('form')) {
+      const r = f.getBoundingClientRect();
+      if (!r.width || !r.height || f.closest('nav,header,footer,[data-sidebar],[role="search"]')) continue;
+      f.setAttribute('data-audit-form', `p${i++}`);
+    }
+    return i;
+  });
+  for (let i = 0; i < Math.min(onPage, 6); i++) {
+    const before = snapshot();
+    const r = await fillAndSubmit(page, `[data-audit-form="p${i}"]`);
+    results.push(judge({ via: `form ${i + 1} on the page`, ...r }, before));
+    await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {});
+    await page.evaluate(() => { const main = document.querySelector('main') ?? document.body; let j = 0;
+      for (const f of main.querySelectorAll('form')) { const r = f.getBoundingClientRect(); if (!r.width || !r.height || f.closest('nav,header,footer,[data-sidebar],[role="search"]')) continue; f.setAttribute('data-audit-form', `p${j++}`); } });
+  }
+  // Forms a dialog opens.
+  const openers = await page.evaluate(([openers, never]) => {
+    const main = document.querySelector('main') ?? document.body;
+    const labels = [];
+    for (const el of main.querySelectorAll('button,a[role="button"]')) {
+      const label = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim();
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height || el.disabled || el.closest('form,nav,header,footer,[data-sidebar]')) continue;
+      if (!new RegExp(openers, 'i').test(label) || new RegExp(never, 'i').test(label)) continue;
+      if (!labels.includes(label)) labels.push(label);
+    }
+    return labels.slice(0, 6);
+  }, [OPENERS.source, NEVER.source]);
+  for (const label of openers) {
+    const before = snapshot();
+    const opener = page.locator('main button, main a[role="button"]').filter({ hasText: label }).first();
+    const alt = page.locator(`main [aria-label="${label.replace(/"/g, '\\"')}"]`).first();
+    const target = (await opener.count()) ? opener : alt;
+    try { await target.click({ timeout: 3_000 }); } catch { continue; }
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
+    const here = new URL(page.url()).pathname;
+    const found = await page.evaluate(() => {
+      const dialog = [...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')].pop();
+      const scope = dialog ?? document.querySelector('main') ?? document.body;
+      const form = [...scope.querySelectorAll('form')].find((f) => f.getBoundingClientRect().height > 0 && !f.hasAttribute('data-audit-form'));
+      if (!form) return false;
+      form.setAttribute('data-audit-form', 'd');
+      return true;
+    });
+    if (!found) {
+      if (here !== path) await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {});
+      else await page.keyboard.press('Escape').catch(() => {});
+      continue;
+    }
+    const r = await fillAndSubmit(page, '[data-audit-form="d"]');
+    results.push(judge({ via: `"${label.slice(0, 40)}"${here !== path ? ` → ${here}` : ''}`, ...r }, before));
+    await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {});
+  }
+  return results;
+}
+
 async function auditOne(context, path) {
   const page = await context.newPage();
   const pageErrors = [];
@@ -194,6 +366,7 @@ async function auditOne(context, path) {
       .map((h) => (h.startsWith(origin) ? h.slice(origin.length) : h).split('#')[0])
       .filter(Boolean))];
     if (interact && !row.error) row.interactions = await clickThrough(page, path, { pageErrors, consoleErrors, badRequests });
+    if (submit && !row.error) row.submissions = await submitForms(page, path, { pageErrors, consoleErrors, badRequests });
   } catch (e) {
     row.error = String(e.message).split('\n')[0].slice(0, 300);
   }
@@ -202,7 +375,8 @@ async function auditOne(context, path) {
   row.badRequests = [...new Set(badRequests)];
   const clean = !row.error && row.status != null && row.status < 400
     && !pageErrors.length && !consoleErrors.length && !row.badRequests.length
-    && !(row.smells?.length) && !(row.overflow > 1) && !(row.interactions?.failed.length);
+    && !(row.smells?.length) && !(row.overflow > 1) && !(row.interactions?.failed.length)
+    && !(row.submissions?.some((r) => r.outcome === 'error'));
   row.verdict = clean ? 'PASS' : 'CHECK';
   await page.close();
   return row;
