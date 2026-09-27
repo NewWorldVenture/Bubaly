@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setFeatureTier, resetFeatureTiers } from '@/lib/server/feature-tiers';
 import { isFeatureTier } from '@/lib/features/tiers';
@@ -20,8 +20,10 @@ function actionFailure(operation: string, message: string, error: unknown): Acti
 
 async function guard(): Promise<GuardResult> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.notAuthorized') };
+  }
   return { supabase: createServiceClient() };
 }
 

@@ -94,7 +94,7 @@ export function TaxVaultModule() {
       if (storageError) return toastError(storageError);
     }
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed, error } = await supabase.from('tax_documents').delete().eq('id', d.id).select('id');
+    const { data: removed, error } = await supabase.from('tax_documents').delete().eq('id', d.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('taxVaultModule.deleted'));
   }
 

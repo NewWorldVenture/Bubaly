@@ -134,6 +134,22 @@ test('SSR password fields and submit wait for real hydration, then accept the fi
   expect(await page.evaluate(() => window.__loginReady.calls.length)).toBe(0);
 });
 
+test('the phone entry waits for hydration too, so an early tap is held rather than dropped', async ({ page }) => {
+  // "Continue with phone" is the primary way in. Before this, it rendered
+  // enabled from the server with no handler, and once hydrated its handler
+  // refused an unmounted form, so a tap in that window did nothing at all and
+  // the phone form never opened (tests/e2e/phone-auth-http.spec.ts timed out on
+  // exactly this under CI load). Disabled until mounted, Playwright's click
+  // waits for it the way a person waits for a greyed-out button.
+  await fixture(page);
+  const phone = page.getByRole('button', { name: 'Continue with phone', exact: true });
+  await expect(phone).toBeDisabled();
+  const earlyTap = phone.click();
+  await hydrate(page); await earlyTap;
+  await expect(phone).toHaveCount(0);
+  expect(await page.evaluate(() => window.__loginReady.errors)).toEqual([]);
+});
+
 test('native pre-hydration submission never serializes credential fields into the URL', async ({ page }) => {
   const submissions = await fixture(page);
   // DOM population models autofill. Native requestSubmit has no React handler

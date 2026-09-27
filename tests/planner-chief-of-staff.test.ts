@@ -348,7 +348,7 @@ function harnessFor(steps: StepSnapshot[], planId: string): Harness {
     },
     async loadApproval(_scope, approvalId) {
       const found = h.approvals[approvalId];
-      return ok(found ? { id: approvalId, status: found.status, editedPayload: null } : null);
+      return ok(found ? { id: approvalId, status: found.status, payload: null, payloadKind: null, planStepIds: null, editedPayload: null } : null);
     },
     async notifyFamily() { return ok({ created: 1 }); },
     async verify() { return ok({ verified: true, detail: 'All checks passed.', checks: [] }); },

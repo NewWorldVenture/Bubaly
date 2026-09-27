@@ -34,6 +34,16 @@
 --   8. the server (service role) is not newly refused a status write;
 --   9. NEGATIVE CONTROL: drop ONLY 0381's decision trigger and require the
 --      adult's bare flip AND the forged-votes flip to succeed again.
+--  10. (0389) a decision once made stays made: a manager cannot re-open a
+--      DECLINED row by taking the "no" away, cannot move a declined 'single'
+--      row to approved on their own yes in one PATCH (0381's A and B both pass
+--      that write), cannot un-expire a row, cannot reverse an approval, cannot
+--      rewrite `edited_payload` after the deciding vote, cannot rewrite
+--      `payload` on a PENDING row between the first yes and the second, and
+--      cannot re-open a row decided before 0381; while the execution stamp on
+--      a DECLINED row (decide()'s error path) still lands;
+--  11. NEGATIVE CONTROL for 0389: drop ONLY its trigger, leave 0381's two in
+--      place, and require the rejected->approved flip and the re-open to land.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/two-parents-means-two-parents-check.sql
@@ -93,6 +103,7 @@ declare
   reject_r  uuid;   -- a two-parent row an adult declines
   server_r  uuid;   -- a row the service role closes
   legacy    uuid;   -- decided before 0381, with no votes at all
+  single_no uuid;   -- a 'single' row an adult declines, then tries to un-decline (0389)
 begin
   select id into mum_m   from public.family_members where family_id = fam and user_id = mum_u;
   select id into dad_m   from public.family_members where family_id = fam and user_id = dad_u;
@@ -116,6 +127,8 @@ begin
     values (fam, 'tasks', 'Closed by the server', 'ai', 'Concierge', 'two_parent', 1) returning id into server_r;
   insert into public.approval_requests (family_id, domain, title, requested_by_kind, agent, approval_model, required_approvals, status, decided_at)
     values (fam, 'scheduling', 'Approved before 0381', 'ai', 'Concierge', 'two_parent', 1, 'approved', now()) returning id into legacy;
+  insert into public.approval_requests (family_id, domain, title, requested_by_kind, agent, approval_model, required_approvals)
+    values (fam, 'tasks', 'Single: declined, then un-declined', 'ai', 'Concierge', 'single', 1) returning id into single_no;
 
   -- ── As the ADULT ────────────────────────────────────────────────────────
   perform set_config('role','authenticated', true);
@@ -209,6 +222,19 @@ begin
     if n <> 1 then failures := array_append(failures, format('an ADULT could not decline a two-parent row (%s rows)', n)); end if;
   exception when others then
     failures := array_append(failures, format('an ADULT''s "no" was refused: %s %s', sqlstate, sqlerrm));
+  end;
+
+  -- 5c. And a "no" on a single-approver row — the row 10b and the 0389
+  --     negative control then try to un-decline.
+  begin
+    update public.approval_requests
+       set status = 'rejected', decided_by = nan_m, decided_at = now(),
+           approvals = approvals || jsonb_build_array(jsonb_build_object('member_id', nan_m, 'decision', 'rejected', 'role', 'adult'))
+     where id = single_no;
+    get diagnostics n = row_count;
+    if n <> 1 then failures := array_append(failures, format('an ADULT could not decline a single-approver row (%s rows)', n)); end if;
+  exception when others then
+    failures := array_append(failures, format('an ADULT''s "no" on a single-approver row was refused: %s %s', sqlstate, sqlerrm));
   end;
 
   -- 7a. Not an oracle: a question about another family counts nothing.
@@ -306,14 +332,142 @@ begin
   end;
   perform set_config('role','postgres', true);
 
+  -- ── 10. A decision once made stays made (0389) ──────────────────────────
+  -- Every row below is already decided (or, for 10g, still pending). 0381
+  -- gates only the way INTO a decision; these are the ways OUT of one, each of
+  -- which `approval_requests_decide` let a manager take with one PATCH.
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub', nan_u::text, true);
+
+  -- 10a. Re-open a declined two-parent row by taking the "no" away. 0381's A
+  --      lets votes be removed; B does not run for a move to pending.
+  begin
+    update public.approval_requests
+       set status = 'pending', approvals = '[]'::jsonb, decided_by = null, decided_at = null
+     where id = reject_r;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'an ADULT re-opened a DECLINED two-parent row by removing the rejecting vote — a "no" is not final'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10b. Flip a declined 'single' row straight to approved on their own yes.
+  --      A passes (one vote, their own) and B passes (one manager satisfies
+  --      'single'); only 0389 stands between this write and the executor.
+  begin
+    update public.approval_requests
+       set status = 'approved', decided_by = nan_m, decided_at = now(),
+           approvals = approvals || jsonb_build_array(jsonb_build_object('member_id', nan_m, 'decision', 'approved', 'role', 'adult'))
+     where id = single_no;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'an ADULT moved a DECLINED single-approver row to approved with one PATCH — reconcileApprovals would run it with skipTrust'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10c. Un-expire a row nobody answered.
+  begin
+    update public.approval_requests set status = 'pending', decided_at = null where id = server_r;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'an ADULT re-opened an EXPIRED row'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10d. The stamp decide() writes on its error path lands on a declined row:
+  --      a decided row is frozen in its decision, not in every column.
+  begin
+    update public.approval_requests
+       set executed_at = now(), execution_result = 'error: Bubaly could not work out what this approval would do'
+     where id = reject_r;
+    get diagnostics n = row_count;
+    if n <> 1 then failures := array_append(failures, format('stampExecution could not stamp a DECLINED row (%s rows) — 0389 froze more than the decision', n)); end if;
+  exception when others then
+    failures := array_append(failures, format('a stamp on a declined row was refused: %s %s', sqlstate, sqlerrm));
+  end;
+
+  perform set_config('request.jwt.claim.sub', dad_u::text, true);
+
+  -- 10e. Reverse an approval after the fact.
+  begin
+    update public.approval_requests set status = 'rejected' where id = two;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a PARENT moved an APPROVED row to rejected — a decision is not a record'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10f. Change what an approved plan step will run, after both parents said yes.
+  begin
+    update public.approval_requests set edited_payload = '{"title":"something nobody voted on"}'::jsonb where id = two;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a PARENT rewrote edited_payload on an APPROVED row — the executor runs that column'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10g. Rewrite the ask on a row that is still PENDING — between the first
+  --      yes and the second.
+  begin
+    update public.approval_requests
+       set payload = '{"name":"finances.transfer","args":{"amount_cents":900000}}'::jsonb
+     where id = two_c;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a PARENT rewrote payload on a PENDING row — the second parent would approve something the first never saw'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 10h. A row decided before 0381, with no votes at all, is decided all the same.
+  begin
+    update public.approval_requests set status = 'pending' where id = legacy;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a PARENT re-opened a row decided before 0381'); end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('role','postgres', true);
+
   select status into st from public.approval_requests where id = two;
   if st is distinct from 'approved' then
     failures := array_append(failures, format('the two-parent row ended at %L, not approved', st));
+  end if;
+  select status into st from public.approval_requests where id = reject_r;
+  if st is distinct from 'rejected' then
+    failures := array_append(failures, format('the declined two-parent row ended at %L, not rejected', st));
+  end if;
+  select status into st from public.approval_requests where id = single_no;
+  if st is distinct from 'rejected' then
+    failures := array_append(failures, format('the declined single-approver row ended at %L, not rejected', st));
   end if;
 
   -- 7b. The grant layer.
   if has_function_privilege('anon', 'public.approval_votes_satisfy(uuid, text, integer, jsonb)', 'EXECUTE') then
     failures := array_append(failures, 'anon may EXECUTE approval_votes_satisfy');
+  end if;
+
+  -- ── Negative control for 0389: prove this probe can SEE that defect ────
+  -- Drop ONLY 0389's trigger, leaving 0381's two in place, and require the
+  -- adult's one-PATCH flip of a DECLINED single-approver row and the re-open
+  -- of a declined two-parent row to land — exactly what 0381 alone permitted.
+  -- The outer rollback restores it.
+  drop trigger if exists approval_requests_decision_is_final on public.approval_requests;
+
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub', nan_u::text, true);
+  update public.approval_requests
+     set status = 'approved', decided_by = nan_m, decided_at = now(),
+         approvals = approvals || jsonb_build_array(jsonb_build_object('member_id', nan_m, 'decision', 'approved', 'role', 'adult'))
+   where id = single_no;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    failures := array_append(failures, format('with 0389''s trigger removed the adult''s rejected->approved flip touched %s row(s) — that defect did not reproduce, so 10b proves nothing', n));
+  end if;
+  update public.approval_requests
+     set status = 'pending', approvals = '[]'::jsonb, decided_by = null, decided_at = null
+   where id = reject_r;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    failures := array_append(failures, format('with 0389''s trigger removed the adult''s re-open of a declined row touched %s row(s) — the defect did not reproduce', n));
+  end if;
+  perform set_config('role','postgres', true);
+  select status into st from public.approval_requests where id = single_no;
+  if st is distinct from 'approved' then
+    failures := array_append(failures, format('with 0389''s trigger removed the declined single row ended at %L, not approved — the negative control did not reproduce the flip', st));
   end if;
 
   -- ── Negative control: prove this probe can SEE the defect ──────────────
@@ -342,7 +496,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'"Two parents" is not a rule the database keeps:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0381 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips)';
+  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0381 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips; 0389: a declined, approved, expired or pre-0381 row cannot be re-opened, reversed or re-edited and a pending ask cannot be rewritten, while a stamp on a declined row lands, and its negative control reproduced the rejected->approved flip and the re-open)';
 end $$;
 
 rollback;

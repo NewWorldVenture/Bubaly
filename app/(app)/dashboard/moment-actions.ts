@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 const PREF_KEY = 'momentPrep';
@@ -87,26 +88,25 @@ export async function setMomentPrepDoneAction(input: { eventId: string; stepId: 
   // notification_prefs column, so merging into `{}` would erase App Lock, the
   // Google Calendar token and every other key this member has set. Fail closed
   // instead — the same guard Capture shortcuts and App Lock already use.
-  const { data: existing, error: readError } = await supabase.from('user_preferences')
-    .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
-  if (readError) {
-    console.error('[dashboard/moment-prep] preferences read failed', readError);
-    return { ok: false, error: describeActionError(readError) };
+  // The step is applied to the row as it is at write time, with a
+  // compare-and-set, so an App Lock or Google change made meanwhile is not put
+  // back — and nor is another tap on this plan (SRV-001 l7).
+  const written = await mergeNotificationPrefs(supabase, ctx.user.id, (prefs) => {
+    const map = (prefs[PREF_KEY] && typeof prefs[PREF_KEY] === 'object' && !Array.isArray(prefs[PREF_KEY]))
+      ? { ...(prefs[PREF_KEY] as Record<string, unknown>) } : {};
+    const saved = Array.isArray(map[eventId])
+      ? (map[eventId] as unknown[]).filter((v): v is string => typeof v === 'string') : [];
+    const doneIds = input.done
+      ? (saved.includes(stepId) ? saved : [...saved, stepId]).slice(0, 32)
+      : saved.filter((id) => id !== stepId);
+    if (doneIds.length === 0) delete map[eventId]; else map[eventId] = doneIds;
+    return { ...prefs, [PREF_KEY]: map };
+  });
+  if (!written.ok) {
+    if (written.reason === 'read_failed') console.error('[dashboard/moment-prep] preferences read failed', written.error);
+    else console.error('[dashboard/moment-prep] preferences write failed', written.reason, written.error);
+    return { ok: false, error: describeActionError(written.error) };
   }
-  const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const map = (prefs[PREF_KEY] && typeof prefs[PREF_KEY] === 'object' && !Array.isArray(prefs[PREF_KEY]))
-    ? { ...(prefs[PREF_KEY] as Record<string, unknown>) } : {};
-  const saved = Array.isArray(map[eventId])
-    ? (map[eventId] as unknown[]).filter((v): v is string => typeof v === 'string') : [];
-  const doneIds = input.done
-    ? (saved.includes(stepId) ? saved : [...saved, stepId]).slice(0, 32)
-    : saved.filter((id) => id !== stepId);
-  if (doneIds.length === 0) delete map[eventId]; else map[eventId] = doneIds;
-  const merged = { ...prefs, [PREF_KEY]: map };
-
-  const { error } = await supabase.from('user_preferences')
-    .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 

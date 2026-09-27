@@ -40,7 +40,7 @@ const SKIP = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverag
  * fixpoint below credits any function that calls one of these, directly or
  * through another function in the same module.
  */
-const AUTH_CALL = /\b(requireUserContext|requireUser|requireMember|requireFamily|requireSocialPermission|requireMarketingAdmin|requireAdmin|requireSuperAdmin|assertSuperAdmin|assertAdmin|isSuperAdmin|getUserContext|getUser|familyId)\s*\(/;
+const AUTH_CALL = /\b(requireUserContext|requireUser|requireMember|requireFamily|requireSocialPermission|requireMarketingAdmin|requireAdmin|requireSuperAdmin|assertSuperAdmin|superAdminGate|assertAdmin|isSuperAdmin|getUserContext|getUser|familyId)\s*\(/;
 
 /**
  * The six that legitimately reach no auth call, each with the reason. A new

@@ -18,7 +18,7 @@ describe('admin authentication boundary', () => {
     for (const path of actions) {
       const source = readFileSync(path, 'utf8');
       if (!source.includes('createServiceClient')) continue;
-      expect(source, path).toMatch(/isSuperAdmin|requireMarketingAdmin|assertSuperAdmin|guard\(/);
+      expect(source, path).toMatch(/isSuperAdmin|requireMarketingAdmin|assertSuperAdmin|superAdminGate|guard\(/);
     }
   });
 

@@ -52,6 +52,20 @@ declare
   -- negative control did not put 0296 back … the vault has been left open'
   -- against a database whose vault was perfectly intact — a false red, with
   -- the most alarming message in the file.
+  --   * NOT the step-up guards. 0391 layers four RESTRICTIVE policies over
+  --     this table — family_credentials_step_up_{select,insert,update,
+  --     delete}_guard — that read `public.session_cleared_step_up() or not
+  --     public.can_manage_family(family_id)`: they decide WHETHER a manager's
+  --     session is strong enough (aal2, or no authenticator enrolled), never
+  --     WHO. Nobody in this fixture has an authenticator, so they answer true
+  --     for the child, the parent and the adult alike and are transparent to
+  --     every refusal and every success measured here. They are excluded by
+  --     WHAT THEY ARE, not by name: RESTRICTIVE (a restrictive policy can only
+  --     narrow, never open the vault) AND calling session_cleared_step_up().
+  --     A PERMISSIVE policy is never excluded, whatever it is called, so a
+  --     fifth permissive policy from anywhere — even one named like a guard —
+  --     still fails this probe. Their own probe is
+  --     a-password-alone-does-not-open-the-familys-vault-check.sql.
   reader     text := $q$
     select count(*),
            count(*) filter (
@@ -63,6 +77,9 @@ declare
       join pg_class c on c.oid = p.polrelid
       join pg_namespace ns on ns.oid = c.relnamespace
      where ns.nspname = 'public' and c.relname = 'family_credentials'
+       and not (not p.polpermissive
+                and concat(pg_get_expr(p.polqual, p.polrelid), ' ', pg_get_expr(p.polwithcheck, p.polrelid))
+                    like '%session\_cleared\_step\_up()%')
   $q$;
 begin
   insert into public.families (id, name) values (fam, 'Vault keys') on conflict do nothing;

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
-import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
+import { superAdminGate } from '@/lib/auth/super-admin-gate';
 import { createServiceClient } from '@/lib/supabase/server';
 import { setAIConfig } from '@/lib/ai/settings';
 import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
@@ -10,8 +10,11 @@ import { describeActionError } from '@/lib/supabase/errors';
 
 export async function saveAIConfigAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, error: t('actions.forbidden') };
+  const gate = await superAdminGate();
+  if (gate.status !== 'allowed') {
+    return { ok: false, error: gate.status === 'unavailable' ? t('ai.accountContextIsTemporarilyUnavailable') : t('actions.forbidden') };
+  }
+  const { user } = gate;
 
   // OpenAI-only deployment.
   const model = String(formData.get('model') || '').trim() || null;
@@ -38,8 +41,9 @@ export type TestAIResult =
  */
 export async function testAIConnectionAction(): Promise<TestAIResult> {
   const t = await getTranslations();
-  const user = await getUser();
-  if (!user || !(await isSuperAdmin())) return { ok: false, code: 'forbidden', message: t('actions.forbidden'), detail: '' };
+  const gate = await superAdminGate();
+  if (gate.status === 'unavailable') return { ok: false, code: 'unavailable', message: t('ai.accountContextIsTemporarilyUnavailable'), detail: '' };
+  if (gate.status !== 'allowed') return { ok: false, code: 'forbidden', message: t('actions.forbidden'), detail: '' };
 
   if (!(await isAIConfigured())) {
     return { ok: false, code: 'unconfigured', message: 'No OpenAI key configured. Add one above and save, then test again.', detail: '' };

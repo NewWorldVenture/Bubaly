@@ -11,6 +11,12 @@ import {
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { decodeGoogleToken, encodeGoogleToken, hasStoredGoogleToken } from '@/lib/google-token-storage';
 import { describeReadError } from '@/lib/supabase/settle';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
+
+/** The stored token is the one this request read (the envelope, compared as stored). */
+function sameStoredToken(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
 
 // Fetches the next 3 months of events from Google Calendar primary and
 // upserts them into calendar_events with source='google'.
@@ -74,16 +80,18 @@ export async function POST() {
       // Null rather than `delete`: GET reads `googleCalendarToken?.accessToken`,
       // so null already answers `connected: false`, and it keeps the same shape
       // the refresh path writes a line below instead of two ways to say "gone".
-      const cleared = { ...np, googleCalendarToken: null };
+      // Only the token this sync read is cleared, onto the row as it is now:
+      // a reconnect that landed during the Google call has a NEW token, and
+      // this must not erase it (SRV-001 l7).
       // Read: a refused clear defeats the very purpose the comment above gives
       // for clearing. GET answers `connected` from this same value, so a failed
       // write leaves the "Sync" button in front of a calendar that can never
       // sync, while this response tells the user to reconnect. The grant is
       // dead either way, so this still answers 409 — but the contradiction is
       // named rather than invisible. Audit C1-S6-02.
-      const { error: clearError } = await supabase
-        .from('user_preferences')
-        .upsert({ user_id: ctx.user.id, notification_prefs: cleared }, { onConflict: 'user_id' });
+      const clearedPrefs = await mergeNotificationPrefs(supabase, ctx.user.id, (prefs) =>
+        sameStoredToken(prefs.googleCalendarToken, np.googleCalendarToken) ? { ...prefs, googleCalendarToken: null } : prefs);
+      const clearError = clearedPrefs.ok ? null : (clearedPrefs.error ?? clearedPrefs.reason);
       if (clearError) {
         console.error('[google-calendar] dead grant could not be cleared; the UI will still offer Sync', clearError);
       }
@@ -100,10 +108,15 @@ export async function POST() {
     // first use, with no separate backfill and no window where the two shapes
     // disagree.
     if (refreshedToken.accessToken !== stored.accessToken || decoded.legacy) {
-      const merged = { ...np, googleCalendarToken: encodeGoogleToken(refreshedToken) };
-      const { error: persistError } = await supabase
-        .from('user_preferences')
-        .upsert({ user_id: ctx.user.id, notification_prefs: merged }, { onConflict: 'user_id' });
+      // Onto the row as it is now, and only over the token this sync read: the
+      // read was taken before a Google call of up to 15 s, and writing that
+      // snapshot back erased any App Lock or shortcut change made meanwhile —
+      // or a reconnect's new token (SRV-001 l7).
+      const persisted = await mergeNotificationPrefs(supabase, ctx.user.id, (prefs) =>
+        sameStoredToken(prefs.googleCalendarToken, np.googleCalendarToken)
+          ? { ...prefs, googleCalendarToken: encodeGoogleToken(refreshedToken) }
+          : prefs);
+      const persistError = persisted.ok ? null : (persisted.error ?? persisted.reason);
       if (persistError) {
         // A lost refresh is self-correcting — the next sync refreshes again.
         // A lost MIGRATION is not: the plaintext token stays in a column the

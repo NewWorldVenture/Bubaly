@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isAppLockConfig, type AppLockConfig } from '@/lib/security/app-lock';
 import type { Json } from '@/lib/database.types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -29,22 +30,20 @@ export async function saveAppLockConfig(config: AppLockConfig | null): Promise<R
     return { ok: false, error: t('appLockActions.invalidLockConfiguration') };
   }
 
-  const { data: prefs, error: prefsError } = await supabase
-    .from('user_preferences')
-    .select('notification_prefs')
-    .eq('user_id', ctx.user.id)
-    .maybeSingle();
-  if (prefsError) return actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), prefsError);
-
-  const np = ((prefs?.notification_prefs as Record<string, unknown> | null) ?? {});
-  const next = { ...np };
-  if (config === null) delete next.appLock;
-  else next.appLock = config;
-
-  const { error } = await supabase
-    .from('user_preferences')
-    .upsert({ user_id: ctx.user.id, notification_prefs: next as Json }, { onConflict: 'user_id' });
-
-  if (error) return actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), error);
+  // Only `appLock` changes, merged onto the row as it is at write time and
+  // written with a compare-and-set (SRV-001 l7). A whole-blob write here could
+  // be put back by a shortcut save or a Google sync that had read the row
+  // first: the card said "App Lock is on" and the old config came back.
+  const saved = await mergeNotificationPrefs(supabase, ctx.user.id, (prefs) => {
+    const next = { ...prefs };
+    if (config === null) delete next.appLock;
+    else next.appLock = config as unknown as Json;
+    return next;
+  });
+  if (!saved.ok) {
+    return saved.reason === 'read_failed'
+      ? actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), saved.error)
+      : actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), saved.error ?? saved.reason);
+  }
   return { ok: true };
 }

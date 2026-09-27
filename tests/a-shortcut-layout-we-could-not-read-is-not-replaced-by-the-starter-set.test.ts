@@ -86,13 +86,24 @@ function from(_table: string) {
     maybeSingle: async () => (readFails
       ? { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }
       : { data: prefs === null ? null : { notification_prefs: { ...prefs } }, error: null }),
-    upsert: async (row: { notification_prefs: Record<string, unknown> }) => {
-      writes += 1;
-      prefs = { ...row.notification_prefs };
-      return { data: null, error: null };
-    },
+    // The action writes through mergeNotificationPrefs (SRV-001 l7): a
+    // compare-and-set update when the row exists, an insert when it does not.
+    update: (row: { notification_prefs: Record<string, unknown> }) => write(row),
+    insert: (row: { notification_prefs: Record<string, unknown> }) => write(row),
   });
   return query;
+}
+function write(row: { notification_prefs: Record<string, unknown> }) {
+  const chain: Record<string, unknown> = {};
+  Object.assign(chain, {
+    eq: () => chain, is: () => chain, select: () => chain,
+    maybeSingle: async () => {
+      writes += 1;
+      prefs = { ...row.notification_prefs };
+      return { data: { user_id: 'user-1' }, error: null };
+    },
+  });
+  return chain;
 }
 
 /** What is actually in user_preferences.notification_prefs right now. */
