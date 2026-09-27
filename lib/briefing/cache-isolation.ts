@@ -104,6 +104,26 @@ export function purgeLegacyBriefingCache(storage: Pick<Storage, 'length' | 'key'
   } catch { /* Storage can be blocked. It is never used to load or save briefs. */ }
 }
 
+/**
+ * The session's own failure copy. It has no catalogue, so the module words
+ * these two for the reader at render time (briefing.failedToGenerateBriefing,
+ * briefing.couldNotReadGeneratedBriefing); anything else in `error` is the
+ * route's message, already in the reader's language.
+ */
+export const BRIEFING_FAILED = 'Failed to generate briefing';
+export const BRIEFING_UNREADABLE = 'Could not read the generated briefing. Please try again.';
+
+/** The `error` a refusing route put in its body, when it put one there. */
+async function reasonGiven(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+    return typeof error === 'string' && error.trim() ? error : null;
+  } catch {
+    return null;
+  }
+}
+
 interface BriefingTabState {
   data: BriefingResponse | null;
   loading: boolean;
@@ -154,11 +174,18 @@ export function createBriefingSession(fetcher: typeof fetch = fetch) {
           signal: controller.signal,
         });
         if (!isCurrent()) return;
-        if (!response.ok) throw new Error('Failed to generate briefing');
+        if (!response.ok) {
+          // The route words each refusal for the reader, and they ask for
+          // different things: wait (429), a plan (403), try again (503). All of
+          // them used to become one generic English failure. Audit C1-S9-98.
+          const reason = await reasonGiven(response);
+          if (!isCurrent()) return;
+          throw new Error(reason ?? BRIEFING_FAILED);
+        }
         const value: unknown = await response.json();
         if (!isCurrent()) return;
         const data = parseBriefingResponse(value);
-        if (!data) throw new Error('Could not read the generated briefing. Please try again.');
+        if (!data) throw new Error(BRIEFING_UNREADABLE);
         publish(type, { data, loading: false, error: null, attempted: true });
       } catch (error) {
         if (isCurrent()) {

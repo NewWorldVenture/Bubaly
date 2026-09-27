@@ -21,7 +21,7 @@ import type { Database } from '@/lib/database.types';
 import type { ConciergeDigest, ConciergeDomain, ConciergeUrgency } from '@/lib/concierge/digest';
 import type { BriefDecisions } from '@/lib/briefing/response-schema';
 import {
-  briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
+  BRIEFING_FAILED, BRIEFING_UNREADABLE, briefingContextKey, createBriefingSession, purgeLegacyBriefingCache,
   type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -819,7 +819,10 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const active = tab === 'kitchen' ? null : state[tab];
   const loading = active ? !active.attempted || active.loading : false;
-  const error = active?.error ?? null;
+  const failure = active?.error ?? null;
+  const error = failure === BRIEFING_FAILED ? tr('briefing.failedToGenerateBriefing')
+    : failure === BRIEFING_UNREADABLE ? tr('briefing.couldNotReadGeneratedBriefing')
+      : failure;
   const currentBriefing = active?.data?.briefing ?? null;
   const generatedAt = active?.data?.generatedAt;
   const digest = active?.data?.digest;

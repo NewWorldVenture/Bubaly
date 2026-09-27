@@ -56,6 +56,11 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
   const { success, error: toastError } = useToast();
   const [scanning, setScanning] = useState(false);
   const [scannedOnce, setScannedOnce] = useState(false);
+  // What the latest scan came to. The forecast and the risk count describe
+  // TODAY only once a scan has run: a refused or failed one left no open
+  // suggestions, and the screen read that absence as "100% the day runs
+  // smoothly · 0 risk alerts · All clear". Audit C1-S9-98.
+  const [lastScan, setLastScan] = useState<{ state: 'pending' } | { state: 'ok' } | { state: 'failed'; message: string }>({ state: 'pending' });
   const [busyIds, setBusyIds] = useState<string[]>([]);
   const [outcomes, setOutcomes] = useState<Record<string, ResolutionResult>>({});
   const inFlight = useRef(new Set<string>());
@@ -83,10 +88,14 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
       const json = (await res.json()) as { autoExecuted?: number; error?: string };
       if (!isCurrent()) return;
       if (!res.ok) throw new Error(json.error || t('autopilotModule.scanFailed'));
+      setLastScan({ state: 'ok' });
       if (json.autoExecuted && json.autoExecuted > 0) success(t('autopilotResolution.scanRecorded', { count: json.autoExecuted }));
       void refresh();
     } catch (err) {
-      if (isCurrent()) toastError(describeDbError(err, t('autopilotModule.scanFailed')));
+      if (!isCurrent()) return;
+      const message = describeDbError(err, t('autopilotModule.scanFailed'));
+      setLastScan({ state: 'failed', message });
+      toastError(message);
     } finally {
       if (isCurrent()) setScanning(false);
     }
@@ -112,6 +121,7 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
     [open],
   );
   const highRisks = open.filter((s) => s.urgency === 3).length;
+  const scanned = lastScan.state === 'ok';
 
   async function resolve(s: Suggestion, dismiss = false) {
     if (!isCurrent() || s.family_id !== familyId || inFlight.current.has(s.id)) return;
@@ -182,8 +192,10 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
             <Gauge className="h-4 w-4" /> {t('autopilot.todayAposSSuccess')}
           </div>
-          <p className={cn('text-3xl font-black', probability >= 85 ? 'text-success' : probability >= 60 ? 'text-amber-500' : 'text-danger')}>{probability}%</p>
-          <p className="text-xs text-muted">{t('autopilot.probabilityTheDayRunsSmoothly')}</p>
+          <p className={cn('text-3xl font-black', !scanned ? 'text-muted' : probability >= 85 ? 'text-success' : probability >= 60 ? 'text-amber-500' : 'text-danger')}>{scanned ? `${probability}%` : '—'}</p>
+          <p className="text-xs text-muted">
+            {scanned ? t('autopilot.probabilityTheDayRunsSmoothly') : lastScan.state === 'failed' ? t('autopilotModule.noForecastScanDidNotRun') : t('autopilotModule.scanningYourFamily')}
+          </p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -197,12 +209,16 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
             <AlertTriangle className="h-4 w-4" /> {t('autopilot.riskAlerts')}
           </div>
-          <p className={cn('text-3xl font-black', highRisks > 0 ? 'text-danger' : 'text-success')}>{highRisks}</p>
+          <p className={cn('text-3xl font-black', !scanned && highRisks === 0 ? 'text-muted' : highRisks > 0 ? 'text-danger' : 'text-success')}>{!scanned && highRisks === 0 ? '—' : highRisks}</p>
           <p className="text-xs text-muted">{t('autopilot.highUrgencyItemsNeedingYou')}</p>
         </div>
       </div>
 
-      {open.length === 0 && handled.length === 0 && approved.length === 0 ? (
+      {open.length === 0 && handled.length === 0 && approved.length === 0 && lastScan.state === 'failed' ? (
+        <ErrorState message={`${t('autopilotModule.nothingCheckedYet')} ${lastScan.message}`} onRetry={runScan} />
+      ) : open.length === 0 && handled.length === 0 && approved.length === 0 && !scanned ? (
+        <SkeletonList />
+      ) : open.length === 0 && handled.length === 0 && approved.length === 0 ? (
         <EmptyState icon={Rocket} title={t('autopilot.allClear')}
           description={t('autopilotModule.autopilotScannedYourFamilyAnd')}
           action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> {t('autopilot.scanAgain')}</Button>} />

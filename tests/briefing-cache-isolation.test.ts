@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  briefingContextKey, createBriefingSession, parseBriefingResponse, purgeLegacyBriefingCache,
+  BRIEFING_FAILED, BRIEFING_UNREADABLE, briefingContextKey, createBriefingSession, parseBriefingResponse, purgeLegacyBriefingCache,
   type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
 import { DEFAULT_LOCALE, LOCALES } from '@/lib/i18n/locales';
@@ -277,5 +277,41 @@ describe('current-context async state', () => {
     unsubscribe();
     session.clear();
     expect(listener).toHaveBeenCalledTimes(3);
+  });
+});
+
+// Audit C1-S9-98 — found by the page audit crawl: /dashboard/briefing answered
+// "Failed to generate briefing" to a refusal the route had worded precisely.
+// A rate limit asks the family to wait, a plan refusal asks for a plan, an
+// unreadable plan asks them to try again; one generic line told all three to
+// retry. The route's words are kept, and the session's own fallback is a
+// constant the module translates.
+describe('a refused briefing says why (C1-S9-98)', () => {
+  const refusal = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  it.each([
+    [429, 'Zu viele Briefing-Anfragen. Bitte warten Sie einen Moment.'],
+    [403, 'This is part of Family+. Upgrade to switch it on for your family.'],
+    [503, 'Bubaly could not confirm your plan right now. Try again in a moment.'],
+  ])('keeps the route\'s own reason for a %i', async (status, reason) => {
+    const session = createBriefingSession(vi.fn<typeof fetch>().mockResolvedValue(refusal(status, { error: reason })));
+    await session.generate('morning');
+    expect(session.getSnapshot().morning).toEqual({ data: null, loading: false, error: reason, attempted: true });
+  });
+
+  it('falls back to the translatable constant when the route gave no reason', async () => {
+    for (const response of [new Response(null, { status: 500 }), new Response('<html>', { status: 502 }), refusal(500, { error: '' })]) {
+      const session = createBriefingSession(vi.fn<typeof fetch>().mockResolvedValue(response));
+      await session.generate('evening');
+      expect(session.getSnapshot().evening.error).toBe(BRIEFING_FAILED);
+    }
+  });
+
+  it('has the module word both constants in the reader\'s language', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('components/modules/briefing-module.tsx', 'utf8');
+    expect(src).toMatch(/failure === BRIEFING_FAILED \? tr\('briefing\.failedToGenerateBriefing'\)/);
+    expect(src).toMatch(/failure === BRIEFING_UNREADABLE \? tr\('briefing\.couldNotReadGeneratedBriefing'\)/);
+    expect(BRIEFING_UNREADABLE).toBe('Could not read the generated briefing. Please try again.');
   });
 });
