@@ -9,7 +9,7 @@ import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
-import { clearedState, retryAfterLabel } from '@/lib/auth/child-throttle';
+import { clearedState, retryAfterMinutes } from '@/lib/auth/child-throttle';
 import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -102,7 +102,7 @@ export async function childSignInAction(input: { username: string; pin: string }
   const reservation = await reserveChildLoginAttempt(admin, username, now);
   if (!reservation.ok) {
     if (reservation.reason === 'locked') {
-      return { ok: false, error: `Too many tries. Try again in ${retryAfterLabel(reservation.retryAfterSec)}.` };
+      return { ok: false, error: t('actions.tooManyTriesTryAgainIn', { minutes: retryAfterMinutes(reservation.retryAfterSec) }) };
     }
     console.error('[child-login] failed-attempt counter write failed', reservation.error);
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };

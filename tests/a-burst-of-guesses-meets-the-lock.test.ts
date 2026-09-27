@@ -112,7 +112,7 @@ import { childSignInAction } from '@/app/(auth)/actions';
 
 const guess = (pin: string, username = 'emma') => childSignInAction({ username, pin });
 const outcome = (r: Awaited<ReturnType<typeof childSignInAction>>) =>
-  r.ok ? 'SIGNED IN' : r.error.startsWith('Too many tries') ? 'LOCKED' : r.error;
+  r.ok ? 'SIGNED IN' : r.error === 'actions.tooManyTriesTryAgainIn' ? 'LOCKED' : r.error;
 const tally = (results: string[]) => results.reduce<Record<string, number>>((acc, k) => ({ ...acc, [k]: (acc[k] ?? 0) + 1 }), {});
 const wrongPins = (n: number, from = 1000) => Array.from({ length: n }, (_, i) => String(from + i));
 
@@ -163,6 +163,19 @@ describe('a concurrent burst gets no more guesses than a sequential one', () => 
     const results = (await Promise.all(wrongPins(25).map(pin => guess(pin)))).map(outcome);
     expect(tally(results)).toEqual({ 'actions.thatUsernameOrPinIsn': DEFAULT_POLICY.maxFails, LOCKED: 25 - DEFAULT_POLICY.maxFails });
     expect(state.checked).toHaveLength(0);
+  });
+});
+
+describe('the lock speaks the child\'s language', () => {
+  it('answers a locked account from the catalogue, with whole minutes to wait', async () => {
+    // Was a template literal in English — "Too many tries. Try again in 15
+    // minutes." — whatever language the family had chosen.
+    const params: Array<Record<string, unknown> | undefined> = [];
+    const i18n = await import('@/lib/i18n/server');
+    vi.spyOn(i18n, 'getTranslations').mockResolvedValue(((key: string, p?: Record<string, unknown>) => { params.push(p); return key; }) as never);
+    state.rows.set('emma', { fails: 5, window_start: new Date().toISOString(), locked_until: new Date(Date.now() + 14.2 * 60_000).toISOString() });
+    expect(await guess('1234')).toEqual({ ok: false, error: 'actions.tooManyTriesTryAgainIn' });
+    expect(params.at(-1)).toEqual({ minutes: 15 });
   });
 });
 
