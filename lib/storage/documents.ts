@@ -2,6 +2,7 @@
 // Path convention: {family_id}/{folder}/{timestamp}-{safe filename} — the family_id
 // folder segment is what storage RLS checks via is_family_member(), so every upload
 // must go through buildFamilyPath() to stay inside the caller's own family folder.
+import { removeConfirmed } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 const BUCKET = 'documents';
@@ -74,17 +75,5 @@ export async function removeFamilyDocument(
   supabase: SupabaseBrowser,
   path: string,
 ): Promise<{ error: string | null }> {
-  const { data, error } = await supabase.storage.from(BUCKET).remove([path]);
-  if (error) return { error: error.message };
-  if (data?.some((object) => object.name === path)) return { error: null };
-
-  const cut = path.lastIndexOf('/');
-  const folder = cut > 0 ? path.slice(0, cut) : '';
-  const name = path.slice(cut + 1);
-  const listed = await supabase.storage.from(BUCKET).list(folder, { search: name, limit: 100 });
-  if (listed.error) return { error: listed.error.message };
-  // `search` is a prefix match, so the name is compared exactly.
-  return listed.data?.some((object) => object.name === name)
-    ? { error: 'The file could not be removed.' }
-    : { error: null };
+  return removeConfirmed(supabase.storage.from(BUCKET), path);
 }

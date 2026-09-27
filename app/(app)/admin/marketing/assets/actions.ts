@@ -96,9 +96,15 @@ export async function deleteAssetAction(id: string, storagePath: string): Promis
     .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('delete the marketing asset', error ?? new Error('Marketing asset was already deleted.'));
   const storageFile = asset.storage_path ?? storagePath;
-  const { error: removeError } = storageFile
+  // SEC-015: a refused delete looks exactly like a delete of something absent
+  // (`error: null`, `data: []`), so the returned list is what says it is gone.
+  const removal = storageFile
     ? await supabase.storage.from(BUCKET).remove([storageFile])
-    : { error: null };
+    : { data: [{ name: '' }], error: null };
+  const removeError = removal.error
+    ?? (storageFile && !removal.data?.some((object) => object.name === storageFile)
+      ? new Error('The asset file was not removed.')
+      : null);
   if (removeError) {
     const { error: restoreError } = await supabase.from('marketing_assets').update({ deleted_at: null })
       .eq('id', id).eq('deleted_at', deletedAt).select('id').maybeSingle();

@@ -1,6 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { removeFamilyDocument } from '@/lib/storage/documents';
+import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 
 // SEC-015. The `documents` storage policy hides a secure-vault file from a
@@ -123,6 +125,93 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
     const admin = readFileSync('app/(app)/admin/actions.ts', 'utf8');
     expect(admin).toContain("const { data: removed, error: storageError } = await supabase.storage.from('documents').remove([doc.storage_path]);");
     expect(admin).toMatch(/!removed\?\.some\(\(object\) => object\.name === doc\.storage_path\)/);
+  });
+
+  it('every storage remove either confirms or is a marked best-effort rollback', () => {
+    // The generalisation: ten call sites share the return shape above. Each is
+    // recorded with what it is, so a new one has to say which it is.
+    const ACCOUNTED: Record<string, string> = {
+      'lib/storage/confirm-removal.ts': 'the shared rule itself',
+      'lib/storage/documents.ts': 'delegates to removeConfirmed',
+      'lib/storage/feedback-attachments.ts': 'delegates to removeConfirmed',
+      'lib/storage/marketplace-photos.ts': 'delegates to removeConfirmed',
+      'lib/storage/family-media.ts': 'delegates to removeConfirmed',
+      'app/(app)/admin/actions.ts': 'confirms by name inline, and keeps the documents row otherwise',
+      'components/modules/photos-module.tsx': 'the delete goes through removeFamilyMedia and refuses to claim success; the upload rollback reports its own failure to the person',
+      'components/memories/create-memory.tsx': 'rollback after a failed insert — reports "the uploaded photo could not be removed" to the person, who has already been told the save failed',
+      'components/modules/messages-module.tsx': 'rollback after a failed insert — logged, and the insert failure is what the person is told',
+      'app/(app)/admin/marketing/assets/actions.ts': 'the delete confirms by name, then restores deleted_at and fails the action; the upload rollback logs',
+    };
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (/\.tsx?$/.test(entry)) files.push(full);
+      }
+    };
+    for (const root of ['app', 'components', 'lib']) walk(root);
+
+    const unaccounted: string[] = [];
+    const seen = new Set<string>();
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      if (!/\.remove\(\s*\[/.test(source) && !/removeConfirmed\(/.test(source)) continue;
+      if (!/storage/.test(source)) continue;
+      // A file counts as removing from storage whether it calls `.remove([...])`
+      // itself or delegates to the shared rule; the three storage helpers now do
+      // the latter, and a staleness check that only looked for the former
+      // reported all three as gone.
+      if (/removeConfirmed\(/.test(source)) seen.add(file);
+      const lines = source.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (!/\.remove\(\s*\[/.test(lines[i])) continue;
+        seen.add(file);
+        if (!(file in ACCOUNTED)) unaccounted.push(`${file}:${i + 1} — a storage remove with no recorded handling`);
+      }
+    }
+    expect(unaccounted, unaccounted.join('\n')).toEqual([]);
+    const stale = Object.keys(ACCOUNTED).filter((f) => !seen.has(f));
+    expect(stale, `no longer remove from storage: ${stale.join(', ')}`).toEqual([]);
+  });
+
+  it('the shared rule has no second copy', () => {
+    // SEC-014's lesson applied here: one rule, imported, not four.
+    const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+    for (const file of ['lib/storage/documents.ts', 'lib/storage/feedback-attachments.ts', 'lib/storage/marketplace-photos.ts', 'lib/storage/family-media.ts']) {
+      const code = strip(readFileSync(file, 'utf8'));
+      expect(code, file).toContain('removeConfirmed(');
+      expect(code, `${file} still has its own copy of the confirmation`).not.toMatch(/\.list\([^)]*search/);
+    }
+  });
+
+  it('the deleted photo no longer reports success it cannot vouch for', () => {
+    const photos = readFileSync('components/modules/photos-module.tsx', 'utf8');
+    const removeAt = photos.indexOf('removeFamilyMedia(supabase, photo.storage_path)');
+    const successAt = photos.indexOf("success(tr('photosModule.photoDeleted'))");
+    expect(removeAt).toBeGreaterThan(-1);
+    expect(successAt).toBeGreaterThan(removeAt);
+    const between = photos.slice(removeAt, successAt);
+    // Through the shared rule, not an inline copy of it.
+    expect(between).toMatch(/removeFamilyMedia\(supabase, photo\.storage_path\)/);
+    expect(between).toMatch(/if \(removal\.error\)/);
+    expect(between).toContain('return;');
+  });
+
+  it('the two best-effort rollbacks say so rather than dropping the result', () => {
+    const messages = readFileSync('components/modules/messages-module.tsx', 'utf8');
+    expect(messages).toMatch(/const rollback = await supabase\.storage\.from\('family-media'\)\.remove/);
+    expect(messages).toMatch(/attachment rollback not confirmed/);
+    const assets = readFileSync('app/(app)/admin/marketing/assets/actions.ts', 'utf8');
+    expect(assets).toMatch(/!removal\.data\?\.some\(\(object\) => object\.name === storageFile\)/);
+    expect(assets).toContain('The asset file was not removed.');
+  });
+
+  it('the shared rule is what the documents wrapper runs', async () => {
+    // Both entry points, one behaviour.
+    const refusing = { remove: async () => ({ data: [], error: null }), list: async () => ({ data: [{ name: NAME }], error: null }) } as RemovableBucket;
+    expect((await removeConfirmed(refusing, KEY)).error).toBeTruthy();
   });
 
   it('the policy this depends on really does find the row', () => {
