@@ -27,6 +27,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 const { executeTool } = await import('@/lib/ai/tools/execute');
+const { getTool } = await import('@/lib/ai/tools/registry');
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown };
@@ -63,9 +64,20 @@ function makeDb(respond: (call: Call) => Reply) {
 type LedgerRow = Record<string, unknown> & { id: string; state: string; attempt: number; idempotency_key: string; family_id: string };
 
 /** An in-memory `ai_tool_calls` with the real unique key, so conflicts behave like 0250. */
-function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string } = {}) {
+function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string; readBarrier?: number } = {}) {
   const rows: LedgerRow[] = [...seed];
   let counter = 0;
+  // Holds ledger reads until `readBarrier` of them have arrived, each answered
+  // with the row as it was when IT read: two workers that both saw the row
+  // before either wrote, which is the interleaving a real race produces.
+  const held: Array<() => void> = [];
+  const hold = (reply: Reply): Reply | Promise<Reply> => {
+    if (!opts.readBarrier) return reply;
+    return new Promise<Reply>((resolve) => {
+      held.push(() => resolve(reply));
+      if (held.length === opts.readBarrier) held.splice(0).forEach((release) => release());
+    });
+  };
   const { db, calls } = makeDb((call) => {
     // Trust rows are filed through this client too (0252): answer like the
     // family fake did so the same ids and payloads can be asserted.
@@ -90,13 +102,15 @@ function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string } =
     }
     if (call.kind === 'select') {
       const row = rows.find((r) => r.family_id === call.filters.family_id && r.idempotency_key === call.filters.idempotency_key);
-      return { data: row ?? null, error: null };
+      return hold({ data: row ? { ...row } : null, error: null }) as Reply;
     }
     if (call.kind === 'update') {
       const row = rows.find((r) => r.id === call.filters.id);
       if (!row) return { data: null, error: null };
-      // The optimistic guard the takeover relies on.
-      if (call.filters.state !== undefined && row.state !== call.filters.state) return { data: null, error: null };
+      // The optimistic guard the takeover relies on: like PostgREST, EVERY
+      // filter must match the row as it is now. Honouring only the filter the
+      // code happened to send is how a guard that matched twice looked safe.
+      if (Object.entries(call.filters).some(([column, value]) => row[column] !== value)) return { data: null, error: null };
       Object.assign(row, call.payload as Record<string, unknown>);
       return { data: { id: row.id }, error: null };
     }
@@ -560,6 +574,36 @@ describe('idempotency', () => {
     expect(outcome.status).toBe('ok');
     expect(family.calls.filter((c) => c.table === 'calendar_events' && c.kind === 'insert')).toHaveLength(1);
     expect(ledger.rows).toHaveLength(1);
+    expect(ledger.rows[0]).toMatchObject({ id: 'call-existing', state: 'succeeded', attempt: 2 });
+  });
+
+  it('takes over an abandoned reservation once, when two retries race for it', async () => {
+    // SEC-021. Taking over a stale `reserved` row writes `reserved` again, so a
+    // guard on `state` alone still matched for the second retry, and both ran
+    // the tool. Measured on the live database with the shipped statement: both
+    // workers took the row. `attempt` moves on every takeover, so it is the token.
+    const family = makeFamilyDb({ domain: calendarDomain });
+    const ledger = makeLedger([{
+      id: 'call-existing', family_id: 'fam-1', idempotency_key: KEY, state: 'reserved', attempt: 1,
+      locked_at: new Date(Date.now() - 10 * 60_000).toISOString(), tool_name: 'calendar.createEvent',
+    }], { readBarrier: 2 });
+    ledgerHolder.client = ledger.db;
+    const scope = scopeWith(family.db);
+    // Count the tool's executions, not the rows: calendar_events has its own
+    // unique idempotency index, but most tools' tables do not, and "A sent
+    // message cannot be unsent." Running once is the executor's promise.
+    const executions = vi.spyOn(getTool('calendar.createEvent')!, 'execute');
+
+    const outcomes = await Promise.all([
+      executeTool(scope, 'calendar.createEvent', CREATE_EVENT_ARGS, { idempotencyKey: KEY }),
+      executeTool(scope, 'calendar.createEvent', CREATE_EVENT_ARGS, { idempotencyKey: KEY }),
+    ]);
+
+    expect(executions).toHaveBeenCalledTimes(1);
+    executions.mockRestore();
+    expect(family.calls.filter((c) => c.table === 'calendar_events' && c.kind === 'insert')).toHaveLength(1);
+    expect(outcomes.map((o) => o.status).sort()).toEqual(['error', 'ok']);
+    expect(outcomes.find((o) => o.status === 'error')).toMatchObject({ retryable: true });
     expect(ledger.rows[0]).toMatchObject({ id: 'call-existing', state: 'succeeded', attempt: 2 });
   });
 
