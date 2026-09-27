@@ -7,6 +7,7 @@ import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import type { Tables } from '@/lib/database.types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -42,7 +43,7 @@ export async function logInteractionAction(formData: FormData): Promise<void> {
     amount: Number.isFinite(amount as number) ? amount : null,
     created_by: ctx.user.id,
   });
-  if (error) throw new Error(describeActionError(error, t('actions.couldNotLogThatInteraction')));
+  if (error) throw refusalError(describeActionError(error, t('actions.couldNotLogThatInteraction')), refusalForError(error));
   revalidatePath(`/dashboard/contacts/${contactId}`);
 }
 
@@ -55,7 +56,7 @@ export async function deleteInteractionAction(input: { id: string; contactId: st
   // Audit C1-S9-60.
   const { data: deleted, error } = await supabase.from('contact_interactions')
     .delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
-  if (error) throw new Error(describeActionError(error, t('actions.couldNotDeleteThatInteraction')));
+  if (error) throw refusalError(describeActionError(error, t('actions.couldNotDeleteThatInteraction')), refusalForError(error));
   if (wroteNoRows(deleted)) throw new Error(t('actions.couldNotDeleteThatInteraction'));
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
 }

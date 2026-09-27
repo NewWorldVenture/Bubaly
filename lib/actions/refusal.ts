@@ -29,6 +29,8 @@ export function refusalFromDigest(digest: string | null | undefined): Refusal | 
  * as not saved, anything else as input the action refused.
  */
 export function refusalForError(error: unknown): Refusal {
+  // `if (error || !data)`: no error, and no row came back.
+  if (error == null) return 'notSaved';
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === 'string') {
     if (code === '23505') return 'duplicate';
@@ -47,6 +49,26 @@ export function refusalError(message: string, refusal: Refusal): Error {
   const error = new Error(message) as Error & { digest?: string };
   error.digest = `${REFUSAL_DIGEST_PREFIX}${refusal}`;
   return error;
+}
+
+// React's production text in place of a thrown server action's message.
+const REDACTED = /^(Minified React error #\d+|An error occurred in the Server Components render)/;
+
+/**
+ * What a form caught from a server action lets it tell the reader. A digest
+ * that names a refusal is that refusal. A message production has redacted —
+ * every thrown action message is, leaving only a numeric digest — was never
+ * the action's, so it reads as not saved rather than as React's text. Null
+ * when the message is the action's own and survived (development, or a throw
+ * on the client), so the caller may show it.
+ */
+export function refusalForThrown(error: unknown, production: boolean): Refusal | null {
+  if (!(error instanceof Error)) return null;
+  const digest = (error as { digest?: unknown }).digest;
+  const named = refusalFromDigest(typeof digest === 'string' ? digest : null);
+  if (named) return named;
+  if ((production && typeof digest === 'string') || REDACTED.test(error.message)) return 'notSaved';
+  return null;
 }
 
 /** Refuse input the action cannot accept, telling the reader it was the input. */

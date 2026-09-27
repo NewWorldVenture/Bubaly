@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, todayKeyFor, zonedDayBoundsMs } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
@@ -180,6 +180,11 @@ export async function POST() {
     return NextResponse.json({ digest, context });
   } catch (err) {
     console.error('Relationship AI error:', err);
+    // An engine with no key, no credit or no connection is unavailable, as
+    // every other AI route answers it — not a server fault behind a 500.
+    if (describeAIError(err).code !== 'unknown') {
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
     return NextResponse.json({ error: t('relationship.somethingWentWrongGeneratingSuggestions') }, { status: 500 });
   }
 }
