@@ -48,15 +48,15 @@ interface WeeklyBriefingData {
 
 // ─── Style maps ────────────────────────────────────────────────────────────────
 
-const LOAD_CONFIG: Record<DayPlan['load'], { label: string; cls: string; dot: string }> = {
-  light:    { label: 'Light',    cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', dot: 'bg-emerald-400' },
-  moderate: { label: 'Moderate', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',       dot: 'bg-amber-400' },
-  heavy:    { label: 'Heavy',    cls: 'text-rose-400 bg-rose-500/10 border-rose-500/20',           dot: 'bg-rose-400' },
+const LOAD_CONFIG: Record<DayPlan['load'], { labelKey: string; cls: string; dot: string }> = {
+  light: { labelKey: 'weeklyBriefingModule.load.light', cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', dot: 'bg-emerald-400' },
+  moderate: { labelKey: 'weeklyBriefingModule.load.moderate', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',       dot: 'bg-amber-400' },
+  heavy: { labelKey: 'weeklyBriefingModule.load.heavy', cls: 'text-rose-400 bg-rose-500/10 border-rose-500/20',           dot: 'bg-rose-400' },
 };
 const STRESS_CONFIG = {
-  low:      { label: 'Low Stress',  color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-  moderate: { label: 'Moderate',    color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20' },
-  high:     { label: 'High Stress', color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20' },
+  low: { labelKey: 'weeklyBriefingModule.stress.low', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+  moderate: { labelKey: 'weeklyBriefingModule.stress.moderate', color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20' },
+  high: { labelKey: 'weeklyBriefingModule.stress.high', color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20' },
 };
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
             <div className="mt-5 pt-5 border-t border-border flex flex-col sm:flex-row gap-3">
               {ops.stressReason && (
                 <div className={cn('flex-1 rounded-xl border px-4 py-3 text-sm', stress.bg)}>
-                  <span className={cn('font-semibold', stress.color)}>{stress.label}: </span>
+                  <span className={cn('font-semibold', stress.color)}>{t(stress.labelKey)}: </span>
                   <span className="text-fg/80">{ops.stressReason}</span>
                 </div>
               )}
@@ -228,7 +228,7 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
                       <div className="text-xs text-muted">{d.date}</div>
                     </div>
                     <span className={cn('text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1', load.cls)}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', load.dot)} />{load.label}
+                      <span className={cn('w-1.5 h-1.5 rounded-full', load.dot)} />{t(load.labelKey)}
                     </span>
                   </div>
                   {(d.events ?? []).length === 0 ? (

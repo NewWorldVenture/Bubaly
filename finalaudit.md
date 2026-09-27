@@ -46141,6 +46141,24 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][LOW][PASSWORDS/WEEKLY]` C1-S9-125 — password categories and the weekly briefing's load and stress labels were English in every locale
+
+**File/path:** `components/modules/passwords-module.tsx`, `components/modules/weekly-briefing-module.tsx`; seven catalogues.
+
+**Problem.** Two pages showed English in every locale:
+- `/dashboard/passwords`:
+  - the nine category chips, the category picker and each entry's category
+  - the "Actions for …" menu label
+- `/dashboard/weekly`: each day's load (Light, Heavy) and the stress level.
+
+**Fix.** These labels now come from catalogue keys (`labelKey`).
+
+**Status:** FIXED. Scanner findings:
+- `passwords-module`: 6 → 0.
+- `weekly-briefing-module`: 7 → 1, a CSS value.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

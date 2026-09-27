@@ -28,17 +28,17 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Credential = Tables<'family_credentials'>;
 
-type CatMeta = { value: string; label: string; icon: typeof Wifi; tint: string };
+type CatMeta = { value: string; labelKey: string; icon: typeof Wifi; tint: string };
 const CATEGORIES: CatMeta[] = [
-  { value: 'wifi', label: 'Wi-Fi', icon: Wifi, tint: 'bg-orange-500/15 text-orange-400' },
-  { value: 'website', label: 'Website', icon: Globe, tint: 'bg-blue-500/15 text-blue-400' },
-  { value: 'app', label: 'App', icon: AppWindow, tint: 'bg-violet-500/15 text-violet-400' },
-  { value: 'streaming', label: 'Streaming', icon: Tv, tint: 'bg-rose-500/15 text-rose-400' },
-  { value: 'email', label: 'Email', icon: Mail, tint: 'bg-sky-500/15 text-sky-400' },
-  { value: 'card', label: 'Card', icon: CreditCard, tint: 'bg-emerald-500/15 text-emerald-400' },
-  { value: 'pin', label: 'PIN / Code', icon: KeyRound, tint: 'bg-amber-500/15 text-amber-400' },
-  { value: 'membership', label: 'Membership', icon: BadgeCheck, tint: 'bg-teal-500/15 text-teal-400' },
-  { value: 'other', label: 'Other', icon: Lock, tint: 'bg-slate-500/15 text-slate-400' },
+  { value: 'wifi', labelKey: 'passwordsModule.category.wifi', icon: Wifi, tint: 'bg-orange-500/15 text-orange-400' },
+  { value: 'website', labelKey: 'passwordsModule.category.website', icon: Globe, tint: 'bg-blue-500/15 text-blue-400' },
+  { value: 'app', labelKey: 'passwordsModule.category.app', icon: AppWindow, tint: 'bg-violet-500/15 text-violet-400' },
+  { value: 'streaming', labelKey: 'passwordsModule.category.streaming', icon: Tv, tint: 'bg-rose-500/15 text-rose-400' },
+  { value: 'email', labelKey: 'passwordsModule.category.email', icon: Mail, tint: 'bg-sky-500/15 text-sky-400' },
+  { value: 'card', labelKey: 'passwordsModule.category.card', icon: CreditCard, tint: 'bg-emerald-500/15 text-emerald-400' },
+  { value: 'pin', labelKey: 'passwordsModule.category.pin', icon: KeyRound, tint: 'bg-amber-500/15 text-amber-400' },
+  { value: 'membership', labelKey: 'passwordsModule.category.membership', icon: BadgeCheck, tint: 'bg-teal-500/15 text-teal-400' },
+  { value: 'other', labelKey: 'passwordsModule.category.other', icon: Lock, tint: 'bg-slate-500/15 text-slate-400' },
 ];
 const CAT_BY_VALUE = new Map(CATEGORIES.map((c) => [c.value, c]));
 const catMeta = (v: string | null) => CAT_BY_VALUE.get(v ?? 'other') ?? CATEGORIES[CATEGORIES.length - 1];
@@ -194,7 +194,7 @@ export function PasswordsModule() {
           {CATEGORIES.filter((c) => counts[c.value]).map((c) => (
             <button key={c.value} onClick={() => setCatFilter(catFilter === c.value ? null : c.value)}
               className={cn('flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition', catFilter === c.value ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}>
-              <c.icon className="h-3.5 w-3.5" /> {c.label} ({counts[c.value]})
+              <c.icon className="h-3.5 w-3.5" /> {t(c.labelKey)} ({counts[c.value]})
             </button>
           ))}
         </div>
@@ -228,10 +228,10 @@ export function PasswordsModule() {
                       <p className="truncate font-semibold">{c.label}</p>
                       {c.is_favorite && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />}
                     </div>
-                    <p className="truncate text-xs text-muted">{meta.label}{owner ? ` · ${firstName(owner.display_name)}` : ''}</p>
+                    <p className="truncate text-xs text-muted">{t(meta.labelKey)}{owner ? ` · ${firstName(owner.display_name)}` : ''}</p>
                   </div>
                   <div className="relative">
-                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={`Actions for ${c.label}`} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={t('passwordsModule.actionsFor', { name: c.label })} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                     {menuId === c.id && (
@@ -281,7 +281,7 @@ export function PasswordsModule() {
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('passwords.category')}>{(id) => (
               <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{t(c.labelKey)}</option>)}
               </Select>
             )}</Field>
             <Field label={t('passwords.name')} required>{(id) => <Input id={id} value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder={t('passwords.eGHomeWiFi')} required />}</Field>
