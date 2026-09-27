@@ -53,22 +53,22 @@ export type FrontDeskVoiceMessage = {
 /** Which server read failed, so the page says so rather than showing an empty list. */
 export type FrontDeskUnavailable = { channel: boolean; voice: boolean };
 
-const STATUS_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
-  screened:  { icon: ShieldCheck,     label: 'Screened',  color: 'bg-blue-500/15 text-blue-400' },
-  answered:  { icon: PhoneCall,       label: 'Answered',  color: 'bg-green-500/15 text-green-400' },
-  voicemail: { icon: Voicemail,       label: 'Voicemail', color: 'bg-violet-500/15 text-violet-400' },
-  blocked:   { icon: Ban,             label: 'Blocked',   color: 'bg-red-500/15 text-red-400' },
-  missed:    { icon: PhoneOff,        label: 'Missed',    color: 'bg-amber-500/15 text-amber-400' },
-  forwarded: { icon: PhoneForwarded,  label: 'Forwarded', color: 'bg-teal-500/15 text-teal-400' },
+const STATUS_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; labelKey: string; color: string }> = {
+  screened:  { icon: ShieldCheck,     labelKey: 'frontDeskModule.status.screened', color: 'bg-blue-500/15 text-blue-400' },
+  answered:  { icon: PhoneCall,       labelKey: 'frontDeskModule.status.answered', color: 'bg-green-500/15 text-green-400' },
+  voicemail: { icon: Voicemail,       labelKey: 'frontDeskModule.status.voicemail', color: 'bg-violet-500/15 text-violet-400' },
+  blocked:   { icon: Ban,             labelKey: 'frontDeskModule.status.blocked', color: 'bg-red-500/15 text-red-400' },
+  missed:    { icon: PhoneOff,        labelKey: 'frontDeskModule.status.missed', color: 'bg-amber-500/15 text-amber-400' },
+  forwarded: { icon: PhoneForwarded,  labelKey: 'frontDeskModule.status.forwarded', color: 'bg-teal-500/15 text-teal-400' },
 };
 
-const CLASS_CONFIG: Record<string, { label: string; color: string }> = {
-  important:    { label: 'Important',    color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
-  known:        { label: 'Known',        color: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  unknown:      { label: 'Unknown',      color: 'bg-surface text-muted border-border' },
-  spam:         { label: 'Spam',         color: 'bg-red-500/15 text-red-400 border-red-500/30' },
-  robocall:     { label: 'Robocall',     color: 'bg-red-500/15 text-red-400 border-red-500/30' },
-  telemarketer: { label: 'Telemarketer', color: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
+const CLASS_CONFIG: Record<string, { labelKey: string; color: string }> = {
+  important:    { labelKey: 'frontDeskModule.class.important', color: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+  known:        { labelKey: 'frontDeskModule.class.known', color: 'bg-green-500/15 text-green-400 border-green-500/30' },
+  unknown:      { labelKey: 'frontDeskModule.class.unknown', color: 'bg-surface text-muted border-border' },
+  spam:         { labelKey: 'frontDeskModule.class.spam', color: 'bg-red-500/15 text-red-400 border-red-500/30' },
+  robocall:     { labelKey: 'frontDeskModule.class.robocall', color: 'bg-red-500/15 text-red-400 border-red-500/30' },
+  telemarketer: { labelKey: 'frontDeskModule.class.telemarketer', color: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
 };
 
 type FilterTab = 'all' | 'important' | 'voicemail' | 'screened' | 'blocked';
@@ -84,19 +84,19 @@ type FilterTab = 'all' | 'important' | 'voicemail' | 'screened' | 'blocked';
  * transcribed voicemail. It is gone; the frozen log keeps its own section.
  */
 const STATS = [
-  { key: 'calls',  label: 'Calls',  labelKey: 'frontDesk.calls',  icon: '📞', color: 'text-brand-text' },
+  { key: 'calls',  labelKey: 'frontDesk.calls',  icon: '📞', color: 'text-brand-text' },
   // "Filed", not "Handled": `ai_handled` proves a request was persisted, which
   // is Bubaly having taken the message on — not the work being finished.
-  { key: 'filed',  label: 'Filed',  labelKey: 'frontDesk.filed',  icon: '📥', color: 'text-green-400' },
-  { key: 'urgent', label: 'Urgent', labelKey: 'frontDesk.urgent', icon: '🚨', color: 'text-red-400' },
+  { key: 'filed',  labelKey: 'frontDesk.filed',  icon: '📥', color: 'text-green-400' },
+  { key: 'urgent', labelKey: 'frontDesk.urgent', icon: '🚨', color: 'text-red-400' },
 ] as const;
 
 const HOW_IT_WORKS = [
-  { icon: PhoneIncoming, text: 'Calls to the family number reach the concierge', textKey: 'frontDesk.callsToTheFamilyNumberReach' },
-  { icon: ShieldCheck,   text: 'Each one is classified before anyone is woken',  textKey: 'frontDesk.eachOneIsClassifiedBefore' },
-  { icon: UserCheck,     text: 'Urgent calls are forwarded to your fallback',    textKey: 'frontDesk.urgentCallsAreForwardedTo' },
-  { icon: Voicemail,     text: 'Voicemail is transcribed into the inbox',        textKey: 'frontDesk.voicemailIsTranscribedInto' },
-  { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
+  { icon: PhoneIncoming, textKey: 'frontDesk.callsToTheFamilyNumberReach' },
+  { icon: ShieldCheck,   textKey: 'frontDesk.eachOneIsClassifiedBefore' },
+  { icon: UserCheck,     textKey: 'frontDesk.urgentCallsAreForwardedTo' },
+  { icon: Voicemail,     textKey: 'frontDesk.voicemailIsTranscribedInto' },
+  { icon: Sparkles,      textKey: 'frontDesk.handleItFilesTheMessage' },
 ] as const;
 
 /**
@@ -455,16 +455,16 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className={cn('truncate text-sm', !call.is_read ? 'font-bold' : 'font-medium')}>
-                            {call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'Unknown caller'}
+                            {call.contact?.name ?? call.caller_name ?? call.caller_number ?? tr('frontDesk.unknownCaller')}
                           </span>
                           <span className="shrink-0 text-[10px] text-muted">{fmtTime(call.received_at)}</span>
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted">
-                          {call.ai_summary ?? call.caller_number ?? st.label}
+                          {call.ai_summary ?? call.caller_number ?? tr(st.labelKey)}
                         </div>
                         <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[10px] text-muted">{st.label}</span>
-                          <span className={cn('rounded border px-1.5 py-0.5 text-[10px] font-medium', cls.color)}>{cls.label}</span>
+                          <span className="text-[10px] text-muted">{tr(st.labelKey)}</span>
+                          <span className={cn('rounded border px-1.5 py-0.5 text-[10px] font-medium', cls.color)}>{tr(cls.labelKey)}</span>
                           {call.duration_secs ? <span className="text-[10px] text-muted flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{fmtDuration(call.duration_secs)}</span> : null}
                           {(call.action_items as unknown[]).length > 0 && (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
@@ -517,7 +517,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                 return (
                   <div key={c} className="flex items-center gap-2">
                     <span className={cn('h-2 w-2 rounded-full flex-shrink-0', cfg.color.split(' ')[1].replace('text', 'bg'))} />
-                    <span className="flex-1 text-xs text-muted">{cfg.label}</span>
+                    <span className="flex-1 text-xs text-muted">{tr(cfg.labelKey)}</span>
                     <span className="text-xs font-semibold">{count}</span>
                   </div>
                 );
@@ -566,7 +566,7 @@ function CallDetail({ call, familyId, userId, onClose }: {
     // Postgres rejected the row and this button never once saved a reminder.
     const result = await createReminderAction({
       title: text.slice(0, 200),
-      notes: `From call with ${callerLabel}`,
+      notes: tr('frontDesk.fromCallWith', { caller: callerLabel }),
       kind: 'task',
       priority: call.priority === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,
@@ -588,14 +588,14 @@ function CallDetail({ call, familyId, userId, onClose }: {
           <st.icon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold">{call.contact?.name ?? call.caller_name ?? call.caller_number ?? 'Unknown'}</div>
-          <div className="text-[10px] text-muted">{st.label} · {fmtTime(call.received_at)}</div>
+          <div className="truncate text-sm font-bold">{call.contact?.name ?? call.caller_name ?? call.caller_number ?? tr('frontDesk.unknownCaller')}</div>
+          <div className="text-[10px] text-muted">{tr(st.labelKey)} · {fmtTime(call.received_at)}</div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="flex flex-wrap gap-2">
-          <span className={cn('rounded-md border px-2 py-0.5 text-[11px] font-semibold', cls.color)}>{cls.label}</span>
+          <span className={cn('rounded-md border px-2 py-0.5 text-[11px] font-semibold', cls.color)}>{tr(cls.labelKey)}</span>
           <span className="rounded-md bg-surface border border-border px-2 py-0.5 text-[11px] font-semibold capitalize">{call.direction}</span>
           {call.priority !== 'normal' && (
             <span className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize',

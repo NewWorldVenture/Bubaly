@@ -7,6 +7,12 @@ import { adminUpdateTicketStatusAction, type TicketStatus } from '@/app/(app)/ad
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const STATUSES: TicketStatus[] = ['open', 'pending', 'resolved', 'closed'];
+// Labels from the catalogue (I18N-002), properly cased per language, so no CSS
+// `capitalize` (which would turn "En attente" into "En Attente").
+const STATUS_KEYS: Record<TicketStatus, string> = {
+  open: 'ticketStatusControl.statusOpen', pending: 'ticketStatusControl.statusPending',
+  resolved: 'ticketStatusControl.statusResolved', closed: 'ticketStatusControl.statusClosed',
+};
 
 export function TicketStatusControl({ ticketId, status }: { ticketId: string; status: TicketStatus }) {
   const t = useTranslations();
@@ -24,7 +30,7 @@ export function TicketStatusControl({ ticketId, status }: { ticketId: string; st
         setValue(previous);
         return toastError(res.error);
       }
-      success(`Marked ${next}`);
+      success(t('ticketStatusControl.markedStatus', { status: t(STATUS_KEYS[next]) }));
       router.refresh();
     });
   }
@@ -38,7 +44,7 @@ export function TicketStatusControl({ ticketId, status }: { ticketId: string; st
       aria-label={t('ticketStatusControl.ticketStatus')}
     >
       {STATUSES.map((s) => (
-        <option key={s} value={s} className="capitalize">{s}</option>
+        <option key={s} value={s}>{t(STATUS_KEYS[s])}</option>
       ))}
     </select>
   );

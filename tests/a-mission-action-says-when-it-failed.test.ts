@@ -49,6 +49,9 @@ function fakeDb(plan: Plan, calls: Call[]) {
       Object.assign(chain, {
         select: () => chain,
         eq: () => chain,
+        // The pay-once approval filters on `approved_at` with .is() and .not().
+        is: () => chain,
+        not: () => chain,
         maybeSingle: settle,
         single: () => settle().then((r) => ({ ...r, data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data })),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => settle().then(res, rej),

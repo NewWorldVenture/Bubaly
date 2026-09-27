@@ -10,7 +10,10 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'AI Conflict Resolution' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.aiConflictResolution') };
+}
 export const dynamic = 'force-dynamic';
 
 function whenLabel(startsAt: string, endsAt: string | null, locale: LocaleCode): string {

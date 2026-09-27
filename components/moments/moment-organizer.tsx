@@ -63,7 +63,7 @@ export function MomentOrganizer({ moments }: { moments: OrganizerMoment[] }) {
           const Icon = ICON[m.key as MomentKey] ?? Compass;
           return (
             <div key={m.key} className="relative rounded-2xl border border-border bg-surface/40 p-4">
-              <button type="button" onClick={() => dismiss(m.key)} disabled={pending} aria-label={`Dismiss ${m.label}`}
+              <button type="button" onClick={() => dismiss(m.key)} disabled={pending} aria-label={t('itemAction.dismiss', { name: m.label })}
                 className="absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-fg disabled:opacity-50">
                 <X className="h-3.5 w-3.5" />
               </button>

@@ -376,6 +376,19 @@ begin
     raise exception '0406: an ADULT inserted a social OAuth token row';
   end if;
 
+  -- The control that replaces the old expectation: the feature still works.
+  -- Without this, closing the table would look identical to breaking it.
   reset role;
-  raise notice '0297+0406 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence and a sibling login; parent and adult keep those; NOBODY with a JWT reaches the OAuth tokens, a manager included';
+  select count(*) into n from public.social_account_tokens where family_id = fam;
+  if n <> 1 then
+    raise exception '0297/0406: the service role sees %/1 seeded token row — the social connection is broken, not secured', n;
+  end if;
+  insert into public.social_account_tokens (family_id, account_id, platform, provider_account_id, access_token_enc)
+    values (fam, acct, 'instagram', 'service-added', 'enc');
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception '0297/0406: the service role cannot write a token row (rows: %)', n;
+  end if;
+
+  raise notice '0297+0406 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences and logins; the token table answers only the service role (0406)';
 end $$;

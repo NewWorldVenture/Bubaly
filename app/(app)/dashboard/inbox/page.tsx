@@ -26,7 +26,10 @@ import { InboxModule } from '@/components/modules/inbox-module';
 import { InboxQueue } from '@/components/modules/inbox-queue';
 import { loadInboxQueue } from '@/lib/inbox/server';
 
-export const metadata: Metadata = { title: 'Household Inbox' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.householdInbox') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function InboxPage() {

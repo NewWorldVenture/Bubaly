@@ -59,7 +59,7 @@ export async function POST() {
       }
       if (usedToday >= dailyLimit) {
         return NextResponse.json(
-          { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
+          { error: tr('wallet.coachDailyLimitReached', { limit: dailyLimit }) },
           { status: 429 },
         );
       }

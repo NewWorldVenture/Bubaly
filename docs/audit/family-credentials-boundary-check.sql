@@ -86,6 +86,11 @@ begin
   insert into auth.users (id, email) values
     (parent_uid, 'cp@example.test'), (adult_uid, 'ca@example.test'), (child_uid, 'cc@example.test')
   on conflict do nothing;
+  -- The premise that lets the reader set 0391's step-up guard aside.
+  if exists (select 1 from auth.mfa_factors
+              where user_id in (parent_uid, adult_uid, child_uid) and status::text = 'verified') then
+    raise exception '0296: a fixture account has a verified second factor, so 0391''s step-up guard could refuse it and the refusals below would not be attributable to the role clause';
+  end if;
   -- A child with a real auth user, exactly as child-login-actions.ts creates one.
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values
     (fam, parent_uid, 'Parent', 'parent', true),

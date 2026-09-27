@@ -7,6 +7,7 @@ import { PlatformDot } from './platform';
 import { Badge } from '@/components/ui/badge';
 import type { SocialPlatform } from '@/lib/social/capabilities';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { useToast } from '@/components/ui/toast';
 
 const STATUS_TONE: Record<string, 'success' | 'neutral' | 'danger' | 'warning'> = {
@@ -20,6 +21,7 @@ export function AccountRow({
   id: string; platform: SocialPlatform; name: string; status: string; lastError: string | null; lastSyncedAt: string | null;
 }) {
   const t = useTranslations();
+  const { fmtDateTime } = useHydrationSafeFormat();
   const { error: toastError } = useToast();
   const [pending, start] = useTransition();
   return (
@@ -28,7 +30,7 @@ export function AccountRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{name}</p>
         <p className="truncate text-xs text-muted">
-          {lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleString()}` : (lastError ?? 'Not yet authorized')}
+          {lastSyncedAt ? `Synced ${fmtDateTime(lastSyncedAt)}` : (lastError ?? 'Not yet authorized')}
         </p>
       </div>
       <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{status.replace(/_/g, ' ')}</Badge>

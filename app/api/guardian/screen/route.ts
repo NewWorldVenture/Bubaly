@@ -8,8 +8,9 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
 import {
   wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlDial, twimlHangup,
-  sendSms, validateTwilioSignature,
+  sendSms,
 } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import type { MemberProfile } from '@/lib/guardian/pipeline';
@@ -21,6 +22,9 @@ import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
+// Where Twilio should call BACK: the `action`/`transcribeCallback` URLs embedded
+// in the TwiML below. Verifying an INBOUND request no longer reads this — see
+// lib/server/twilio-ingress.ts, which takes the signed URL from the request.
 const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
@@ -34,15 +38,8 @@ export async function POST(req: NextRequest) {
   if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
   const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
-  // Validate Twilio signature (skip in dev) — same guard as the inbound routes;
-  // Twilio signs the FULL URL including the query string.
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    const url = `${BASE_URL}${req.nextUrl.pathname}${req.nextUrl.search}`;
-    if (!validateTwilioSignature(sig, url, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-  }
+  const verdict = verifyTwilioRequest(req, params, 'guardian/screen');
+  if (!verdict.ok) return twilioRefusal(verdict);
 
   const speechResult = params.SpeechResult ?? '';
   const callSid = params.CallSid ?? '';

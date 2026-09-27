@@ -7,7 +7,10 @@ import { isMissingTableError } from '@/lib/supabase/errors';
 import { ErrorState } from '@/components/ui/states';
 import { MealVoteClient, type VoteView } from './vote-client';
 
-export const metadata: Metadata = { title: 'Meal Voting' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardRecipesVoteVoteClient.mealVoting') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MealVotePage() {

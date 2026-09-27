@@ -129,6 +129,11 @@ function walk(dir, out = []) {
 
 // Strings that are structurally not copy, however word-like they look.
 const NOT_COPY = [
+  // TypeScript between two generics, which the JSX-text rule reads as a text
+  // node: `type Member = Tables<'family_members'>; type Plan = Tables<'plans'>`
+  // yields "; type Plan = Tables". 126 of 2,800 findings were this, so the count
+  // overstated the English on screen by about 4.5%.
+  /^[;,]?\s*(export\s+)?(type|interface)\s+\w+\s*(=|extends)/,
   /^https?:\/\//i,
   /^\//,                        // paths
   /^[a-z0-9-]+$/,               // slugs, ids, css tokens
@@ -419,6 +424,46 @@ const ACTION_ERROR_PATTERN =
   /(?:\berror:\s*|describeActionError\([^,()]+,\s*)'([^'\\\n]{4,})'/g;
 
 /**
+ * The same failure message written as a template literal (I18N-002).
+ *
+ * `NOT_COPY` refuses anything containing a backtick — "a template literal is
+ * code, not a sentence" — and for a template sliced out of the middle of an
+ * expression that is right. A template that IS the error message is not code:
+ * `error: \`Too many tries. Try again in ${…}.\`` was the lockout a child saw,
+ * in English in every language, and the scanner's count did not move when it was
+ * removed (I18N-001). Each `${…}` is shown as `…`: a placeholder, not copy, and
+ * never text the lift can find and replace — it matches quoted strings only.
+ */
+const TEMPLATE_BODY = String.raw`\x60((?:[^\x60\\\n$]|\\.|\$(?!\{)|\$\{[^}\n]*\})+)\x60`;
+const TEMPLATE_ACTION_ERROR_PATTERN =
+  new RegExp(String.raw`(?:\berror:\s*|describeActionError\([^,()]+,\s*)` + TEMPLATE_BODY, 'g');
+
+/**
+ * Template literals in two more places that are unambiguously copy (I18N-003).
+ *
+ * An attribute that carries words — `aria-label={`Approve: ${title}`}` is what
+ * a screen reader says, `title={`${name} — upgrade to unlock`}` is a tooltip —
+ * and a template standing alone as a JSX child, `{`${n} items left`}`. The
+ * backtick rule in NOT_COPY hid all of them, the same blind spot I18N-002 closed
+ * for toasts and action errors. Excluded on purpose: `${` nesting and any other
+ * `attr={`…`}` (a className, a key or an href is not copy), and templates
+ * assigned to variables, which are as often a class list or a URL as a sentence.
+ */
+const TEMPLATE_COPY_ATTR_PATTERN = new RegExp(
+  String.raw`\b(aria-label|title|placeholder|alt|label|description)=\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
+const TEMPLATE_JSX_CHILD_PATTERN = new RegExp(String.raw`(?<![$=]\s*)\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
+
+/**
+ * The question asked before something is deleted (I18N-005). `confirm()` shows
+ * its argument verbatim in a native dialog, so `confirm(`Remove ${name} from the
+ * inventory?`)` asked a German parent in English, at the one moment the answer
+ * cannot be taken back, and neither the backtick rule nor the quoted-string
+ * rules read a confirm() argument.
+ */
+const CONFIRM_TEMPLATE_PATTERN = new RegExp(String.raw`\b(?:window\.)?confirm\(\s*` + TEMPLATE_BODY, 'g');
+const CONFIRM_QUOTED_PATTERN = /\b(?:window\.)?confirm\(\s*(['"])((?:(?!\1)[^\\\n]|\\.)+)\1\s*\)/g;
+
+/**
  * A prose argument to a helper that puts it in front of a user.
  *
  * Every name here was read before it was listed — `actionFailure` returns the
@@ -486,6 +531,7 @@ function toastPattern(source) {
     'g',
   );
 }
+
 // A JSX text node: between > and <, no braces (those are expressions, not copy).
 //
 // Newlines are ALLOWED inside the match on purpose. Copy that trails an inline
@@ -606,6 +652,12 @@ export function scanFile(file) {
   // read `<em>${topicLabel}</em> — wrote:</p>` inside an HTML email template as
   // page copy — and that email goes to the operator, not to the visitor.
   if (file.endsWith('.tsx')) for (const m of source.matchAll(TEXT_PATTERN)) push(m[1], m.index ?? 0);
+  if (file.endsWith('.tsx')) {
+    for (const m of source.matchAll(TEMPLATE_COPY_ATTR_PATTERN)) push(m[2].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+    for (const m of source.matchAll(TEMPLATE_JSX_CHILD_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+  }
+  for (const m of source.matchAll(CONFIRM_TEMPLATE_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+  for (const m of source.matchAll(CONFIRM_QUOTED_PATTERN)) push(m[2], m.index ?? 0);
   for (const m of source.matchAll(PROP_PATTERN)) {
     // `data-*` is machine state and `aria-hidden`/`aria-live` are enum values;
     // `aria-label` is the one ARIA attribute that carries a sentence.
@@ -619,6 +671,7 @@ export function scanFile(file) {
   for (const [text, at] of arrayFindings(source)) push(text, at);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(TEMPLATE_ACTION_ERROR_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
   for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);
   const toasts = toastPattern(source);
   // `delimited: true` — a quoted literal cannot be a slice through an
@@ -651,6 +704,11 @@ function filesUnder(paths) {
     }
   }
   return files;
+}
+
+/** How many files a scan of `paths` reads: the non-vacuity check counts these, not files with findings. */
+export function scannedFileCount(paths) {
+  return filesUnder(paths).length;
 }
 
 export function scanPaths(paths) {

@@ -1,0 +1,56 @@
+-- A feedback screenshot is not world-readable. (F-E05)
+--
+-- `feedback-attachments` was `public = true` AND carried an unscoped read
+-- policy:
+--
+--   objects | Feedback attachments are publicly readable | SELECT | (bucket_id = 'feedback-attachments')
+--
+-- So every object was readable twice over — by the public path, which does not
+-- consult storage.objects RLS at all, and by the authenticated path, whose
+-- policy asked only which bucket the object was in. Writes were already scoped
+-- correctly (`auth.uid()::text = (storage.foldername(name))[1]`); reads were
+-- not scoped at all.
+--
+-- These are screenshots taken at the moment something in the product went
+-- wrong, which is to say screenshots of a real family's calendar, children's
+-- names, balances or documents. Object names are UUID-based so they are not
+-- enumerable, and that is the only thing that was limiting this — an
+-- unguessable name is not an access control, and a URL leaks the ordinary
+-- ways: a Referer header, a paste into a ticket, a CDN log.
+--
+-- A reader-scoped policy (0369's, below) needed checking first,
+-- because the Idea Board is deliberately cross-user — `feedback_ideas_select`
+-- is `auth.uid() IS NOT NULL`, every signed-in user sees every family's ideas
+-- (see AUTHZ-006), so a reader-scoped policy would have broken the product if
+-- the board drew these images. It does not. Exactly one surface renders them,
+-- `components/admin/feedback-admin.tsx`, behind the super-admin gate, reading
+-- through the service role — and the board's own query no longer selects the
+-- column at all.
+--
+-- So reads now go: private bucket, no public path; admin console mints a
+-- 10-minute signed URL through the service role; and the owner keeps 0369's
+-- read, so the uploader can still see what they attached.
+--
+-- WHAT IS LEFT FOR THIS MIGRATION. 0369 (a public bucket is not a public
+-- listing) already dropped the unscoped policy above and installed "Users read
+-- their own feedback-attachments" — `auth.uid()` = the first folder segment,
+-- to authenticated. That closed the LIST endpoint and the authenticated read.
+-- It kept `public = true` on purpose, because avatars and marketplace photos
+-- are meant to be served by URL. Feedback screenshots are not: the one surface
+-- that renders them is the super-admin console, which reads through the
+-- service role and now mints a short-lived signed URL. So the public path is
+-- the whole remaining hole, and this closes it.
+--
+-- No admin read policy is added. The upstream note proposed one
+-- (`… or is_super_admin()`), but the console never reads as the admin's JWT —
+-- it reads as the service role, which bypasses RLS — so a JWT-level admin read
+-- would be access nothing uses. 0369's owner policy is kept exactly as it is:
+-- the uploader keeps the read that matches their INSERT and DELETE.
+--
+-- Held by docs/audit/feedback-attachment-is-not-world-readable-check.sql.
+
+update storage.buckets set public = false where id = 'feedback-attachments';
+
+-- Idempotent re-drop of the policy 0369 already removed, so this file states
+-- the whole of its own end state on a database that somehow skipped 0369.
+drop policy if exists "Feedback attachments are publicly readable" on storage.objects;

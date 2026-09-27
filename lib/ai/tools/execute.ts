@@ -251,13 +251,17 @@ async function reserveCall(
   const stale = !Number.isFinite(lockedAt) || Date.now() - lockedAt > STALE_RESERVATION_MS;
   if (existing.state !== 'failed' && !stale) return { status: 'in_progress' };
 
-  // Take the row over. The `state` guard makes the takeover atomic against a
-  // second worker doing the same thing: exactly one update matches.
+  // Take the row over, conditional on the row this worker read, so exactly one
+  // of two workers doing the same thing matches. `state` alone did not do that:
+  // taking over an abandoned `reserved` row writes `reserved` again, so the
+  // second worker's guard still matched and the tool ran twice. `attempt` moves
+  // on every takeover, which makes it the token.
   const { data: taken, error: takeError } = await ledger
     .from('ai_tool_calls')
     .update({ state: 'reserved', attempt: existing.attempt + 1, locked_at: nowIso, error: null, outputs: null, finished_at: null })
     .eq('id', existing.id)
     .eq('state', existing.state)
+    .eq('attempt', existing.attempt)
     .select('id')
     .maybeSingle();
   if (takeError) {

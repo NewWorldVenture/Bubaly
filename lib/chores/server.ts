@@ -31,6 +31,13 @@ export async function ensureProgress(supabase: DB, familyId: string, memberId: s
     .insert({ family_id: familyId, member_id: memberId })
     .select('*')
     .single();
+  if (error?.code === '23505') {
+    // A concurrent approval created it first (unique on member_id): use theirs.
+    const { data: created, error: rereadError } = await supabase
+      .from('kid_progress').select('*').eq('family_id', familyId).eq('member_id', memberId).maybeSingle();
+    if (rereadError || !created) throw new Error('Could not read chore progress');
+    return created;
+  }
   if (error || !data) throw new Error('Could not create chore progress');
   return data;
 }
@@ -105,6 +112,12 @@ async function revertCompletionRewards(
   });
   if (error) console.error('[chore rewards] progress rollback failed', error);
 }
+
+/**
+ * How many times the progress write may lose its compare-and-set before the
+ * approval fails. Contention is approvals for one child landing together.
+ */
+const PROGRESS_ATTEMPTS = 8;
 
 export type CompletionResult = { xp: number; level: number; leveledUp: boolean; streak: number; newBadges: string[] };
 

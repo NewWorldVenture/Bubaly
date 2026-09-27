@@ -12,7 +12,10 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
-export const metadata: Metadata = { title: 'Food & Nutrition' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFood.foodAmpNutrition') };
+}
 export const dynamic = 'force-dynamic';
 
 const fmtDay = (d: string | null, locale: LocaleCode) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '');
@@ -32,15 +35,17 @@ async function FeatureCard({
   const t = await getTranslations();
   return (
     <section className="flex flex-col rounded-2xl border border-border bg-surface/40 p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className={cn('grid h-9 w-9 place-items-center rounded-xl', tint)}><Icon className="h-5 w-5" /></span>
-          <div>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        {/* min-w-0 + break-words: a long title (German "Mahlzeitenplanung…") wraps
+            instead of pushing "Öffnen" off the card (B8 page audit, de-DE). */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', tint)}><Icon className="h-5 w-5" /></span>
+          <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted">{index}.</p>
-            <h2 className="-mt-0.5 text-sm font-bold">{title}</h2>
+            <h2 className="-mt-0.5 break-words text-sm font-bold">{title}</h2>
           </div>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>{t('food.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
+        <Link href={href} className="flex shrink-0 items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={t('itemAction.open', { name: title })}>{t('food.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>

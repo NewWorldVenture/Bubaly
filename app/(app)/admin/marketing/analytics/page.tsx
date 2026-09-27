@@ -7,12 +7,13 @@ import { Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { planMonthlyCents } from '@/lib/constants/plans';
-import { getTranslations } from '@/lib/i18n/server';
+import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
+  const locale = (await getLocaleContext()).locale.code;
   const tr = await getTranslations();
   const supabase = createServiceClient();
   const [customersResult, campaignsResult, emailsResult] = await Promise.all([
@@ -36,7 +37,7 @@ export default async function AnalyticsPage() {
     const start = d.getTime();
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
     const value = customers.filter((c) => { const t = new Date(c.createdAt).getTime(); return t >= start && t < end; }).length;
-    return { label: d.toLocaleDateString('en-US', { month: 'short' }), value };
+    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
   });
   const maxAcq = Math.max(...acq.map((a) => a.value), 1);
 

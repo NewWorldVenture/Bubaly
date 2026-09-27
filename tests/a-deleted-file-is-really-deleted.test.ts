@@ -51,9 +51,12 @@ describe('a file the user deleted is really deleted', () => {
     // failed row delete must not orphan a library row pointing at a removed
     // image. That reasoning is left alone. What it must not do is discard the
     // storage result and say "Photo deleted" either way.
+    // The removal goes through removeFamilyMedia, which reads the returned
+    // list as well as the error: storage answers a refused delete and a delete
+    // of something absent alike, with `error: null` (SEC-015).
     const source = read('components/modules/photos-module.tsx');
-    expect(source).toContain("const { error: storageError } = await supabase.storage.from('family-media').remove(");
-    expect(at(source, 'if (storageError)')).toBeLessThan(at(source, "success(tr('photosModule.photoDeleted'))"));
+    expect(source).toContain('const removal = await removeFamilyMedia(supabase, photo.storage_path);');
+    expect(at(source, 'if (removal.error)')).toBeLessThan(at(source, "success(tr('photosModule.photoDeleted'))"));
     expect(source).toContain("tr('photosModule.theFileCouldNotBe')");
   });
 
@@ -69,10 +72,14 @@ describe('a file the user deleted is really deleted', () => {
   });
 
   it('no rollback discards its result silently', () => {
-    for (const path of ['components/modules/home-module.tsx', 'components/modules/messages-module.tsx']) {
-      const source = read(path);
-      expect(source, path).toContain('const { error: rollbackError }');
-      expect(source, path).toContain('left an object behind');
-    }
+    const source = read('components/modules/home-module.tsx');
+    expect(source).toContain('const { error: rollbackError }');
+    expect(source).toContain('left an object behind');
+    // The messages rollback reads the returned list as well as the error, since
+    // storage answers a refused delete with `error: null` too (SEC-015).
+    const messages = read('components/modules/messages-module.tsx');
+    expect(messages).toContain("const rollback = await supabase.storage.from('family-media').remove([stored.path]);");
+    expect(messages).toContain('if (rollback.error || !rollback.data?.some((object) => object.name === stored.path))');
+    expect(messages).toContain('attachment rollback not confirmed');
   });
 });

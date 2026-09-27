@@ -1,7 +1,7 @@
 'use client';
 
 // Enhanced notes: color coding, checklists, categories, grid/list view, search
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useId } from 'react';
 import {
   StickyNote, Plus, Trash2, Pin, PinOff, Search, X, Copy, List, LayoutGrid,
   CheckSquare, Square, Palette, Clock, FileText, Sparkles, User,
@@ -282,7 +282,8 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 className="focus-ring flex-1 min-w-0 rounded text-left">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
-                  <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
+                  {/* A real button, so the keyboard can open the note; its click bubbles to the row (MAIN-F-D06). */}
+                  <button type="button" className="block min-w-0 max-w-full truncate text-left text-sm font-semibold">{note.title ?? t('notes.untitled')}</button>
                   {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
@@ -290,7 +291,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span suppressHydrationWarning className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
+                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
                 <button aria-label={t('a11y.copy')} onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
@@ -364,7 +365,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 {fmtRelative(note.updated_at)}
               </div>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
+                <button aria-label={t(note.is_pinned ? 'a11y.unpin' : 'a11y.pin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
                 <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
@@ -384,6 +385,7 @@ function NoteModal({ note, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
+  const a11yId = useId();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   // Local only, and it stays local: there is no `notes.color` column for the
@@ -468,7 +470,7 @@ function NoteModal({ note, onClose, onSaved }: {
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-sm font-medium">{t('notes.content')}</label>
+            <label htmlFor={`${a11yId}-content`} className="text-sm font-medium">{t('notes.content')}</label>
             <div className="flex items-center gap-1">
               <button type="button" onClick={insertChecklistItem}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-elevated hover:text-fg transition">
@@ -482,9 +484,10 @@ function NoteModal({ note, onClose, onSaved }: {
             </div>
           </div>
           <Textarea
+            id={`${a11yId}-content`}
             value={bodyValue}
             onChange={(e) => setBodyValue(e.target.value)}
-            placeholder={`Write anything…\n\nTip: [ ] unchecked item\n     [x] checked item`}
+            placeholder={t('notes.contentPlaceholder')}
             className="min-h-[200px] font-mono text-sm"
             autoFocus={!!note} />
 

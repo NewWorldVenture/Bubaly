@@ -8,7 +8,7 @@ const budget = readFileSync('components/vacations/trip-budget.tsx', 'utf8');
 describe('vacation CRUD read boundaries', () => {
   it('surfaces generic CRUD list failures with a retry action', () => {
     expect(shared).toContain('error, refresh } = useRealtimeQuery');
-    expect(shared).toContain('Could not load ${title.toLowerCase()}. Refresh and try again.');
+    expectSays(shared, 'shared.sectionLoadFailed', 'This section could not be loaded. Refresh and try again.');
     expect(shared).toContain('onRetry={refresh}');
   });
 

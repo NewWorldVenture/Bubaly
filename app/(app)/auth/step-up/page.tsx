@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { redirect } from 'next/navigation';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -6,7 +7,6 @@ import { readAssurance } from '@/lib/auth/require-aal2';
 import { isSafeReturnPath, sessionStrength } from '@/lib/auth/mfa';
 import { Logo } from '@/components/brand/logo';
 import { StepUpForm } from '@/components/auth/step-up-form';
-import { getTranslations } from '@/lib/i18n/server';
 
 // The tab title is copy like any other: it was English in every locale.
 // Audit C1-S9-100.

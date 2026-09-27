@@ -29,6 +29,7 @@ import {
 import { dayKeyIn } from '@/lib/time/zoned';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { groceryCategoryLabel } from '@/lib/i18n/grocery-category';
 
 type PantryItem = Tables<'pantry_items'>;
 
@@ -116,10 +117,10 @@ export function PantryModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Items tracked', value: summary.total, icon: '📦', color: 'text-brand-text' },
-          { label: 'Expiring soon', value: summary.expiringSoon, icon: '⏳', color: 'text-warning' },
-          { label: 'Expired', value: summary.expired, icon: '⚠️', color: 'text-danger' },
-          { label: 'Running low', value: summary.lowStock, icon: '🛒', color: 'text-amber-400' },
+          { label: t('pantryModule.stat.itemsTracked'), value: summary.total, icon: '📦', color: 'text-brand-text' },
+          { label: t('pantryModule.stat.expiringSoon'), value: summary.expiringSoon, icon: '⏳', color: 'text-warning' },
+          { label: t('pantryModule.stat.expired'), value: summary.expired, icon: '⚠️', color: 'text-danger' },
+          { label: t('pantry.runningLow'), value: summary.lowStock, icon: '🛒', color: 'text-amber-400' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -210,7 +211,7 @@ export function PantryModule() {
                         {item.is_staple && <span className="ml-1.5 text-[10px] text-muted">staple</span>}
                       </p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                        {item.category && <span className="text-[11px] text-muted">{item.category}</span>}
+                        {item.category && <span className="text-[11px] text-muted">{groceryCategoryLabel(t, item.category)}</span>}
                         {item.expires_at && <Badge tone={TONE_CLASS[st.tone] as 'neutral'}>{st.label}</Badge>}
                         {lowS && <Badge tone="warning">Low</Badge>}
                       </div>
@@ -303,7 +304,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
           <Field label={t('pantry.category')}>
             {(id) => (
               <Select id={id} name="category" defaultValue={item?.category ?? 'Pantry'}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {CATEGORIES.map((c) => <option key={c} value={c}>{groceryCategoryLabel(t, c)}</option>)}
               </Select>
             )}
           </Field>

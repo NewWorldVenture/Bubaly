@@ -8,6 +8,7 @@
 // state changes are mirrored from Stripe, never forged locally.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { householdPolicyBlocked } from '@/lib/trust/messages';
 import { headers } from 'next/headers';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -133,7 +134,7 @@ export async function issueCardAction(input: {
     title: `Issue ${input.type} card`,
     context: { amountCents: input.spendLimitCents ?? undefined }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const { data: member, error: memberError } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
   if (memberError) return actionFailure('load the cardholder profile', t('money.couldNotLoadTheCardholderProfile'), memberError);

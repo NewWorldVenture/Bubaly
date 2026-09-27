@@ -31,7 +31,14 @@ import { todayInZone } from '@/lib/schedule/zoned';
 
 type Sub = Tables<'subscriptions_tracked'>;
 
+// Stored as the English word (and the cadence and status as their ids); each is
+// worded in the reader's language when shown (audit C1-S9-121).
 const CATEGORIES = ['Streaming', 'Music', 'Software', 'Gaming', 'News', 'Fitness', 'Cloud', 'Membership', 'Other'];
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+const categoryLabel = (t: Tr, c: string | null) => CATEGORIES.includes(c ?? 'Other') ? t(`subscriptionsModule.category.${(c ?? 'Other').toLowerCase()}`) : (c as string);
+const cadenceLabel = (t: Tr, c: string) => (['weekly', 'monthly', 'quarterly', 'yearly'] as string[]).includes(c) ? t(`subscriptionsModule.cadence.${c}`) : c;
+const statusLabel = (t: Tr, st: string) => (['active', 'trial', 'paused', 'canceled'] as string[]).includes(st) ? t(`subscriptionsModule.status.${st}`) : st;
+const pricePer = (t: Tr, amount: string, c: string) => (['weekly', 'monthly', 'quarterly', 'yearly'] as string[]).includes(c) ? t(`subscriptionsModule.pricePer.${c}`, { amount }) : `${amount}/${c}`;
 const blank = () => ({ id: '', name: '', cost: '', cadence: 'monthly', category: 'Streaming', status: 'active', next_charge: '', last_used: '', note: '' });
 
 export function SubscriptionsModule() {
@@ -155,7 +162,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
       {reviewMonthly > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{usd(reviewMonthly)}/mo</strong>{' '}{t('subscriptionsModule.haveRecordedUseMoreThan')}</p>
+          <p>{t('subscriptions.subscriptionsTotaling')} <strong>{t('subscriptionsModule.pricePer.monthly', { amount: usd(reviewMonthly) })}</strong>{' '}{t('subscriptionsModule.haveRecordedUseMoreThan')}</p>
         </div>
       )}
 
@@ -170,23 +177,23 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
             <div key={s.id} className="flex flex-col items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3 sm:flex-row">
               <div className="min-w-0 w-full">
                 <p className={`font-medium ${canceled ? 'text-muted line-through' : ''}`}>
-                  {s.name} <span className="text-muted">· {usd(s.cost_cents)}/{s.cadence === 'monthly' ? 'mo' : s.cadence === 'yearly' ? 'yr' : s.cadence}</span>
+                  {s.name} <span className="text-muted">· {pricePer(t, usd(s.cost_cents), s.cadence)}</span>
                   {stale && !canceled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-500"><AlertTriangle className="h-3 w-3" /> {t('subscriptions.reviewUsage')}</span>}
-                  {s.status === 'trial' && <span className="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">trial</span>}
+                  {s.status === 'trial' && <span className="ml-2 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-400">{statusLabel(t, 'trial')}</span>}
                 </p>
                 <p className="text-xs text-muted">
-                  {s.category ?? 'Other'} · {usd(monthlyCostCents(s.cost_cents, s.cadence))}/mo · {usd(annualCostCents(s.cost_cents, s.cadence))}/yr
-                  {s.next_charge ? ` · next ${fmtDate(s.next_charge)}` : ''}
-                  {usage.state === 'recorded' ? ` · last recorded use ${fmtDate(usage.lastUsed)}`
-                    : usage.state === 'unknown' ? ' · usage unknown; Edit to add last use'
-                      : usage.state === 'future' ? ' · last-use date is in the future; Edit to correct'
-                        : ' · last-use date is invalid; Edit to correct'}
+                  {categoryLabel(t, s.category)} · {t('subscriptionsModule.pricePer.monthly', { amount: usd(monthlyCostCents(s.cost_cents, s.cadence)) })} · {t('subscriptionsModule.pricePer.yearly', { amount: usd(annualCostCents(s.cost_cents, s.cadence)) })}
+                  {s.next_charge ? ` · ${t('subscriptionsModule.nextOn', { date: fmtDate(s.next_charge) })}` : ''}
+                  {' · '}{usage.state === 'recorded' ? t('subscriptionsModule.usage.recorded', { date: fmtDate(usage.lastUsed) })
+                    : usage.state === 'unknown' ? t('subscriptionsModule.usage.unknown')
+                      : usage.state === 'future' ? t('subscriptionsModule.usage.future')
+                        : t('subscriptionsModule.usage.invalid')}
                 </p>
                 <SubscriptionPriceHistoryReview
                   key={JSON.stringify([subscriptionReviewContextKey(context), s.id, s.name, s.cost_cents, s.cadence, s.note, s.status, s.last_used, s.next_charge, s.category])}
                   context={context}
                   subscription={{ id: s.id, name: s.name, costCents: s.cost_cents, cadence: s.cadence, note: s.note }}
-                  onPrefill={(charge) => edit(s, charge.amountCents, `Selected recorded charge: USD ${(charge.amountCents / 100).toFixed(2)} on ${charge.date}, source transactions/${charge.recordId}. Review the editable cost and choose Save. This is not a confirmed provider plan-price change; other fields are preserved.`)}
+                  onPrefill={(charge) => edit(s, charge.amountCents, t('subscriptions.prefillNote', { amount: (charge.amountCents / 100).toFixed(2), date: charge.date, id: charge.recordId }))}
                 />
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
@@ -207,15 +214,15 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
             <Field label={t('subscriptions.name')}>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('subscriptions.netflixSpotify')} />}</Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('subscriptions.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
-              <Field label={t('subscriptions.billing')}>{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.billing')}>{(id) => <Select id={id} value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>{CADENCES.map((c) => <option key={c} value={c}>{cadenceLabel(t, c)}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label={t('subscriptions.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-              <Field label={t('subscriptions.status')}>{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{SUB_STATUSES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(t, c)}</option>)}</Select>}</Field>
+              <Field label={t('subscriptions.status')}>{(id) => <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{SUB_STATUSES.map((c) => <option key={c} value={c}>{statusLabel(t, c)}</option>)}</Select>}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('subscriptions.nextCharge')}>{(id) => <Input id={id} type="date" value={form.next_charge} onChange={(e) => setForm({ ...form, next_charge: e.target.value })} />}</Field>
-              <Field label={t('subscriptions.lastUsed')} hint="Leave blank if usage is unknown; record only actual use.">{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
+              <Field label={t('subscriptions.lastUsed')} hint={t('subscriptionsModule.lastUsedHint')}>{(id) => <Input id={id} type="date" value={form.last_used} onChange={(e) => setForm({ ...form, last_used: e.target.value })} />}</Field>
             </div>
             <Field label={t('subscriptions.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
@@ -288,8 +295,8 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
       {canReview && visibleReview.result && (
         <div className="space-y-3">
           <p role="status" className="text-xs text-muted">{t('subscriptions.reviewed')} {visibleReview.result.recordsRead} {t('subscriptions.recordedExpensesFrom')} {visibleReview.result.window.from} to {visibleReview.result.window.to}.
-            {visibleReview.result.limited ? ' History was limited to the 500 most recent records; this is a partial review.' : ''}
-            {visibleReview.result.unsupportedCurrencyRecords > 0 ? ` ${visibleReview.result.unsupportedCurrencyRecords} records were excluded because their currency is unknown or unsupported.` : ''}
+            {visibleReview.result.limited ? ` ${t('subscriptions.historyLimited')}` : ''}
+            {visibleReview.result.unsupportedCurrencyRecords > 0 ? ` ${visibleReview.result.unsupportedCurrencyRecords === 1 ? t('subscriptions.excludedOne') : t('subscriptions.excludedMany', { n: visibleReview.result.unsupportedCurrencyRecords })}` : ''}
           </p>
           {candidates.length === 0 ? <p className="text-sm text-muted">{t('subscriptions.noNewCandidatesMeetTheseConservative')}</p> : candidates.map((candidate) => (
             <details key={candidate.id} className="rounded-xl border border-border p-3">
@@ -297,7 +304,7 @@ export function SubscriptionCandidateReview({ context, tracked, onPrefill }: {
               <div className="mt-3 space-y-3 text-sm">
                 <p>{candidate.explanation}</p>
                 <p className="text-muted">{t('subscriptions.observedWindow')} {candidate.observed.from} to {candidate.observed.to}.</p>
-                <ul aria-label={`Recorded expense evidence for ${candidate.name}`} className="space-y-2">
+                <ul aria-label={t('subscriptions.expenseEvidenceFor', { name: candidate.name })} className="space-y-2">
                   {candidate.evidence.map((item) => <li key={item.recordId} className="break-words text-xs text-muted"><time dateTime={item.date}>{item.date}</time> - USD {(item.amountCents / 100).toFixed(2)} - <code className="break-all">transactions/{item.recordId}</code></li>)}
                 </ul>
                 <p className="text-xs text-muted">{t('subscriptions.useThisEvidenceToPreFill')}</p>

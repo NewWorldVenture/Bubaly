@@ -10,6 +10,7 @@ import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { addItems, type GroceryItemInput } from '@/lib/services/groceries';
 import { parseIngredients } from '@/lib/services/meals';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import type { Database } from '@/lib/database.types';
 
 type Refusal = { ok: false; error: string };
 type Result = { ok: true; id?: string } | Refusal;
@@ -35,7 +36,7 @@ export async function createMealVote(input: {
     meal_date: input.mealDate || null, meal_type: input.mealType || null,
     allow_maybe: input.allowMaybe ?? true,
   }).select('id').single();
-  if (error || !vote) return { ok: false, error: describeActionError(error, 'Could not create vote') };
+  if (error || !vote) return { ok: false, error: describeActionError(error, t('actions.couldNotCreateTheVote')) };
 
   const rows = options.map((o) => ({
     vote_id: vote.id, family_id: familyId,

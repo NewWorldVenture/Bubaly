@@ -185,7 +185,7 @@ export function ProjectsModule() {
                   <span className="text-xs text-muted">{total}</span>
                 </div>
                 <ul className="space-y-2">{list.map((p) => <Card key={p.id} p={p} />)}</ul>
-                {col.key === 'done' && total > 3 && <button onClick={() => setShowDone((v) => !v)} className="mt-2 text-xs text-muted hover:text-fg">{showDone ? 'Show fewer' : `Show all ${total}`}</button>}
+                {col.key === 'done' && total > 3 && <button onClick={() => setShowDone((v) => !v)} className="mt-2 text-xs text-muted hover:text-fg">{showDone ? tr('listToggle.showFewer') : tr('listToggle.showAll', { n: total })}</button>}
                 {list.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted">{tr('projects.nothingHere')}</p>}
               </section>
             );
@@ -346,7 +346,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { error } = await createClient().from('project_materials').insert(fresh.map((m) => ({ family_id: familyId, project_id: project.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
     setSuggesting(false);
     if (error) return toastError(describeDbError(error));
-    success(`${fresh.length} material${fresh.length === 1 ? '' : 's'} added`);
+    success(fresh.length === 1 ? tr('projects.materialAddedOne', { count: fresh.length }) : tr('projects.materialsAddedMany', { count: fresh.length }));
   }
 
   async function setQuoteStatus(q: Quote, status: ProjectQuoteStatus) {
@@ -371,7 +371,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { data: linked, error: linkError } = await supabase.from('home_projects').update({ contractor_id: q.contractor_id ?? project.contractor_id, status: project.status === 'quoting' || project.status === 'planning' || project.status === 'idea' ? 'scheduled' : project.status }).eq('id', project.id).select('id');
     if (linkError) return toastError(describeDbError(linkError));
     if (wroteNoRows(linked)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(`Accepted ${q.contractor_name} at ${money(q.amount_cents)}`);
+    success(tr('projects.acceptedNameAtAmount', { name: q.contractor_name, amount: money(q.amount_cents) }));
   }
 
   async function deleteQuote(q: Quote) {
@@ -437,8 +437,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
                     <p className="text-[11px] text-muted">{money(materialLineCents(m))}{m.is_purchased && m.actual_cost_cents !== null && m.est_cost_cents !== null && m.actual_cost_cents !== m.est_cost_cents ? ` (est. ${money(Math.round(m.est_cost_cents * m.quantity))})` : ''}{m.store ? ` · ${m.store}` : ''}</p>
                   </div>
                   {m.url && <a href={safeWebLink(m.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('projects.openLink')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
-                  <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={`Edit ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => deleteMaterial(m)} aria-label={`Delete ${m.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => setMaterialForm({ open: true, material: m })} aria-label={tr('itemAction.edit', { name: m.name })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => deleteMaterial(m)} aria-label={tr('itemAction.delete', { name: m.name })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </li>
               ))}
               <li className="flex justify-between px-3 pt-1 text-xs text-muted"><span>{mt.purchased}/{mt.count} {tr('projects.bought')} {money(mt.actualCents)} spent</span><span>{money(mt.remainingCents)} {tr('projects.stillToBuy')}</span></li>

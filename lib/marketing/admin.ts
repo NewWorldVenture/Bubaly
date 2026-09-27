@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
+import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import type { Database } from '@/lib/database.types';
 
 type DB = SupabaseClient<Database>;
@@ -86,7 +87,9 @@ export async function requireMarketingAdmin(): Promise<{
 /** Fail a privileged mutation without exposing unclassified provider details. */
 export function marketingActionFailure(operation: string, error: unknown): never {
   console.error(`[marketing-action] ${operation} failed`, error);
-  throw new Error(describeActionError(error, `Could not ${operation}.`));
+  // The digest names why, so the section's error page can say what to change
+  // (lib/actions/refusal.ts); production omits the message itself.
+  throw refusalError(describeActionError(error, `Could not ${operation}.`), refusalForError(error));
 }
 
 export async function logMarketingAudit(

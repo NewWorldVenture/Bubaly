@@ -70,7 +70,7 @@ export default async function ContentPage() {
                         {isBlog && (
                           <div className="grid grid-cols-2 gap-2">
                             <input name="slug" defaultValue={blog.slug ?? ''} placeholder="Slug (auto from title)" className={smCls} />
-                            <select name="category" defaultValue={blog.category ?? ''} className={smCls}>
+                            <select aria-label={t('fieldName.category')} name="category" defaultValue={blog.category ?? ''} className={smCls}>
                               <option value="">Category…</option>
                               {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                             </select>
@@ -81,7 +81,7 @@ export default async function ContentPage() {
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          <select name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
+                          <select aria-label={t('fieldName.status')} name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
                             {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
                           </select>
                           <SubmitButton className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</SubmitButton>

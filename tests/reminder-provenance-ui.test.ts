@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { RemindersModule } from '@/components/modules/reminders-module';
 import { withReminderProvenance, visibleReminderTags } from '@/lib/reminders/provenance';
 import { getMessages, translate } from '@/lib/i18n/messages';
+import { pluralize } from '@/lib/i18n/translate';
 
 const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, tags: [] as string[], update: vi.fn(), db: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock('react', async (original) => ({ ...await original<typeof import('react')>(),
@@ -20,7 +21,10 @@ vi.mock('@/lib/hooks/use-action', () => ({ useAction: () => ({ run: vi.fn(), isP
 vi.mock('@/lib/supabase/client', () => ({ createClient: state.db }));
 vi.mock('@/app/(app)/dashboard/reminders/actions', () => ({ createReminderAction: vi.fn(), deleteReminderAction: vi.fn(), snoozeReminderAction: vi.fn() }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages('en-US'), key) }));
+vi.mock('@/components/i18n/locale-provider', () => ({
+  useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params),
+  usePlural: () => (key: string, count: number) => pluralize(getMessages('en-US'), 'en-US', key, count),
+}));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));
 vi.mock('@/components/ui/modal', () => ({ Modal: ({ children }: { children: ReactNode }) => createElement('div', null, children) }));
