@@ -259,6 +259,14 @@ describe('Supabase migration filename safety', () => {
     // on every member's calendar. Held by
     // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
     //
+    // 0355_an_archived_page_takes_its_public_answers_with_it.sql adds four
+    // AFTER triggers on marketing_pages and blog_posts that move a page's
+    // published FAQ answers to 'answered' in the same transaction as its
+    // archive, delete, rename or unpublish: the answers had no join back to
+    // their page and kept rendering after it went dark. Held by
+    // docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql
+    // and docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql.
+    //
     // 0356_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql
     // gives family_contact_channels.forward_to_phone the E.164 CHECK its own
     // comment claimed, after normalizing the rows already there and keeping

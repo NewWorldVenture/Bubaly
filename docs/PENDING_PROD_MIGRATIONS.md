@@ -2409,6 +2409,56 @@ runs its negative control first (a parent and an adult making the same writes
 must land) and went red on that control when the write grant was revoked with
 0352 in place.
 
+### `0355` makes an archived page take its public answers with it — unapplied
+
+`0355_an_archived_page_takes_its_public_answers_with_it.sql` (SRV-001 leads
+`m1` and `m2+m3`). Generated FAQ answers do not live in the page row: they are
+rows in `marketing_aeo_questions`, world-readable on one predicate (0228's
+`status = 'published'`) with no join back to their source page. So when a page
+left the public set — archived, deleted, renamed, or a blog post unpublished —
+its own route went dark but its answers kept rendering: on /faq's Knowledge
+Center tab and in its FAQPage structured data, in every still-live article of
+the same category, and with a body that ends "Read the full guide at
+/blog/<slug>" for a URL that now answers 404. Nothing self-healed it: 0237's
+regeneration trigger is switched off for exactly this case, and the hand-retry
+paths select the page `.is('deleted_at', null)`.
+
+**What closes it**: four AFTER … FOR EACH ROW triggers on `marketing_pages` and
+`blog_posts`, bound to two SECURITY DEFINER functions with a pinned
+`search_path` (`retire_marketing_aeo_on_page_hidden`,
+`retire_marketing_aeo_on_post_unpublished`; EXECUTE revoked from public, anon
+and authenticated), that move the page's PUBLISHED answers to `answered` — the
+status `runQuestions` itself writes for an unpublished page — inside the same
+transaction as the take-down, so there is no window. Only published rows move;
+an `opportunity` or `drafting` row an admin is mid-way through keeps its
+status, and the editorial text survives for a later re-publish. **This
+migration rewrites rows on apply**: answers already orphaned by pages that are
+archived, deleted or unpublished today are moved to `answered` first, and
+re-pointed or blanked `blog_aeo_v1` rows are handled by the same backfill (its
+first cut refused to apply over exactly that drifted data; the probe below
+re-applies it over both shapes).
+
+**Ships on its own.** The application half is live on merge: the take-down
+actions (`archivePlatformPage`, `updatePlatformPage`, `archiveContentAction`,
+`unpublishBlogPostAction`, the legacy bridge's three paths) retire the answers
+themselves, so the fast path is closed before the migration; a brand rule can be
+corrected after it is saved and a retry re-queues the job it was clicked on
+(`m2+m3`). Until 0355 is applied, a take-down that bypasses the actions — the
+cron worker, `scripts/backfill-*.mjs`, the SQL editor — still leaves the answers
+public.
+
+**Evidence.** `docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql`
+(control first: the super admin and service role can still write every column
+the take-downs write; then archive, delete, rename and unpublish each retire
+exactly their page's published answers and no sibling's; no role may EXECUTE
+the trigger functions) and
+`docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql` (a rename
+of a live page retires the old path's answers and no sibling's, and step 3
+re-applies 0355 over re-pointed and blanked rows). Both mutation-tested three
+ways on private clones of a HEAD template with the migration applied.
+`tests/an-archived-page-takes-its-public-answers-with-it.test.ts` covers the
+actions and guards the CI wiring that executes the probes.
+
 ### `0356` stores the urgent fallback number the only way it can be used — unapplied
 
 `0356_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql`
