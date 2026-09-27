@@ -417,6 +417,18 @@ drop table if exists a15_saved_fn;
 delete from public.wallet_transactions
  where stripe_ref in ('a15_neutered_a', 'a15_neutered_b');
 
+-- And leave the SEEDED ANCHOR FAMILY exactly as it was found. The fixtures
+-- above go there, committed, because the dblink sessions have to see them;
+-- clearing them only at the start made the probe repeatable but not clean —
+-- after every run a phantom "Race Child" member stayed in the family every
+-- other probe and every demo is measured against, until the next run cleared
+-- it. The start-of-run delete stays, so a run that dies mid-way still leaves
+-- the next one a clean slate.
+delete from public.wallet_transactions where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.wallet_buckets      where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.child_wallets       where id              = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.family_members      where id              = 'e0000000-0000-4000-8000-0000000000c9';
+
 -- The summary line reads the block's own verdict rather than asserting one.
 -- Before this, a SKIP still printed "ALL INVARIANTS PASSED" — a green line that
 -- proves nothing is the very thing the skip exists to prevent, so leaving it
