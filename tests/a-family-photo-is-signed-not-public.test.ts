@@ -67,6 +67,45 @@ describe('a stored reference is classified before anything renders it', () => {
       .toEqual({ kind: 'family-media', path: PATH });
   });
 
+  it.each([
+    'object/public', 'object/sign', 'object/authenticated',
+    'render/image/public', 'render/image/sign', 'render/image/authenticated',
+  ])('recognises an encoded bucket on the %s route', (route) => {
+    for (const bucket of ['family%2Dmedia', 'family%2dmedia', '%66amily-media']) {
+      const ref = `https://abcd.supabase.co/storage/v1/${route}/${bucket}/${PATH}?token=old&width=200`;
+      expect(parseFamilyMediaRef(ref)).toEqual({ kind: 'family-media', path: PATH });
+    }
+  });
+
+  it('recognises encoded route segments on either host without decoding the object twice', () => {
+    for (const prefix of [
+      '%73torage/v%31/%6Fbject/s%69gn',
+      '%73torage/v%31/r%65nder/im%61ge/p%75blic',
+    ]) {
+      const ref = `https://other.example/${prefix}/family%2Dmedia/${FAMILY}/photos/my%2520photo%252F.jpg`;
+      expect(parseFamilyMediaRef(ref)).toEqual({ kind: 'family-media', path: `${FAMILY}/photos/my%20photo%2F.jpg` });
+    }
+  });
+
+  it('keeps other buckets and external URLs external, including encoded names', () => {
+    for (const ref of [
+      'https://media.example/photos/family%2Dmedia/a%20b.jpg',
+      `https://abcd.supabase.co/storage/v1/object/public/marketplace%2Dphotos/${PATH}`,
+      `https://abcd.supabase.co/storage/v1/object/public/family%252Dmedia/${PATH}`,
+    ]) {
+      expect(parseFamilyMediaRef(ref)).toEqual({ kind: 'external', url: ref });
+    }
+  });
+
+  it('applies the same object-path validation after decoding the bucket', () => {
+    for (const path of [
+      FAMILY, `${FAMILY}/`, `${FAMILY}//a.jpg`, `not-a-uuid/a.jpg`,
+      `${FAMILY}/a%2Fb.jpg`, `${FAMILY}/a%5Cb.jpg`, `${FAMILY}/bad%E0%A4%A.jpg`,
+    ]) {
+      expect(parseFamilyMediaRef(`https://abcd.supabase.co/storage/v1/object/sign/family%2Dmedia/${path}?token=old`)).toBeNull();
+    }
+  });
+
   it('passes a genuinely external image through, over http(s) only', () => {
     const giphy = 'https://media.giphy.com/media/abc/giphy.gif';
     expect(parseFamilyMediaRef(giphy)).toEqual({ kind: 'external', url: giphy });
@@ -94,6 +133,33 @@ describe('a stored reference is classified before anything renders it', () => {
 });
 
 describe('signing', () => {
+  it('re-signs encoded and canonical references in one viewer-authorized request', async () => {
+    const encoded = `https://abcd.supabase.co/storage/v1/object/sign/family%2Dmedia/${PATH}?token=another-session`;
+    createSignedUrls.mockResolvedValue({ data: [{ path: PATH, signedUrl: signedFor(PATH), error: null }], error: null });
+    const out = await signFamilyMediaRefs(client(), [PUBLIC, encoded]);
+    expect(from).toHaveBeenCalledWith(FAMILY_MEDIA_BUCKET);
+    expect(createSignedUrls).toHaveBeenCalledExactlyOnceWith([PATH], 3600);
+    expect(out.get(encoded)).toBe(signedFor(PATH));
+    expect(out.get(PUBLIC)).toBe(signedFor(PATH));
+  });
+
+  it('never returns an encoded stored capability when viewer signing is denied', async () => {
+    const encoded = `https://abcd.supabase.co/storage/v1/object/sign/family%2Dmedia/${PATH}?token=another-session`;
+    createSignedUrls.mockResolvedValue({ data: [{ path: PATH, signedUrl: null, error: 'not authorized' }], error: null });
+    const out = await signFamilyMediaRefs(client(), [encoded]);
+    expect(createSignedUrls).toHaveBeenCalledExactlyOnceWith([PATH], 3600);
+    expect(out.get(encoded)).toBeNull();
+  });
+
+  it('sends a once-decoded literal percent object name to Storage unchanged', async () => {
+    const encoded = `https://abcd.supabase.co/storage/v1/object/public/family%2Dmedia/${FAMILY}/photos/100%25%2520ready.jpg`;
+    const path = `${FAMILY}/photos/100%%20ready.jpg`;
+    createSignedUrls.mockResolvedValue({ data: [{ path, signedUrl: signedFor(path), error: null }], error: null });
+    const out = await signFamilyMediaRefs(client(), [encoded]);
+    expect(createSignedUrls).toHaveBeenCalledExactlyOnceWith([path], 3600);
+    expect(out.get(encoded)).toBe(signedFor(path));
+  });
+
   it('signs every family reference in ONE call, and never touches Storage for an external one', async () => {
     createSignedUrls.mockImplementation(async (paths: string[]) => ({
       data: paths.map((p) => ({ path: p, signedUrl: signedFor(p), error: null })), error: null,
@@ -143,6 +209,17 @@ describe('signing', () => {
 });
 
 describe('the browser cache of signed URLs', () => {
+  it('does not expose an encoded reference before signing or after a viewer denial', async () => {
+    const encoded = `https://abcd.supabase.co/storage/v1/object/sign/family%2Dmedia/${PATH}?token=another-session`;
+    expect(lookupFamilyMediaUrl(encoded)).toBeUndefined();
+    createSignedUrls.mockResolvedValue({ data: [{ path: PATH, signedUrl: null, error: 'not authorized' }], error: null });
+    await ensureFamilyMediaUrls([encoded]);
+    expect(lookupFamilyMediaUrl(encoded)).toBeNull();
+    expect(createSignedUrls).toHaveBeenCalledExactlyOnceWith([PATH], 3600);
+    vi.stubGlobal('document', { cookie: '' });
+    expect(lookupFamilyMediaUrl(encoded)).toBeNull();
+  });
+
   it('is undefined while signing, then reuses one URL instead of re-signing on every render', async () => {
     createSignedUrls.mockImplementation(async (paths: string[]) => ({
       data: paths.map((p) => ({ path: p, signedUrl: signedFor(p), error: null })), error: null,

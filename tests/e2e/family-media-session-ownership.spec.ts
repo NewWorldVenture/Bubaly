@@ -88,7 +88,7 @@ async function install(context: BrowserContext, holdSigning = false): Promise<St
       }
       await route.fulfill(response); return;
     }
-    if (url.href === signedA && request.method() === 'GET') {
+    if ([signedA, signedA.replace('/family-media/', '/family%2Dmedia/')].includes(url.href) && request.method() === 'GET') {
       state.imageOwners.push(state.owner);
       await route.fulfill({ contentType: 'image/png', headers, body: pixel }); return;
     }
@@ -257,4 +257,30 @@ for (const kind of ['valid', 'absent', 'external'] as const) {
     expect(state.hydrationWarnings).toBe(0); expect(state.consoleErrors).toBe(0);
     expect(state.pageErrors).toBe(0); expect(state.unexpected).toBe(0);
   });
+}
+
+for (const encoded of [false, true]) {
+  for (const owner of ['A', 'B'] as const) {
+    test(`a stored ${encoded ? 'encoded' : 'canonical'} signed photo is authorized as viewer ${owner}`, async ({ page, context }) => {
+      const state = await install(context); state.owner = owner; await load(page, state);
+      const src = encoded ? signedA.replace('/family-media/', '/family%2Dmedia/') : signedA;
+      await page.evaluate(() => window.__familyMediaOwnership.signIn());
+      await page.evaluate(({ markup, src }) => window.__familyMediaOwnership.hydrate(markup, src), { markup: serverMarkup(src), src });
+      // A stored bearer URL must be re-signed as the viewer, including when the
+      // bucket name is percent-encoded. A transport denial must render nothing.
+      await expect.poll(() => page.evaluate(() => window.__familyMediaOwnership.signingSettled)).toBe(1);
+      await page.evaluate(() => window.__familyMediaOwnership.settle());
+      expect(state.signingOwners).toEqual([owner]);
+      if (owner === 'A') {
+        await expect.poll(() => page.evaluate(() => window.__familyMediaOwnership.view().imageDecoded)).toBe(true);
+        expect(state.imageOwners).toEqual(['A']);
+      } else {
+        expect(await page.evaluate(() => window.__familyMediaOwnership.view())).toMatchObject({ tag: 'SPAN', busy: null, hasImage: false });
+        expect(state.imageOwners).toEqual([]);
+      }
+      expect(await page.evaluate(() => window.__familyMediaOwnership.recoverable)).toBe(0);
+      expect(state.hydrationWarnings).toBe(0); expect(state.consoleErrors).toBe(0);
+      expect(state.pageErrors).toBe(0); expect(state.unexpected).toBe(0);
+    });
+  }
 }
