@@ -24,6 +24,7 @@ import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -636,7 +637,7 @@ export function SchoolModule() {
                               </span>
                             ) : g.grade ?? '—'}
                           </td>
-                          <td className="px-4 py-3 text-muted">{new Date(g.date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
+                          <td className="px-4 py-3 text-muted">{parseCalendarDate(g.date)?.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
                         </tr>
                       );
                     })}
