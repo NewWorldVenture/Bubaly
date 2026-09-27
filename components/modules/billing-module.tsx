@@ -71,46 +71,58 @@ type Bill = Tables<'bills'>;
 type SavingsGoal = Tables<'savings_goals'>;
 
 // ── Stripe helpers ──────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: React.ReactNode }> = {
-  trialing: { label: 'Trial', tone: 'neutral', icon: <Clock className="h-4 w-4" /> },
-  active: { label: 'Active', tone: 'success', icon: <CheckCircle2 className="h-4 w-4" /> },
-  past_due: { label: 'Past due', tone: 'warning', icon: <AlertCircle className="h-4 w-4" /> },
-  canceled: { label: 'Canceled', tone: 'neutral', icon: <AlertCircle className="h-4 w-4" /> },
-  incomplete: { label: 'Incomplete', tone: 'warning', icon: <AlertCircle className="h-4 w-4" /> },
-  incomplete_expired: { label: 'Expired', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
-  unpaid: { label: 'Unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
+const STATUS_CONFIG: Record<SubscriptionStatus, { labelKey: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: React.ReactNode }> = {
+  trialing: { labelKey: 'billingModule.status.trialing', tone: 'neutral', icon: <Clock className="h-4 w-4" /> },
+  active: { labelKey: 'billingModule.status.active', tone: 'success', icon: <CheckCircle2 className="h-4 w-4" /> },
+  past_due: { labelKey: 'billingModule.status.pastDue', tone: 'warning', icon: <AlertCircle className="h-4 w-4" /> },
+  canceled: { labelKey: 'billingModule.status.canceled', tone: 'neutral', icon: <AlertCircle className="h-4 w-4" /> },
+  incomplete: { labelKey: 'billingModule.status.incomplete', tone: 'warning', icon: <AlertCircle className="h-4 w-4" /> },
+  incomplete_expired: { labelKey: 'billingModule.status.incompleteExpired', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
+  unpaid: { labelKey: 'billingModule.status.unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
 };
 // No price field. There used to be one, a hand-written `$${…toFixed(2)}/mo` per
 // slug, and nothing ever rendered it: the current-plan card shows name and
 // description only, and every price a family actually sees comes from
 // PlanManager below, formatted for the reader. A dead string that no reader
 // sees has no locale to be given, so it is removed rather than "converted".
-const PLAN_LABELS: Record<string, { name: string; description: string }> = {
-  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.' },
-  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.' },
-  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.' },
-  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.' },
-  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.' },
+const PLAN_LABELS: Record<string, { nameKey: string; descriptionKey: string }> = {
+  free: { nameKey: 'billingModule.plan.free.name', descriptionKey: 'billingModule.plan.free.description' },
+  basic: { nameKey: 'billingModule.plan.basic.name', descriptionKey: 'billingModule.plan.basic.description' },
+  basic_annual: { nameKey: 'billingModule.plan.basicAnnual.name', descriptionKey: 'billingModule.plan.basicAnnual.description' },
+  plus: { nameKey: 'billingModule.plan.plus.name', descriptionKey: 'billingModule.plan.plus.description' },
+  plus_annual: { nameKey: 'billingModule.plan.plusAnnual.name', descriptionKey: 'billingModule.plan.plusAnnual.description' },
   // Legacy slugs map to Basic.
-  family: { name: 'Family Basic', description: 'Everything a busy household needs.' },
-  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.' },
+  family: { nameKey: 'billingModule.plan.family.name', descriptionKey: 'billingModule.plan.family.description' },
+  family_annual: { nameKey: 'billingModule.plan.familyAnnual.name', descriptionKey: 'billingModule.plan.familyAnnual.description' },
 };
 
-async function openPortal() {
-  const res = await fetch('/api/billing/portal', { method: 'POST' });
-  const json = await res.json(); if (json.url) window.location.href = json.url;
+/**
+ * Opens the Stripe portal, or says why it cannot. The route words each refusal
+ * (not a parent, no billing account, billing unavailable); this used to read
+ * the body, find no url, and do nothing at all, so "Payment & invoices" looked
+ * like a dead button whenever it failed. Audit C1-S9-109.
+ */
+async function openPortal(): Promise<{ ok: true } | { ok: false; error: string | null }> {
+  try {
+    const res = await fetch('/api/billing/portal', { method: 'POST' });
+    const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (res.ok && json.url) { window.location.href = json.url; return { ok: true }; }
+    return { ok: false, error: json.error ?? null };
+  } catch {
+    return { ok: false, error: null };
+  }
 }
 
 const TIER_DEFS = [
   {
-    level: 1 as const, name: 'Family Basic', featured: false,
+    level: 1 as const, nameKey: 'billingModule.plan.basic.name', featured: false,
     monthlyCents: BASIC_MONTHLY_CENTS, annualCents: BASIC_ANNUAL_CENTS,
-    features: ['Unlimited members', 'Chores, meals & grocery planning', 'School & sports hubs', 'Unlimited AI assistant', 'Smart Imports & Kitchen Display'],
+    features: ['billingModule.tier.unlimitedMembers', 'billingModule.tier.choresMealsGrocery', 'billingModule.tier.schoolSportsHubs', 'billingModule.tier.unlimitedAi', 'billingModule.tier.importsKitchenDisplay'],
   },
   {
-    level: 2 as const, name: 'Family+', featured: true,
+    level: 2 as const, nameKey: 'billingModule.plan.plus.name', featured: true,
     monthlyCents: PLUS_MONTHLY_CENTS, annualCents: PLUS_ANNUAL_CENTS,
-    features: ['Everything in Basic', 'AI Concierge & daily briefings', 'AI School & Sports assistant', 'Family Command Center', 'Priority support'],
+    features: ['billingModule.tier.everythingInBasic', 'billingModule.tier.conciergeBriefings', 'billingModule.tier.schoolSportsAi', 'billingModule.tier.commandCenter', 'billingModule.tier.prioritySupport'],
   },
 ];
 
@@ -164,9 +176,9 @@ export function PlanManager({
             : tr('billing.billedMonthly');
           const isCurrent = change === 'current';
           return (
-            <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
+            <div key={t.nameKey} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
               <div className="flex items-center justify-between">
-                <p className="font-semibold">{t.name}</p>
+                <p className="font-semibold">{tr(t.nameKey)}</p>
                 {isCurrent ? <Badge tone="success">{tr('billing.current')}</Badge> : t.featured && <Badge tone="brand">{tr('billing.mostPopular')}</Badge>}
               </div>
               <p className="mt-1 text-2xl font-bold">{price(perMonth)}<span className="text-sm font-normal text-muted">{tr('pricingValue.perMonthSuffix')}</span></p>
@@ -178,13 +190,16 @@ export function PlanManager({
                 disabled={isCurrent}
                 onClick={() => onChoose(plan)}
               >
-                {isCurrent ? 'Current plan' : change === 'new' ? `Choose ${t.name}` : CHANGE_LABELS[change]}
-                {change === 'switch_interval' ? ` to ${annual ? 'annual' : 'monthly'}` : ''}
+                {/* Every word on this button was English. Audit C1-S9-109. */}
+                {isCurrent ? tr('billingModule.change.current')
+                  : change === 'new' ? tr('billingModule.change.choose', { plan: tr(t.nameKey) })
+                  : change === 'switch_interval' ? tr(annual ? 'billingModule.change.switchToAnnual' : 'billingModule.change.switchToMonthly')
+                  : tr(`billingModule.change.${change}`)}
               </Button>
               <ul className="mt-3 space-y-1.5">
                 {t.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-xs text-muted">
-                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />{f}
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />{tr(f)}
                   </li>
                 ))}
               </ul>
@@ -197,7 +212,8 @@ export function PlanManager({
 }
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
-const TABS = ['Overview', 'Transactions', 'Budgets', 'Bills', 'Savings Goals', 'Reports'] as const;
+// Ids, not labels: the label is the reader's, from the catalogue. Audit C1-S9-109.
+const TABS = ['overview', 'transactions', 'budgets', 'bills', 'savingsGoals', 'reports'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -243,6 +259,19 @@ function memberAge(birthday: string | null): number | null {
   const m = now.getMonth() - b.getMonth();
   if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
   return age >= 0 && age < 130 ? age : null;
+}
+
+// The stored category is the English word (it is data, and existing rows hold
+// it); what a reader sees is its label. Audit C1-S9-109.
+const CATEGORY_KEY: Record<string, string> = {
+  Housing: 'housing', Groceries: 'groceries', Dining: 'dining', Transport: 'transport', Utilities: 'utilities',
+  Entertainment: 'entertainment', Health: 'health', Shopping: 'shopping', Subscriptions: 'subscriptions', Insurance: 'insurance',
+  Education: 'education', 'Auto & Gas': 'autoGas', 'Personal Care': 'personalCare', Gifts: 'gifts', Other: 'other',
+};
+/** A known category in the reader's language; a family's own category as they typed it. */
+function categoryLabel(tr: (key: string) => string, category: string | null | undefined): string {
+  const c = category || 'Other';
+  return CATEGORY_KEY[c] ? tr(`billingModule.category.${CATEGORY_KEY[c]}`) : c;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -356,7 +385,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
         )}</Field>
         <Field label={tr('billing.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}
           </Select>
         )}</Field>
         <Field label={tr('billing.date')} required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />}</Field>
@@ -403,7 +432,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
       <form onSubmit={submit} className="space-y-4">
         <Field label={tr('billing.category')} required>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}
           </Select>
         )}</Field>
         <Field label={tr('billing.budgetAmount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />}</Field>
@@ -460,7 +489,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
         <Field label={tr('billing.dueDate')} required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />}</Field>
         <Field label={tr('billing.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}
           </Select>
         )}</Field>
         <div className="flex items-center gap-3">
@@ -577,7 +606,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const checkoutTier = search.get('checkout');
   const checkoutLevel: 1 | 2 | undefined = checkoutTier === 'plus' ? 2 : checkoutTier === 'basic' ? 1 : undefined;
   const needLevel = checkoutLevel ?? (search.get('need') === '2' ? 2 : wantsUpgrade ? 1 : undefined);
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [tab, setTab] = useState<Tab>('overview');
   const { subscription, status: subReadStatus, reload: loadSub, isCurrentReady } = useBillingSubscription(familyId, userId);
   const [pending, startTransition] = useTransition();
   const reviewNeedsReadback = readback?.account === reviewAccount;
@@ -986,20 +1015,20 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <div className="rounded-2xl border border-border bg-surface/40 p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold">{tr('billing.overview')}</h2>
-          <button onClick={() => setTab('Reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewFullReport')} <ChevronRight className="h-3.5 w-3.5" /></button>
+          <button onClick={() => setTab('reports')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewFullReport')} <ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { icon: Wallet, label: 'Total Balance', value: fmtCurrency(totalBalance), circle: 'bg-violet-600',
+            { icon: Wallet, label: tr('billingModule.totalBalance'), value: fmtCurrency(totalBalance), circle: 'bg-violet-600',
               foot: (
                 <span className={cn('flex items-center gap-1 font-medium', netSavings >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
                   {netSavings >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
                   {fmtCurrency(Math.abs(netSavings))} {tr('billing.thisMonth')}
                 </span>
               ) },
-            { icon: ArrowDownLeft, label: 'Income', value: fmtCurrency(income), circle: 'bg-emerald-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
-            { icon: ArrowUpRight, label: 'Expenses', value: fmtCurrency(expenses), circle: 'bg-rose-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
-            { icon: PiggyBank, label: 'Savings', value: fmtCurrency(netSavings), circle: 'bg-blue-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
+            { icon: ArrowDownLeft, label: tr('billingModule.income'), value: fmtCurrency(income), circle: 'bg-emerald-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
+            { icon: ArrowUpRight, label: tr('billingModule.expenses'), value: fmtCurrency(expenses), circle: 'bg-rose-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
+            { icon: PiggyBank, label: tr('billingModule.savings'), value: fmtCurrency(netSavings), circle: 'bg-blue-500', foot: <span className="text-muted">{tr('billing.thisMonth')}</span> },
           ].map(({ icon: Icon, label, value, circle, foot }) => (
             <div key={label} className="rounded-xl border border-border bg-bg/40 p-3 sm:p-4">
               <div className="flex items-start justify-between gap-2">
@@ -1039,7 +1068,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 {spendByCategory.map((s) => (
                   <div key={s.label} className="flex items-center gap-2.5 text-sm">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
-                    <span className="flex-1 truncate text-muted">{s.label}</span>
+                    <span className="flex-1 truncate text-muted">{categoryLabel(tr, s.label)}</span>
                     <span className="shrink-0 font-semibold tabular-nums">{fmtCurrency(s.amount)}</span>
                     <span className="w-8 shrink-0 text-right text-xs text-muted tabular-nums">{s.pct}%</span>
                   </div>
@@ -1064,7 +1093,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </p>
               </>
             ) : (
-              <button onClick={() => setTab('Budgets')} className="text-xs font-semibold text-brand-text hover:underline">{tr('billing.setAMonthlyBudget')}</button>
+              <button onClick={() => setTab('budgets')} className="text-xs font-semibold text-brand-text hover:underline">{tr('billing.setAMonthlyBudget')}</button>
             )}
           </div>
         </div>
@@ -1073,7 +1102,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{tr('billing.recentTransactions')}</h2>
-            <button onClick={() => setTab('Transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('transactions')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {transactions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted">{tr('billing.noTransactionsYet')}</p>
@@ -1089,7 +1118,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{tx.name}</p>
-                    <p className="truncate text-xs text-muted">{tx.category || 'Other'}</p>
+                    <p className="truncate text-xs text-muted">{categoryLabel(tr, tx.category)}</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className={cn('text-sm font-bold tabular-nums', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
@@ -1110,7 +1139,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{tr('billing.billsAmpReminders')}</h2>
-            <button onClick={() => setTab('Bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewCalendar')} <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('bills')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewCalendar')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
             {/* Mini calendar */}
@@ -1194,7 +1223,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   </div>
                 </div>
               ))}
-              <button onClick={() => setTab('Reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand-text hover:underline">
+              <button onClick={() => setTab('reports')} className="flex w-full items-center justify-center gap-0.5 pt-1 text-sm font-semibold text-brand-text hover:underline">
                 {tr('billing.viewFullBreakdown')} <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -1242,7 +1271,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{tx.name}</p>
-                <p className="text-xs text-muted">{tx.category} · {fmtDate(tx.date)}</p>
+                <p className="text-xs text-muted">{categoryLabel(tr, tx.category)} · {fmtDate(tx.date)}</p>
               </div>
               <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                 {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
@@ -1276,7 +1305,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <div key={b.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <div>
-                    <p className="font-semibold">{b.category}</p>
+                    <p className="font-semibold">{categoryLabel(tr, b.category)}</p>
                     <p className="text-xs text-muted capitalize">{b.period}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1323,7 +1352,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 <p className="text-xs text-muted">
                   Due {fmtDate(b.due_date)}
                   {b.is_recurring && ` · ${b.recurrence}`}
-                  {b.category && ` · ${b.category}`}
+                  {b.category && ` · ${categoryLabel(tr, b.category)}`}
                 </p>
               </div>
               <Badge tone={b.status === 'paid' ? 'success' : b.status === 'overdue' ? 'danger' : 'neutral'}>
@@ -1456,12 +1485,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   const renderTabContent = () => {
     switch (tab) {
-      case 'Overview': return renderOverview();
-      case 'Transactions': return renderTransactions();
-      case 'Budgets': return renderBudgets();
-      case 'Bills': return renderBills();
-      case 'Savings Goals': return renderSavingsGoals();
-      case 'Reports': return renderReports();
+      case 'overview': return renderOverview();
+      case 'transactions': return renderTransactions();
+      case 'budgets': return renderBudgets();
+      case 'bills': return renderBills();
+      case 'savingsGoals': return renderSavingsGoals();
+      case 'reports': return renderReports();
       default: return renderOverview();
     }
   };
@@ -1485,7 +1514,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           <div className="tab-bar">
             {TABS.map((t) => (
               <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>
-                {t}
+                {tr(`billingModule.tab.${t}`)}
               </button>
             ))}
           </div>
@@ -1512,8 +1541,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <>
               <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-lg font-bold">{plan.name}</p>
-                  <p className="mt-1 text-sm text-muted">{plan.description}</p>
+                  <p className="text-lg font-bold">{tr(plan.nameKey)}</p>
+                  <p className="mt-1 text-sm text-muted">{tr(plan.descriptionKey)}</p>
                   {subscription?.current_period_end && (
                     <p className="mt-2 text-sm text-muted">
                       {subCanceling
@@ -1524,11 +1553,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge tone={subConfig.tone as 'success' | 'warning' | 'danger' | 'neutral'}>
-                    <span className="flex items-center gap-1">{subConfig.icon} {subConfig.label}</span>
+                    <span className="flex items-center gap-1">{subConfig.icon} {tr(subConfig.labelKey)}</span>
                   </Badge>
                   {admin && subscription && (
                     <Button size="sm" variant="ghost" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => {
-                      if (admin && isCurrentReady() && reviewInFlight.current !== reviewAccount && waitingReadback.current?.account !== reviewAccount) startTransition(() => void openPortal());
+                      if (admin && isCurrentReady() && reviewInFlight.current !== reviewAccount && waitingReadback.current?.account !== reviewAccount) startTransition(async () => { const r = await openPortal(); if (!r.ok) toastError(r.error ?? tr('billingModule.portalUnavailable')); });
                     }}>{tr('billing.paymentAmpInvoices')}</Button>
                   )}
                 </div>
@@ -1572,9 +1601,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 </div>
               )}
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {['Unlimited family members', 'AI family assistant', 'All modules', 'Real-time sync', 'Document vault', 'Meal planning', 'School & sports', 'Priority support'].map((f) => (
+                {['billingModule.includes.unlimitedMembers', 'billingModule.includes.aiAssistant', 'billingModule.includes.allModules', 'billingModule.includes.realTimeSync', 'billingModule.includes.documentVault', 'billingModule.includes.mealPlanning', 'billingModule.includes.schoolSports', 'billingModule.tier.prioritySupport'].map((f) => (
                   <div key={f} className="flex items-center gap-2 text-xs text-muted">
-                    <CheckCircle2 className={cn('h-3.5 w-3.5 shrink-0', hasActiveAccess ? 'text-emerald-400' : 'text-muted/60')} />{f}
+                    <CheckCircle2 className={cn('h-3.5 w-3.5 shrink-0', hasActiveAccess ? 'text-emerald-400' : 'text-muted/60')} />{tr(f)}
                   </div>
                 ))}
               </div>
@@ -1630,7 +1659,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">{tr('billing.savingsGoals')}</h2>
-            <button onClick={() => setTab('Savings Goals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('savingsGoals')} className="flex items-center gap-0.5 text-xs font-semibold text-brand-text hover:underline">{tr('billing.viewAll')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {savingsGoals.length === 0 ? (
             <div className="py-2 text-center">

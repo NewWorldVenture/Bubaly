@@ -45737,6 +45737,28 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][BILLING]` C1-S9-109 — the billing page's plan buttons, statuses and categories were English, and "Payment & invoices" failed silently
+
+**File/path:** `components/modules/billing-module.tsx`; seven catalogues.
+
+**Problem.**
+- **English on the page where a family chooses what to pay for** (`/dashboard/billing`, part of the `C1-S9-101` burn-down), in every locale:
+  - the plan-choice button ("Current plan", "Choose Family+", "Switch billing to annual")
+  - the subscription status badge, the plan names and descriptions, and the feature lists
+  - the six tab labels and the four stat labels
+  - the fifteen spending categories
+- **"Payment & invoices" did nothing when it failed.** It read the portal route's JSON, found no `url`, and stopped. Each refusal the route words for the reader was dropped: not a parent, no billing account, or billing unavailable.
+
+**Fix.**
+- **Labels.** Status, plan, tier and tab text are catalogue keys, in fields named `labelKey` and `nameKey` so the raw-key guard can tell them from copy. Tab ids are no longer labels.
+- **Categories.** Categories stay stored as the English word, because it is data and existing rows hold it. They are shown through `categoryLabel()`, and a family's own category shows as they typed it.
+- **Portal.** A portal failure now toasts the route's own reason, or a translated fallback.
+- About 70 keys in seven catalogues; plan names stay brand names.
+
+**Status:** FIXED. `billing-module` goes from 65 to 19 scanner findings. The 19 left are the stored category values (data, not copy) and four type-alias fragments the scanner misreads.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
