@@ -60,7 +60,9 @@ test.describe('a family photo in a private bucket', () => {
       expect(row.storage_path.startsWith(`${owner.familyId}/photos/`)).toBe(true);
 
       // 1. The family sees it, through a signature, and never through the
-      //    stored URL.
+      //    stored URL. The page opens on Albums; an upload outside an album
+      //    is listed under All Photos.
+      await page.getByRole('button', { name: 'All Photos', exact: true }).click();
       const shown = page.locator('img[src*="/object/sign/family-media/"]').first();
       await expect(shown).toBeVisible({ timeout: 60_000 });
       await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth), { timeout: 30_000 }).toBe(1);
