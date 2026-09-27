@@ -213,6 +213,9 @@ describe('a link inside a sentence', () => {
     ['app/(app)/marketplace/page.tsx', "t('marketplace.postTheFirstItem')"],
     ['app/(app)/marketplace/page.tsx', "t('marketplace.openTheFirstOne')"],
     ['app/(app)/marketplace/creators/page.tsx', "t('marketplaceCreators.openTheFirstOne')"],
+    // Empty states the phone sweep did not reach (found by the desktop crawl).
+    ['components/modules/calm-module.tsx', "t('calm.familyAssistant')"],
+    ['components/wallet/child-detail-view.tsx', "t('childDetail.createOne')"],
   ];
 
   it.each(LINKS)('%s: the link at %s is underlined, not only coloured', (file, marker) => {
@@ -220,6 +223,29 @@ describe('a link inside a sentence', () => {
     const tag = enclosingTag(src, src.indexOf(marker), ['Link']);
     const cls = /className="([^"]*)"/.exec(tag)?.[1] ?? '';
     expect(cls.split(/\s+/), tag).toContain('underline');
+  });
+});
+
+describe("the family display's list tiles", () => {
+  // At desktop width a list tile (calendar, chores, grocery…) scrolls inside a
+  // fixed-height grid cell; the phone sweep stacks tiles and never saw it.
+  it('are named regions the keyboard can reach', () => {
+    const src = read('components/display/display-grid.tsx');
+    const at = src.indexOf('role="region" tabIndex={0} aria-label={labelOf(tile.widget as WidgetKey)}');
+    expect(at, 'no named, focusable region for a list tile').toBeGreaterThanOrEqual(0);
+    const tag = enclosingTag(src, at, ['div']);
+    expect(tag).toMatch(/className="[^"]*\boverflow-y-auto\b[^"]*\bfocus-ring\b/);
+  });
+
+  it('scroll once, at the tile: a list inside a tile is not a second, unreachable scroller', () => {
+    // The re-crawl after the fix above still failed on the grocery list and the
+    // members row, each an `overflow-y-auto` of its own inside the tile's region.
+    const grid = read('components/display/display-grid.tsx');
+    const grocery = enclosingTag(grid, grid.indexOf('data.grocery.items.slice'), ['ul']);
+    const members = enclosingTag(grid, grid.indexOf('data.members.map((m) => ('), ['div']);
+    const handled = read('components/display/handled-today-tile.tsx');
+    const handledList = enclosingTag(handled, handled.indexOf('items.map('), ['ul']);
+    for (const tag of [grocery, members, handledList]) expect(tag).not.toMatch(/overflow-(y-)?auto/);
   });
 });
 

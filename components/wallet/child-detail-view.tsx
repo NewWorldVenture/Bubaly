@@ -747,7 +747,7 @@ export function ChildDetailView({
           <Link href="/wallet/goals" className="text-xs font-semibold text-brand-text hover:underline">{t('childDetail.manage')}</Link>
         </div>
         {goals.length === 0 ? (
-          <p className="text-sm text-muted">{t('childDetail.noGoalsYet')} <Link href="/wallet/goals" className="text-brand-text hover:underline">{t('childDetail.createOne')}</Link></p>
+          <p className="text-sm text-muted">{t('childDetail.noGoalsYet')} <Link href="/wallet/goals" className="text-brand-text underline underline-offset-2">{t('childDetail.createOne')}</Link></p>
         ) : (
           <div className="space-y-2">
             {activeGoals.map((g) => <GoalCard key={g.id} goal={g} />)}
