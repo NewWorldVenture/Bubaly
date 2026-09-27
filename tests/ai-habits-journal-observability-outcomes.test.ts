@@ -74,10 +74,17 @@ beforeEach(() => {
   mocks.server.mockResolvedValue({
     from: (table: string) => {
       if (!results[table]) throw new Error(`Unexpected mocked table: ${table}`);
+      // `range` as well as `limit`: the habit-log read goes through
+      // `readAll`, which pages with `.range(from, to)`. Without it that call
+      // threw, readAll turned the throw into `{ rows: [], error }` — its
+      // documented behaviour for a transport failure — and every case in this
+      // file ran the route's FAILED-read path while asserting the successful
+      // one. It passed only because the route discarded that error (DATA-011).
       return {
         select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue(results[table]),
+        range: vi.fn().mockResolvedValue(results[table]),
       };
     },
   });

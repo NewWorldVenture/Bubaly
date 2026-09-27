@@ -36,7 +36,7 @@ export async function POST() {
     // `Promise.all` rather than `settleAll` only because `readAll` already
     // answers `{ rows, error }` for a transport failure instead of rejecting —
     // the same guarantee, in the shape this destructuring needs.
-    const [{ data: habits }, { rows: logs }] = await Promise.all([
+    const [{ data: habits }, { rows: logs, error: logsError }] = await Promise.all([
       supabase
         .from('habits')
         .select('id, title, cadence, target_per_period, weekdays')
@@ -51,6 +51,14 @@ export async function POST() {
         .order('id')
         .range(from, to), { max: 5000 }),
     ]);
+
+    // A streak counted over a prefix of the log is a lower streak, stated as
+    // a fact to someone who kept the habit. readAll reports the truncation;
+    // discarding it is what turns that into coaching.
+    if (logsError) {
+      console.error('[ai/habits] habit-log read failed', logsError);
+      return NextResponse.json({ error: t('habits.couldNotGenerateCoachingRight') }, { status: 503 });
+    }
 
     if (!habits || habits.length === 0) {
       return NextResponse.json({ error: t('habits.addAHabitFirstThen') }, { status: 400 });

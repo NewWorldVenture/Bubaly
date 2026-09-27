@@ -67,7 +67,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // would be wrong, so learn nothing rather than learn from a fragment.
   if (plansError) {
     console.error('[dashboard/playbook] meal plan read failed', plansError);
-    return { ok: false, error: plansError.message };
+    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
   }
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
@@ -90,7 +90,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .order('id').range(from, to), { max: 4000 });
   if (groceriesError) {
     console.error('[dashboard/playbook] grocery read failed', groceriesError);
-    return { ok: false, error: groceriesError.message };
+    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
   }
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
@@ -122,7 +122,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // it has none. Fail closed instead of publishing that verdict.
   if (eventsError) {
     console.error('[dashboard/playbook] calendar read failed', eventsError);
-    return { ok: false, error: eventsError.message };
+    return { ok: false, error: translate(messages, 'playbook.couldNotReadEnoughOfYourHistory') };
   }
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
