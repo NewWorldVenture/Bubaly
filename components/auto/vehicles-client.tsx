@@ -15,6 +15,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Vehicle = Tables<'vehicles'>;
 type Member = { id: string; display_name: string | null };
@@ -22,6 +23,7 @@ type Member = { id: string; display_name: string | null };
 export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; members: Member[] }) {
   const tr = useTranslations();
   const t = useTranslations();
+  const { fmtNumber } = useFormat();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [pending, start] = useTransition();
@@ -52,7 +54,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                 {v.license_plate && <Badge tone="brand">{v.license_plate}{v.plate_state ? ` ${v.plate_state}` : ''}</Badge>}
                 {v.vin && <Badge tone="neutral">VIN …{v.vin.slice(-6)}</Badge>}
-                {v.mileage != null && <Badge tone="neutral"><Gauge className="mr-1 h-3 w-3" />{v.mileage.toLocaleString()} mi</Badge>}
+                {v.mileage != null && <Badge tone="neutral"><Gauge className="mr-1 h-3 w-3" />{fmtNumber(v.mileage)} mi</Badge>}
                 {driverName(v.primary_driver) && <Badge tone="accent">{driverName(v.primary_driver)}</Badge>}
               </div>
               <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">

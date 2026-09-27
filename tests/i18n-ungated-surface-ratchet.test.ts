@@ -169,7 +169,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // 2,650 findings across 593 app/components files with INVARIANT.txt present.
 // Bank the translated public/auth/control copy: tighten by169, do not loosen
 // the gate or compare differently configured scanners.
-const CEILING = 2650;
+// Remaining PR598 localization and the PR604/605 control integrations use the
+// same scanner and measure 2,544 findings across 591 files. Bank the 106 fewer
+// hardcoded strings while preserving the current main surface.
+const CEILING = 2544;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

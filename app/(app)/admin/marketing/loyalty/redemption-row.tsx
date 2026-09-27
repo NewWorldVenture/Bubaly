@@ -5,6 +5,7 @@ import { Check, X, Loader2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fulfillRedemptionAction, cancelRedemptionAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 export type Redemption = {
@@ -17,6 +18,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-surface/60 px-3 
 
 export function RedemptionRow({ redemption }: { redemption: Redemption }) {
   const t = useTranslations();
+  const { fmtNumber, fmtDate } = useFormat();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const r = redemption;
@@ -28,9 +30,9 @@ export function RedemptionRow({ redemption }: { redemption: Redemption }) {
           <div className="flex items-center gap-2">
             <Gift className="h-4 w-4 text-brand-text" />
             <p className="font-semibold">{r.reward_name}</p>
-            <Badge tone="brand">{r.cost_points.toLocaleString()} pts</Badge>
+            <Badge tone="brand">{fmtNumber(r.cost_points)} pts</Badge>
           </div>
-          <p className="mt-1 text-xs text-muted">{r.family_label} · {new Date(r.created_at).toLocaleDateString()}</p>
+          <p className="mt-1 text-xs text-muted">{r.family_label} · {fmtDate(r.created_at)}</p>
           {r.code && <p className="mt-0.5 text-xs text-muted">Code: <span className="font-mono">{r.code}</span></p>}
           {r.notes && <p className="mt-0.5 text-xs text-muted">{r.notes}</p>}
         </div>

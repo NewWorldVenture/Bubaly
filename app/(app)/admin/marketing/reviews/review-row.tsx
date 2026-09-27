@@ -6,6 +6,7 @@ import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from '.
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 type Review = {
@@ -16,6 +17,7 @@ type Review = {
 
 export function ReviewRow({ review }: { review: Review }) {
   const t = useTranslations();
+  const { fmtDate } = useFormat();
   const [pending, start] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const moderate = (status: ReviewStatus) => start(async () => { await moderateReviewAction(review.id, status); });
@@ -29,7 +31,7 @@ export function ReviewRow({ review }: { review: Review }) {
           </div>
           {review.title && <p className="mt-1 font-semibold">{review.title}</p>}
           {review.body && <p className="mt-0.5 text-sm text-muted">{review.body}</p>}
-          <p className="mt-1 text-xs text-muted">{review.author_name || 'Anonymous'}{review.author_email ? ` · ${review.author_email}` : ''} · {new Date(review.submitted_at).toLocaleDateString()}</p>
+          <p className="mt-1 text-xs text-muted">{review.author_name || 'Anonymous'}{review.author_email ? ` · ${review.author_email}` : ''} · {fmtDate(review.submitted_at)}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Badge tone={STATUS_TONE[review.status as ReviewStatus] ?? 'neutral'}>{STATUS_LABELS[review.status as ReviewStatus] ?? review.status}</Badge>

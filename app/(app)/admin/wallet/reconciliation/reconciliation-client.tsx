@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { anomalyLabel, type ReconReport, type Anomaly, type AnomalyKind } from '@/lib/wallet/reconcile';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 const SEVERITY_STYLE: Record<Anomaly['severity'], { icon: typeof AlertOctagon; cls: string; chip: string }> = {
   high: { icon: AlertOctagon, cls: 'border-danger/30 bg-danger/5', chip: 'bg-danger/15 text-danger' },
@@ -18,6 +19,7 @@ const SEVERITY_STYLE: Record<Anomaly['severity'], { icon: typeof AlertOctagon; c
 
 export function ReconciliationClient({ report }: { report: ReconReport }) {
   const t = useTranslations();
+  const { fmtNumber } = useFormat();
   const [filter, setFilter] = useState<'all' | Anomaly['severity']>('all');
 
   const grouped = useMemo(() => {
@@ -54,7 +56,7 @@ export function ReconciliationClient({ report }: { report: ReconReport }) {
             {report.healthy ? 'Ledger is healthy' : `${highCount} critical anomal${highCount === 1 ? 'y' : 'ies'} found`}
           </p>
           <p className="text-sm text-muted">
-            {t('adminWalletReconciliationReconciliationClient.checked')} {report.totalTxns.toLocaleString()} {t('adminWalletReconciliationReconciliationClient.transactionsAcross')} {report.walletsChecked} wallets.
+            {t('adminWalletReconciliationReconciliationClient.checked')} {fmtNumber(report.totalTxns)} {t('adminWalletReconciliationReconciliationClient.transactionsAcross')} {report.walletsChecked} wallets.
             {report.healthy
               ? ' No critical integrity issues — derived balances and reversals reconcile.'
               : ' Review the anomalies below.'}
