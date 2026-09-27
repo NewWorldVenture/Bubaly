@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -24,6 +24,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // No key: say so before any work, rather than let the provider's throw
+    // reach the catch below as a generic failure.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: tr('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-wallet-child:${ctx.user.id}:${childId}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: tr('child.tooManyChildMoneyCoach') },

@@ -5,7 +5,7 @@ import { readAll } from '@/lib/supabase/read-all';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { buildCoachPrompt, parseCoachResponse, type HabitStat } from '@/lib/habits/ai';
 import {
@@ -21,6 +21,9 @@ export async function POST() {
     const ctx = await requireUserContext();
     const { familyId } = ctx.active;
     const supabase = await createServer();
+    // No key: say so before any work, rather than let the provider's throw
+    // reach the catch below as a generic failure.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-habits:${ctx.user.id}`, { limit: 15 });
     if (!limited.ok) return NextResponse.json(
       { error: t('habits.tooManyHabitCoachRequests') },

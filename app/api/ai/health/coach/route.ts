@@ -6,7 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { resolveProvider, describeAIError, isAIConfigured } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -25,7 +25,10 @@ export async function POST(req: Request) {
   let ctx;
   try { ctx = await requireUserContext(); } catch { return NextResponse.json({ error: t('coach.unauthorized') }, { status: 401 }); }
 
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
+  // isAIConfigured, not the environment alone: a key saved in Admin → AI Engine
+  // is the one resolveProvider uses, and reading only the environment told a
+  // family with that key that the engine was not set up.
+  if (!(await isAIConfigured())) {
     return NextResponse.json({ error: t('coach.theAiEngineIsnT') }, { status: 503 });
   }
 

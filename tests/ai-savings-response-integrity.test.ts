@@ -53,7 +53,7 @@ function reply(summary: unknown, suggestions: unknown) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1' } });
+  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: 'parent' } });
   mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
   mocks.resolveProvider.mockResolvedValue({ complete: mocks.complete });
   mocks.createServer.mockResolvedValue({

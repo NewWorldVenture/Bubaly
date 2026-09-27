@@ -3,7 +3,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -57,7 +58,11 @@ export async function POST(req: NextRequest) {
       { error: t('cancel.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
+    // The key checkout used: Super Admin → Stripe Setup first, then the
+    // environment (getStripe() read only the environment).
+    const secretKey = effectiveSecretKey(await getStripeSettings());
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    await stripeFromKey(secretKey).subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
 
     // Stripe has already changed by here. A sync matching no rows left the local
     // row saying the opposite of what the family just chose — "cancels at period

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
@@ -15,7 +16,12 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
-    const stripe = getStripe();
+    // The same key checkout used: Super Admin → Stripe Setup first, then the
+    // environment. getStripe() read only the environment, so a family that
+    // subscribed with the configured key could not open the portal.
+    const secretKey = effectiveSecretKey(await getStripeSettings());
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    const stripe = stripeFromKey(secretKey);
 
     const { data, error: billingCustomerError } = await supabase
       .from('billing_customers')

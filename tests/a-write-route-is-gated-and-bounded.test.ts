@@ -47,7 +47,7 @@ const GATES = [
   'hasCronAuthorization',
   'secretEquals',
   'bearerMatches',            // a Bearer secret in constant time (lib/server/secret-compare): the Guardian escalation
-  'stripe.webhooks', 'constructEvent', 'svix-signature',  // signature-verified webhooks
+  'constructWebhookEvent', 'constructEvent', 'svix-signature',  // signature-verified webhooks (lib/stripe's keyless verifier, Stripe's own, Resend's)
   'validateTwilioSignature',  // the Twilio callbacks: guardian inbound, screening, contact centre
   'verifyTwilioRequest',      // the same check through lib/server/twilio-ingress, which no build mode skips
 ];
@@ -70,7 +70,7 @@ const BOUNDED = ['readBoundedRequestJson', 'MAX_SMALL_JSON_BYTES', 'MAX_BODY_BYT
  * `includes()` keeps answering yes about a gate that no longer runs — which the
  * calibration for this file caught by failing to fail. Identifiers are matched
  * on word boundaries; the few entries that are not plain identifiers
- * (`stripe.webhooks`, `svix-signature`, `auth.getUser`, `getUser()`) fall back
+ * (`svix-signature`, `auth.getUser`, `getUser()`) fall back
  * to a literal search.
  */
 function uses(src: string, needle: string): boolean {
