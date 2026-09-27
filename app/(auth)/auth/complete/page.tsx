@@ -5,8 +5,14 @@ import { resolveAuthSelection } from '@/lib/billing/review-selection';
 import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-server';
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
+import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Complete sign in', robots: { index: false, follow: false }, referrer: 'no-referrer' };
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('authCallback.title'), robots: { index: false, follow: false }, referrer: 'no-referrer' };
+}
 
 export default async function CallbackCompletionPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Start from this request's immutable store before awaiting query admission.

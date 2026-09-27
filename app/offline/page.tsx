@@ -1,7 +1,13 @@
+import type { Metadata } from 'next';
 import { WifiOff } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata = { title: 'Offline' };
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.offline') };
+}
 
 export default async function OfflinePage() {
   const t = await getTranslations();
