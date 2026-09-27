@@ -75,7 +75,11 @@ describe('a dialled number is a number (C1-S7-05)', () => {
     expect(src, 'forward_to_phone is stored raw again').not.toMatch(
       /patch\.forward_to_phone = input\.forwardTo;/,
     );
-    expect(src).toMatch(/toE164\(input\.forwardTo\)/);
+    // Through toCallableE164 (lib/contact-center/phone), which admits only phone
+    // punctuation and then hands the value to toE164 — stricter than calling
+    // toE164 directly, and the shape main's a-forwarding-number-is-a-number
+    // test drives end to end.
+    expect(src).toMatch(/toCallableE164\(input\.forwardTo\)/);
   });
 
   it('clearing the fallback is still possible', () => {
@@ -88,12 +92,31 @@ describe('a dialled number is a number (C1-S7-05)', () => {
   it('every TwiML builder that interpolates text escapes it', () => {
     // The class, not the one instance. twimlDial was the only builder in this
     // file without an escape, and it was the only one that dials.
+    // main folded the escape into ONE shared `xml()` (text and attribute values
+    // alike), so the class is now "every interpolation goes through it" — and
+    // the escaper itself must still escape, or every builder passes vacuously.
     const src = read('lib/guardian/twilio.ts');
+    const escaperStart = src.indexOf('function xml(');
+    expect(escaperStart, 'the shared xml() escaper is gone').toBeGreaterThan(-1);
+    const escaper = src.slice(escaperStart, src.indexOf('\n}\n', escaperStart));
+    expect(escaper).toMatch(/replace\(\/&\/g/);
+    expect(escaper).toMatch(/replace\(\/<\/g/);
+    expect(escaper).toMatch(/replace\(\/"\/g/);
     for (const fn of ['twimlSay', 'twimlGather', 'twimlRecord', 'twimlDial']) {
       const start = src.indexOf(`export function ${fn}`);
       expect(start, `${fn} is gone; update this list`).toBeGreaterThan(-1);
       const body = src.slice(start, src.indexOf('\nexport ', start + 1));
-      expect(body, `${fn} interpolates into markup without escaping`).toMatch(/replace\(\/&\/g/);
+      const interpolations = body.match(/\$\{[^}]*\}/g) ?? [];
+      expect(interpolations.length, `${fn} interpolates nothing; update this list`).toBeGreaterThan(0);
+      for (const hole of interpolations) {
+        if (/^\$\{xml\(/.test(hole)) continue;
+        // A local (`${attrs}`, `${callerAttr}`) is fine only if every value it
+        // was built from went through xml() on its own defining lines.
+        const name = hole.slice(2, -1).trim();
+        const definition = body.slice(body.indexOf(`const ${name} =`), body.indexOf(`\${${name}}`));
+        expect(definition, `${fn} interpolates ${hole} into markup without escaping`).toMatch(/xml\(/);
+        expect(definition, `${fn} builds ${name} from an unescaped value`).not.toMatch(/\$\{(?!xml\()[^}]*\}/);
+      }
     }
   });
 });

@@ -96,7 +96,14 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     // (C1-S9-85). `[^;]`, not `[\s\S]`: the `.select('id')` must be in the
     // binding's OWN statement, or a storage upload's `data: stored` borrows the
     // next statement's select and is reported as an unread write.
-    const bindings = [...src.matchAll(/(?:const|let) \{ data: (\w+), error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map((m) => m[1]);
+    const named = [...src.matchAll(/(?:const|let) \{ data: (\w+), error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map((m) => m[1]);
+    // main spelt the delete handlers it confirmed with the bare `data`
+    // (driving-safety-view has no other confirmed write). A file whose only
+    // confirmed writes are spelt that way is held to the same reading, rather
+    // than reported as having changed shape.
+    const bindings = named.length > 0
+      ? named
+      : [...src.matchAll(/(?:const|let) \{ data, error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map(() => 'data');
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
       // Read as "none", against an exact expected count, or — for a
@@ -105,7 +112,7 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
       const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `|| !${b})`, `if (!${b})`, `if (!${b}?.length)`, `(${b} ?? []).map(`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
       expect(src, `${b} is requested but never read`).toContain(read);
       // …and read AFTER it is bound, not in some earlier function.
-      expect(at(src, `data: ${b}, error`)).toBeLessThan(at(src, read));
+      expect(at(src, b === 'data' ? '{ data, error' : `data: ${b}, error`)).toBeLessThan(at(src, read));
     }
   });
 

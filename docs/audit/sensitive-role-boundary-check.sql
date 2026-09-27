@@ -46,7 +46,7 @@
 --   child_logins           "Managers manage child_logins" FOR ALL,
 --                          USING and WITH CHECK can_manage_family(family_id)
 --   social_account_tokens   all four policies, can_manage_family(family_id) —
---                           DROPPED by 0361, which restores 0034's deny-all
+--                           DROPPED by 0406, which restores 0034's deny-all
 --                           for every JWT; controls (b) and (c) assert that
 --   driver_licenses         is_family_member(family_id)
 --                             and (can_manage_family(family_id)
@@ -185,7 +185,7 @@ begin
   -- empty table.
   select count(*) into n from public.social_account_tokens where family_id = ctl_fam;
   if n <> 1 then
-    raise exception '0361 boundary UNPROVEN (control seed): the owner sees % seeded control token row(s), expected 1', n;
+    raise exception '0406 boundary UNPROVEN (control seed): the owner sees % seeded control token row(s), expected 1', n;
   end if;
   insert into public.child_logins (family_id, member_id, user_id, username, created_by)
     values (ctl_fam, ctl_ward_m, ctl_ward, 'k0297-control-ward', kid);
@@ -229,10 +229,10 @@ begin
 
   -- (b) + (c) social_account_tokens, in the family this child DOES manage.
   --     These began as the other answer — a manager reads and inserts — and
-  --     0361_social_tokens_service_role_only removed that answer: the token
+  --     0406_social_tokens_service_role_only removed that answer: the token
   --     store answers to NOBODY holding a JWT, a manager included (0034's
   --     original deny-all, restored; Audit C3-S5-01, merged in C1-S9-89). So
-  --     the control now asserts 0361's rule where can_manage_family says YES,
+  --     the control now asserts 0406's rule where can_manage_family says YES,
   --     which is what proves the refusals at 3 are not can_manage_family's.
   --     The seeded row is counted as the owner first (see `seeded_ctl`
   --     below the seed), so a zero here cannot be an empty table.
@@ -243,7 +243,7 @@ begin
     n := -1; ctl_err := format('%s: %s', sqlstate, sqlerrm);
   end;
   if n > 0 then
-    raise exception '0361 boundary BROKEN (control b): a MANAGER of the control household reads % OAuth token row(s) — the store is service-role only', n;
+    raise exception '0406 boundary BROKEN (control b): a MANAGER of the control household reads % OAuth token row(s) — the store is service-role only', n;
   end if;
 
   refused := false;
@@ -253,7 +253,7 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0361 boundary BROKEN (control c): a MANAGER of the control household inserted a social OAuth token row — the store is service-role only';
+    raise exception '0406 boundary BROKEN (control c): a MANAGER of the control household inserted a social OAuth token row — the store is service-role only';
   end if;
 
   -- (d) "Managers manage child_logins" for UPDATE. THE SAME COLUMN the takeover
@@ -353,7 +353,7 @@ begin
   if not found then
     raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
   end if;
-  -- 0361: the OAuth token store answers to NOBODY holding a JWT, adult
+  -- 0406: the OAuth token store answers to NOBODY holding a JWT, adult
   -- included. This probe previously asserted the opposite — that an adult
   -- could insert and then read a token row, on the reasoning that "the fix
   -- must not lock the grown-ups out". That reasoning is right for licences
@@ -364,7 +364,7 @@ begin
   -- so it is corrected rather than deleted.
   select count(*) into n from public.social_account_tokens where family_id = fam;
   if n <> 0 then
-    raise exception '0361: an ADULT reads % social OAuth token row(s) — service-role only', n;
+    raise exception '0406: an ADULT reads % social OAuth token row(s) — service-role only', n;
   end if;
   refused := false;
   begin
@@ -373,9 +373,9 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0361: an ADULT inserted a social OAuth token row';
+    raise exception '0406: an ADULT inserted a social OAuth token row';
   end if;
 
   reset role;
-  raise notice '0297+0361 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence and a sibling login; parent and adult keep those; NOBODY with a JWT reaches the OAuth tokens, a manager included';
+  raise notice '0297+0406 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence and a sibling login; parent and adult keep those; NOBODY with a JWT reaches the OAuth tokens, a manager included';
 end $$;

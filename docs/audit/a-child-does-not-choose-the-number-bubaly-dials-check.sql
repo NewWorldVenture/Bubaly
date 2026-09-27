@@ -315,6 +315,25 @@ begin
   drop policy if exists concierge_calls_manager_update_guard on public.concierge_calls;
   drop policy if exists concierge_calls_manager_delete_guard on public.concierge_calls;
 
+  -- 0344–0377 (merged after this probe was written) also narrowed the
+  -- PERMISSIVE write policies on these tables, so dropping the guards alone no
+  -- longer reaches the pre-fix state. Put back 0173's member FOR ALL write
+  -- exactly as it was (is_family_member on both halves), inside the same
+  -- rolled-back transaction, so the escalation below is a real control.
+  declare
+    pre_t text;
+    pre_p text;
+  begin
+    foreach pre_t in array array['concierge_calls'] loop
+      for pre_p in select policyname from pg_policies
+                    where schemaname = 'public' and tablename = pre_t
+                      and permissive = 'PERMISSIVE' and cmd <> 'SELECT' loop
+        execute format('drop policy %I on public.%I', pre_p, pre_t);
+      end loop;
+      execute format('create policy %I on public.%I for all to authenticated using (public.is_family_member(family_id)) with check (public.is_family_member(family_id))', 'pre_fix_members_manage_' || pre_t, pre_t);
+    end loop;
+  end;
+
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.sub', kid_u::text, true);
 

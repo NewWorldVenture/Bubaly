@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { bodyOf } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 
 // A-10 — the Meals module's secondary/enhancement client reads (the "add from
@@ -41,10 +40,20 @@ describe('meals-module secondary reads log on failure', () => {
 // so the doubled member adds one to each of two meals AND two to the
 // denominator: one person deciding a family's dinner twice, for two dinners.
 describe('castVote does not leave a member holding two ballots', () => {
-  // The whole function, not a fixed 1,400-character window: a longer comment
-  // (Audit C1-S9-83) pushed the insert check out of the old window, and a
-  // window that ends early also makes every `not.toMatch` below vacuous.
-  const castVote = bodyOf(src, 'async function castVote', '\n  }\n');
+  // The body of castVote, matched by braces rather than by a fixed number of
+  // characters. A byte window silently stops covering the end of the function
+  // the moment anything is added above it — a comment did exactly that — and a
+  // guard that quietly shrinks is worse than one that fails loudly.
+  const castVote = (() => {
+    const start = src.indexOf('async function castVote');
+    expect(start, 'castVote not found').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', start); i < src.length; i += 1) {
+      if (src[i] === '{') depth += 1;
+      else if (src[i] === '}') { depth -= 1; if (depth === 0) return src.slice(start, i + 1); }
+    }
+    throw new Error('castVote body is unbalanced');
+  })();
 
   it('checks the error from the clear before inserting the new ballot', () => {
     expect(castVote).toMatch(/const\s*\{\s*error:\s*clearError\s*\}\s*=\s*await[\s\S]*?\.delete\(\)/);

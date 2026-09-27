@@ -123,7 +123,7 @@ describe('the referral cookie is not swallowed (C1-S9-74)', () => {
 describe('AI settings do not load forever (C1-S9-74)', () => {
   it('a failed load call ends the loading state and shows the load error', () => {
     const src = strip(readFileSync('components/settings/ai-settings.tsx', 'utf8'));
-    const failure = src.slice(at(src, "console.error('[settings:ai] load call failed', error);"));
+    const failure = src.slice(at(src, "console.error('[ai-settings] load failed', error);"));
     expect(failure.slice(0, at(failure, '});'))).toContain('if (alive) setLoadCallFailed(true);');
     expect(src).toContain('if (loadError || loadCallFailed) {');
     expect(src).toContain("{loadError ?? t('aiActions.couldNotLoadYourBubaly')}");

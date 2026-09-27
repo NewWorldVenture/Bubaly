@@ -94,22 +94,32 @@ export function MoneyCardsView({
     // Every result used to be discarded and the toast reported the number
     // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
     // denials and "Finish account setup first" — the product REFUSING, reported
-    // to a parent as success, on a payment instrument. The four other
-    // issueCardAction call sites in this file check res.ok; this one did not.
-    // Audit C4-S4-04.
+    // to a parent as success, on a payment instrument — and a THROW part-way
+    // left `setBusy(null)` unreached (the button stuck), skipped the remaining
+    // children, and said nothing. The four other issueCardAction call sites in
+    // this file check res.ok; this one did not. Report what actually happened:
+    // every child is attempted, the count is the number issued, and the first
+    // refusal's reason is what the parent reads. Audit C4-S4-04.
     const failures: string[] = [];
-    for (const child of childrenWithoutCards) {
-      const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
-      if (!res.ok) failures.push(res.error);
+    let issued = 0;
+    try {
+      for (const child of childrenWithoutCards) {
+        const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+        if (!res.ok) failures.push(res.error || t('globalError.somethingWentWrong'));
+        else issued += 1;
+      }
+    } catch (err) {
+      failures.push(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
+    if (issued > 0) success(`Issued ${issued} virtual card${issued !== 1 ? 's' : ''}!`);
     // Refresh either way: the list is the honest record of what now exists, and
     // a partial run must not leave the screen showing the pre-run state.
     router.refresh();
     // Surface the actual reason rather than a count — the reason is what tells
     // a parent what to do next, and it is the thing that was being discarded.
-    if (failures.length > 0) return toastError(failures[0]);
-    success(t('moneyCardsView.virtualCardCreated'));
+    if (failures.length > 0) toastError(failures[0]);
   }
 
   async function toggleFreeze(card: IssuedCard) {

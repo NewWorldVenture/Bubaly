@@ -87,14 +87,15 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
 
   useEffect(() => {
     let alive = true;
-    // A REJECTED load (the call itself failing, not an `ok: false`) set
-    // neither state, so the screen said "Loading…" forever. Audit C1-S9-74.
+    // `{ ok: false }` was handled; a REJECTED load (the call itself failing)
+    // set neither state, so the skeleton said "Loading…" forever with nothing
+    // said. Audit C1-S9-74.
     void loadAISettingsAction().then((res) => {
       if (!alive) return;
       if (res.ok) setSettings(res.settings);
       else setLoadError(res.error);
     }).catch((error: unknown) => {
-      console.error('[settings:ai] load call failed', error);
+      console.error('[ai-settings] load failed', error);
       if (alive) setLoadCallFailed(true);
     });
     return () => { alive = false; };

@@ -57,10 +57,13 @@ export function CareModule() {
   const tr = useTranslations();
   const { fmtTimeAgo } = useFormat();
   const { familyId, userId, members, selfMember, role } = useApp();
-  // 0329: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
+  // C1-S8-09: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
   // exists so the whole family can log a check-in — but editing and deleting
   // are the author's, or a manager's for moderation. The card already shows
-  // "by <name>"; these controls now agree with it.
+  // "by <name>"; these controls agree with it. This is the UI half: the
+  // branch's `a_record_about_you_is_not_yours_to_rewrite` migration that made
+  // the database say the same was dropped on the merge with main (C1-S9-89)
+  // and is recorded in finalaudit.md for the owner to decide.
   const mayEdit = (e: CareEntry) => e.logged_by === selfMember?.id || isManager(role);
   const { success, error: toastError } = useToast();
 

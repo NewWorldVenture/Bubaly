@@ -92,10 +92,15 @@ export function NotificationsModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
-    const { data: removed, error } = await supabase.from('notifications').delete().eq('id', id).select('id');
+    // Family-wide rows (no user_id) are listed to every member but deletable
+    // only by a manager (own row OR can_manage_family). Under RLS a refused
+    // delete is not an error — it matches nothing and comes back with zero rows
+    // — so without the row check the bin did nothing, said nothing, and the row
+    // came back on refresh (audit C1-S9-82). The refresh below still runs on a
+    // refusal, so the list shows what the table says rather than what was tapped.
+    const { data: rows, error } = await supabase.from('notifications').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
     void refresh();
   }
 

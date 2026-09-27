@@ -100,8 +100,20 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
   async function run(key: string, fn: () => Promise<{ ok: boolean; error?: string }>, ok?: string) {
     setBusy(key);
-    const res = await fn();
-    setBusy(null);
+    // `fn()` can REJECT, not just resolve `{ ok: false }` — a transport failure,
+    // or a server action that throws (requireSocialPermission does). That
+    // rejection skipped `setBusy(null)`, so the control stayed disabled with a
+    // spinner and nothing was said. Every caller in this module goes through
+    // here, so this is the one place it has to be handled.
+    let res: { ok: boolean; error?: string };
+    try {
+      res = await fn();
+    } catch (err) {
+      console.error('[social-feed] action failed', err);
+      res = { ok: false, error: err instanceof Error && err.message ? err.message : undefined };
+    } finally {
+      setBusy(null);
+    }
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
     if (ok) success(ok);
     router.refresh();
@@ -205,11 +217,14 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
-                    // The refresh shows the server's truth either way, so a refused
-                    // mark-read is a smaller answer — logged, not dropped. Audit C1-S9-74.
+                    // Degrade quietly (the link already opened) but never silently:
+                    // the refresh shows the server's truth either way, so a refused
+                    // mark-read is a smaller answer — logged, not dropped — and a
+                    // bare `.then()` had let a rejection leave an unread item unread
+                    // with no trace. Audit C1-S9-74.
                     if (!item.isRead) void markReadAction({ id: item.id, read: true })
                       .then((res) => { if (!res.ok) console.warn('[social-feed] mark-read refused', res.error); router.refresh(); })
-                      .catch((error: unknown) => console.warn('[social-feed] mark-read call failed', error));
+                      .catch((error: unknown) => console.error('[social-feed] mark read failed', error));
                   }} />
               ))}
             </div>

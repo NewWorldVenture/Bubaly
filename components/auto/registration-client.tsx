@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { FileText, Plus, Pencil, Trash2, ClipboardCheck } from 'lucide-react';
 import {
   saveRegistrationAction, deleteRegistrationAction, saveInspectionAction, deleteInspectionAction,
@@ -32,10 +34,12 @@ export function RegistrationClient({
   const [inspOpen, setInspOpen] = useState(false);
   const [inspEdit, setInspEdit] = useState<Inspection | null>(null);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
   const vName = (id: string | null) => { const v = vehicles.find((x) => x.id === id); return v ? vehicleLabel(v) : '—'; };
 
   return (
     <div className="space-y-6">
+      <ActionError message={actionError} />
       {/* Registrations */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -56,7 +60,7 @@ export function RegistrationClient({
                   </div>
                   <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                     <button onClick={() => { setRegEdit(r); setRegOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{tr('registrationClient.edit')}</button>
-                    <button onClick={() => start(async () => { await deleteRegistrationAction(r.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{tr('registrationClient.delete')}</button>
+                    <button onClick={() => start(async () => { await run(() => deleteRegistrationAction(r.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{tr('registrationClient.delete')}</button>
                   </div>
                 </Card>
               );
@@ -85,7 +89,7 @@ export function RegistrationClient({
                   </div>
                   <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                     <button onClick={() => { setInspEdit(i); setInspOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('registrationClient.edit')}</button>
-                    <button onClick={() => start(async () => { await deleteInspectionAction(i.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('registrationClient.delete')}</button>
+                    <button onClick={() => start(async () => { await run(() => deleteInspectionAction(i.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('registrationClient.delete')}</button>
                   </div>
                 </Card>
               );
@@ -96,7 +100,7 @@ export function RegistrationClient({
 
       {/* Registration modal */}
       <Modal open={regOpen} onClose={() => setRegOpen(false)} title={regEdit ? 'Edit registration' : 'Add registration'}>
-        <form action={(fd) => start(async () => { await saveRegistrationAction(fd); setRegOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveRegistrationAction(fd))) setRegOpen(false); })} className="space-y-3">
           {regEdit && <input type="hidden" name="id" value={regEdit.id} />}
           <Field label={tr('registrationClient.vehicle')}><Select name="vehicle_id" defaultValue={regEdit?.vehicle_id ?? ''}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">
@@ -115,7 +119,7 @@ export function RegistrationClient({
 
       {/* Inspection modal */}
       <Modal open={inspOpen} onClose={() => setInspOpen(false)} title={inspEdit ? 'Edit inspection' : 'Add inspection'}>
-        <form action={(fd) => start(async () => { await saveInspectionAction(fd); setInspOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveInspectionAction(fd))) setInspOpen(false); })} className="space-y-3">
           {inspEdit && <input type="hidden" name="id" value={inspEdit.id} />}
           <Field label={tr('registrationClient.vehicle')}><Select name="vehicle_id" defaultValue={inspEdit?.vehicle_id ?? ''}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">

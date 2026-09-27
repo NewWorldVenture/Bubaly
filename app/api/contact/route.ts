@@ -70,7 +70,7 @@ export async function POST(req: Request) {
         requester_email: email,
         tags: ['contact-form', `topic:${topic}`],
       });
-    if (ticketError) console.error('[contact] support ticket insert failed', ticketError);
+    if (ticketError) console.error('[contact] support_tickets write failed', ticketError);
     else ticketFiled = true;
     // Surface it in the Super Admin Notification Center.
     const { recordAdminNotification } = await import('@/lib/admin/notify');

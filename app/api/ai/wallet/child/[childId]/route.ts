@@ -30,6 +30,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
+    // Every read below decides either whether this call is allowed or what a
+    // child is told about their own money, so a failed read stops the call
+    // (503) rather than standing in for "no wallet", "no calls today" or "a
+    // balance of zero". Each of those used to be the silent default here.
+    const unavailable = () => NextResponse.json({ error: tr('child.failedToGenerateCoaching') }, { status: 503 });
+
     // Verify the child wallet belongs to this family (RLS also enforces this)
     // A refused read left the binding null and took the same branch as a row
     // that genuinely is not there, so the caller was told their own child wallet
@@ -59,13 +65,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      const { count: usedToday } = await supabase
+      const { count: usedToday, error: meterError } = await supabase
         .from('wallet_audit_logs')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('action', 'ai_coach_call')
         .gte('created_at', startOfDay.toISOString());
-      if ((usedToday ?? 0) >= dailyLimit) {
+      // An unreadable meter is not "none used": that answer lifted the daily
+      // limit, and every call behind it is a paid model call.
+      if (meterError || usedToday === null) { console.error('[ai-wallet-child] usage meter read failed', meterError); return unavailable(); }
+      if (usedToday >= dailyLimit) {
         return NextResponse.json(
           { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
           { status: 429 },
@@ -73,7 +82,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       }
     }
 
-    const [{ data: member }, { data: walletBuckets }, { data: txns, error: txnsError }, { data: goals }] = await settleAll([
+    const [
+      { data: member, error: memberError },
+      { data: walletBuckets, error: bucketsError },
+      { data: txns, error: txnsError },
+      { data: goals, error: goalsError },
+    ] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -89,6 +103,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     if (txnsError) {
       console.error('[ai/wallet/child] transaction read failed or truncated', { childId, error: txnsError });
       return NextResponse.json({ error: tr('child.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
+    // The other three reads are held to the same standard (see `unavailable`).
+    if (memberError || bucketsError || goalsError) {
+      console.error('[ai-wallet-child] ledger read failed', memberError ?? bucketsError ?? goalsError);
+      return unavailable();
     }
 
     const bucketKindById = new Map((walletBuckets ?? []).map((b) => [b.id, b.kind as BucketKind]));

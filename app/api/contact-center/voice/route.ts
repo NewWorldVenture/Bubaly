@@ -12,6 +12,7 @@ import {
 } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult } from '@/lib/contact-center/server';
+import { toCallableE164 } from '@/lib/contact-center/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,9 +61,13 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'this family';
 
   // Concierge off → forward to the human fallback if set, else take a message.
+  // A number saved before the settings form normalized it is still dialled
+  // when it reads as one; anything else takes a message rather than dialling
+  // text.
   if (channel?.ai_concierge_enabled === false) {
-    if (channel.forward_to_phone) {
-      return twiml(wrapTwiml(twimlSay(t('voice.pleaseHoldWhileIConnect')), twimlDial(channel.forward_to_phone, to)));
+    const forwardTo = toCallableE164(channel.forward_to_phone);
+    if (forwardTo) {
+      return twiml(wrapTwiml(twimlSay(t('voice.pleaseHoldWhileIConnect')), twimlDial(forwardTo, to)));
     }
   }
 

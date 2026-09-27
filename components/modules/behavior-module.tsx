@@ -32,10 +32,16 @@ const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 export function BehaviorModule() {
   const tr = useTranslations();
   const { familyId, userId, members, role } = useApp();
-  // 0329 makes this a parenting tool in the database too: `member_id` is
-  // commented "-- the child" and `logged_by` is the adult who wrote it, so the
-  // person observed is not the author. The controls follow the boundary.
+  // The behavior log is what a parent reviews. 0377 made changing or removing
+  // an entry a manager's write — a child cannot delete the hard day they had.
+  // `member_id` is commented "-- the child" and `logged_by` is the adult who
+  // wrote it, so the person observed is not the author, and these controls keep
+  // logging a manager's on screen too (C1-S8-09). That is the UI half only: the
+  // branch's migration that made INSERT manager-only was dropped on the merge
+  // with main (C1-S9-89), and 0377's rule — anyone in the family may log —
+  // stands in the database; finalaudit.md records it for the owner.
   const canEdit = isManager(role);
+  const canRemove = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -91,8 +97,10 @@ export function BehaviorModule() {
 
   async function remove(id: string) {
     if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
-    const { data: removed, error } = await createClient().from('behavior_logs').delete().eq('id', id).select('id');
-    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved')); else success(tr('behaviorModule.deleted'));
+    const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
+    else success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {
@@ -217,7 +225,7 @@ export function BehaviorModule() {
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
               </div>
-              {canEdit && <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>}
+              {canRemove && <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>}
             </div>
           );
         })}

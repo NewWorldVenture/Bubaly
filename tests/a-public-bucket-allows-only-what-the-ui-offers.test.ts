@@ -1,4 +1,4 @@
-// `family-media` is PUBLIC and, until 0330, had no `allowed_mime_types` at all
+// `family-media` is PUBLIC and, until 0418, had no `allowed_mime_types` at all
 // — the only one of the project's four public buckets without a list, and the
 // one that takes the widest range of uploads (Photos, Moments, Inventory,
 // Closet, Reminder attachments, Message attachments). Anything stored there is
@@ -27,7 +27,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATION = 'supabase/migrations/0370_a_public_bucket_serves_what_you_put_in_it.sql';
+const MIGRATION = 'supabase/migrations/0418_a_public_bucket_serves_what_you_put_in_it.sql';
 
 function walk(...dirs: string[]): string[] {
   const out: string[] = [];
@@ -43,7 +43,7 @@ function walk(...dirs: string[]): string[] {
   return out;
 }
 
-/** The allowlist 0330 writes, read out of the migration rather than restated. */
+/** The allowlist 0418 writes, read out of the migration rather than restated. */
 function allowedTypes(): string[] {
   const sql = readFileSync(path.join(ROOT, MIGRATION), 'utf8');
   const body = sql.slice(sql.indexOf('set allowed_mime_types'), sql.indexOf('where id ='));

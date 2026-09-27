@@ -24,3 +24,13 @@ export function toE164(input: string | null | undefined, defaultCc = '1'): strin
 export function isE164(value: string | null | undefined): boolean {
   return !!value && /^\+[1-9]\d{7,14}$/.test(value);
 }
+
+/** A number Bubaly may dial or text on a family's behalf, as E.164, or null.
+ *  Stricter than toE164: only phone punctuation is accepted, because toE164
+ *  keeps the digits of whatever it is given and would make a number out of
+ *  text (a URL, a TwiML fragment, a note with a date in it). */
+export function toCallableE164(input: string | null | undefined): string | null {
+  const typed = input?.trim() ?? '';
+  if (!typed || !/^[+\d\s().-]+$/.test(typed)) return null;
+  return toE164(typed);
+}

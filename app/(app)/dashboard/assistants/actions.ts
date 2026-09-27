@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { logAudit } from '@/lib/server/audit';
+import { getTranslations } from '@/lib/i18n/server';
 import { issueAssistantToken } from '@/lib/assistant/link-token';
 import { isAdmin } from '@/lib/constants/roles';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -81,19 +82,25 @@ export async function revokeAssistantLinkAction(id: string): Promise<AssistantAc
   const admin = createServiceClient();
   // Scoped to this family as well as the id: an id from elsewhere must not
   // revoke another household's key.
-  // "It stops working immediately" is what this action promises. A revoke
-  // matching no rows leaves a live assistant key against the family's data while
-  // the parent has been told it is dead — and a key believed revoked is one
-  // nobody goes back to check. Audit C1-S9-60.
   const { data: revoked, error } = await admin
     .from('assistant_links')
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', id)
     .eq('family_id', ctx.active.familyId)
     .select('id');
-  if (error || wroteNoRows(revoked)) {
-    console.error('[assistants] revoke failed', error ?? 'no rows updated');
+  if (error) {
+    console.error('[assistants] revoke failed', error);
     return { ok: false, error: 'Could not revoke that key.' };
+  }
+  // Zero rows is not a revocation. An id from another household, or one
+  // deleted in another tab, matched nothing and raised nothing, and the reply
+  // below used to say "It stops working immediately" regardless. On a
+  // credential, telling a parent a key is dead when it was never touched is
+  // the one success message that must be true — and a key believed revoked is
+  // one nobody goes back to check. Audit C1-S9-60.
+  if (wroteNoRows(revoked)) {
+    const t = await getTranslations();
+    return { ok: false, error: t('assistants.keyNotFoundNothingRevoked') };
   }
   await logAudit(await createServer(), {
     familyId: ctx.active.familyId, actorId: ctx.user.id,

@@ -2715,7 +2715,7 @@ export interface Database {
       accept_invite: { Args: { p_token: string }; Returns: string };
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
-      // 0327: stamps ONE paperwork action in place; false when a concurrent tap
+      // 0415: stamps ONE paperwork action in place; false when a concurrent tap
       // already stamped it. security invoker — the caller's RLS still decides.
       paperwork_stamp_action: { Args: { p_item_id: string; p_index: number; p_as: string; p_id: string }; Returns: boolean };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };

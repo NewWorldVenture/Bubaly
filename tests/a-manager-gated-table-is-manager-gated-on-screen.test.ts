@@ -9,8 +9,8 @@
 //     still works from any HTTP client. 0309 fixed that for `medications`,
 //     saying it plainly: "a hidden button is not a boundary."
 //   * guard in the database, none on screen → a child is shown Add and Delete,
-//     taps them, and gets a refusal. 0326 found BOTH halves missing on
-//     `immunizations` and `health_visits`; 0328 found the same on
+//     taps them, and gets a refusal. 0414 found BOTH halves missing on
+//     `immunizations` and `health_visits`; 0416 found the same on
 //     `family_insurance_policies`, whose twin `insurance_policies` had been
 //     manager-gated all along.
 //

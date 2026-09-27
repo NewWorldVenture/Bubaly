@@ -48,22 +48,12 @@ async function loadOrderRole(orderId: string) {
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, status')
     .eq('id', orderId).eq('family_id', ctx.active.familyId).maybeSingle();
-
-  // The caller's PARTY role, resolved here rather than inferred at each call
-  // site. Every site used to write
-  //     const role = order.seller_member === me ? 'seller' : 'buyer';
-  // which silently made any family member who is NEITHER party a "buyer".
-  // Scoping to the family is not the same as being in the exchange: a third
-  // member could overwrite a confirmed pickup (the upsert resets confirm_code
-  // and confirmed_at), pass confirmHandoff's `role !== proposer_role` check and
-  // RECEIVE THE HAND-OFF CODE, cancel, and complete. The RPC only checks
-  // is_family_member, so the database does not backstop it — and this file's
-  // own reason table already carries the refusal that never fired.
-  //
-  // `null` means not a party. The same check exists in marketplace/actions.ts
-  // for reviews; returning it from the loader means no future call site can
-  // forget it, which is the lesson the four duplicated escapeLike helpers
-  // taught this repository. Audit C3-S4-02.
+  // Only the two people in the exchange arrange its pickup. Anyone else in the
+  // family used to be treated as the buyer here (`seller ? 'seller' : 'buyer'`),
+  // so a sibling could propose, confirm - minting the hand-off code - or cancel
+  // someone else's pickup. 0372 enforces the same in RLS; `null` means not a
+  // party, and returning it from the loader means no call site can forget the
+  // check. Audit C3-S4-02.
   const role: 'seller' | 'buyer' | null =
     order?.seller_member === ctx.active.member.id ? 'seller'
       : order?.buyer_member === ctx.active.member.id ? 'buyer'

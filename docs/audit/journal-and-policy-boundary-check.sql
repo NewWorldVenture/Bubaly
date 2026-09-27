@@ -1,4 +1,4 @@
--- ── 0369: a private journal, and the insurance table that lost its twin ─────
+-- ── 0416: a private journal, and the insurance table that lost its twin ─────
 --
 -- TWO tables, one shape: the intent is written down and the policy does not
 -- carry it.
@@ -19,7 +19,7 @@
 -- line in lib/ai/context/policy.ts — has been manager-gated for writes all
 -- along. `insurance-module.tsx` carries no role check of any kind.
 --
--- Measured before 0369, as a signed-in child:
+-- Measured before 0416, as a signed-in child:
 --   NOTICE: child read 1 of a SIBLING's private journal entries
 --   NOTICE: child rewrote a SIBLING's journal entry
 --   NOTICE: child deleted a SIBLING's journal entry
@@ -40,7 +40,7 @@ declare
   mp uuid; mk uuid; ms uuid; je uuid; pol uuid;
   n int; txt text; holes text[] := '{}';
 begin
-  insert into public.families (id, name) values (fam, '0369 journal and policies') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0416 journal and policies') on conflict do nothing;
   insert into auth.users (id, email) values
     (up, 'p0328@example.test'), (uk, 'k0328@example.test'), (us, 's0328@example.test')
     on conflict do nothing;
@@ -68,7 +68,7 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uk::text, true);
   if auth.uid() is distinct from uk then
-    raise exception '0369: impersonation failed — auth.uid() is %, expected the child', auth.uid();
+    raise exception '0416: impersonation failed — auth.uid() is %, expected the child', auth.uid();
   end if;
 
   -- ── 1. Reading a sibling's private journal ────────────────────────────────
@@ -123,7 +123,7 @@ begin
   -- ── What must still work ──────────────────────────────────────────────────
   -- Your own journal is yours: read, write, edit and delete.
   select count(*) into n from public.journal_entries where member_id = mk;
-  if n < 1 then raise exception '0369: a member can no longer read their OWN journal'; end if;
+  if n < 1 then raise exception '0416: a member can no longer read their OWN journal'; end if;
   insert into public.journal_entries (family_id, member_id, entry_date, body, created_by)
     values (fam, mk, current_date, 'A second entry.', uk);
   update public.journal_entries set body = 'Edited.' where member_id = mk and body = 'A second entry.';
@@ -141,7 +141,7 @@ begin
   -- Every member still READS the insurance policies — that is the product.
   select count(*) into n from public.family_insurance_policies where family_id = fam;
   if n < 1 then
-    raise exception '0369: a family member can no longer read the insurance policies';
+    raise exception '0416: a family member can no longer read the insurance policies';
   end if;
   reset role;
 
@@ -151,7 +151,7 @@ begin
   update public.family_insurance_policies set policy_number = 'POL-54321' where id = pol;
   select policy_number into txt from public.family_insurance_policies where id = pol;
   if txt is distinct from 'POL-54321' then
-    raise exception '0369: a parent can no longer edit an insurance policy (number is %)', txt;
+    raise exception '0416: a parent can no longer edit an insurance policy (number is %)', txt;
   end if;
   insert into public.family_insurance_policies
     (family_id, policy_type, insurer, policy_number, is_active, created_by)
@@ -163,12 +163,12 @@ begin
   -- wearing a security fix's clothes.
   select count(*) into n from public.journal_entries where member_id = ms;
   if n > 0 then
-    raise exception '0369: a parent can read a child''s private journal — that is a product decision, not this migration''s to make';
+    raise exception '0416: a parent can read a child''s private journal — that is a product decision, not this migration''s to make';
   end if;
   reset role;
 
   if array_length(holes, 1) is not null then
-    raise exception '0369: %', array_to_string(holes, '; ');
+    raise exception '0416: %', array_to_string(holes, '; ');
   end if;
-  raise notice '0369 OK — a journal is its author''s, and policy numbers are the parents''';
+  raise notice '0416 OK — a journal is its author''s, and policy numbers are the parents''';
 end $$;

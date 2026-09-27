@@ -319,9 +319,28 @@ begin
     into n_pol, n_blind
     from pg_policy
    where polrelid = 'public.chore_assignments'::regclass;
+  -- 0374 (C1-K-52, merged after this was written) narrowed UPDATE to the
+  -- assignee or a manager and DELETE to a manager. Neither touches what this
+  -- probe credits: every row the child writes below is its OWN (member_id =
+  -- the child, which check 1 proves is writable), INSERT and SELECT are still
+  -- 0004's role-blind policies, and DELETE is not exercised. So 0374's exact
+  -- shape still leaves every refusal below to the guard; anything else does not.
+  if not (n_pol = 4 and n_blind = 4) and (
+       select count(*) from pg_policy
+        where polrelid = 'public.chore_assignments'::regclass and polpermissive
+          and (
+            (polcmd = 'r' and replace(pg_get_expr(polqual, polrelid), 'public.', '') = 'is_family_member(family_id)')
+            or (polcmd = 'a' and replace(pg_get_expr(polwithcheck, polrelid), 'public.', '') = 'is_family_member(family_id)')
+            or (polcmd = 'w'
+                and replace(pg_get_expr(polqual, polrelid), 'public.', '') = '(is_family_member(family_id) AND (is_self_member(member_id) OR can_manage_family(family_id)))'
+                and replace(pg_get_expr(polwithcheck, polrelid), 'public.', '') = '(is_family_member(family_id) AND (is_self_member(member_id) OR can_manage_family(family_id)))')
+            or (polcmd = 'd' and replace(pg_get_expr(polqual, polrelid), 'public.', '') = 'can_manage_family(family_id)')
+          )) = 4 and n_pol = 4 then
+    n_blind := 4;
+  end if;
   if n_pol <> 4 or n_blind <> 4
      or not (select relrowsecurity from pg_class where oid = 'public.chore_assignments'::regclass) then
-    raise warning 'ATTRIBUTION FAILED: chore_assignments no longer carries exactly 0004''s four permissive is_family_member(family_id) policies with RLS enabled (% policies, % of them role-blind), so a 42501 below may be a policy''s and not the guard''s', n_pol, n_blind;
+    raise warning 'ATTRIBUTION FAILED: chore_assignments no longer carries exactly 0004''s four permissive is_family_member(family_id) policies (or 0374''s own-row narrowing of them) with RLS enabled (% policies, % of them role-blind), so a 42501 below may be a policy''s and not the guard''s', n_pol, n_blind;
     failures := failures + 1;
   end if;
 

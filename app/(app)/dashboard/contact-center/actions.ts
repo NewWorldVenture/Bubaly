@@ -5,10 +5,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { toE164 } from '@/lib/guardian/phone';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
+import { toCallableE164 } from '@/lib/contact-center/phone';
 
 type Fail = { ok: false; error: string };
 
@@ -88,13 +88,17 @@ export async function updateConciergeAction(input: {
   if (input.forwardTo !== undefined) {
     // The greeting beside this is trimmed and capped; this was stored raw, and
     // unlike the greeting it is DIALLED — it reaches `<Dial>` in the voice
-    // route and Twilio's `To` in three escalation paths. Normalise to E.164 or
-    // refuse, rather than storing something that is not a number. Clearing the
-    // fallback stays possible: an empty value is null, not an error.
-    // Audit C1-S7-05.
+    // route and Twilio's `To` in three escalation paths, and the field's own
+    // placeholder format ("+1 555 123 4567") then failed the E.164 check in
+    // urgent SMS delivery on every message. Normalise to E.164 or refuse,
+    // rather than storing something that is not a number — through
+    // toCallableE164, which admits only phone punctuation before toE164 keeps
+    // the digits, so a URL, a TwiML fragment or a note with a date in it is
+    // refused rather than made into a number. Clearing the fallback stays
+    // possible: an empty value is null, not an error. Audit C1-S7-05.
     const cleared = input.forwardTo === null || input.forwardTo.trim() === '';
-    const normalized = cleared ? null : toE164(input.forwardTo);
-    if (!cleared && !normalized) return { ok: false, error: t('actions.enterAValidPhoneNumber') };
+    const normalized = cleared ? null : toCallableE164(input.forwardTo);
+    if (!cleared && !normalized) return { ok: false, error: t('actions.forwardingNumberNotCallable') };
     patch.forward_to_phone = normalized;
   }
   const { data: patched, error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId).select('family_id');

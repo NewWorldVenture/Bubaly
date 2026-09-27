@@ -31,7 +31,7 @@ const STATUS_STYLE: Record<string, string> = {
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
-  // 0326 makes the database refuse a non-manager write on this table. The
+  // 0414 makes the database refuse a non-manager write on this table. The
   // controls follow it, the way medications-module.tsx already does — a button
   // that renders and then fails is worse than one that was never offered.
   const canEdit = isManager(role);

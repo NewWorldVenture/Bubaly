@@ -77,7 +77,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   reminders.made = [];
   db = createInMemorySupabase<DB>({
-    // 0327's function, to its contract: stamp ONE element, refuse an element
+    // 0415's function, to its contract: stamp ONE element, refuse an element
     // that already carries a materialized_id, and recompute `status` from the
     // row as it stands rather than from the caller's copy. The SQL itself is
     // asserted separately, against a replayed schema, by

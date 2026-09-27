@@ -203,7 +203,7 @@ export async function GET(req: NextRequest) {
           : read.ok
             ? 'Bubaly is switched off for this family.'
             : "Bubaly could not read this family's settings, so this occurrence was not filed.",
-      });
+      }, 'routine_runs write failed (skipped stamp)');
       if (!read.ok) problems.push(rule.id);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
@@ -245,11 +245,11 @@ export async function GET(req: NextRequest) {
     // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
     if (!request.ok) {
-      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: request.error });
+      await stampRun(db, rule.id, dueAt, { status: 'failed', detail: request.error }, 'routine_runs write failed (failed stamp)');
       problems.push(rule.id);
     } else {
       const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
-      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id });
+      await stampRun(db, rule.id, dueAt, { status: 'filed', request_id: request.data.id }, 'routine_runs write failed (filed stamp)');
       // `filed` is held to the standard this file already sets for `armed`
       // ("it may only count writes that landed, so a quiet tick reads
       // differently from a broken one"). A refused createRun leaves a request

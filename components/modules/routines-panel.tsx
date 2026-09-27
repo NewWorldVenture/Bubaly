@@ -165,9 +165,9 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             success(tr('routinesPanel.undone'));
             onApplied();
           }).catch((error: unknown) => {
-            // A failed call used to leave "Undo" doing nothing, silently, over
-            // events that are still on the calendar. Audit C1-S9-74.
-            console.error('[routines] undo call failed', error);
+            // A rejection used to leave "Undo" looking done, silently. It is not:
+            // the events are still on the calendar. Audit C1-S9-74.
+            console.error('[routines] undo failed', error);
             toastError(tr('actions.couldNotUndoThoseEvents'));
           });
         },

@@ -54,7 +54,7 @@ export function InsuranceModule() {
   const fmtDate = (d: string) => policyDate(d, locale.code);
 
   const { familyId, userId, members, role } = useApp();
-  // 0328 gives this table the manager-gated writes its twin `insurance_policies`
+  // 0416 gives this table the manager-gated writes its twin `insurance_policies`
   // has always had. The controls follow, the way medications-module.tsx does —
   // a button that renders and then fails is worse than one never offered.
   const canEdit = isManager(role);

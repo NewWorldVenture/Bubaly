@@ -68,9 +68,11 @@ export function WorkloadModule({
     }))).then((res) => {
       if (!res.ok) toastError(res.error);
     }).catch((error: unknown) => {
-      // Background persistence of the week's loads: a failed call is logged
-      // rather than raised over the chart it does not affect. Audit C1-S9-74.
-      console.error('[workload] snapshot save call failed', error);
+      // Background persistence of the week's loads: a rejected call is logged
+      // and said, the same as a refused one above — a weekly snapshot silently
+      // not saved is the failure this exists to name. Audit C1-S9-74.
+      console.error('[workload] snapshot save failed', error);
+      toastError(error instanceof Error && error.message ? error.message : 'Could not save this week’s workload.');
     });
   }, [report, toastError]);
 

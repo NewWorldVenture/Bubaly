@@ -418,7 +418,32 @@ begin
   -- 7d. Every policy on the table. Exactly 0028's one, permissive, FOR ALL,
   --     both clauses `is_family_member(family_id)` — so RLS answers YES to a
   --     member, and nothing restrictive can be what refused checks 1, 3 and 4.
-  if (select count(*) from pg_policy p where p.polrelid = 'public.reward_redemptions'::regclass) <> 1
+  --
+  --     0373 (C1-K-49, merged after this was written) splits that FOR ALL into
+  --     four per-command policies: SELECT and INSERT stay member-wide (INSERT
+  --     for yourself), UPDATE admits a member only on their own row while it
+  --     is 'requested' and only to 'requested'/'cancelled', DELETE is a
+  --     manager's. That UPDATE policy would refuse a child's self-approval
+  --     too, but only AFTER the BEFORE ROW guard: Postgres evaluates WITH
+  --     CHECK once BEFORE triggers have run, so the guard's 42501 is still the
+  --     one checks 1, 3 and 4 see. Exactly 0373's shape is therefore accepted
+  --     as well; anything else is stale.
+  if (select count(*) from pg_policy p where p.polrelid = 'public.reward_redemptions'::regclass) = 4
+     and (select count(*) from pg_policy p
+           where p.polrelid = 'public.reward_redemptions'::regclass and p.polpermissive
+             and (
+               (p.polname = 'reward_redemptions_select' and p.polcmd = 'r'
+                and pg_get_expr(p.polqual, p.polrelid) = 'is_family_member(family_id)')
+               or (p.polname = 'reward_redemptions_insert' and p.polcmd = 'a'
+                and pg_get_expr(p.polwithcheck, p.polrelid) = '(is_family_member(family_id) AND (is_self_member(member_id) OR can_manage_family(family_id)))')
+               or (p.polname = 'reward_redemptions_update' and p.polcmd = 'w'
+                and pg_get_expr(p.polqual, p.polrelid) = '(can_manage_family(family_id) OR (is_self_member(member_id) AND (status = ''requested''::redemption_status)))'
+                and pg_get_expr(p.polwithcheck, p.polrelid) = '(can_manage_family(family_id) OR (is_self_member(member_id) AND (status = ANY (ARRAY[''requested''::redemption_status, ''cancelled''::redemption_status]))))')
+               or (p.polname = 'reward_redemptions_delete' and p.polcmd = 'd'
+                and pg_get_expr(p.polqual, p.polrelid) = 'can_manage_family(family_id)')
+             )) = 4 then
+    null;  -- 0373's shape: the guard still answers first.
+  elsif (select count(*) from pg_policy p where p.polrelid = 'public.reward_redemptions'::regclass) <> 1
      or not exists (
        select 1 from pg_policy p
         where p.polrelid = 'public.reward_redemptions'::regclass
