@@ -48726,6 +48726,18 @@ locale on both sides; money through `fmtMoney`).
 client component and fails on a bare `toLocaleString()` /
 `toLocaleDateString()` / `toLocaleTimeString()` (red with the connect-grid
 line restored).
+*Dates, after review on #604:* the locale alone was not enough for a date or
+a time. `useFormat()` binds no zone, so the server (UTC) and a browser in
+Berlin or New York still drew different text for one timestamp ("0:30",
+"2:30", or the day before) and hydration failed. The four P-11 date and time
+displays (admin notifications, social sync time, review and redemption dates)
+now use `useHydrationSafeFormat()`: the server render and the browser's
+hydrating render both format in UTC, and the render right after hydration
+switches to the reader's zone (`useSyncExternalStore`, no
+`suppressHydrationWarning`). `tests/a-date-renders-the-same-on-the-server-and-at-hydration.test.ts`
+renders with React's server renderer in a process set to America/New_York:
+the hook draws the UTC text, the plain formatter (the control) the New York
+text; 3 of 5 cases fail with the hook removed.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card

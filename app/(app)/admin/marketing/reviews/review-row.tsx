@@ -6,7 +6,7 @@ import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from '.
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 type Review = {
@@ -17,7 +17,7 @@ type Review = {
 
 export function ReviewRow({ review }: { review: Review }) {
   const t = useTranslations();
-  const { fmtDate } = useFormat();
+  const { fmtDate } = useHydrationSafeFormat();
   const [pending, start] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const moderate = (status: ReviewStatus) => start(async () => { await moderateReviewAction(review.id, status); });

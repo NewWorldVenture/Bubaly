@@ -7,7 +7,7 @@ import { PlatformDot } from './platform';
 import { Badge } from '@/components/ui/badge';
 import type { SocialPlatform } from '@/lib/social/capabilities';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { useToast } from '@/components/ui/toast';
 
 const STATUS_TONE: Record<string, 'success' | 'neutral' | 'danger' | 'warning'> = {
@@ -21,7 +21,7 @@ export function AccountRow({
   id: string; platform: SocialPlatform; name: string; status: string; lastError: string | null; lastSyncedAt: string | null;
 }) {
   const t = useTranslations();
-  const { fmtDateTime } = useFormat();
+  const { fmtDateTime } = useHydrationSafeFormat();
   const { error: toastError } = useToast();
   const [pending, start] = useTransition();
   return (
