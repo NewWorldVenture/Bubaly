@@ -430,10 +430,14 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // Best-effort and logged, not raised: the caller is already reporting the
   // failure that made it release. Zero rows means the claim was no longer this
   // action's (the run was decided elsewhere), which is not a release to retry.
+  // The claim is all three of `status`, `state` and `approved_at`: pausing the
+  // run keeps `status = 'approved'` and moves only `state`, and a pause made
+  // while the plan was applying is a person's decision to keep.
   const release = async () => {
     const { data: released, error: releaseErr } = await sb.from('family_automation_runs').update({
       status: 'pending', state: 'awaiting_approval', approved_by: null, approved_at: null,
-    }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('approved_at', approvedAt).select('id');
+    }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('state', 'executing')
+      .eq('approved_at', approvedAt).select('id');
     if (releaseErr) console.error('[concierge] run release failed', { runId, familyId, error: releaseErr });
     else if (wroteNoRows(released)) console.error('[concierge] run release matched no rows; the claim was no longer held', { runId, familyId });
   };
@@ -463,11 +467,14 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // plan already applied. Zero rows is the same case as an error: reporting
   // success over it is what would make a retry necessary and invisible.
   // `approved_at` stays the claim's: it is when the person said yes, and
-  // `completed_at` is when the plan finished.
+  // `completed_at` is when the plan finished. The claim is matched the same way
+  // `release` matches it, so a run paused during the apply, or claimed again
+  // by a newer approval, is not stamped over by this one.
   const { data: stamped, error: runErr } = await sb.from('family_automation_runs').update({
     status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
     completed_at: new Date().toISOString(),
-  }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').select('id');
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('state', 'executing')
+    .eq('approved_at', approvedAt).select('id');
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     await release();

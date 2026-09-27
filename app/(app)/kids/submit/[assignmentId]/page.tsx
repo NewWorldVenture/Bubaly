@@ -7,6 +7,7 @@ import { computeReward, DIFFICULTY_LABELS, fmtCash, type Difficulty } from '@/li
 import { SubmitProofForm } from './submit-form';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { isUuid } from '@/lib/utils/validation';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -18,6 +19,8 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
   const t = await getTranslations();
   const { locale } = await getLocaleContext();
   const { assignmentId } = await params;
+  // Not a row id at all: not found, before a read that would fail on it (B12).
+  if (!isUuid(assignmentId)) return <AppNotFound backHref="/kids" />;
   const ctx = await requireUserContext();
   const supabase = await createServer();
 

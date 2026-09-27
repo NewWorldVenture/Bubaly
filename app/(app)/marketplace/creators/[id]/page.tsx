@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
+import { isUuid } from '@/lib/utils/validation';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -35,6 +36,8 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   // Prices follow the READER's locale — the marketplace helpers require it.
   const { locale } = await getLocaleContext();
   const { id } = await params;
+  // Not a row id at all: not found, before a read that would fail on it (B12).
+  if (!isUuid(id)) return <AppNotFound backHref="/marketplace/creators" />;
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
