@@ -121,7 +121,10 @@ defects below. Every one is fixed or recorded; none is left unexplained.
 | An intermittent #418 (hydration): once on `/economy` (first sweep), once on `/dashboard/setup` (second sweep) | 2 | ⚠️ **OPEN.** Neither reproduced on re-runs (nine for `/economy`). A random page each time suggests something time-dependent in the shared shell; not yet found. The sweep in CI retries once and names the page when it recurs | — |
 | `/display`: one image request failed | 1 | this sandbox's proxy certificate; the Unsplash image answers 200 and the CSP allows `https:` images — not a site defect | — |
 
-All 433 internal links found on the crawled pages resolve.
+All 433 internal links found on the crawled pages resolve. All 1,048 blog posts in the
+sitemap answer 200 on production (checked one by one, 2026-09-27 13:40Z; 13 that timed
+out through this sandbox's proxy answered 200 on a retry). Rendering and contrast of the
+posts is the parallel session's work (#588, #590).
 
 ### Every page
 
