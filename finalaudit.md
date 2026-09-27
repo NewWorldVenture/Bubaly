@@ -118,7 +118,7 @@ saved from a signed-in browser.
 
 | Lane | Routes | Rows | Claim |
 |---|---|---|---|
-| A | public, auth and marketing pages (everything outside the signed-in app) | 44 | — (a parallel session has worked the public side on `main`: #588, #589, #590 — it is theirs to claim) |
+| A | public, auth and marketing pages (everything outside the signed-in app) | 44 | session_01TRY21ZKsFrfB3qtoP972A4, 2026-09-27 16:35Z (the session behind #588, #589, #590) |
 | B | `/admin/**` | 80 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
 | C | `/dashboard/a…h**` | 95 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
 | D | `/dashboard/i…r**` | 53 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
