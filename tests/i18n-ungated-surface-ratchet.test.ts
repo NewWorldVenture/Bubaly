@@ -186,7 +186,14 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // this one 2,926, 142 attribute templates and no JSX-child ones (the tree's child
 // templates are separators such as ` · ${when}`), every one an existing English
 // string a screen reader or tooltip already shows. The gated surfaces stay at zero.
-const CEILING = 2926;
+//
+// Then lowered to 2,924 as two strings were translated with A11Y-003 and
+// MAIN-F-D06: the contact list's "Unknown" and the notes list's "Untitled".
+// The scanner also now reads a confirm() prompt, template or quoted (I18N-005).
+// Measured with the tree held fixed that adds nothing here: main had already
+// replaced the English prompts with its translated confirm dialog, and every
+// confirm() left in the tree passes a catalogue key.
+const CEILING = 2924;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -272,5 +279,26 @@ describe('the scanner sees copy written as a template in an attribute or a JSX c
     expect(texts).toContain('… items left');
     // A class list, a key, an href and a bare separator are not copy.
     expect(texts.some((t: string) => /row|items\/|^·/.test(t) && !t.includes('left'))).toBe(false);
+  });
+});
+
+describe('the scanner sees the question asked before a delete (I18N-005)', () => {
+  it('reports a confirm() prompt, template or quoted', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-confirm-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      'export function Row({ name, on }: { name: string; on: () => void }) {',
+      '  const del = () => { if (confirm(`Remove ${name} from the inventory?`)) on(); };',
+      "  const wipe = () => { if (window.confirm('Delete everything in this list?')) on(); };",
+      '  return <button onClick={() => { del(); wipe(); }} />;',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Remove … from the inventory?');
+    expect(texts).toContain('Delete everything in this list?');
   });
 });

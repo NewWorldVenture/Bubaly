@@ -8,6 +8,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminSetFamilyPlanAction } from '@/app/(app)/admin/actions';
 import { useToast } from '@/components/ui/toast';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 const PLAN_OPTIONS: { id: string; label: string }[] = [
   { id: 'free', label: 'Free' },
@@ -20,6 +21,7 @@ const PLAN_OPTIONS: { id: string; label: string }[] = [
 export function SetPlanControl({ familyId, familyName, currentPlan }: {
   familyId: string; familyName: string; currentPlan: string | null;
 }) {
+  const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const initial = currentPlan && PLAN_OPTIONS.some((p) => p.id === currentPlan) ? currentPlan : 'free';
@@ -29,7 +31,7 @@ export function SetPlanControl({ familyId, familyName, currentPlan }: {
   function change(plan: string) {
     if (plan === value || pending) return;
     const label = PLAN_OPTIONS.find((p) => p.id === plan)?.label ?? plan;
-    if (!window.confirm(`Set ${familyName} to ${label}?`)) return;
+    if (!window.confirm(t('confirmPrompt.setPlan', { family: familyName, plan: label }))) return;
     const prev = value;
     setValue(plan); // optimistic
     start(async () => {
