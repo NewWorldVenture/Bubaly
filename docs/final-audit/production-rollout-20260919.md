@@ -2,6 +2,12 @@
 
 The user authorized publishing the current changes to main and production. PR 510 merged at 19:50:26 UTC as `4bee627572be77112b1206f4243841df00f9a181`; its direct parents are prior main `57f22c0b` and audited branch `6353d0d4`. The merge and branch share frozen tree `b039b2c08e994037e65b2677c102b7a338a9bbe5`. No SQL or Supabase configuration changed from prior main.
 
+## Verified CI follow-up release: 75a1f3c6
+
+Release `75a1f3c6b9874e0228af2c81f072e7cc068d1c9e`, tree `2f4cb2f980b1a92c4313d3af4ea7fe514630a648`, publishes the two-file disposable phone CI repair and four audit documents. Application runtime and product Supabase configuration/SQL are unchanged from2a5. Vercel deployment `dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW` succeeds, GitHub Production `6546108247`; the immutable URL is [bubaly-rdlt5ry45](https://bubaly-rdlt5ry45-newworldventure.vercel.app).
+
+At21:51:25 UTC, public build200 identifies exact revision75a1f3c6 with private/no-store headers. The21:51:48 UTC release record verifies exact-deployment public auth/phone readiness, disabled native credential controls/POST with no credential serialization, cookie-neutral invalid callback and clean history; zero page errors, failed public assets or authentication/SMS dispatch. This is public readiness, not production OTP delivery or verification. Evidence: `Temp/bubaly-75a1f3c6-production-release-20260919.json`. Hosted CI `35471471192` remains active; new phone acceptance is pending. The separate service-worker cache repair is now in progress and has no deployment or acceptance claim in this checkpoint.
+
 ## Verified application release: 2a5e7e7a
 
 Application release `2a5e7e7a15b93f544660b41c0f3185b4865e80ed` was verified live at www.bubaly.com at21:29:31 UTC. Application commit `837b210106e48fe43023df352a4b84bed6200552` contains frozen source/test/workflow tree `f75e7febdf01bf944fa35a505745001533c80028`; the final release tree is `10034dc3858d7894fb8e302d259e33ad605294ed`. Vercel deployment `dpl_8oWh1TNVFNbmGissmnvmA11P6ECT` succeeded at 21:28:59 UTC, GitHub Production record `6545922576`. The immutable deployment is [bubaly-hkto1x84l](https://bubaly-hkto1x84l-newworldventure.vercel.app).
@@ -16,7 +22,7 @@ All 14,038 permanent audit IDs remain. Follow-up SEC-001 discovery executes a de
 
 ## Native-form follow-up on main 70789485
 
-Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` is live on Vercel deployment
+Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` was verified live on Vercel deployment
 `dpl_4e2X1mo4taDXyYNnd38F36DP7M4r`, successful at 20:20:47 UTC, with GitHub
 Production record `6545293519`. Its immutable URL is
 [the verified deployment](https://bubaly-gqgndu7rm-newworldventure.vercel.app).

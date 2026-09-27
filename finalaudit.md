@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
+- Last Updated: 2026-09-19T21:53:24.050Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 192
@@ -11,6 +11,8 @@
 - Blocked: 0
 - Failed: 3
 - Overall Completion: 0.01%
+
+Active worker-cache cycle from75a1f3c6: actual service-worker handlers, Chromium CacheStorage and application logout reproduce synthetic private image bytes surviving logout and reaching B offline. SEC-001 remains FAIL; existing SUPPORT-98FD1D4C44AD remains IN PROGRESS. Implementation and regression work are active; no repair PASS is claimed yet. Baseline75a1 is verified on exact Vercel dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW at21:51 UTC with passing public auth/phone readiness and no authentication or SMS dispatch. Hosted CI35471471192 remains running; new phone runtime acceptance is pending. All14,038 IDs and counts remain unchanged. See docs/final-audit/service-worker-private-cache-cycle.md and production-rollout-20260919.md.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -14660,7 +14662,7 @@ Existing obligations remain SEC-001, STORAGE-EA481A772907, LIBRARY-02F9B7049DA7,
 Required rollout order: define strict configured-project/bucket/family reference parsing and the desired revocation/cache contract; prove authorized/cross-family, stale-owner, expiry/idle and range/download behavior on disposable data; deploy every legacy/new-reference consumer before changing bucket access; then verify a reviewed private-bucket change, denial of old public reads, permitted member reads, old-client behavior and cache handling. A signed bearer URL grants access until its expiry and alone cannot promise per-request membership or immediate logout revocation. Current provider configuration, old public cache exposure and production schema prerequisites need independent verification before such a rollout.
 
 #### Fixes Applied
-None
+Worker cache repair and targeted regression work are IN PROGRESS from75a1f3c6. Exact implementation and test evidence remain pending; no privacy repair PASS is claimed. Bucket access and the broader media rollout remain separate. See docs/final-audit/service-worker-private-cache-cycle.md.
 
 #### Retest Results
 Read-only source/caller map complete. Controlled private-image cache isolation regression fails as described above; provider access and native worker/optimizer acceptance are unexecuted. No privacy fix has been applied; SEC-001 stays FAIL.
