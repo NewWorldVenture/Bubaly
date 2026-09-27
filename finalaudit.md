@@ -46101,6 +46101,28 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][LOW][RENEWALS/MESSAGES]` C1-S9-123 — renewal categories, message tabs and groups were English, and the family's first conversation was named in English
+
+**File/path:** `components/modules/renewals-module.tsx`, `components/modules/messages-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/renewals` showed English in every locale:
+  - each renewal's category badge and the category picker
+  - the load-failure fallback message
+- `/dashboard/messages` showed English in every locale:
+  - the conversation tabs
+  - the four smart recipient groups
+- The family's first conversation, created automatically, was saved as "Family Chat" in English.
+
+**Fix.**
+- Categories stay stored as their id and are worded through the catalogue.
+- Tabs and groups are `labelKey`s.
+- The first conversation is named in the reader's language.
+
+**Status:** FIXED. Scanner findings: `renewals-module` drops to 0; `messages-module` drops to 1, a type-alias fragment.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
