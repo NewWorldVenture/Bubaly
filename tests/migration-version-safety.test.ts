@@ -302,7 +302,24 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
-    expect(audit.nextVersion).toBe('0388');
+    // 0388_a_decision_once_made_stays_made.sql (SRV-001, the m7+m8 residual)
+    // adds the fourth trigger on approval_requests: once status leaves
+    // 'pending', status, approvals, edited_payload, decided_by and decided_at
+    // are frozen, and payload — the ask the votes are votes on — cannot change
+    // for the life of the row; the execution stamps still land. RLS-subject
+    // callers only, like 0381's rules. Held by docs/audit/two-parents-means-
+    // two-parents-check.sql (the re-open, the declined→approved flip, the
+    // post-decision edit and the payload rewrite refused; the stamps landing).
+    //
+    // 0389_a_queued_run_keeps_the_gate_it_was_born_with.sql (the same residual)
+    // pins family_automation_runs.metadata: once approval_id or plan_id is set
+    // it cannot be removed or changed by an RLS-subject caller. The
+    // load-bearing half is in the concierge action, which now resolves the
+    // governing approval from approval_requests by plan and never from the
+    // run's metadata. Held by docs/audit/automation-runs-pin-what-a-member-
+    // may-queue-check.sql.
+    //
+    expect(audit.nextVersion).toBe('0390');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

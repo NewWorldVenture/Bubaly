@@ -2687,3 +2687,90 @@ cannot read the document. No writer upserts this table. `vacation_flights` and
 `vacation_tickets` carry the same `document_id` column with the same FK, and
 this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
 writes either column or follows it today.
+
+### `0388` makes a decision, once made, stay made — unapplied
+
+`0388_a_decision_once_made_stays_made.sql` (SRV-001, the residual the m7+m8
+re-review recorded: "a rejection is not final in the database"). 0381 put the
+approval model into the database — a vote is the voter's own, a move INTO
+approved/modified needs the yeses the row's model asks for, the rule columns
+are frozen — and, deliberately, gated nothing after the decision. That left the
+other direction open: `approval_requests_decide` (0251) is `can_manage_family`
+on USING and WITH CHECK with no status predicate and no column pin, so on a row
+a parent has DECLINED any manager can, with the browser session and one PATCH
+over `/rest/v1`, re-open it (`{"status":"pending","approvals":[]}` — rule A
+permits taking votes away, rule B does not run), or on a `single` /
+`first_available` / `sequential` row approve it outright with their own yes,
+or on a `two_parent` row where the other parent approved swap their own "no"
+for a "yes" and flip. The same door works approved → rejected, expired →
+pending and cancelled → pending. The application never leaves a decided status
+(`openForDecision` refuses with "This request was already decided."; every
+status writer predicates on `status = 'pending'`).
+
+**What closes it**: one BEFORE UPDATE trigger, `approval_requests_decision_is_final`
+(function `approval_decision_is_final`, SECURITY INVOKER, EXECUTE revoked from
+public, anon and authenticated), for callers subject to row-level security:
+rule D — once `status` is anything but `pending`, `status`, `approvals`,
+`edited_payload`, `decided_by` and `decided_at` cannot change; rule E — `payload`,
+the ask the votes are votes on, cannot change for the life of the row. What the
+application still writes to a decided row (`executed_at` / `execution_result`
+from `stampExecution` on both paths and the private-purchase result stamp;
+`consequences`, `request_id`, `payload_kind` attached after filing) is untouched.
+errcode 42501. 0251's policy and 0381's three rules are left exactly as written.
+Replay-safe (`create or replace`, `drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the run executor
+now derives what it runs through the same `effectiveArgsOf` the approval card
+and `decide()` use (`approvedArgsFor` in `lib/ai/runs/executor.ts`), so a value
+written to `edited_payload` directly cannot reach a tool from that side either.
+Until 0388 is applied, a manager with the browser session can still re-open or
+flip a decided request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql`, extended:
+the re-open of a declined two-parent row, the declined `single` → approved flip
+in one PATCH (passes 0381's A and B; only 0388 refuses), the un-expire, the
+approved → rejected reversal, the post-decision edit and the payload rewrite on
+a pending row are each refused by the named trigger; the execution stamp on a
+DECLINED row and the existing stamps LAND; the negative control drops ONLY
+`approval_requests_decision_is_final` (0381's triggers still in force) and
+requires the flip and the re-open to land. `tests/a-decision-once-made-stays-made.test.ts`
+reads the migration for the exact rule and the probe for its cases.
+
+### `0389` keeps a queued run's gate where the server put it — unapplied
+
+`0389_a_queued_run_keeps_the_gate_it_was_born_with.sql` (SRV-001, the residual
+"an adult can PATCH `family_automation_runs.metadata` to drop `approval_id`").
+When an accepted concierge plan lands on the family's "ask first" dial, the
+action files an approval and a `family_automation_runs` row whose
+`metadata.approval_id` records that a vote stands between the line and the
+calendar. The "Do it" button read that key and branched on it — present →
+`decide()`, absent → materialise the plan directly. `family_automation_runs_update`
+(0251) is `can_manage_family` with no column pin and the table's one trigger is
+`set_updated_at`, so an adult could PATCH the key away and tap "Do it": the plan
+was materialised with no vote while the two-parent approval stayed pending. The
+lead was WIDER than recorded: 0255/0329 also let a manager INSERT a fresh run
+row with no approval at all, so a pin on UPDATE alone could never be the fix.
+
+**What closes it** is in the ACTION, live on merge: `executeQueuedRunAction`
+and `dismissQueuedRunAction` resolve the governing approval from
+`approval_requests` by the plan it names (`payload->>'plan_id'`, which 0388
+freezes) and never from the run's metadata; a run that claims an approval
+Bubaly cannot find, or whose approval is already decided, does nothing and
+says so (three sentences, seven locales). **What this migration does** is keep
+the cache honest for the rows the server wrote: rule F — for RLS-subject
+callers, once `metadata->>'approval_id'` or `metadata->>'plan_id'` is non-null
+it cannot be removed or changed; every other key stays writable. No user
+session updates `metadata` today, so it refuses no live path. Deliberately not
+attempted: refusing `status = 'executed'` while a pending approval names the
+plan, because the approve path closes the run on the deciding parent's own
+session after the flip and a second pending approval for the same plan would
+make that honest close fail. errcode 42501. Replay-safe.
+
+**Evidence.** `docs/audit/automation-runs-pin-what-a-member-may-queue-check.sql`,
+extended: a manager dropping `approval_id` or pointing it elsewhere is refused
+by the named trigger; the same manager adding an unrelated key LANDS; the
+negative control drops ONLY this trigger and requires the scrub to succeed.
+`tests/scrubbing-a-runs-metadata-does-not-skip-the-vote.test.ts` drives the
+action against a run whose metadata was scrubbed and against a row born without
+an approval, and asserts nothing is materialised until the vote passes.
+

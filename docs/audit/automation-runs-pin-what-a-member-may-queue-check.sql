@@ -75,6 +75,12 @@
 --      was — the pre-0329 state — and require the WHOLE chain to reproduce: the
 --      child's plant succeeds, and the parent's own click then marks the
 --      sibling's spend request approved in the parent's name.
+--   8b. (0389) a MANAGER cannot drop `approval_id` from a server-written run's
+--      metadata, point it at another approval, or point `plan_id` at another
+--      plan — while an unrelated metadata key still lands, so the pin is a pin
+--      and not a lock on the column;
+--   8c. NEGATIVE CONTROL for 0389: drop ONLY `family_automation_runs_gate_is_pinned`
+--      and require the manager's scrub of `approval_id` to land.
 --
 -- RLS is evaluated BEFORE a unique index, so an insert that reaches a constraint
 -- violation is one RLS LET THROUGH; those are caught separately and reported as
@@ -145,6 +151,7 @@ declare
   sibling_m constant uuid := '00000000-0000-4000-8000-000000032904';
   approval  constant uuid := '00000000-0000-4000-8000-000000032905';
   plan      constant uuid := '00000000-0000-4000-8000-000000032906';
+  run_row   constant uuid := '00000000-0000-4000-8000-000000032907';
   parent_m  uuid;
   forged    constant jsonb := jsonb_build_object(
     'plan_id',     '00000000-0000-4000-8000-000000032906',
@@ -290,10 +297,58 @@ begin
     failures := array_append(failures, 'a MANAGER could not stamp an approval — 0251''s approval_requests_decide is broken');
   end if;
   -- Put the sibling's request back so the negative control starts undecided.
+  -- (As postgres: 0388 freezes a decided row for RLS-subject callers only.)
   perform set_config('role','postgres', true);
   update public.approval_requests
      set status = 'pending', decided_by = null, decided_at = null, executed_at = null, approvals = '[]'::jsonb
    where id = approval;
+
+  -- ── 8b. The gate a server-written run was born with is pinned (0389) ─────
+  -- `metadata->>'approval_id'` is what the panel's line stands on, and 0251's
+  -- UPDATE policy let a manager rewrite it. The action no longer trusts it
+  -- (it resolves the approval from approval_requests by plan); the database
+  -- now keeps the server-written cache honest.
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub', parent_u::text, true);
+  perform set_config('request.jwt.claim.role','authenticated', true);
+
+  begin
+    update public.family_automation_runs set metadata = metadata - 'approval_id' where id = run_row;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a MANAGER dropped approval_id from a queued run''s metadata — the "Do it" line no longer names the vote it waits on'); end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.family_automation_runs
+       set metadata = jsonb_set(metadata, '{approval_id}', to_jsonb(gen_random_uuid()::text))
+     where id = run_row;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a MANAGER pointed a queued run at a different approval'); end if;
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.family_automation_runs
+       set metadata = jsonb_set(metadata, '{plan_id}', to_jsonb(gen_random_uuid()::text))
+     where id = run_row;
+    get diagnostics n = row_count;
+    if n > 0 then failures := array_append(failures, 'a MANAGER pointed a queued run at a different plan'); end if;
+  exception when insufficient_privilege then null;
+  end;
+  -- Control: a key the pin does not name still lands.
+  begin
+    update public.family_automation_runs
+       set metadata = metadata || '{"probe_note":"still writable"}'::jsonb
+     where id = run_row;
+    get diagnostics n = row_count;
+    if n <> 1 then failures := array_append(failures, format('a MANAGER could not add an unrelated key to a queued run''s metadata (%s rows) — 0389 pins more than it says', n)); end if;
+  exception when others then
+    failures := array_append(failures, format('a MANAGER''s unrelated metadata write was refused: %s %s', sqlstate, sqlerrm));
+  end;
+  perform set_config('role','postgres', true);
+  if (select metadata ->> 'approval_id' from public.family_automation_runs where id = run_row) is distinct from approval::text
+     or (select metadata ->> 'plan_id' from public.family_automation_runs where id = run_row) is distinct from plan::text then
+    failures := array_append(failures, 'the queued run''s approval_id or plan_id changed under the manager''s writes — 0389 is not holding');
+  end if;
 
   -- ── As the server: the client planAcceptedAction actually holds ─────────
   -- 9. `createServiceClient()` bypasses RLS entirely, which is why the product
@@ -318,6 +373,22 @@ begin
   end if;
   if not has_table_privilege('anon', 'public.family_automation_runs', 'SELECT') then
     failures := array_append(failures, 'anon lost SELECT on family_automation_runs — 0329 was not supposed to touch reads (0290 and 0322 left SELECT alone deliberately)');
+  end if;
+
+  -- ── 8c. Negative control for 0389: prove this probe can SEE that defect ──
+  -- Drop ONLY 0389's trigger and require the manager's scrub to land, which
+  -- is exactly the pre-0389 state. The outer rollback restores it.
+  drop trigger if exists family_automation_runs_gate_is_pinned on public.family_automation_runs;
+  perform set_config('role','authenticated', true);
+  perform set_config('request.jwt.claim.sub', parent_u::text, true);
+  update public.family_automation_runs set metadata = metadata - 'approval_id' where id = run_row;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    failures := array_append(failures, format('with 0389''s trigger removed the manager''s scrub of approval_id touched %s row(s) — the defect did not reproduce, so 8b proves nothing', n));
+  end if;
+  perform set_config('role','postgres', true);
+  if (select metadata ? 'approval_id' from public.family_automation_runs where id = run_row) then
+    failures := array_append(failures, 'with 0389''s trigger removed approval_id is still on the row — the scrub did not reproduce');
   end if;
 
   -- ── Negative control: prove this probe can SEE the defect ──────────────
@@ -367,7 +438,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a run in the approval queue is not authored by a manager or the server:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes, reads are untouched, a manager and the service role still can, and the negative control reproduced the forged decision record)';
+  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes, reads are untouched, a manager and the service role still can, and the negative control reproduced the forged decision record; 0389: a manager cannot drop or redirect a queued run''s approval_id or plan_id while an unrelated metadata key still lands, and its negative control reproduced the scrub)';
 end $$;
 
 rollback;

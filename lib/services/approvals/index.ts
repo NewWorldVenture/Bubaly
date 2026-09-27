@@ -937,12 +937,13 @@ export async function decide(
  * (`effectiveArgsOf`). When they disagreed, one approver's correction was
  * shown, run, and then erased by the other.
  *
- * NOT covered: a `plan_steps` row is executed by the run executor, which reads
- * the raw `edited_payload` column (lib/ai/runs/executor.ts loadApproval ->
- * `approvedPayload` -> runToolStep) without this allow-list. An edit written
- * by `editAndApprove` is already allow-listed and schema-checked, so the two
- * agree for every edit the app makes; they can differ only for a value a
- * manager wrote to the column directly. That reader is a separate finding.
+ * The fourth reader is the run executor, which performs `plan_steps` rows and
+ * run-gated `tool` rows: lib/ai/runs/executor.ts `approvedArgsFor` derives
+ * what it runs through the same `effectiveArgsOf`, so a value written to the
+ * column directly cannot reach a tool from that side either. (0388 also
+ * freezes `edited_payload` once the row is decided.) The tool's own
+ * `safeParse` runs inside `executeTool` on that path, so it is not repeated
+ * here.
  */
 function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<string, unknown> | null {
   // The allow-listed merge is `effectiveArgsOf` (lib/approvals/card-data.ts),
