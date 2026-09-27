@@ -852,8 +852,9 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 >
 > **What "done" means for the finding rows, stated so it is checkable rather
 > than argued.** `docs/audit/finding-index.py` derives the tally from the
-> document itself: **FIXED 121 · CHECKED 2 · PARTIAL 7 · OWNER'S 7 · OPEN 8 ·
-> BLOCKED 1 · SUPERSEDED 1** — 140 distinct ids over 147 rows, **none blank**.
+> document itself: **FIXED 122 · CHECKED 2 · PARTIAL 7 · OWNER'S 7 · OPEN 8 ·
+> BLOCKED 1 · SUPERSEDED 1** — 141 distinct ids over 148 rows, **none blank**
+> (CONC-002 added 2026-09-27: FIXED +1).
 >
 > Recounted on the merges of `main` into PR #548's branch — 6ff770da (#579's
 > 0344–0380 and #582's release note), then dcc0b42b (#581, which closed
