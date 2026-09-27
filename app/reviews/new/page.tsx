@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { DEFAULT_REPUTATION } from '@/lib/marketing/reviews';
+import { realTextOr } from '@/lib/marketing/reputation';
 import { ReviewForm, type PublicLink } from './review-form';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -37,11 +38,13 @@ export default async function NewReviewPage() {
       <div className="mb-6 text-center"><span className="text-lg font-bold tracking-tight">{t('reviewsNew.bubaly')}</span></div>
       <div className="glass-card p-6 sm:p-8">
         <ReviewForm
-          headline={s?.request_headline ?? DEFAULT_REPUTATION.request_headline}
-          message={s?.request_message ?? DEFAULT_REPUTATION.request_message}
+          // Seeder text in the settings row reads as the product talking to a
+          // customer; each field falls back to the default instead.
+          headline={realTextOr(s?.request_headline, DEFAULT_REPUTATION.request_headline)}
+          message={realTextOr(s?.request_message, DEFAULT_REPUTATION.request_message)}
           minPublicRating={s?.min_public_rating ?? DEFAULT_REPUTATION.min_public_rating}
-          thankYouHigh={s?.thank_you_high ?? DEFAULT_REPUTATION.thank_you_high}
-          thankYouLow={s?.thank_you_low ?? DEFAULT_REPUTATION.thank_you_low}
+          thankYouHigh={realTextOr(s?.thank_you_high, DEFAULT_REPUTATION.thank_you_high)}
+          thankYouLow={realTextOr(s?.thank_you_low, DEFAULT_REPUTATION.thank_you_low)}
           publicLinks={publicLinks}
         />
       </div>

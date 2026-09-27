@@ -31,6 +31,9 @@ const state = vi.hoisted(() => ({ db: null as unknown }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
+// The paperwork actions carry the document area's step-up gate (O-03); this
+// suite is about the stamp, so the session has cleared it.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-1', email: 'someone@example.com' },

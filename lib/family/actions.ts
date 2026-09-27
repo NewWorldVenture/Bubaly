@@ -17,6 +17,10 @@ import { isManager } from '@/lib/constants/roles';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { knowledgeGraphTarget, toCanonicalGraphRow } from '@/lib/twin/project';
 import { logAudit } from '@/lib/server/audit';
+import type { TrailAction } from '@/lib/activity/trail';
+// lib reaching into app on purpose (m7r4): a queued concierge run must be decided
+// by the Autopilot panel's own actions — one decision path, not a copy of it.
+import { dismissQueuedRunAction, executeQueuedRunAction } from '@/app/(app)/dashboard/concierge/actions';
 
 // Tables a member may write through these generic actions, with the columns
 // each accepts. family_id / created_by / updated_by are always set server-side.
@@ -64,7 +68,8 @@ const MANAGER_ONLY = new Set([
   'family_digital_twin_profiles',
 ]);
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+/** `note` is a sentence the person should see even though nothing failed (one vote of several). */
+export type ActionResult = { ok: true; id?: string; note?: string } | { ok: false; error: string };
 
 /**
  * Refuses a write to a table whose feature this family does not have, and
@@ -223,7 +228,49 @@ export async function setRecommendationStatus(
   return { ok: true, id };
 }
 
-/** Approve or skip a pending autonomous automation run (manager-gated). */
+/**
+ * Approve or skip a pending autonomous automation run (manager-gated).
+ *
+ * WHY THIS IS NO LONGER A STATUS WRITE BY ID (m7r4). The Approve / Skip buttons
+ * on /dashboard/family-automation and /dashboard/autonomous-family-management
+ * are drawn for every run whose legacy `status` is 'pending', and two kinds of
+ * row sit there with a vote standing between them and the family:
+ *
+ *   - a concierge plan the family's "ask first" dial queued
+ *     (`metadata.plan_id`), gated by an `approval_requests` row that may say
+ *     "Two parents";
+ *   - a §10 run the executor parked on a step's approval
+ *     (`state = 'awaiting_approval'`, the approval naming it by `run_id`).
+ *
+ * This action used to stamp `status = 'approved' | 'skipped'` plus
+ * `approved_by`/`approved_at` on the row and read nothing else. Nothing
+ * executes off that column (claim_ai_runs reads `state`), so no plan ran
+ * without its vote — but the line left the queue as "approved" with nobody
+ * having voted, the approval card stayed open on the other parent's screen,
+ * a "Skip" was not a "no" (the plan still landed when the card was approved),
+ * and when it did land `decide()` could not close the run, because it closes
+ * only rows still at `status = 'pending'`: the run sat on "Needs you"
+ * (which reads `state`) for good and never counted as handled.
+ *
+ * So the row's own gate decides what a tap means:
+ *   - a run naming a concierge plan goes through the SAME decision path the
+ *     Autopilot panel uses — executeQueuedRunAction / dismissQueuedRunAction,
+ *     which resolve the governing approval from `approval_requests` (never
+ *     from the run's manager-writable metadata) and route the vote through
+ *     `decide()`, threshold and all. One rule, not a second surface;
+ *   - a run a PENDING approval names by `run_id` is refused and pointed at the
+ *     approval card, which is where that step's vote is taken. Its
+ *     `state = 'awaiting_approval'` alone is not the gate: when the approval
+ *     has closed but the run's state never advanced (a failed foldIntoRun,
+ *     which the executor's next pass reconciles), Skip still clears the line,
+ *     and Approve is refused — there is no open vote left to cast, and a
+ *     stamped "approved" could contradict what the card decided;
+ *   - only a run nothing governs keeps the direct write, compare-and-set on
+ *     `status = 'pending'`.
+ *
+ * Every read here is strict: a failed read is not "no approval", and answering
+ * it with the direct write would be the very bypass this closes.
+ */
 export async function resolveAutomationRun(
   id: string,
   decision: 'approved' | 'skipped',
@@ -237,6 +284,85 @@ export async function resolveAutomationRun(
     return { ok: false, error: t('actions.onlyParentsAndAdultsCanApprove') };
   }
   const supabase = await createServer();
+  const familyId = ctx.active.familyId;
+
+  const { data: run, error: readError } = await supabase
+    .from('family_automation_runs')
+    .select('id, status, state, metadata')
+    .eq('id', id)
+    .eq('family_id', familyId)
+    .maybeSingle();
+  if (readError) {
+    console.error('[family-action] could not read the automation run before resolving it', { id, familyId, error: readError });
+    return { ok: false, error: describeActionError(readError, t('actions.couldNotCheckRunApproval')) };
+  }
+  if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
+
+  // The trail row says what happened, not what was tapped: 'vote' when decide()
+  // recorded this parent's yes and the approval is still open, 'approve' only
+  // when the approval closed and the plan ran (or nothing gated the line).
+  const audit = (action: TrailAction) => logAudit(supabase, {
+    familyId, actorId: ctx.user.id, action,
+    resource: 'family_automation_runs', resourceId: id,
+  });
+
+  // A concierge plan's run: the Autopilot panel's own decision path. The same
+  // truthiness test those actions use, so no row that names a plan can fall
+  // through to the direct write below.
+  const meta = (run.metadata ?? {}) as { plan_id?: unknown };
+  if (meta.plan_id) {
+    if (decision === 'skipped') {
+      const dismissed = await dismissQueuedRunAction(id);
+      if (!dismissed.ok) return { ok: false, error: dismissed.error };
+      await audit('skip');
+      revalidatePath('/dashboard', 'layout');
+      return { ok: true, id };
+    }
+    const res = await executeQueuedRunAction(id);
+    if (!res.ok) {
+      // The panel's sentence says "Dismiss"; this page's button says "Skip".
+      return {
+        ok: false,
+        error: res.code === 'approval_already_decided' ? t('actions.runApprovalAlreadyDecidedSkip') : res.error,
+      };
+    }
+    // `mode: 'ask'` is executeQueuedRunAction's answer for exactly one case:
+    // decide() recorded this vote and the threshold is not met yet, so nothing
+    // ran and the run stays pending. That — and only that — is worth a
+    // sentence, or the tap looks like it did nothing. A completed execution
+    // carries no note: the line leaves the list on refresh.
+    const voteOnly = res.mode === 'ask';
+    await audit(voteOnly ? 'vote' : 'approve');
+    revalidatePath('/dashboard', 'layout');
+    return voteOnly && res.summary ? { ok: true, id, note: res.summary } : { ok: true, id };
+  }
+
+  // A run the executor parked on a step's approval names it by `run_id`. While
+  // that approval is open, its card is the decision; flipping this mirror
+  // column would only hide the line. Read strictly — see above.
+  const { data: gates, error: gateError } = await supabase
+    .from('approval_requests')
+    .select('id')
+    .eq('family_id', familyId)
+    .eq('run_id', id)
+    .eq('status', 'pending')
+    .limit(1);
+  if (gateError) {
+    console.error('[family-action] could not read the approval behind an automation run', { id, familyId, error: gateError });
+    return { ok: false, error: describeActionError(gateError, t('actions.couldNotCheckRunApproval')) };
+  }
+  if (gates && gates.length > 0) return { ok: false, error: t('actions.runWaitsOnItsApproval') };
+
+  // Parked on an approval that is no longer open — decided on its card,
+  // expired, or cancelled — while the run's own state never advanced. There is
+  // no vote left to cast, so Approve is refused; Skip falls through and clears
+  // the line, as it always could.
+  if (run.state === 'awaiting_approval' && decision === 'approved') {
+    return { ok: false, error: t('actions.runApprovalAlreadyDecidedSkip') };
+  }
+
+  // Nothing governs this run (any more): the direct write, compare-and-set on
+  // 'pending' so a run someone else just resolved is not resolved twice.
   // RLS FILTERS this update rather than refusing it. `logAudit` below records the
   // decision unconditionally, so a filtered write wrote an audit entry for an
   // approval that never happened — the log and the table disagreeing is worse
@@ -249,18 +375,15 @@ export async function resolveAutomationRun(
       approved_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId)
-    .select('id');
+    .eq('status', 'pending')
+    .eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('resolve that automation', error);
   // The same failure mode as the concierge autopilot in C1-S9-48: a manager
   // approves an automation, is told it worked, and the run stays pending — so
   // it is offered to them again, or the automation simply never executes.
-  if (wroteNoRows(resolved)) return { ok: false, error: t('actions.couldNotResolveThatAutomation') };
-  await logAudit(supabase, {
-    familyId: ctx.active.familyId, actorId: ctx.user.id,
-    action: decision === 'approved' ? 'approve' : 'skip',
-    resource: 'family_automation_runs', resourceId: id,
-  });
+  // Zero rows here also means someone else resolved it first (the CAS above).
+  if (wroteNoRows(resolved)) return { ok: false, error: t('actions.runNotFoundOrAlready') };
+  await audit(decision === 'approved' ? 'approve' : 'skip');
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }

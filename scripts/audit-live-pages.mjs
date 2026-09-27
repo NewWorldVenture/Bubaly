@@ -18,7 +18,7 @@
 //
 //   BASE_URL=https://www.bubaly.com node scripts/audit-live-pages.mjs \
 //     [--json out.json] [--jsonl progress.jsonl] [--max 3000] [--concurrency 6]
-//     [--only public|app] [--filter /blog]
+//     [--only public|app] [--filter /blog] [--axe]
 //
 // Through an HTTPS proxy, Chromium is pointed at HTTPS_PROXY and verifies TLS
 // against the system NSS store; nothing here turns certificate checks off.
@@ -27,6 +27,7 @@ import { appendFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const APP_DIR = join(ROOT, 'app');
@@ -45,6 +46,10 @@ const JSON_OUT = arg('json', '');
 // One JSON object per line as each page finishes, so a long run can be read
 // (or resumed from) before it ends.
 const JSONL_OUT = arg('jsonl', '');
+// WCAG 2.x A/AA, the tags tests/e2e/accessibility.spec.ts holds the app to;
+// serious and critical violations are recorded as problems.
+const AXE = argv.includes('--axe');
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const isGroup = (s) => /^\(.*\)$/.test(s);
 const isDynamic = (s) => /^\[.*\]$/.test(s);
@@ -52,6 +57,19 @@ const isDynamic = (s) => /^\[.*\]$/.test(s);
 // shapes an error surfaces in with a 200.
 const ERROR_MARKERS = ['Application error', 'This page hit a snag', 'Internal Server Error', 'Unhandled Runtime Error'];
 const PLACEHOLDER_ID = '00000000-0000-4000-8000-000000000000';
+// Text a visitor should never read: the database seeder's placeholders, a
+// value that rendered as `undefined`/`NaN`/`[object Object]`, an unfilled
+// template, and a translation KEY shown in place of its sentence
+// (`pricing.cardTitle` — lowerCamel, a dot, lowerCamel with a capital).
+const PLACEHOLDER_TEXT = [
+  [/content generated for testing purposes/i, 'seeder placeholder text'],
+  [/\bImportant task #\d+\b/, 'seeder placeholder text'],
+  [/\bSeed [A-Z][a-z]+(?: [A-Z][a-z]+)* #\d+/, 'seeder placeholder record'],
+  [/\blorem ipsum\b/i, 'lorem ipsum'],
+  [/\b(?:undefined|NaN)\b|\[object Object\]/, 'a value rendered as undefined/NaN/[object Object]'],
+  [/\{\{\s*\w+\s*\}\}/, 'an unfilled {{template}}'],
+  [/(?<![\w@/.-])[a-z][a-zA-Z]{2,}\.[a-z]+[A-Z][a-zA-Z0-9]*\b(?![\w/-]*\.(?:com|app|io|org))/, 'a raw translation key'],
+];
 
 /** Every page route under app/ as { pattern, group, file }. */
 function routes() {
@@ -126,6 +144,16 @@ async function audit(context, path, kind) {
     result.h1 = await page.locator('h1').count();
     const body = await page.locator('body').innerText().catch(() => '');
     result.markers = ERROR_MARKERS.filter((m) => body.includes(m));
+    for (const [pattern, what] of PLACEHOLDER_TEXT) {
+      const hit = pattern.exec(body);
+      if (hit) result.markers.push(`${what}: "${body.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).replace(/\s+/g, ' ')}"`);
+    }
+    if (kind === 'public' && AXE) {
+      const axe = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+      result.a11y = axe.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0]?.target?.join(' ') ?? ''}`.slice(0, 200));
+    }
     if (kind === 'public') {
       result.links = (await page.$$eval('a[href]', (as) => as.map((a) => a.getAttribute('href')))).map(sameSite).filter(Boolean);
       await page.setViewportSize({ width: 390, height: 844 });
@@ -153,6 +181,7 @@ function problems(r) {
     if (r.h1 !== 1 && r.finalPath === r.path) out.push(`${r.h1} <h1>`);
     if (r.overflowPx > 1) out.push(`scrolls sideways by ${r.overflowPx}px on a 390px phone`);
   }
+  if (r.a11y?.length) out.push(`a11y: ${r.a11y.slice(0, 3).join('; ')}`);
   if (r.markers.length) out.push(`error text on page: ${r.markers.join(', ')}`);
   if (r.pageErrors.length) out.push(`uncaught: ${r.pageErrors[0]}`);
   if (r.consoleErrors.length) out.push(`console: ${r.consoleErrors[0]}`);

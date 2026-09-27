@@ -20,7 +20,8 @@ describe('the Google Calendar token writes are read (C1-S6-02)', () => {
   it('a refused clear is named, because GET answers "connected" from that value', () => {
     // Discarding it leaves the Sync button in front of a calendar that can
     // never sync, while the same response tells the user to reconnect.
-    expect(source).toContain('const { error: clearError }');
+    // Written through mergeNotificationPrefs (SRV-001 l7); its failure is still read.
+    expect(source).toContain('const clearError = clearedPrefs.ok ? null');
     expect(at(source, 'if (clearError)')).toBeLessThan(at(source, 'reconnect: true'));
   });
 
@@ -28,7 +29,7 @@ describe('the Google Calendar token writes are read (C1-S6-02)', () => {
     // A lost refresh self-corrects on the next sync. A lost migration does not:
     // the plaintext token stays in a browser-readable column (C3-S5-02) and
     // everything looks fine.
-    expect(source).toContain('const { error: persistError }');
+    expect(source).toContain('const persistError = persisted.ok ? null');
     const branch = source.slice(at(source, 'if (persistError)'));
     expect(branch).toContain('decoded.legacy');
     expect(branch).toContain('remains readable');

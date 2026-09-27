@@ -51,7 +51,7 @@ const SERVICE_FACTORY = /^(createServiceClient|createServiceRoleClient|createAdm
 /** Callables that establish who is acting, or refuse when they may not. */
 const GUARDS = new Set([
   'requireUserContext', 'requireUser', 'requireFamilyContext', 'requireFamily', 'requireMember',
-  'requireParent', 'requireAuth', 'requireSession', 'requireSuperAdmin', 'assertSuperAdmin',
+  'requireParent', 'requireAuth', 'requireSession', 'requireSuperAdmin', 'assertSuperAdmin', 'superAdminGate',
   'isSuperAdmin', 'requireAdmin', 'assertAdmin', 'getSessionUser', 'getCurrentUser',
   'requireGuardian', 'assertFamilyMember', 'assertParent', 'requireChild', 'requireOwner',
   'assertOwner', 'requireActor', 'requireManager', 'assertManager', 'verifyOnboardingOwner',
@@ -254,7 +254,7 @@ describe('authenticating a caller does not decide which family they may touch', 
   // id from its caller and hands it to the service client is therefore only as
   // safe as its own gate — and the only gate that legitimately reaches across
   // families is super admin.
-  const SUPER_ADMIN = new Set(['assertSuperAdmin', 'requireSuperAdmin', 'isSuperAdmin']);
+  const SUPER_ADMIN = new Set(['assertSuperAdmin', 'requireSuperAdmin', 'isSuperAdmin', 'superAdminGate']);
 
   it('a service-client family key from the caller is super-admin gated', () => {
     const offenders: string[] = [];

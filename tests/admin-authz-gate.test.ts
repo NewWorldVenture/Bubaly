@@ -23,7 +23,7 @@ function walk(dir: string): string[] {
   return out;
 }
 
-const GATE = /isSuperAdmin|requireMarketingAdmin|requireSuperAdmin/;
+const GATE = /isSuperAdmin|requireMarketingAdmin|requireSuperAdmin|superAdminGate/;
 const PRIVILEGED = /createServiceClient|requireMarketingAdmin/;
 
 describe('A-17 every admin action re-verifies super-admin (layout is not enough)', () => {
@@ -52,5 +52,15 @@ describe('A-17 every admin action re-verifies super-admin (layout is not enough)
     expect(helper).toMatch(/isSuperAdmin\(\)/);
     // must THROW (not just branch) when the caller is not a super-admin
     expect(helper).toMatch(/if\s*\(\s*!ok\s*\)\s*throw/);
+  });
+
+  it('superAdminGate — the answer-not-throw gate (SRV-001 l6) — enforces isSuperAdmin and never answers "allowed" on a failure', () => {
+    const helper = readFileSync('lib/auth/super-admin-gate.ts', 'utf8');
+    expect(helper).toMatch(/isSuperAdmin\(\)/);
+    expect(helper).toMatch(/if \(!user\) return \{ status: 'forbidden' \}/);
+    // The one place it can say `allowed` is the success of isSuperAdmin(); a
+    // throw anywhere is `unavailable`, never a pass.
+    expect(helper.match(/status: 'allowed'/g) ?? []).toHaveLength(2); // the type and the one return
+    expect(helper).toMatch(/catch \(error\) \{[\s\S]{0,120}return \{ status: 'unavailable' \}/);
   });
 });
