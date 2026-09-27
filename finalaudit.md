@@ -46443,6 +46443,29 @@ The planning toast also read "undefined prep plans ready" when the action return
 
 ---
 
+### `[CLAUDE-1][MEDIUM][DASHBOARD]` C1-S9-132 — the family dashboard greeted by the server's clock and suggested in English
+
+**File/path:** `components/dashboard/family-dashboard.tsx`; seven catalogues.
+
+**Problem.**
+- The greeting on `/dashboard` used the host's hour, and the host runs in UTC. A family in California therefore read "Good evening" at 11 am.
+- In every locale, the following were English:
+  - the greeting
+  - all six suggestion sentences ("You have 3 open tasks to wrap up.") and their buttons
+  - the six stat-card links
+  - the five AI tool cards
+  - the progress legend
+  - the suggestions intro
+
+**Fix.**
+- The greeting uses the family's time zone and a catalogue key.
+- Suggestions use `getPlurals()` counted forms.
+- Every other string listed above is a key.
+
+**Status:** FIXED. Scanner findings for this file drop from 25 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

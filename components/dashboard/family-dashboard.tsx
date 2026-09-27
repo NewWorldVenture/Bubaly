@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getPlurals, getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -68,6 +68,7 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
 
 export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const tr = await getTranslations();
+  const plural = await getPlurals();
   // A SERVER component, so the locale comes from the request rather than from a
   // hook — useLocale() here is a build error, which is how this was caught.
   const { locale } = await getLocaleContext();
@@ -140,27 +141,30 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const r = 40; const circ = 2 * Math.PI * r;
 
-  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  // The family's hour, not the server's: the host runs in UTC, so a morning in
+  // California read "Good evening" (audit C1-S9-132).
+  const familyHour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: ctx.active.family.timezone || 'UTC' }).format(new Date()));
+  const greeting = tr(familyHour < 12 ? 'familyDashboard.goodMorning' : familyHour < 18 ? 'familyDashboard.goodAfternoon' : 'familyDashboard.goodEvening', { name: ctx.active.family.name });
 
   // Suggestions derived from real family data — never fabricated.
   const suggestions: { icon: typeof Calendar; text: string; cta: string }[] = [];
   if ((openChores ?? 0) > 0) {
-    suggestions.push({ icon: CheckCircle2, text: `You have ${openChores} open ${openChores === 1 ? 'task' : 'tasks'} to wrap up.`, cta: 'View tasks' });
+    suggestions.push({ icon: CheckCircle2, text: plural('familyDashboard.suggest.openTasks', openChores ?? 0), cta: tr('familyDashboard.cta.viewTasks') });
   }
   if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
-    suggestions.push({ icon: ShoppingCart, text: 'Your week has meals planned but the grocery list is empty.', cta: 'Build list' });
+    suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.suggest.emptyGroceries'), cta: tr('familyDashboard.cta.buildList') });
   }
   if ((upcomingEvents?.length ?? 0) > 0) {
-    suggestions.push({ icon: Calendar, text: `${upcomingEvents!.length} ${upcomingEvents!.length === 1 ? 'event is' : 'events are'} coming up in the next two weeks.`, cta: 'View calendar' });
+    suggestions.push({ icon: Calendar, text: plural('familyDashboard.suggest.upcomingEvents', upcomingEvents!.length), cta: tr('familyDashboard.cta.viewCalendar') });
   }
   if (birthdayCount > 0) {
-    suggestions.push({ icon: Cake, text: `${birthdayCount} ${birthdayCount === 1 ? 'birthday is' : 'birthdays are'} coming up this week.`, cta: 'View members' });
+    suggestions.push({ icon: Cake, text: plural('familyDashboard.suggest.birthdays', birthdayCount), cta: tr('familyDashboard.cta.viewMembers') });
   }
   if ((overdueReminders?.length ?? 0) > 0) {
-    suggestions.push({ icon: Bell, text: `${overdueReminders!.length} ${overdueReminders!.length === 1 ? 'reminder is' : 'reminders are'} overdue.`, cta: 'Check reminders' });
+    suggestions.push({ icon: Bell, text: plural('familyDashboard.suggest.overdueReminders', overdueReminders!.length), cta: tr('familyDashboard.cta.checkReminders') });
   }
   if ((unreadMessages ?? 0) > 0) {
-    suggestions.push({ icon: MessageCircle, text: `You have ${unreadMessages} unread ${(unreadMessages ?? 0) === 1 ? 'message' : 'messages'} from your family.`, cta: 'Open messages' });
+    suggestions.push({ icon: MessageCircle, text: plural('familyDashboard.suggest.unreadMessages', unreadMessages ?? 0), cta: tr('familyDashboard.cta.openMessages') });
   }
 
   // Week meal map — just show meal_type per slot (no join needed)
@@ -178,7 +182,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {greeting}, {ctx.active.family.name}! <span>👋</span>
+            {greeting} <span>👋</span>
           </h1>
           <p className="mt-1 text-sm text-muted">{tr('familyDashboard.heresWhatsHappeningWithYourFamily')}</p>
         </div>
@@ -187,22 +191,22 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel="View calendar" />
-        <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
-        <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
-        <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
-        <StatCard href="/dashboard/reminders" label={tr('familyDashboard.overdueAlerts')} value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel="View reminders" />
-        <StatCard href="/dashboard/messages" label={tr('familyDashboard.unreadMessages')} value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel="Open messages" />
+        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel={tr('familyDashboard.cta.viewCalendar')} />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel={tr('familyDashboard.cta.viewTasks')} />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel={tr('familyDashboard.cta.viewChores')} />
+        <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel={tr('familyDashboard.cta.viewAll')} />
+        <StatCard href="/dashboard/reminders" label={tr('familyDashboard.overdueAlerts')} value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel={tr('familyDashboard.cta.viewReminders')} />
+        <StatCard href="/dashboard/messages" label={tr('familyDashboard.unreadMessages')} value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel={tr('familyDashboard.cta.openMessages')} />
       </div>
 
       {/* AI tools */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
-          { href: '/dashboard/inbox', label: 'Magic Import', desc: 'Paste anything → organized', icon: Wand2, bg: 'bg-violet-600' },
-          { href: '/dashboard/scan', label: 'Scan Flyer', desc: 'Photo → calendar', icon: ScanLine, bg: 'bg-blue-600' },
-          { href: '/dashboard/briefing', label: 'Daily Briefing', desc: "Today at a glance", icon: Sun, bg: 'bg-amber-500' },
-          { href: '/dashboard/assistant', label: 'AI Assistant', desc: 'Ask anything', icon: Sparkles, bg: 'bg-emerald-600' },
-          { href: '/display', label: 'Kitchen Display', desc: 'Full-screen kiosk', icon: Monitor, bg: 'bg-rose-500' },
+          { href: '/dashboard/inbox', label: tr('familyDashboard.tool.magicImport.label'), desc: tr('familyDashboard.tool.magicImport.desc'), icon: Wand2, bg: 'bg-violet-600' },
+          { href: '/dashboard/scan', label: tr('familyDashboard.tool.scanFlyer.label'), desc: tr('familyDashboard.tool.scanFlyer.desc'), icon: ScanLine, bg: 'bg-blue-600' },
+          { href: '/dashboard/briefing', label: tr('familyDashboard.tool.dailyBriefing.label'), desc: tr('familyDashboard.tool.dailyBriefing.desc'), icon: Sun, bg: 'bg-amber-500' },
+          { href: '/dashboard/assistant', label: tr('familyDashboard.tool.aiAssistant.label'), desc: tr('familyDashboard.tool.aiAssistant.desc'), icon: Sparkles, bg: 'bg-emerald-600' },
+          { href: '/display', label: tr('familyDashboard.tool.kitchenDisplay.label'), desc: tr('familyDashboard.tool.kitchenDisplay.desc'), icon: Monitor, bg: 'bg-rose-500' },
         ].map((t) => (
           <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
             <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
@@ -301,7 +305,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           </div>
           <p className="mb-4 text-sm text-fg/70">
-            {suggestions.length > 0 ? 'Here are some suggestions for your family:' : 'Everything looks on track. Ask the assistant anything.'}
+            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : tr('familyDashboard.allOnTrack')}
           </p>
           {suggestions.length > 0 && (
             <div className="space-y-2.5">
@@ -381,9 +385,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
             <div className="space-y-3">
               {[
-                { color: 'bg-violet-500', label: 'Completed', val: done },
-                { color: 'bg-yellow-400', label: 'In Progress', val: Math.max(0, total - done - (openChores ?? 0)) },
-                { color: 'bg-elevated', label: 'Remaining', val: openChores ?? 0 },
+                { color: 'bg-violet-500', label: tr('familyDashboard.completed'), val: done },
+                { color: 'bg-yellow-400', label: tr('familyDashboard.progress.inProgress'), val: Math.max(0, total - done - (openChores ?? 0)) },
+                { color: 'bg-elevated', label: tr('familyDashboard.progress.remaining'), val: openChores ?? 0 },
               ].map(({ color, label, val }) => (
                 <div key={label} className="flex items-center gap-3">
                   <div className={cn('h-3 w-3 rounded-full', color)} />
