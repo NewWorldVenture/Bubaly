@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 // The page audit register is only useful if it is COMPLETE: a page nobody
@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 // Audit C1-S9-93, re-pointed at the one register in C1-S9-107.
 const register = await import('../scripts/page-audit-register.mjs');
 
-const pages: string[] = execSync("git ls-files 'app/**/page.tsx' 'app/page.tsx'", { encoding: 'utf8' })
+const pages: string[] = execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { encoding: 'utf8' })
   .split('\n').filter(Boolean);
 
 describe('every page is in the page audit register', () => {

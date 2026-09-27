@@ -121,15 +121,14 @@ describe('an AI endpoint refuses before it spends anything', () => {
     expect(limiter.enforce).toHaveBeenCalled();
   });
 
-  it('never lets a request through when the account cannot be read — the family\'s own refusal stands', async () => {
-    // Main's gate (#585) asks the endpoint's own client and reads a failed
-    // lookup as "not a super admin"; the plan refusal is then the answer.
+  it('answers 503 when the account cannot be read to know — not 403, and not a pass', async () => {
     state.familyId = FREE;
     state.superAdmin = 'throws';
 
     const response = await savings();
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'unavailable' });
     expect(limiter.enforce).not.toHaveBeenCalled();
   });
 

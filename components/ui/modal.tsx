@@ -38,8 +38,9 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
-  useDialogBehavior(dialogRef, open, { onClose });
   const hydrated = useHydrated();
+  const shown = open && hydrated;
+  useDialogBehavior(dialogRef, shown, { onClose });
 
   // Not `typeof document === 'undefined'`: that is false on the client's FIRST
   // render too, so a modal that starts open (/dashboard/vacations/new opens
@@ -48,7 +49,7 @@ export function Modal({
   // re-rendering it on the client. useHydrated is false on the server AND
   // during hydration, then true, so the portal appears one commit later
   // instead of breaking hydration. Audit C1-S9-96.
-  if (!open || !hydrated) return null;
+  if (!shown) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">

@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -41,7 +41,8 @@ describe('1. a grid with no mobile column count sizes its column to its widest c
     // is a page that does the moment a long name or a table lands in it. The
     // count may only fall. The crawl measures the rest.
     const CEILING = 330;
-    const files = execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const files = execFileSync('git', ['ls-files', 'app/**/*.tsx', 'components/**/*.tsx'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    expect(files.length).toBeGreaterThan(100);
     let count = 0;
     for (const f of files) {
       for (const m of read(f).matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{cn\('([^']*)')/g)) {
@@ -72,7 +73,8 @@ describe('3. a stat tile that stacks its icon over its numbers is a column', () 
     // `.stat-card` is a flex ROW (app/globals.css). Sports and School put an
     // icon (mb-3, meant to sit above), the value, the label and a sub-label in
     // one — four blocks side by side, the last past the edge.
-    const files = execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const files = execFileSync('git', ['ls-files', 'app/**/*.tsx', 'components/**/*.tsx'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    expect(files.length).toBeGreaterThan(100);
     const offenders: string[] = [];
     let stacked = 0;
     for (const f of files) {

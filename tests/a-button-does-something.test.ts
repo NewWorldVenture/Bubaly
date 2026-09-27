@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ticketCsvCell, ticketsCsv, TICKET_CSV_COLUMNS } from '@/lib/admin/tickets-csv';
@@ -44,7 +44,8 @@ export function deadButtons(raw: string): string[] {
 
 describe('a button does something (C1-S9-105)', () => {
   it('no page or component renders a button with no action', () => {
-    const files = execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const files = execFileSync('git', ['ls-files', 'app/**/*.tsx', 'components/**/*.tsx'], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    expect(files.length).toBeGreaterThan(100);
     const offenders = files.flatMap((f) => deadButtons(readFileSync(f, 'utf8')).map((d) => `${f} ${d}`));
     expect(offenders).toEqual([]);
   });

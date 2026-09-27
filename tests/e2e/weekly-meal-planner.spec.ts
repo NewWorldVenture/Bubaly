@@ -7,6 +7,8 @@ import autoprefixer from 'autoprefixer';
 import { expect, test, type Page } from '@playwright/test';
 
 // Actual MealsModule, Modal, form controls, query hook and application CSS.
+// The notification interaction cases also mount the actual ToastProvider;
+// only its native haptics transport is replaced in this browser fixture.
 // Session context, PostgREST reads and server-action transport are explicit
 // boundaries. Service/action tests separately verify database persistence and
 // authorization; these tests do not claim to execute production RLS.
@@ -16,6 +18,7 @@ const icons = fs.readFileSync(path.join(path.dirname(require.resolve('lucide-rea
 const isolated = new Set([
   'react', 'react-dom', 'lucide-react', 'next/link', '@/components/app/app-context',
   '@/components/i18n/locale-provider', '@/components/ui/toast', '@/components/ai/ai-insight',
+  '@capacitor/core', '@capacitor/haptics',
   '@/lib/supabase/client', '@/lib/offline/cache-scope',
   '@/app/(app)/dashboard/meals/actions', '@/app/(app)/dashboard/grocery/actions',
 ]);
@@ -42,6 +45,7 @@ function collect(filename: string): string {
   }
   return id;
 }
+const toastEntry = collect('components/ui/toast.tsx');
 const entry = collect('components/modules/meals-module.tsx');
 const origin = 'https://weekly-meals-fixture.invalid';
 type Row = Record<string, unknown>;
@@ -58,6 +62,7 @@ type Probe = {
   captureClick: (label: string) => void; captureSubmit: () => void; fireCaptured: (count: number) => void;
   apiMode: ApiMode; apiCalls: Row[]; api: (input: Row) => Promise<{ status: number; body: Row }>;
   finishApi: (mode?: ApiMode) => void;
+  toastLifetime: number | null;
 };
 declare global { interface Window { __weeklyMeals: Probe } }
 
@@ -73,7 +78,7 @@ test.beforeAll(async () => {
   css = (await postcss([tailwindcss(configModule.exports.default),autoprefixer()]).process(fs.readFileSync('app/globals.css', 'utf8'), { from: 'app/globals.css' })).css;
 });
 
-async function fixture(page: Page, options: { familyId?: string; timezone?: string; now?: string; mode?: ActionMode; meals?: Row[]; plans?: Row[]; readErrors?: Record<string, boolean> } = {}) {
+async function fixture(page: Page, options: { familyId?: string; timezone?: string; now?: string; mode?: ActionMode; meals?: Row[]; plans?: Row[]; readErrors?: Record<string, boolean>; realToast?: boolean } = {}) {
   await page.clock.setFixedTime(new Date(options.now ?? '2026-09-12T12:00:00Z'));
   await page.route('**/*', async route => {
     if (route.request().url() === `${origin}/api/ai/meals/plan` && route.request().method() === 'POST') {
@@ -93,7 +98,7 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
     const loaded = {}, h = React.createElement, pending = new Map();
     const options = ${JSON.stringify(options)};
     const p = window.__weeklyMeals = { familyId: options.familyId || 'family-A', timezone: options.timezone || 'America/New_York', calls: [], notices: [], errors: [],
-      modes: { plan: options.mode || 'success' }, readErrors: options.readErrors || {}, reads: [], captured: null, apiMode:'success',apiCalls:[] };
+      modes: { plan: options.mode || 'success' }, readErrors: options.readErrors || {}, reads: [], captured: null, apiMode:'success',apiCalls:[], toastLifetime:null };
     const meal = (id, name, ingredients, family = 'family-A') => ({ id, name, ingredients, family_id: family, meal_type: 'dinner', image_url: null, recipe_url: null, created_by: 'user-A' });
     p.tables = { meals: options.meals || [
       meal('meal-tacos', 'Lime tacos', [{name:'Chicken',qty:'1',unit:'lb'},{name:'Lime',qty:'2',unit:null}]),
@@ -191,6 +196,7 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       '@/components/app/app-context':{useApp:()=>({familyId:p.familyId,userId:'user-A',family:{id:p.familyId,name:p.familyId,timezone:p.timezone},members:[],selfMember:null,role:'parent',planLevel:2})},
       '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'})},
       '@/components/ui/toast':{useToast:()=>({success:message=>p.notices.push({kind:'success',message}),error:message=>p.notices.push({kind:'error',message})})},
+      '@capacitor/core':{Capacitor:{isNativePlatform:()=>false}}, '@capacitor/haptics':{},
       '@/components/ai/ai-insight':{AiInsight:()=>null},
       '@/lib/supabase/client':{createClient:()=>db},
       '@/lib/offline/cache-scope':{useAuthenticatedCacheScope:()=>null,isAuthenticatedCacheScopeCurrent:()=>true},
@@ -204,9 +210,12 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       new Function('require','module','exports',item.source)(name=>load(item.imports[name]),module,module.exports);
       return module.exports;
     }
+    const toastModule = options.realToast ? load(${JSON.stringify(toastEntry)}) : null;
+    if (toastModule) mocks['@/components/ui/toast'] = toastModule;
+    p.toastLifetime = toastModule?.LIFETIME.plain ?? null;
     const MealsModule = load(entry).MealsModule;
     let root = ReactDOM.createRoot(document.getElementById('root'));
-    p.render = patch => { Object.assign(p,patch || {}); ReactDOM.flushSync(()=>root.render(h(MealsModule))); };
+    p.render = patch => { Object.assign(p,patch || {}); ReactDOM.flushSync(()=>root.render(toastModule ? h(toastModule.ToastProvider,null,h(MealsModule)) : h(MealsModule))); };
     p.unmount = () => ReactDOM.flushSync(()=>root.render(null));
     p.flush = () => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     const propsFor = element => element[Object.keys(element).find(key=>key.startsWith('__reactProps'))];
@@ -696,4 +705,68 @@ test('a competing row for the same dinner prevents confirmation of the saved rec
   expect(await notices(page,'success')).toEqual([]);
   expect(await page.evaluate(()=>window.__weeklyMeals.tables.meal_plans.length)).toBe(2);
   await expect(slot(page)).toContainText('Coconut curry');
+});
+
+const savedToast = (page: Page) => page.getByRole('status').filter({hasText:/^Meal saved\.$/});
+async function acknowledgeSavedToast(page: Page) {
+  const toast = savedToast(page);
+  await expect(toast).toBeVisible();
+  await toast.getByRole('button',{name:'Dismiss',exact:true}).click();
+  await expect(toast).toHaveCount(0);
+}
+
+test('acknowledges a hovered save notification before choosing the next dinner', async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await fixture(page,{realToast:true});
+  await choose(page);
+  await save(page).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(slot(page)).toContainText('Lime tacos');
+  await savedToast(page).hover();
+  const lifetime = await page.evaluate(()=>window.__weeklyMeals.toastLifetime);
+  expect(lifetime).toBeGreaterThan(0);
+  // Observe the real provider beyond its own dismissal window: hover must
+  // preserve the acknowledgment until the user dismisses it or moves away.
+  await page.waitForTimeout(lifetime! + 100);
+  await acknowledgeSavedToast(page);
+  await choose(page,'Coconut curry','Tuesday');
+  await save(page).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(slot(page,'Tuesday')).toContainText('Coconut curry');
+  await expect(slot(page)).toContainText('Lime tacos');
+  await acknowledgeSavedToast(page);
+  expect(await calls(page)).toHaveLength(2);
+});
+
+test('dismisses a hovered save notification after reopening a dinner and replaces only that dinner', async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await fixture(page,{realToast:true,meals:[
+    {id:'meal-tacos',name:'Lime tacos',family_id:'family-A',meal_type:'dinner',image_url:null,recipe_url:null,created_by:'user-A',ingredients:[]},
+  ],plans:[
+    {id:'existing-lunch',family_id:'family-A',meal_id:'meal-tacos',plan_date:'2026-09-07',meal_type:'lunch'},
+  ]});
+  await choose(page,'Tomato soup');
+  await save(page).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(slot(page)).toContainText('Tomato soup');
+  await acknowledgeSavedToast(page);
+  await choose(page,'Lime tacos','Tuesday');
+  await save(page).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(slot(page,'Tuesday')).toContainText('Lime tacos');
+  await slot(page,'Tuesday').click();
+  // A paused notification can sit above the reopened mobile dialog. Use its
+  // visible control instead of forced clicks, hidden DOM changes or sleeps.
+  await savedToast(page).hover();
+  await acknowledgeSavedToast(page);
+  await dialog(page).getByRole('button',{name:'Create a meal',exact:true}).click();
+  await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Herbed white beans');
+  await save(page).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(slot(page,'Tuesday')).toContainText('Herbed white beans');
+  await expect(slot(page)).toContainText('Tomato soup');
+  const plans = await page.evaluate(()=>window.__weeklyMeals.tables.meal_plans);
+  expect(plans.filter(row=>row.plan_date==='2026-09-08' && row.meal_type==='dinner')).toHaveLength(1);
+  expect(plans.find(row=>row.id==='existing-lunch')?.meal_id).toBe('meal-tacos');
+  expect(await calls(page)).toHaveLength(3);
 });

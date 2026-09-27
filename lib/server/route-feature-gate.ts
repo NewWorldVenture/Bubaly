@@ -49,16 +49,22 @@ export async function refuseUnlessEntitled(
     }
   }
 
-  // The page in front of this endpoint lets a super administrator through
-  // (`requireFeature` and `requirePlanLevel` both do, to preview and support).
-  // Refusing them here left those pages half-broken for the one account that
-  // can open them regardless of plan: /dashboard/autopilot and
-  // /dashboard/briefing rendered and then got 403 from their own endpoints
-  // (2026-09-27 page audit). Asked only once the family itself was refused,
-  // and a lookup that fails is "no" — never a reason to let a request through.
-  // Asked of `db` — the client this endpoint authenticated (a bearer token on
-  // /api/ai), never a separate cookie session the same browser may carry.
-  if (await callerIsSuperAdmin(db)) return null;
+  // A super administrator passes, exactly as `requireFeature` lets them onto
+  // the page (a feature switched Off included), so previewing a feature works
+  // past its first fetch. Before this the page let them in and every endpoint
+  // behind it answered 403, and the screens showed that as their own result —
+  // Autopilot's "100% the day runs smoothly" over a scan that never ran.
+  // Asked only once the family has been refused, so an entitled request pays
+  // nothing for it. Audit C1-S9-98.
+  try {
+    if (await isSuperAdmin(db)) return null;
+  } catch (error) {
+    console.error('[route-feature-gate] account read failed', { hrefs, error });
+    return NextResponse.json(
+      { error: 'Bubaly could not confirm your plan right now. Try again in a moment.', code: 'unavailable' },
+      { status: 503 },
+    );
+  }
 
   if (outcomes.every((o) => o.reason === 'off')) {
     return NextResponse.json({ error: 'Not found.', code: 'feature_off' }, { status: 404 });
@@ -75,13 +81,4 @@ export async function refuseUnlessEntitled(
     },
     { status: 403 },
   );
-}
-
-async function callerIsSuperAdmin(db: DB): Promise<boolean> {
-  try {
-    return await isSuperAdmin(db);
-  } catch (error) {
-    console.error('[route-feature-gate] super-admin check failed; applying the family gate', error);
-    return false;
-  }
 }

@@ -3,7 +3,8 @@
 // own family is not on Family+, /dashboard/autopilot and /dashboard/briefing
 // rendered and then got 403 from /api/autopilot/scan and /api/ai/briefing
 // (2026-09-27 page audit). The endpoint gate now asks the same question, but
-// only after the family itself was refused, and a failed lookup stays a refusal.
+// only after the family itself was refused. A failed account lookup stays
+// unavailable (503), rather than asserting a plan refusal (403).
 //
 // Review on #585: the question must be asked of the caller the endpoint
 // authenticated. /api/ai takes a bearer token ahead of cookies and hands the
@@ -11,7 +12,7 @@
 // ordinary bearer through on an admin's cookie and refused an admin's bearer
 // with no cookie. `isSuperAdmin` itself runs here (only the clients are fake),
 // so its credential choice is what is exercised.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type User = { id: string; email: string } | null;
 
@@ -43,6 +44,8 @@ const { refuseUnlessEntitled } = await import('@/lib/server/route-feature-gate')
 
 const gate = (db: unknown) => refuseUnlessEntitled(db as never, 'fam', ['/dashboard/autopilot']);
 
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+
 describe('a feature endpoint and the page in front of it', () => {
   beforeEach(() => {
     vi.stubEnv('SUPER_ADMIN_EMAILS', ADMIN.email);
@@ -66,8 +69,10 @@ describe('a feature endpoint and the page in front of it', () => {
     expect(db.auth.getUser).not.toHaveBeenCalled();
   });
 
-  it('treats a failed super-admin lookup as a refusal, never as access', async () => {
-    expect((await gate(client(ADMIN, { fail: true })))?.status).toBe(403);
+  it('reports a failed super-admin lookup as unavailable without granting access', async () => {
+    const response = await gate(client(ADMIN, { fail: true }));
+    expect(response?.status).toBe(503);
+    expect(await response?.json()).toMatchObject({ code: 'unavailable' });
   });
 
   it('refuses an ordinary bearer even when the browser also carries an admin cookie', async () => {

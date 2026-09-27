@@ -14,11 +14,12 @@
 //
 //   node scripts/page-audit-register.mjs     # exit 1 if a page has no row
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FINAL = join(ROOT, 'finalaudit.md');
 export const TABLE_HEADING = '### Every page';
 
@@ -52,7 +53,7 @@ export function routeOf(file) {
 }
 
 export function pageFiles() {
-  return execSync("git ls-files 'app/**/page.tsx' 'app/page.tsx'", { cwd: ROOT, encoding: 'utf8' })
+  return execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { cwd: ROOT, encoding: 'utf8' })
     .split('\n').filter(Boolean).sort();
 }
 
@@ -97,4 +98,4 @@ function main() {
   console.log(`Page register complete: ${routes().length} pages, ${rows.length} rows.`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

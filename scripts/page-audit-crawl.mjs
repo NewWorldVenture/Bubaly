@@ -19,6 +19,7 @@
 //          placeholder and are marked `placeholder: true` in the result.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 import { build } from './page-audit-register.mjs';
 
@@ -231,4 +232,4 @@ async function main() {
   console.log(`\n${results.length} routes crawled as ${label}; ${bad.length} with problems → ${out}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e); process.exit(1); });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((e) => { console.error(e); process.exit(1); });
