@@ -1,6 +1,19 @@
 // Marketplace domain logic — pure, framework-free, unit-tested. The React module
 // and any server code import these so labels, money math, filtering and the
 // offer/claim state machine live in one tested place.
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents as formatMoney } from '@/lib/wallet/ledger';
+
+/** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+/**
+ * The marketplace's money is in US dollars, and that is a property of the MONEY:
+ * none of marketplace_listings, marketplace_bids, marketplace_negotiations or
+ * marketplace_orders carries a currency column, so there is nothing to convert
+ * and nothing to follow. The READER's locale decides the notation, not the unit.
+ */
+export const MARKETPLACE_CURRENCY = 'USD';
 
 export type ListingKind = 'sell' | 'rent' | 'borrow' | 'free' | 'wanted' | 'swap' | 'donate';
 export type ListingCategory =
@@ -42,20 +55,64 @@ export function kindHasPrice(kind: ListingKind): boolean {
   return kind === 'sell' || kind === 'rent';
 }
 
-/** Whole cents → "$12.50" (or "$12" when even). Negative/NaN clamps to $0. */
-export function formatCents(cents: number | null | undefined): string {
+/**
+ * Whole cents in the READER's notation — "$12.50" / "$12" in en-US, "12,50 $" /
+ * "12 $" in de-DE (cents only when there are some). Negative/NaN clamps to zero.
+ *
+ * This used to be `$${dollars.toFixed(2)}`: the symbol was text and `toFixed` has
+ * no locale, so a German family read "$2768.50" where they write "2.768,50 $".
+ * `locale` is REQUIRED rather than defaulted, because a default is exactly how a
+ * parameter nobody passes happens — every caller has a reader and must say whose.
+ */
+export function formatCents(cents: number | null | undefined, locale: LocaleCode): string {
   const n = Number.isFinite(cents) ? Math.max(0, Math.round(cents as number)) : 0;
-  const dollars = n / 100;
-  return dollars % 1 === 0 ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+  return formatMoney(n, MARKETPLACE_CURRENCY, locale);
 }
 
-/** "$12" | "$5/day" | "Free" | "" — the price chip label for a listing. */
-export function priceLabel(kind: ListingKind, priceCents: number, rentPeriod?: RentPeriod | null): string {
-  if (kind === 'free') return 'Free';
+/**
+ * The unit a money INPUT shows beside the number, as the reader writes it: the
+ * symbol Intl prints for the marketplace currency in `locale`, and whether it
+ * goes before the number or after it — "$" before in en-US, "$" after in de-DE
+ * ("25 $"), "$US" after in fr-FR. The bid and offer boxes used to hard-code a
+ * "$" on the left, so a German bidder typed into "$ [   ]" under a placeholder
+ * that read "Max bid (min 2.768,50 $)". Read from the same Intl formatter as
+ * every amount around the box, so the two cannot disagree.
+ */
+export function currencyUnit(locale: LocaleCode): { symbol: string; before: boolean } {
+  const parts = new Intl.NumberFormat(locale, { style: 'currency', currency: MARKETPLACE_CURRENCY }).formatToParts(1);
+  const unitAt = parts.findIndex((p) => p.type === 'currency');
+  const numberAt = parts.findIndex((p) => p.type === 'integer');
+  // style: 'currency' always emits a currency part; the code is the honest
+  // spelling of the unit if an engine ever did not.
+  if (unitAt < 0) return { symbol: MARKETPLACE_CURRENCY, before: false };
+  return { symbol: parts[unitAt].value, before: unitAt < numberAt };
+}
+
+/** A rent price is a SENTENCE around the amount ("{amount}/day"), not a suffix
+ *  glued on in English — German writes "5 $/Tag", and only the catalogue knows. */
+const RENT_PRICE_KEY: Record<RentPeriod, string> = {
+  hour: 'listings.pricePerHour',
+  day: 'listings.pricePerDay',
+  week: 'listings.pricePerWeek',
+  month: 'listings.pricePerMonth',
+};
+
+/** "$12" | "$5/day" | "Free" | "" — the price chip label for a listing, in the
+ *  reader's notation and words. */
+export function priceLabel(
+  kind: ListingKind,
+  priceCents: number,
+  rentPeriod: RentPeriod | null | undefined,
+  locale: LocaleCode,
+  t: Translate,
+): string {
+  if (kind === 'free') return t('listings.free');
   if (!kindHasPrice(kind)) return '';
-  const money = formatCents(priceCents);
-  if (kind === 'rent' && rentPeriod) return `${money}${RENT_PERIOD_LABELS[rentPeriod]}`;
-  return money;
+  const amount = formatCents(priceCents, locale);
+  // rent_period is a DB string cast to RentPeriod; an unknown one keeps the bare
+  // amount rather than rendering a raw key.
+  const rentKey = kind === 'rent' && rentPeriod ? RENT_PRICE_KEY[rentPeriod] : undefined;
+  return rentKey ? t(rentKey, { amount }) : amount;
 }
 
 /** Parse a user-typed dollar string ("12.50", "$8") into whole cents. */

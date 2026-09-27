@@ -8,11 +8,11 @@ import { ErrorState } from '@/components/ui/states';
 import { auctionStatus, timeLeft, reserveMet, type AuctionListing } from '@/lib/marketplace/auction';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
+import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 
 export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -36,6 +36,10 @@ type Row = {
  *  countdowns, bid counts, reserve state, and Buy-It-Now flags. */
 export default async function AuctionsPage() {
   const t = await getTranslations();
+  // Bids to the cent, in the READER's notation — this was `$${(c / 100).toFixed(2)}`,
+  // which has no locale at all. getFormat() reads the request's locale.
+  const { fmtMoney } = await getFormat();
+  const money = (c: number) => fmtMoney(c, MARKETPLACE_CURRENCY);
   const ctx = await requireUserContext();
   const sb = await createServer();
   const now = new Date();
@@ -123,7 +127,7 @@ export default async function AuctionsPage() {
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted">
                     {r.reserve_cents != null && <span className={resMet ? 'text-emerald-400' : 'text-amber-400'}>{resMet ? 'Reserve met' : 'Reserve'}</span>}
-                    {r.buy_now_cents != null && <span className="text-emerald-400">Buy now {money(r.buy_now_cents)}</span>}
+                    {r.buy_now_cents != null && <span className="text-emerald-400">{t('marketplaceAuctions.buyNowAmount', { amount: money(r.buy_now_cents) })}</span>}
                   </div>
                 </div>
               </Link>

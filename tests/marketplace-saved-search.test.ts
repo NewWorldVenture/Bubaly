@@ -3,6 +3,15 @@ import {
   listingMatchesSearch, matchesForSearch, countNewSince, describeSearch, searchTerms,
   type MatchableListing,
 } from '@/lib/marketplace/saved-search';
+import { getMessages, translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
+
+// The REAL catalogue, so a missing sentence fails here rather than rendering its
+// key on the Alerts page. savedSearch.underAmount and savedSearch.anythingNew are
+// added by the I18N-003 marketplace change and reach lib/i18n/messages/*.json in
+// the orchestrator's catalogue merge: until that lands these cases are red.
+const tFor = (code: LocaleCode) => (key: string, params?: Record<string, string | number>) =>
+  translate(getMessages(code), key, params);
 
 const L = (over: Partial<MatchableListing> = {}): MatchableListing => ({
   id: 'l1', title: 'Kids balance bike', description: 'Red, barely used', kind: 'sell',
@@ -87,10 +96,19 @@ describe('countNewSince', () => {
 describe('describeSearch', () => {
   it('summarises the criteria', () => {
     expect(describeSearch({ query: 'bike', kind: 'rent', category: 'sports', maxPriceCents: 5000 },
-      { rent: 'For rent' }, { sports: 'Sports' }))
+      'en-US', tFor('en-US'), { rent: 'For rent' }, { sports: 'Sports' }))
       .toBe('“bike” · For rent · Sports · under $50');
   });
   it('falls back to "Anything new" when empty', () => {
-    expect(describeSearch({})).toBe('Anything new');
+    expect(describeSearch({}, 'en-US', tFor('en-US'))).toBe('Anything new');
+  });
+  it('writes the price ceiling in the reader’s notation, in whole dollars as before', () => {
+    // A German reader's ceiling sits beside price chips that read "15 $", so it
+    // must read "50 $" too — never the hand-written "$50".
+    const de = describeSearch({ maxPriceCents: 4999 }, 'de-DE', tFor('de-DE'));
+    expect(de).toContain('50\u00a0$');
+    expect(de).not.toMatch(/\$\s?\d/);
+    expect(de).not.toContain('savedSearch.');
+    expect(describeSearch({ maxPriceCents: 4999 }, 'en-US', tFor('en-US'))).toBe('under $50');
   });
 });

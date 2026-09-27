@@ -9,13 +9,13 @@ import { ErrorState } from '@/components/ui/states';
 import {
   priceBand, assessPrice, dealLabel, discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
+import { formatCents, MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 
 export const metadata: Metadata = { title: 'Deals · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 async function ReadFailure() {
   const t = await getTranslations();
@@ -35,6 +35,12 @@ type Row = { id: string; title: string; photo_url: string | null; category: stri
  *  Price Coach from a per-item check into a discovery surface. */
 export default async function DealsPage() {
   const t = await getTranslations();
+  // Both amounts on a deal card are the READER's: the price to the cent, as it was,
+  // and the comparable range in whole dollars — "Similar: $20–$45" was two hand-
+  // written symbols inside an English sentence, and is now a catalogue sentence.
+  const { locale } = await getLocaleContext();
+  const { fmtMoney } = await getFormat();
+  const money = (c: number) => fmtMoney(c, MARKETPLACE_CURRENCY);
   await requireUserContext();
   const sb = await createServer();
 
@@ -105,7 +111,7 @@ export default async function DealsPage() {
                       d.verdict.tone === 'ok' ? 'text-emerald-500' : 'text-sky-500')}>{d.verdict.text}</span>
                   )}
                 </div>
-                <p className="mt-0.5 text-[10px] text-muted">Similar: ${Math.round(d.low / 100)}–${Math.round(d.high / 100)}</p>
+                <p className="mt-0.5 text-[10px] text-muted">{t('marketplaceDeals.similarRange', { low: formatCents(d.low, locale.code), high: formatCents(d.high, locale.code) })}</p>
               </div>
             </Link>
           ))}

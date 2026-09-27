@@ -1,5 +1,5 @@
 // I18N-003 — money values whose currency symbol is a LITERAL. Fifty-one when
-// this pin was written; twenty now, and the ceiling below may only fall.
+// this pin was written; eight now, and the ceiling below may only fall.
 //
 // THE DEFECT, and why the locale ratchet is blind to it.
 // tests/hardcoded-locales-only-go-down.test.ts counts `'en-US'` in a formatter
@@ -42,15 +42,21 @@
 // (tests/a-german-family-reads-its-closet-dining-inventory-poll-and-gift-money-
 // in-its-own-format.test.ts, tests/a-german-parent-reads-what-the-car-and-the-
 // house-cost-in-their-own-format.test.ts, tests/a-german-family-reads-engine-
-// money-in-their-own-format.test.ts). `node scripts/audit-hand-written-
-// currency.mjs` lists the twenty that remain, by file and line. A ceiling left
-// at 51 over a count of 20 would have let thirty-one NEW hand-written symbols in
-// without a word, so SITES is the count, not the history, and every unit that
-// lands lowers it.
+// money-in-their-own-format.test.ts); and the marketplace — listings, auctions,
+// negotiations, the price coach, price history, saved searches, the assistant
+// and the fifteen marketplace pages and panels that render them
+// (tests/a-german-bidder-reads-marketplace-money-in-their-own-format.test.ts,
+// tests/a-german-family-types-marketplace-money-beside-a-trailing-unit.test.ts).
+// `node scripts/audit-hand-written-currency.mjs` lists the eight that remain, by
+// file and line: the vacation AI route, the approval card, the concierge digest,
+// the CRM, the approval reminders, the purchase advisor, the gifts service and
+// the trips service. A ceiling left at 51 over a count of 8 would have let
+// forty-three NEW hand-written symbols in without a word, so SITES is the count,
+// not the history, and every unit that lands lowers it.
 import { describe, expect, it } from 'vitest';
 import { findHandWrittenCurrency } from '../scripts/audit-hand-written-currency.mjs';
 
-const SITES = 20;
+const SITES = 8;
 
 describe('a currency symbol written as a literal', () => {
   const found = findHandWrittenCurrency() as { file: string; line: number }[];

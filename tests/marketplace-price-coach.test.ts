@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
+import { getMessages, translate } from '@/lib/i18n/messages';
 import {
   percentile, priceBand, assessPrice, dealLabel, bandSummary,
   discountVsMedianPercent, isDeal, type Comp,
 } from '@/lib/marketplace/price-coach';
+
+// The REAL en-US catalogue, so a sentence missing from it fails here instead of
+// reaching a family as its key. The priceCoach.* sentences are added by the I18N-003
+// marketplace change and land in lib/i18n/messages/*.json with the orchestrator's
+// catalogue merge: until that merge, the cases that render them are red.
+const t = (key: string, params?: Record<string, string | number>) =>
+  translate(getMessages('en-US'), key, params);
 
 const comp = (priceCents: number, condition = 'good'): Comp => ({ category: 'sports', condition, priceCents, kind: 'sell' });
 
@@ -82,7 +90,8 @@ describe('labels & summary', () => {
     expect(dealLabel('unknown')).toBeNull();
   });
   it('summarizes the range', () => {
-    expect(bandSummary({ lowCents: 2000, medianCents: 3500, highCents: 4500, sampleSize: 6 })).toBe('Similar items: $20–$45');
-    expect(bandSummary(null)).toBeNull();
+    expect(bandSummary({ lowCents: 2000, medianCents: 3500, highCents: 4500, sampleSize: 6 }, 'en-US', t))
+      .toBe('Similar items: $20–$45');
+    expect(bandSummary(null, 'en-US', t)).toBeNull();
   });
 });
