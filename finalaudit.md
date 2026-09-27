@@ -48617,6 +48617,21 @@ of these tables yet, so this takes effect when those migrations are applied.
 feature case fails with the fix reverted); `tests/assistant-engine.test.ts`
 now routes the service client to its fake, so it still asserts the payload
 the turn asks for.
+**P-10, follow-up from review on #585: a filed row must not carry what was
+typed.** Once feature rows were recorded at all, `request_text` became
+readable by every active member of the family (0250's SELECT policy), and
+eight call sites handed `withAiRequest` a person's own words: the assistant's
+message (turn, stream and `/api/ai/chat`), the chef request, a marketplace
+question, a chore prompt, a post topic, a trip destination (and, milder, a
+chore title, an asset name, a trade). `AiRequestSpec.text` already said
+"keep it non-sensitive"; now every call site passes a fixed label ("Assistant
+turn", "Recipe from the AI chef", "Research a trip"), the model and the
+conversation still get the original text, and
+`tests/an-ai-request-row-never-carries-what-was-typed.test.ts` scans all 39
+call sites and fails on anything but a string literal or a catalogue string.
+`tests/assistant-engine.test.ts` passes a synthetic private phrase through the
+turn and the stream and asserts the model received it and the ledger row did
+not. No SQL change.
 
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one

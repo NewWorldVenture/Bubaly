@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
         // errors still leaves the evidence.
         await withAiRequest(
           scopeFromUserContext(ctx, supabase),
-          { feature: 'chat.assistant', text: message, kind: 'feature', conversationId },
+          { feature: 'chat.assistant', text: 'Assistant chat', kind: 'feature', conversationId },
           async (obs) => {
         let content = '';
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];

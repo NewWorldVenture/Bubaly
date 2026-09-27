@@ -101,7 +101,7 @@ export async function POST() {
       // reading a support ticket can tell it from "AI wasn't configured".
       recommendations = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
-        { feature: 'home.utility-savings', text: `Utility savings across ${bills.length} bills` },
+        { feature: 'home.utility-savings', text: 'Utility savings' },
         async (obs) => {
           const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: userMsg }], tools: [] });
           obs.used(completion.model ?? 'unknown', completion.usage);

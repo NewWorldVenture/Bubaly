@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   try {
     const text = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: `insights.${kind}`, text: `Insights: ${kind}` },
+      { feature: `insights.${kind}`, text: 'Insights' },
       async (obs) => {
         const provider = await resolveProvider();
         const completion = await provider.complete({
