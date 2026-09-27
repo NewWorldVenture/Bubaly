@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 describe('the app shell on a phone', () => {
   it("names the top bar's logo link", () => {
     const shell = readFileSync('components/app/app-shell.tsx', 'utf8');
-    expect(shell).toContain(`<Link href="/home" aria-label={t('nav.home')} className="lg:hidden">`);
+    expect(shell).toContain('<Link href="/home" aria-label={t(\'nav.home\')} className="lg:hidden">');
   });
 
   it("draws the marketing section's group labels at full muted strength", () => {
