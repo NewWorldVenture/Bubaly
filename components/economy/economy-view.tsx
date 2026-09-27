@@ -28,7 +28,7 @@ type Tab = 'balances' | 'store' | 'requests' | 'manage';
 
 export function EconomyView(props: {
   currencies: Currency[]; members: Member[]; balances: BalanceCell[];
-  rewards: Reward[]; redemptions: Redemption[]; canManage: boolean;
+  rewards: Reward[]; redemptions: Redemption[]; canManage: boolean; selfMemberId: string;
 }) {
   const t = useTranslations();
   const tr = useTranslations();
@@ -39,6 +39,9 @@ export function EconomyView(props: {
   const [busy, setBusy] = useState<string | null>(null);
 
   const kids = members.filter((m) => !m.isManager);
+  // A redemption spends the chosen member's tokens: a manager may request for
+  // any child, a child only for themselves (the server action refuses the rest).
+  const requestable = canManage ? kids : kids.filter((m) => m.id === props.selfMemberId);
   const emojiByCurrency = new Map(currencies.map((c) => [c.id, c.emoji]));
   const balanceOf = (currencyId: string, memberId: string) =>
     balances.find((b) => b.currencyId === currencyId && b.memberId === memberId)?.balance ?? 0;
@@ -123,7 +126,7 @@ export function EconomyView(props: {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {rewards.map((r) => (
               <RewardCard key={r.id} reward={r} emoji={emojiByCurrency.get(r.currencyId) ?? '⭐'}
-                kids={kids} balanceOf={balanceOf} busy={busy}
+                kids={requestable} balanceOf={balanceOf} busy={busy}
                 onRequest={(memberId) => run(`redeem-${r.id}-${memberId}`, () => requestRedemptionAction({ rewardId: r.id, memberId }), 'Request sent for approval')} />
             ))}
           </div>

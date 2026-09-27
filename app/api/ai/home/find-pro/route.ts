@@ -78,10 +78,11 @@ export async function POST(req: Request) {
   const q = encodeURIComponent(`${tradeLabel} ${job ? job + ' ' : ''}near ${location || 'me'}`);
   const searchUrl = `https://www.google.com/search?q=${q}`;
 
-  await supabase.from('home_ai_logs').insert({
+  const { error: writeError1 } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'find_pro',
     input: { trade, job, location }, output: { text }, created_by: ctx.user.id,
   });
+  if (writeError1) console.error('[ai/home/find-pro] home_ai_logs write failed', writeError1);
 
   return NextResponse.json({ text, searchUrl, tradeLabel });
 }

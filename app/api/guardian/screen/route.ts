@@ -7,7 +7,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
 import {
-  wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlHangup,
+  wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlDial, twimlHangup,
   sendSms, validateTwilioSignature,
 } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
       if (memberPhone) {
         return finish(wrapTwiml(
           twimlSay(responseText || tr('screen.connectingYouNowOneMoment')),
-          `<Dial>${memberPhone}</Dial>`,
+          twimlDial(memberPhone),
         ));
       }
 

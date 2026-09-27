@@ -6,6 +6,9 @@ import { clientIp, rateLimit } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { readAll } from '@/lib/supabase/read-all';
 
+/** The most events one feed publishes: the nearest ones win. */
+const FEED_MAX_EVENTS = 2000;
+
 // Public iCalendar feed for a single bubaly calendar.
 //
 //   GET /api/sync/feeds/<feed_token>
@@ -66,7 +69,20 @@ export async function GET(
     .eq('feed_enabled', true)
     .maybeSingle();
 
-  if (error || !calendar) {
+  // A subscribed calendar app polls this URL for as long as the subscription
+  // lives, and treats what it gets as the truth: an empty calendar deletes every
+  // event it holds, and some clients drop a feed that answers 404. So a read
+  // that FAILED answers 503, uncached, and the client keeps what it has until
+  // the next poll. Only a clean "no such enabled feed" is a 404.
+  const unavailable = () => new NextResponse('Feed temporarily unavailable', {
+    status: 503,
+    headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
+  });
+  if (error) {
+    console.error('[sync-feed] calendar read failed', error);
+    return unavailable();
+  }
+  if (!calendar) {
     return new NextResponse('Not found', { status: 404 });
   }
 
@@ -83,8 +99,12 @@ export async function GET(
     .lte('starts_at', horizon)
     .order('starts_at', { ascending: true })
     .order('id')
-    .range(from, to), { max: 2000 });
-
+    .range(from, to), { max: FEED_MAX_EVENTS });
+  // readAll reports two different things as an error. Reaching the cap returns
+  // exactly FEED_MAX_EVENTS rows — the nearest ones, in order — and that prefix
+  // is a correct feed for a very busy calendar. Anything short of the cap with an
+  // error is a failed read, and publishing it would empty every subscriber's
+  // calendar (cached for 15 minutes at the edge) until the next good poll.
   // A short feed is not a short calendar — it is a DELETION instruction.
   //
   // An ICS subscription is authoritative for the calendar it names: Apple
@@ -97,15 +117,18 @@ export async function GET(
   //
   // 503 with Retry-After is the honest answer: every subscriber keeps the copy
   // it has. The cron on the other side of this seam
-  // (app/api/cron/calendar-feeds) already checks this same read's error; this
-  // route was the one that did not.
-  if (eventsError) {
+  // (app/api/cron/calendar-feeds) already checks this same read's error.
+  //
+  // readAll reports two different things as an error, though. Reaching the cap
+  // returns exactly FEED_MAX_EVENTS rows — the nearest ones, in order — and that
+  // prefix is the same feed every poll of a very busy calendar publishes, so it
+  // deletes nothing a subscriber ever had. Only an error short of the cap is a
+  // failed read.
+  if (eventsError && rows.length < FEED_MAX_EVENTS) {
     console.error('[sync-feed] event read failed; refusing to publish a short feed', { calendarId: calendar.id, error: eventsError });
-    return new NextResponse('Calendar temporarily unavailable', {
-      status: 503,
-      headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
-    });
+    return unavailable();
   }
+  if (eventsError) console.warn('[sync-feed] feed capped at the nearest events', { calendarId: calendar.id, max: FEED_MAX_EVENTS });
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,

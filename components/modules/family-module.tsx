@@ -11,7 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -496,7 +496,7 @@ export function FamilyModule() {
                 .update({ is_active: false }).eq('id', removeMember.id).eq('family_id', familyId).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
-              if (!rows || rows.length === 0) { toastError(t('actions.couldNotUpdateThatMember')); return; }
+              if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
@@ -560,7 +560,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
     // Same manager gate as the removal above: an UPDATE the policy filters comes
     // back `error: null` with nothing changed. The INSERT needs no readback —
     // RLS refuses an insert with an error rather than filtering it away.
-    const { data: rows, error: err } = member
+    const { data: savedRows, error: err } = member
       ? await sb.from('family_members').update(payload).eq('id', member.id).eq('family_id', familyId).select('id')
       : await sb.from('family_members').insert({
           ...payload, family_id: familyId, is_active: true,
@@ -568,7 +568,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
         }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    if (!rows || rows.length === 0) { toastError(t('actions.couldNotUpdateThatMember')); return; }
+    if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(member ? t('familyModule.memberUpdated') : t('familyModule.memberAdded'));
     onSaved();
   }

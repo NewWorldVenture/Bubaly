@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Car, Plus, Trash2, Gauge, TrendingDown, Smartphone } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
@@ -24,8 +25,11 @@ export function DrivingSafetyView() {
   // The date and clock follow the reader.
   const locale = useLocale();
   const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
+  // The trip log is what a parent reviews; a driver must not be able to erase
+  // their own speeding or phone-use record (0365: managers edit and delete).
+  const canDelete = isManager(role);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: rows, loading, error, refresh } = useRealtimeQuery<Trip>({
@@ -40,16 +44,15 @@ export function DrivingSafetyView() {
 
   async function remove(id: string) {
     if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
-    // 0362 ("a driving score is not the driver's to grade") narrows writes here,
-    // and RLS FILTERS a delete rather than refusing it — so without the readback
-    // a removal the policy blocked came back `error: null` and was reported as
-    // "Deleted". The family scope answers a different question from the readback:
-    // whose row it was, rather than whether anything went.
-    const { data: rows, error } = await createClient().from('driving_trips').delete()
-      .eq('id', id).eq('family_id', familyId).select('id');
-    if (error) { toastError(error.message); return; }
-    if (!rows || rows.length === 0) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
-    success(tr('drivingSafetyView.deleted'));
+    // main's 0365 ("a driving record is not the driver's to erase") narrows
+    // writes here, and RLS FILTERS a delete rather than refusing it — so without
+    // the readback a removal the policy blocked came back `error: null` and was
+    // reported as "Deleted". The family scope answers a different question from
+    // the readback: whose row it was, rather than whether anything went.
+    const { data, error } = await createClient().from('driving_trips').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(error.message);
+    else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
+    else success(tr('drivingSafetyView.deleted'));
   }
 
   return (
@@ -90,7 +93,7 @@ export function DrivingSafetyView() {
                   <p className={cn('text-2xl font-black tabular-nums', SCORE_TINT[band])}>{t.score}</p>
                   <p className="text-[10px] capitalize text-muted">{band}</p>
                 </div>
-                <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>
+                {canDelete && <button onClick={() => remove(t.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={tr('drivingSafetyView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}

@@ -38,10 +38,24 @@ export function isTwilioConfigured(): boolean {
 
 // ─── TwiML Builders ────────────────────────────────────────────────────────
 
+// Every value below is interpolated into an XML document Twilio parses
+// strictly. A bare `&` in a URL (`?sessionId=…&turn=2`) is not well-formed XML
+// and Twilio refuses the whole response (error 12100), so the call hears
+// "an application error has occurred" instead of the prompt. And a value a
+// customer typed (a forwarding number) that is not escaped can close the
+// element and add verbs of its own. Escape text and attribute values alike.
+function xml(value: string | number): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /** TwiML: say text via TTS. */
 export function twimlSay(text: string, voice = 'Polly.Joanna-Neural'): string {
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<Say voice="${voice}">${escaped}</Say>`;
+  return `<Say voice="${xml(voice)}">${xml(text)}</Say>`;
 }
 
 /** TwiML: Gather speech input from caller. */
@@ -53,9 +67,8 @@ export function twimlGather(opts: {
   voice?: string;
 }): string {
   const { action, text, timeout = 5, speechTimeout = 'auto', voice = 'Polly.Joanna-Neural' } = opts;
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<Gather input="speech" action="${action}" timeout="${timeout}" speechTimeout="${speechTimeout}">
-  <Say voice="${voice}">${escaped}</Say>
+  return `<Gather input="speech" action="${xml(action)}" timeout="${xml(timeout)}" speechTimeout="${xml(speechTimeout)}">
+  <Say voice="${xml(voice)}">${xml(text)}</Say>
 </Gather>`;
 }
 
@@ -66,20 +79,19 @@ export function twimlRecord(opts: {
   action?: string; transcribeCallback?: string; maxLength?: number; text: string; voice?: string;
 }): string {
   const { action, transcribeCallback, maxLength = 120, text, voice = 'Polly.Joanna-Neural' } = opts;
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const attrs = [
-    action ? `action="${action}"` : '',
-    `maxLength="${maxLength}"`,
-    transcribeCallback ? `transcribe="true" transcribeCallback="${transcribeCallback}"` : '',
+    action ? `action="${xml(action)}"` : '',
+    `maxLength="${xml(maxLength)}"`,
+    transcribeCallback ? `transcribe="true" transcribeCallback="${xml(transcribeCallback)}"` : '',
   ].filter(Boolean).join(' ');
-  return `<Say voice="${voice}">${escaped}</Say>
+  return `<Say voice="${xml(voice)}">${xml(text)}</Say>
 <Record ${attrs} />`;
 }
 
 /** TwiML: transfer to a phone number. */
 export function twimlDial(phoneNumber: string, callerId?: string): string {
-  const callerAttr = callerId ? ` callerId="${callerId}"` : '';
-  return `<Dial${callerAttr}>${phoneNumber}</Dial>`;
+  const callerAttr = callerId ? ` callerId="${xml(callerId)}"` : '';
+  return `<Dial${callerAttr}>${xml(phoneNumber)}</Dial>`;
 }
 
 /** TwiML: hang up. */
@@ -89,7 +101,7 @@ export function twimlHangup(): string {
 
 /** TwiML: pause. */
 export function twimlPause(seconds = 1): string {
-  return `<Pause length="${seconds}" />`;
+  return `<Pause length="${xml(seconds)}" />`;
 }
 
 /** Wrap TwiML elements in the standard XML envelope. */

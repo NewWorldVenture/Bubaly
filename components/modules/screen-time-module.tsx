@@ -32,9 +32,12 @@ const blank = () => ({ id: '', member_id: '', entry_date: today(), minutes: '30'
 export function ScreenTimeModule() {
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
-  // A daily limit is set ON a child BY a parent. 0300 makes that the rule in the
-  // database; this is the same rule in the interface, so the control is absent
+  // A daily limit is set ON a child BY a parent: only a manager sets one (the
+  // database enforces the same since main's 0351), so the control is absent
   // rather than present-and-failing for everyone it does not belong to.
+  // Logging time stays open to everyone. Limits, and the usage log they are
+  // checked against, are a manager's to change: a child may log time but not
+  // erase it (0351, 0366).
   const canSetLimits = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -104,8 +107,10 @@ export function ScreenTimeModule() {
 
   async function remove(id: string) {
     if (!confirm(t('screenTimeModule.deleteThisEntry'))) return;
-    const { error } = await createClient().from('screen_time_entries').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('screenTimeModule.deleted'));
+    const { data, error } = await createClient().from('screen_time_entries').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (!data?.length) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(t('screenTimeModule.deleted'));
   }
 
   async function saveLimit(e: React.FormEvent) {
@@ -221,7 +226,7 @@ export function ScreenTimeModule() {
                 {e.note && <p className="text-xs text-muted">{e.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
               </div>
-              <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label={t('screenTime.delete')}><Trash2 className="h-4 w-4" /></button>
+              {canSetLimits && <button onClick={() => remove(e.id)} className="text-muted hover:text-danger" aria-label={t('screenTime.delete')}><Trash2 className="h-4 w-4" /></button>}
             </div>
           );
         })}

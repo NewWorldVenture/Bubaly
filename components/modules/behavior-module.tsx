@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -30,8 +31,12 @@ const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
 export function BehaviorModule() {
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
+  // The behavior log is what a parent reviews: anyone may log, but only a
+  // manager changes or removes an entry (0377) - a child cannot delete the
+  // hard day they had.
+  const canRemove = isManager(role);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
@@ -108,13 +113,12 @@ export function BehaviorModule() {
     if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
-    // reports success over a record that is still there.
-    // 0373 makes a behaviour note the property of whoever WROTE it.
-    const { data, error } = await createClient().from('behavior_logs').delete()
-      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
-    if (error) { toastError(describeDbError(error)); return; }
-    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
-    success(tr('behaviorModule.deleted'));
+    // reports success over a record that is still there. main's 0377 makes a
+    // behaviour note a manager's to erase.
+    const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
+    else success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {
@@ -239,7 +243,7 @@ export function BehaviorModule() {
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
               </div>
-              <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>
+              {canRemove && <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>}
             </div>
           );
         })}

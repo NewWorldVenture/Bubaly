@@ -13,6 +13,7 @@ import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
@@ -74,13 +75,16 @@ function FamilySwitcher() {
   const [open, setOpen] = useState(false);
   useDismissOnEscape(open, () => setOpen(false));
   const [pending, startTransition] = useTransition();
+  const { message: switchError, run } = useActionError();
 
   function switchTo(familyId: string) {
     setOpen(false);
     if (familyId === family.id) return;
+    // A throw here used to close the menu and do nothing else: no navigation,
+    // no message. Switching household is the one action where "nothing
+    // happened" is indistinguishable from "it worked and this is the new one".
     startTransition(async () => {
-      await setActiveFamilyAction(familyId);
-      window.location.assign('/home');
+      if (await run(() => setActiveFamilyAction(familyId))) window.location.assign('/home');
     });
   }
 
@@ -98,6 +102,7 @@ function FamilySwitcher() {
         </div>
         <ChevronDown className="h-4 w-4 text-muted" />
       </button>
+      <ActionError message={switchError} />
       {open && (
         <>
           {/* Presentational: no content, no name, nothing to focus. It exists so a
@@ -137,14 +142,14 @@ function UserMenu() {
   const [open, setOpen] = useState(false);
   useDismissOnEscape(open, () => setOpen(false));
   const [switching, startSwitch] = useTransition();
+  const { message: switchFamilyError, run: runSwitch } = useActionError();
   const name = selfMember?.display_name ?? userEmail ?? 'You';
 
   function switchFamily(familyId: string) {
     setOpen(false);
     if (familyId === family.id) return;
     startSwitch(async () => {
-      await setActiveFamilyAction(familyId);
-      window.location.assign('/home');
+      if (await runSwitch(() => setActiveFamilyAction(familyId))) window.location.assign('/home');
     });
   }
 
@@ -221,6 +226,7 @@ function UserMenu() {
                     {f.familyId === family.id && <Check className="h-4 w-4 text-brand-text" />}
                   </button>
                 ))}
+                <ActionError message={switchFamilyError} />
                 <Link href="/dashboard/settings#families" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-elevated">
                   <Plus className="h-4 w-4" /> {t('shell.newFamily')}
                 </Link>

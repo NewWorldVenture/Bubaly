@@ -5,6 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -16,6 +17,9 @@ type Result = { ok: true } | { ok: false; error: string };
 export async function moveAssignmentAction(assignmentId: string, toMemberId: string): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // Rebalancing moves a chore - and the points it will earn - between
+  // members: a manager's call (0374 holds RLS to the same).
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
   const supabase = await createServer();
 
   const { data: target } = await supabase.from('family_members')

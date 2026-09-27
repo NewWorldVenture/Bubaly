@@ -187,7 +187,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     const { data: rows, error } = await supabase.from('family_members')
       .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (!rows || rows.length === 0) return toastError(t('actions.couldNotUpdateThatMember'));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -470,7 +470,7 @@ function EditMemberModal({ member, isSelf, onClose }: {
       .eq('id', member.id).eq('family_id', member.family_id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    if (!rows || rows.length === 0) return toastError(t('actions.couldNotUpdateThatMember'));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

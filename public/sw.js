@@ -7,13 +7,17 @@
    offline to whoever next opens the app on a shared/family device — so only the
    public app shell below is ever cached for navigations; every other page is
    network-only with the /offline fallback. (The v3→v4 bump purges any HTML the
-   previous worker cached, via the activate-time cleanup.) */
+   previous worker cached, via the activate-time cleanup.)
+
+   The same holds for bytes that are not HTML (SEC-001, Q58 / C1-K-18). Family
+   photos live on the Supabase origin and were never cached here, but Next's
+   image optimizer re-serves them from THIS origin at /_next/image, and the
+   worker cached every same-origin image cache-first with no partition by
+   session: after logout the next person on the device was served the previous
+   family's photos offline. So an optimizer response is never cached, nor is
+   anything the server marks private or no-store. (The v4→v5 bump purges what
+   v4 already holds, through the same activate sweep that purged v3's HTML.) */
 const CACHE = 'bubaly-v5';
-/* v5 (SEC-001, Q58): v4 cached every successful same-origin IMAGE, which
-   included /_next/image — the optimizer proxy that renders private family
-   photos. Those bytes persisted in Cache Storage after logout and were served
-   cache-first, offline, to whoever used the device next. The bump purges what v4
-   stored, through the same activate sweep that purged v3's HTML. */
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown
@@ -69,7 +73,13 @@ self.addEventListener('fetch', (event) => {
   // network-only, and it has to be excluded by PATH rather than by header —
   // Next emits `Cache-Control: public` for optimized images whatever their
   // source was, so honouring the header alone would still store them.
-  if (url.pathname.startsWith('/_next/image')) return;
+  // The worker ANSWERS the request (straight from the network, nothing written
+  // to any cache) rather than declining it: the two are the same to the
+  // browser, and answering is what lets a harness see the network's bytes.
+  if (url.pathname.startsWith('/_next/image')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then(

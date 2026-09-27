@@ -40,7 +40,8 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands. Stating it rather than deriving it is
+    // Bumped whenever a migration lands — 0353 takes network consent and
+    // affiliate commissions out of members' hands. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
     //
@@ -243,6 +244,12 @@ describe('Supabase migration filename safety', () => {
     // event_id cascade took the plan with its event and stranded the reminder
     // on every member's calendar. Held by
     // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
+    //
+    // 0344–0377 and 0378–0380 are the C1-K pass from
+    // claude/youthful-turing-ppwrkl, numbered 0318–0351 on that branch. They
+    // were renumbered after main's 0318–0343 on the first merge, and the three
+    // that then collided with main's 0349, 0352 and 0360 moved to 0378
+    // (savings goals), 0379 (member locations) and 0380 (audit actor).
     //
     // The numbers between 0343 and 0360 are held by migrations still in
     // review; each lands with its own paragraph here. A number below the one
