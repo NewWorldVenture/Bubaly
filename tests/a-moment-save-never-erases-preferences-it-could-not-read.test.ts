@@ -75,8 +75,11 @@ describe('saving a moment step onto a preferences read that failed', () => {
 
   it('reports the failure to the caller instead of a silent ok', async () => {
     read = { data: null, error: { code: 'PGRST301', message: 'JWT expired' } };
-    await expect(setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'leave-by', done: true }))
-      .resolves.toMatchObject({ ok: false, error: 'JWT expired' });
+    const result = await setMomentPrepDoneAction({ eventId: 'evt-1', stepId: 'leave-by', done: true });
+    expect(result.ok).toBe(false);
+    // Described, never the database's own text (SEC-023).
+    expect(result).toHaveProperty('error');
+    expect((result as { error?: string }).error).not.toBe('JWT expired');
   });
 
   it('does not erase the blob when the refused read is an UNcheck either', async () => {

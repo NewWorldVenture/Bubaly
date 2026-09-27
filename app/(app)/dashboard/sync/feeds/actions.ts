@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * `alreadySubscribedAs` is set when "Add & Sync Now" re-synced a subscription
@@ -106,7 +107,7 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
       if (!winner.ok || !winner.feed) return { ok: false, error: t('calendarSync.couldNotCheckExistingFeeds') };
       feed = winner.feed;
     } else if (error || !data) {
-      return { ok: false, error: error?.message ?? 'Could not save the feed' };
+      return { ok: false, error: describeActionError(error, t('actions.couldNotSaveTheFeed')) };
     } else {
       feed = data;
       createdHere = true;
@@ -195,7 +196,7 @@ export async function removeCalendarFeed(feedId: string): Promise<ActionResult> 
     .delete()
     .eq('id', feedId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');

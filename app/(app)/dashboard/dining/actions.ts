@@ -3,6 +3,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -12,7 +13,7 @@ export async function toggleFavoriteAction(id: string, next: boolean): Promise<R
   const supabase = await createServer();
   const { error } = await supabase.from('dining_out')
     .update({ is_favorite: next }).eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -35,7 +36,7 @@ export async function addRestaurantAction(input: {
     distance_km: input.distanceKm ?? null,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -57,6 +58,6 @@ export async function logVisitAction(input: {
     visited_at: input.visitedAt || new Date().toISOString(),
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

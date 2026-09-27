@@ -130,7 +130,9 @@ describe('learning the family playbook from a read that did not finish', () => {
     // The whole point: the family is NOT told what their household looks like
     // on the strength of the first 4,000 rows of it.
     expect(result.ok, 'a conclusion drawn from a prefix is not ok').toBe(false);
-    expect(result.error, 'the caller is told the rows were a prefix').toContain('PREFIX');
+    // Told in the family's words that their history could not be read in full —
+    // not readAll's internal "PREFIX" diagnostic, which is for the log (SEC-023).
+    expect(result.error).toBe('Could not read enough of your history to build a playbook. Please try again.');
     expect(upserts, 'nothing is written from a truncated read').toEqual([]);
   });
 
@@ -139,7 +141,10 @@ describe('learning the family playbook from a read that did not finish', () => {
 
     const result = await refreshPlaybookAction();
 
-    expect(result).toMatchObject({ ok: false, error: 'canceling statement due to statement timeout' });
+    expect(result.ok).toBe(false);
+    // Described, never the database's own text (SEC-023).
+    expect(result.error).toBeTruthy();
+    expect(result.error).not.toBe('canceling statement due to statement timeout');
     expect(upserts).toEqual([]);
   });
 
@@ -155,7 +160,8 @@ describe('learning the family playbook from a read that did not finish', () => {
     const result = await refreshPlaybookAction();
 
     expect(result.ok, `a refused ${table} read must not become an empty ${table}`).toBe(false);
-    expect(result.error).toBe(error.message);
+    expect(result.error, 'described, never the database\'s own text (SEC-023)').toBeTruthy();
+    expect(result.error).not.toBe(error.message);
     expect(upserts).toEqual([]);
   });
 

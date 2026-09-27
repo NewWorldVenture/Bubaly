@@ -8,6 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type GenerateResult = { ok: boolean; error?: string; plans?: number };
 
@@ -18,5 +19,7 @@ export async function generatePrepPlansAction(): Promise<GenerateResult> {
   // read, and never the server's zone. `ctx.active.family` is the `families`
   // row, so `timezone` is the column 0002 defaults to 'UTC'.
   const res = await runPrepGeneration(sb, ctx.active.familyId, ctx.user.id, ctx.active.family.timezone || 'UTC');
-  return res.ok ? { ok: true, plans: res.plans } : { ok: false, error: res.error };
+  // The runner returns the database's own text for its cron log; a person gets
+  // the described form (SEC-023).
+  return res.ok ? { ok: true, plans: res.plans } : { ok: false, error: describeActionError(res.error) };
 }

@@ -8,6 +8,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -34,7 +35,7 @@ async function setMomentStatus(momentKey: string, status: 'engaged' | 'dismissed
     { family_id: ctx.active.familyId, moment_key: momentKey, as_of_date: today, status, created_by: ctx.user.id },
     { onConflict: 'family_id,moment_key,as_of_date' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/moments');
   return { ok: true };
 }

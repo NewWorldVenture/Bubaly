@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { buildCallBrief, type CallTaskKind, type CallCategory } from '@/lib/concierge-calls/brief';
 import type { Json } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -72,7 +73,7 @@ export async function requestCallAction(input: {
     scheduled_for: input.scheduledFor || null,
     created_by: ctx.user.id,
   }).select('id').single();
-  if (error || !data) return { ok: false, error: error?.message ?? 'Could not create the call request' };
+  if (error || !data) return { ok: false, error: describeActionError(error, t('actions.couldNotCreateTheCallRequest')) };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'create',
@@ -89,7 +90,7 @@ export async function cancelCallAction(id: string): Promise<Result> {
   const supabase = await createServer();
   const { error } = await supabase.from('concierge_calls')
     .update({ status: 'cancelled' }).eq('id', id).in('status', ['draft', 'queued', 'action_needed']);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -104,7 +105,7 @@ export async function requeueCallAction(id: string, phone?: string): Promise<Res
   if (phone?.trim()) patch.callee_phone = phone.trim();
   const { error } = await supabase.from('concierge_calls')
     .update(patch).eq('id', id).in('status', ['draft', 'failed', 'action_needed']);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -125,7 +126,7 @@ export async function logCallOutcomeAction(id: string, outcome: string): Promise
   const { error } = await supabase.from('concierge_calls')
     .update({ status: 'completed', outcome: text.slice(0, 2000), completed_at: new Date().toISOString() })
     .eq('id', id).eq('family_id', ctx.active.familyId).in('status', ['draft', 'queued', 'failed', 'action_needed']);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
     resource: 'concierge_calls', resourceId: id, metadata: { loggedByHand: true },

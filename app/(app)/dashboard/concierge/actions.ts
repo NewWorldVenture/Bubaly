@@ -445,11 +445,11 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
         .eq('is_system', true).eq('enabled', true);
       if (retryError) {
         console.error('[concierge] autopilot policy insert-race update failed', { familyId, effect, error: retryError });
-        return { ok: false, error: retryError.message };
+        return { ok: false, error: describeActionError(retryError) };
       }
     } else if (insertError) {
       console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
-      return { ok: false, error: insertError.message };
+      return { ok: false, error: describeActionError(insertError) };
     }
   }
 

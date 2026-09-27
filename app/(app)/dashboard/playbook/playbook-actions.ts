@@ -16,6 +16,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -76,7 +77,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
       .select('id,name').eq('family_id', familyId).in('id', [...mealCounts.keys()]);
     if (mealsError) {
       console.error('[dashboard/playbook] meal name read failed', mealsError);
-      return { ok: false, error: mealsError.message };
+      return { ok: false, error: describeActionError(mealsError) };
     }
     for (const m of meals ?? []) {
       const count = mealCounts.get(m.id) ?? 0;
@@ -106,7 +107,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .select('kind,name,member_id,rating').eq('family_id', familyId).limit(500);
   if (favsError) {
     console.error('[dashboard/playbook] favorites read failed', favsError);
-    return { ok: false, error: favsError.message };
+    return { ok: false, error: describeActionError(favsError) };
   }
   for (const f of favs ?? []) {
     if (f.name) signals.push({ type: 'favorite', kind: f.kind ?? 'thing', name: f.name, memberId: f.member_id, rating: f.rating });
@@ -147,7 +148,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
     .select('kind,start_date').eq('family_id', familyId).limit(500);
   if (tripsError) {
     console.error('[dashboard/playbook] vacation read failed', tripsError);
-    return { ok: false, error: tripsError.message };
+    return { ok: false, error: describeActionError(tripsError) };
   }
   const styleCounts = new Map<string, number>();
   const bump = (style: string) => styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
@@ -194,7 +195,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   const { data: inserted, error } = await sb.from('family_playbook_suggestions')
     .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true })
     .select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   // We asked for the representation and did not get one, so there is no honest
   // count to report. Guessing either way — 0, or the candidate count — is the
   // same defect with a friendlier face, so say we could not tell. The rows DID
@@ -239,6 +240,6 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
   const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

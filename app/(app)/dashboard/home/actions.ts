@@ -180,7 +180,7 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
 
   if (rows.length === 0) return { ok: true, created: 0 };
   const { error } = await supabase.from('maintenance_tasks').insert(rows);
-  if (error) return { ok: false, created: 0, error: error.message };
+  if (error) return { ok: false, created: 0, error: describeActionError(error) };
   revalidatePath('/dashboard/home');
   revalidateAsset(assetId);
   return { ok: true, created: rows.length };

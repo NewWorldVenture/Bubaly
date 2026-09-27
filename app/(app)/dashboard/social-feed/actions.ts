@@ -11,6 +11,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
 import { buildItemFromHtml, isSafePublicUrl } from '@/lib/social/unfurl';
 import { fetchPublicText } from '@/lib/server/public-calendar-fetch';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 type Category = 'family' | 'friends' | 'groups' | 'other';
@@ -37,7 +38,7 @@ export async function addSourceAction(input: {
     category: asCategory(input.category),
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -48,7 +49,7 @@ export async function removeSourceAction(input: { id: string }): Promise<Result>
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_sources')
     .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -59,7 +60,7 @@ export async function toggleFavoriteAction(input: { id: string; favorite: boolea
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items')
     .update({ is_favorite: input.favorite }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -70,7 +71,7 @@ export async function markReadAction(input: { id: string; read: boolean }): Prom
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items')
     .update({ is_read: input.read }).eq('id', input.id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -81,7 +82,7 @@ export async function markAllReadAction(): Promise<Result> {
   const supabase = await createServer();
   const { error } = await supabase.from('social_reader_items')
     .update({ is_read: true }).eq('family_id', ctx.active.familyId).eq('is_read', false);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -160,7 +161,7 @@ export async function addByUrlAction(input: { url: string; category?: string; so
     external_id: draft.externalId,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -191,7 +192,7 @@ export async function addFeedItemAction(input: {
     category: asCategory(input.category),
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }

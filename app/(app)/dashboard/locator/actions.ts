@@ -8,6 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/location/geo';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
 
@@ -61,7 +62,7 @@ export async function updateMyLocation(input: {
     accuracy_m: input.accuracy ?? null, battery: input.battery ?? null,
     place_id: current?.id ?? null, is_sharing: true,
   }, { onConflict: 'member_id' });
-  if (upErr) return { ok: false, error: upErr.message };
+  if (upErr) return { ok: false, error: describeActionError(upErr) };
 
   const transition = classifyTransition(prevPlaceId, current?.id ?? null);
   if (transition !== 'none') {
@@ -131,7 +132,7 @@ export async function setLocationSharing(enabled: boolean): Promise<LocationResu
     family_id: c.active.familyId, member_id: member.id, is_sharing: enabled,
     ...(enabled ? {} : { latitude: null, longitude: null, place_id: null }),
   }, { onConflict: 'member_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
@@ -152,7 +153,7 @@ export async function savePlace(input: {
   const { error } = input.id
     ? await supabase.from('family_places').update(fields).eq('id', input.id).eq('family_id', c.active.familyId)
     : await supabase.from('family_places').insert({ ...fields, family_id: c.active.familyId, created_by: c.user.id });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
@@ -162,7 +163,7 @@ export async function deletePlace(id: string): Promise<LocationResult> {
   if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
   const { error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
@@ -174,7 +175,7 @@ export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<
   const supabase = await createServer();
   const { error } = await supabase.from('family_places')
     .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }

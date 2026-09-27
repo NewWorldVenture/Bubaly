@@ -8,6 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const PREF_KEY = 'momentPrep';
 
@@ -89,7 +90,7 @@ export async function setMomentPrepDoneAction(input: { eventId: string; stepId: 
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
   if (readError) {
     console.error('[dashboard/moment-prep] preferences read failed', readError);
-    return { ok: false, error: readError.message };
+    return { ok: false, error: describeActionError(readError) };
   }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const map = (prefs[PREF_KEY] && typeof prefs[PREF_KEY] === 'object' && !Array.isArray(prefs[PREF_KEY]))
@@ -104,7 +105,7 @@ export async function setMomentPrepDoneAction(input: { eventId: string; stepId: 
 
   const { error } = await supabase.from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -144,7 +145,7 @@ export async function addMomentGroceryAction(input: {
     const { data: created, error: listErr } = await supabase.from('grocery_lists')
       .insert({ family_id: input.familyId, name: 'Groceries', created_by: ctx.user.id })
       .select('id').single();
-    if (listErr || !created) return { ok: false, error: listErr?.message ?? 'Could not create a list' };
+    if (listErr || !created) return { ok: false, error: describeActionError(listErr, t('actions.couldNotCreateAList')) };
     listId = created.id;
   }
 
@@ -168,7 +169,7 @@ export async function addMomentGroceryAction(input: {
   const { data: inserted, error } = await supabase.from('grocery_items').insert(
     toAdd.map((name) => ({ family_id: input.familyId, list_id: listId as string, name, created_by: ctx.user.id })),
   ).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true, added: toAdd.length, ids: (inserted ?? []).map((r) => r.id) };
 }
 
@@ -180,7 +181,7 @@ export async function removeMomentGroceryAction(input: { ids: string[] }): Promi
   const supabase = await createServer();
   // RLS scopes the delete to the caller's family; ids came straight from the insert.
   const { error } = await supabase.from('grocery_items').delete().in('id', ids);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -204,6 +205,6 @@ export async function createMomentReminderAction(input: {
     related_id: input.eventId || null,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
