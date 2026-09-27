@@ -6,14 +6,22 @@ const inbound = readFileSync('app/api/contact-center/email/route.ts', 'utf8');
 const contact = readFileSync('app/api/contact/route.ts', 'utf8');
 
 describe('the inbound-email secret is compared in constant time (C3-S5-08)', () => {
-  it('uses timingSafeEqual, not ===', () => {
-    expect(inbound).toContain('timingSafeEqual(a, b)');
+  // Since the merge with PR #548 this goes through the shared
+  // lib/server/secret-equals helper rather than a local timingSafeEqual: one
+  // comparison for every shared secret the server checks.
+  it('uses the constant-time helper, not ===', () => {
+    expect(inbound).toContain('secretEquals(provided, secret)');
     // `===` on a secret leaks its prefix through response timing.
     expect(inbound).not.toContain('provided === secret');
   });
 
-  it('length is checked first, because timingSafeEqual throws on a mismatch', () => {
-    expect(at(inbound, 'a.length === b.length')).toBeLessThan(at(inbound, 'timingSafeEqual(a, b)'));
+  it('leaks no length either: both sides are compared as fixed-size digests', () => {
+    // timingSafeEqual throws on a length mismatch, so a raw comparison needs a
+    // length check first — which leaks the length. HMAC digests are always 32
+    // bytes, so the helper never branches on the secret's length.
+    const helper = readFileSync('lib/server/secret-equals.ts', 'utf8');
+    expect(helper).toContain("createHmac('sha256'");
+    expect(helper).toContain('timingSafeEqual(');
   });
 
   it('says so when the secret arrives in a URL, where every log keeps it', () => {

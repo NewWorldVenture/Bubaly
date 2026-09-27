@@ -12,13 +12,22 @@ import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/service
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 type Admin = ReturnType<typeof createServiceClient>;
 export type ContactChannel = Tables<'family_contact_channels'>;
 type ContactCenterError = { message: string; code?: string };
 
+/**
+ * The URL registered with Twilio for this family's number. It MUST be byte-for-byte
+ * what app/api/contact-center/{voice,sms}/route.ts verifies against, because Twilio
+ * signs the URL it calls and those routes recompute that HMAC. Both sides now call
+ * the same function; they used to differ only in the fallback, and that difference
+ * alone made an unset NEXT_PUBLIC_APP_URL register a real URL and then reject every
+ * call to it. See lib/server/app-url.ts.
+ */
 function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '');
+  return appBaseUrl();
 }
 
 /** Read a family's contact channel, creating the empty row on first access. */

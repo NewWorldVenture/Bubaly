@@ -9,6 +9,7 @@
 //   4. records an audit log entry.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -16,7 +17,6 @@ import { isManager } from '@/lib/constants/roles';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { knowledgeGraphTarget, toCanonicalGraphRow } from '@/lib/twin/project';
 import { logAudit } from '@/lib/server/audit';
-import { getTranslations } from '@/lib/i18n/server';
 import type { TrailAction } from '@/lib/activity/trail';
 // lib reaching into app on purpose (m7r4): a queued concierge run must be decided
 // by the Autopilot panel's own actions — one decision path, not a copy of it.
@@ -275,11 +275,14 @@ export async function resolveAutomationRun(
   id: string,
   decision: 'approved' | 'skipped',
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) {
-    return { ok: false, error: 'Only parents and adults can approve automations.' };
+    // Was an English literal, on the refusal path of a manager-gated action —
+    // the same half-translated shape found across eight modules: the path the
+    // code was written for is translated and the path it falls back to is not.
+    return { ok: false, error: t('actions.onlyParentsAndAdultsCanApprove') };
   }
-  const t = await getTranslations();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
@@ -360,6 +363,10 @@ export async function resolveAutomationRun(
 
   // Nothing governs this run (any more): the direct write, compare-and-set on
   // 'pending' so a run someone else just resolved is not resolved twice.
+  // RLS FILTERS this update rather than refusing it. `logAudit` below records the
+  // decision unconditionally, so a filtered write wrote an audit entry for an
+  // approval that never happened — the log and the table disagreeing is worse
+  // than either being wrong alone.
   const { data: resolved, error } = await supabase
     .from('family_automation_runs')
     .update({

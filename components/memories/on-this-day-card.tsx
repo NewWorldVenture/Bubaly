@@ -12,6 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import type { Tables } from '@/lib/database.types';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Photo = Tables<'family_photos'>;
 
@@ -61,8 +62,7 @@ export function OnThisDayCard() {
       <div className="flex shrink-0 -space-x-3">
         {memories.slice(0, 4).map((m) => (
           <span key={m.id} className="relative h-12 w-12 overflow-hidden rounded-xl border-2 border-bg bg-elevated">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={m.thumbnail_url || m.url || ''} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
+            <FamilyMediaImg src={m.thumbnail_url || m.url} alt={m.caption ?? 'Family memory'} className="h-full w-full object-cover" loading="lazy" />
           </span>
         ))}
       </div>

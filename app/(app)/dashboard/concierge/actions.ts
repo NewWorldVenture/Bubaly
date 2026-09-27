@@ -299,6 +299,11 @@ async function governingApprovalFor(
 async function markRunExecuted(
   sb: DB, runId: string, familyId: string, userId: string, summary: string, applied: WriteBackKind[],
 ): Promise<{ data: { id: string }[] | null; error: PostgrestError | null }> {
+  // `state` and `completed_at` alongside the legacy `status`: the Display's
+  // "Handled today" tile filters `state = 'completed'` and the billing value
+  // card filters `completed_at`, so a run stamped only `status = 'executed'`
+  // showed up in neither. `approved_at` is when the person said yes, not a
+  // completion time; on this path the yes and the finish are one clock read.
   const now = new Date().toISOString();
   // The rows it stamped come back so a caller can tell "stamped" from "no
   // longer pending". After decide() the second is expected (decide closes the
@@ -592,12 +597,12 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
         .select('id');
       if (retryError) {
         console.error('[concierge] autopilot policy insert-race update failed', { familyId, effect, error: retryError });
-        return { ok: false, error: retryError.message };
+        return { ok: false, error: describeActionError(retryError, t('actions.couldNotUpdateThatPolicy')) };
       }
       if (!retried?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
     } else if (insertError) {
       console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
-      return { ok: false, error: insertError.message };
+      return { ok: false, error: describeActionError(insertError, t('actions.couldNotUpdateThatPolicy')) };
     }
   }
 

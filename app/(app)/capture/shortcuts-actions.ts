@@ -10,6 +10,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS } from '@/lib/capture/shortcuts';
 import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -37,7 +38,7 @@ export async function loadCaptureShortcuts(): Promise<CaptureShortcutsRead> {
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
   if (error) {
     console.error('[capture/shortcuts] preferences read failed', error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: describeActionError(error) };
   }
   const prefs = (data?.notification_prefs as Record<string, unknown> | null) ?? null;
   const saved = prefs?.[CAPTURE_SHORTCUTS_PREF_KEY];
@@ -64,7 +65,7 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
   if (!saved.ok) {
     if (saved.reason === 'read_failed') console.error('[capture/shortcuts] preferences read failed', saved.error);
     else console.error('[capture/shortcuts] preferences write failed', saved.reason, saved.error);
-    return { ok: false, error: (saved.error as { message?: string } | undefined)?.message ?? saved.reason };
+    return { ok: false, error: describeActionError(saved.error) };
   }
   return { ok: true };
 }

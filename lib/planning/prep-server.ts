@@ -47,6 +47,7 @@ import type { Database } from '@/lib/database.types';
 import { generatePrepPlans, type HorizonSignal } from './prep';
 import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -79,7 +80,7 @@ export async function runPrepGeneration(
   ]);
 
   const firstErr = [trips, members, docs].find((r) => r.error)?.error;
-  if (firstErr) return { ok: false, error: firstErr.message, plans: 0 };
+  if (firstErr) return { ok: false, error: describeActionError(firstErr), plans: 0 };
 
   const signals: HorizonSignal[] = [];
   for (const t of trips.data ?? []) if (t.start_date) signals.push({ id: t.id, kind: 'trip', title: t.title ?? 'Trip', date: t.start_date });
@@ -117,7 +118,7 @@ export async function runPrepGeneration(
   // generation that cannot see the existing rows does not write.
   const { data: existing, error: existingErr } = await sb.from('prep_plans')
     .select('signal_kind, signal_id, status').eq('family_id', familyId);
-  if (existingErr) return { ok: false, error: existingErr.message, plans: 0 };
+  if (existingErr) return { ok: false, error: describeActionError(existingErr), plans: 0 };
   const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
 
   const fresh = plans.filter((p) => !decided.has(`${p.kind}:${p.signalId}`));
@@ -128,10 +129,10 @@ export async function runPrepGeneration(
     title: p.title, target_date: p.targetDate, urgency: p.urgency, created_by: createdBy,
   }));
   const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
-  if (planErr) return { ok: false, error: planErr.message, plans: 0 };
+  if (planErr) return { ok: false, error: describeActionError(planErr), plans: 0 };
 
   const { data: idRows, error: readErr } = await sb.from('prep_plans').select('id, signal_kind, signal_id').eq('family_id', familyId);
-  if (readErr) return { ok: false, error: readErr.message, plans: 0 };
+  if (readErr) return { ok: false, error: describeActionError(readErr), plans: 0 };
   const idByKey = new Map<string, string>();
   for (const r of idRows ?? []) idByKey.set(`${r.signal_kind}:${r.signal_id}`, r.id);
 
@@ -144,7 +145,7 @@ export async function runPrepGeneration(
   });
   if (stepRows.length) {
     const { error: stepErr } = await sb.from('prep_plan_steps').upsert(stepRows, { onConflict: 'family_id,plan_id,label', ignoreDuplicates: true });
-    if (stepErr) return { ok: false, error: stepErr.message, plans: 0 };
+    if (stepErr) return { ok: false, error: describeActionError(stepErr), plans: 0 };
   }
 
   return { ok: true, plans: fresh.length };

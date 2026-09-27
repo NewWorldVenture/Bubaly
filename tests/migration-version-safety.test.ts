@@ -418,7 +418,51 @@ describe('Supabase migration filename safety', () => {
     // membership alone, so a member could install a coming-soon or retired app
     // over /rest/v1. DELETE stays open, so a stranded install can always be
     // removed. Held by docs/audit/only-a-released-app-installs-check.sql.
-    expect(audit.nextVersion).toBe('0421');
+    //
+    // 0426-0443 are PR #548's block, and it has moved twice. The branch
+    // numbered it 0318-0338 against a main that stopped at 0317; main then
+    // landed its own 0318-0360, and the author moved the block to 0361-0382 on
+    // merging main at 7e54596d. main then landed 0344-0380 (#579, the C1-K
+    // pass) and 0381-0387 (#581), so the block collided again, all of it this
+    // time, and it moved as one block, in order and by name, into the range
+    // this PR was assigned: 0361->0426, 0362->0427, 0363->0428, 0365->0429,
+    // 0366->0430, 0367->0431, 0369->0432, 0370->0433, 0371->0434,
+    // 0372->0435, 0373->0436, 0374->0437, 0375->0438, 0378->0439,
+    // 0379->0440, 0380->0441, 0381->0442, 0382->0443. Above main's newest
+    // rather than into any gap below it, because a version below the newest
+    // one applied is not what `supabase db push` applies without being told
+    // to. What the survivors touch: policy predicates (0426), reward prices
+    // (0428), subscriptions and billing_customers (0429), nine health tables
+    // (0430), a guardian_phone unique index (0432), marketplace deal terms
+    // (0433), medications (0434), grades and screen-time limits (0435),
+    // medical_profiles reads + family_allergies() (0438), a reward balance
+    // trigger (0439), push_deliveries (0440), the Resend counter (0441) and
+    // independence_milestones (0442).
+    //
+    // 0443_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
+    // and ensure_default_todo_list: get-or-create of a family's DEFAULT list as
+    // one operation under a per-family advisory lock (DATA-007), SECURITY
+    // INVOKER so RLS decides exactly what it decided before. Held by
+    // docs/audit/a-family-gets-one-default-list-check.sql, which races two
+    // sessions against it and against a lock-less copy.
+    //
+    // 0427, 0431, 0436 AND 0437 ARE PERMANENTLY UNUSED, and that is recorded
+    // rather than renumbered, for the reason given for 0334 and 0337 above.
+    // Each was the branch's fix for a subject #579 had since closed, and each
+    // is shown by a probe going red with the file put back on the replayed
+    // chain, not by comparing names: 0427 (driving scores) is main's 0365, a
+    // trip is a manager's to erase (driving-score-write-boundary-check); 0431
+    // (safety check-ins, whose locator half 0335 had already taken) is main's
+    // 0379 (locator-write-boundary-check, step 6: with it a child files a
+    // check-in naming nobody); 0436 (behaviour-note authorship) is main's 0377
+    // (access-record-write-boundary-check); 0437 (journals) is main's 0364
+    // (main's private-journal-check). Laid over main's, each replaced or
+    // widened the rule main's guards stand on. The author had already dropped
+    // four more the same way on the first merge (numbered 0364, 0368, 0376 and
+    // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
+    // those never took a number in this range, and the numbers they held then
+    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
+    expect(audit.nextVersion).toBe('0444');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

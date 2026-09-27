@@ -19,9 +19,12 @@ export function DocumentCapture({ photo = false, onSaved }: { photo?: boolean; o
   const ownSelection = selection?.familyId === familyId && selection.userId === userId ? selection : null;
   const ownResult = ownSelection ? result : null;
   useEffect(() => {
-    generation.current++;
+    // The ref object, not its value: the cleanup must bump the live counter so
+    // an upload still in flight for the old family sees it is stale.
+    const gen = generation;
+    gen.current++;
     setSelection(null); setResult(null); setSender(''); setBusy(false); setCamera(false);
-    return () => { generation.current++; };
+    return () => { gen.current++; };
   }, [familyId, userId]);
 
   function choose(file: File | undefined) {

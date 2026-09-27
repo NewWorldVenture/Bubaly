@@ -106,11 +106,14 @@ describe('the search sanitizers know that * is a wildcard to PostgREST', () => {
     expect(sanitizeQuery("Emma's passport")).toBe("Emma's passport");
   });
 
-  it('the AI-activity sanitizer escapes * too', async () => {
-    // safeSearchTerm is module-private, so this asserts the character class it is
-    // built from — which is the thing that was wrong — rather than reaching in.
-    const fs = await import('node:fs');
-    const source = fs.readFileSync('lib/ai/activity.ts', 'utf8');
-    expect(source, 'the escape class must contain *').toMatch(/replace\(\/\[\\\\%_\*\]\/g/);
+  it('the shared LIKE escaper escapes * too', async () => {
+    // lib/ai/activity.ts's private safeSearchTerm is gone: it now calls
+    // escapeOrValue from lib/supabase/escape-like.ts (the audit branch's
+    // one-definition rule, tests/ilike-patterns-are-escaped.test.ts), so the
+    // `*` rule moved there with it and reaches every caller.
+    const { escapeLike, escapeOrValue } = await import('@/lib/supabase/escape-like');
+    expect(escapeLike('*')).toBe('\\*');
+    expect(escapeLike('a*b%c_d')).toBe('a\\*b\\%c\\_d');
+    expect(escapeOrValue('(a*b)')).toBe('a\\*b');
   });
 });

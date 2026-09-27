@@ -4,7 +4,6 @@
 // the parent-triggered server action and the nightly cron so the logic lives once.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { analyzeCommunications, type CommSummary, type ContactSummary } from './learning';
 
 /** How far back the learning loop looks. */
@@ -23,8 +22,6 @@ export async function runLearningForFamily(
     auditClient?: SupabaseClient;
   } = {},
 ): Promise<LearningRunResult> {
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -33,16 +30,16 @@ export async function runLearningForFamily(
     { data: contacts, error: contactsError },
     { data: pending, error: pendingError },
   ] = await Promise.all([
-    gFrom('guardian_communications')
+    supabase.from('guardian_communications')
       .select('from_number, contact_id, scam_detected, trust_level_at_time, started_at')
       .eq('family_id', familyId)
       .gte('started_at', since)
       .order('started_at', { ascending: false })
       .limit(MAX_COMMS),
-    gFrom('guardian_contacts')
+    supabase.from('guardian_contacts')
       .select('id, phone, name, trust_level, trust_override')
       .eq('family_id', familyId),
-    gFrom('guardian_suggestions')
+    supabase.from('guardian_suggestions')
       .select('evidence, suggestion_type, proposed_contact_id, proposed_trust_level')
       .eq('family_id', familyId)
       .eq('status', 'pending'),
@@ -86,7 +83,7 @@ export async function runLearningForFamily(
   let skipped = 0;
   for (const draft of drafts) {
     if (existingKeys.has(draft.dedupeKey)) { skipped++; continue; }
-    const { error } = await gFrom('guardian_suggestions').insert({
+    const { error } = await supabase.from('guardian_suggestions').insert({
       family_id: familyId,
       suggestion_type: draft.suggestion_type,
       title: draft.title,
@@ -107,9 +104,12 @@ export async function runLearningForFamily(
   // on-demand run never reached the audit trail. Still best-effort, but a
   // failure is now said out loud.
   if (created > 0) {
-    const audit = withGuardianTables(options.auditClient ?? supabase);
+    // No `withGuardianTables` cast: the Guardian tables are declared in
+    // lib/database.types.ts on this branch, so the audit client is typed as it
+    // stands.
+    const audit = options.auditClient ?? supabase;
     try {
-      const { error: auditError } = await (audit.from('guardian_audit_log') as ReturnType<typeof supabase.from>).insert({
+      const { error: auditError } = await audit.from('guardian_audit_log').insert({
         family_id: familyId,
         actor: 'ai',
         action: 'learning.suggestions_generated',

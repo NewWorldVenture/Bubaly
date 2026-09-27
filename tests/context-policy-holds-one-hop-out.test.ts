@@ -53,8 +53,22 @@ function tsFilesUnder(path: string): string[] {
   return readdirSync(path).flatMap((entry) => tsFilesUnder(join(path, entry)));
 }
 
+/**
+ * RPCs that read a table on the caller's behalf, and the tables they read. A
+ * scanner that only sees `.from()` cannot see a reach made through one, and
+ * `foodProfile` moved its `medical_profiles` read into `family_allergies()`
+ * (0438) — which is how this map started. An RPC that reads a denied table and
+ * is not listed here is a blind spot; add it with the migration that defines it.
+ */
+const RPC_READS: Record<string, string[]> = {
+  family_allergies: ['medical_profiles'], // 0438_a_diagnosis_is_not_the_familys_to_browse.sql
+};
+const RPC = /\.rpc\(\s*['"`]([a-z_0-9]+)['"`]/g;
+
 function deniedTablesIn(source: string): Set<string> {
-  return new Set([...source.matchAll(FROM)].map((m) => m[1]).filter((t) => DENIED.has(t)));
+  const fromReads = [...source.matchAll(FROM)].map((m) => m[1]);
+  const rpcReads = [...source.matchAll(RPC)].flatMap((m) => RPC_READS[m[1]] ?? []);
+  return new Set([...fromReads, ...rpcReads].filter((t) => DENIED.has(t)));
 }
 
 /** Exported function name -> body text. */

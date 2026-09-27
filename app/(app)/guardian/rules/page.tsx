@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RulesEditor } from '@/components/guardian/rules-editor';
 import { ErrorState } from '@/components/ui/states';
 import { Zap, ArrowLeft } from 'lucide-react';
@@ -16,12 +15,11 @@ export default async function RulesPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   // A failed read rendered "no routing rules" — and these rules are the
   // deterministic overrides a family wrote to keep specific callers out. Telling
   // them they have none is the opposite of the truth.
-  const [{ data: rules, error }] = await settleAll([(db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  const [{ data: rules, error }] = await settleAll([supabase.from('guardian_routing_rules')
     .select('id, name, description, priority, is_active, ai_suggested, condition_trust_levels, condition_time_start, condition_time_end, condition_days_of_week, condition_contexts, condition_caller_pattern, action_routing_mode')
     .eq('family_id', familyId)
     .order('priority', { ascending: true })]);

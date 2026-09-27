@@ -132,8 +132,17 @@ describe('a private photo does not outlive the session in the worker cache', () 
     worker.pending.set(url, response('B-denied', 'private, no-store'));
     const second = await worker.dispatch(imageRequest(url));
 
-    expect(second?.body).toBe('B-denied');
-    expect(worker.fetches.filter((u) => u === url)).toHaveLength(2);
+    // Two answers reach the network, and both are right. Main's worker fetches
+    // /_next/image itself and declines to store it (B gets 'B-denied'); the
+    // audit branch's worker does not intercept /_next/image at all (sw.js v5),
+    // so `dispatch` sees no respondWith and the BROWSER fetches it. What must
+    // never happen is A's bytes coming back from Cache Storage.
+    if (second === undefined) expect(stored()).not.toContain(url);
+    else expect(second.body).toBe('B-denied');
+    expect(second?.body).not.toBe('A-private-bytes');
+    // Main's worker fetched both itself; a pass-through worker fetched neither
+    // (the browser did), which is the same two network requests.
+    expect(worker.fetches.filter((u) => u === url)).toHaveLength(second === undefined ? 0 : 2);
   });
 
   it('does not persist optimized family media even when the optimizer calls it public', async () => {

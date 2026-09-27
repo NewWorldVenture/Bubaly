@@ -3,6 +3,7 @@
 // folder segment is what storage RLS checks via is_family_member(), so every upload
 // must go through buildFamilyPath() to stay inside the caller's own family folder.
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const BUCKET = 'documents';
 /** The "documents" bucket's file_size_limit (migration 0007 = 26214400). Exported
@@ -31,7 +32,7 @@ export async function uploadFamilyDocument(
     contentType: file.type || 'application/octet-stream',
     upsert: false,
   });
-  if (error) return { path: null, error: error.message };
+  if (error) return { path: null, error: describeActionError(error) };
   return { path, error: null };
 }
 
@@ -41,7 +42,7 @@ export async function getDocumentSignedUrl(
   expiresInSeconds = 120,
 ): Promise<{ url: string | null; error: string | null }> {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, expiresInSeconds);
-  if (error || !data) return { url: null, error: error?.message ?? 'Could not create a link' };
+  if (error || !data) return { url: null, error: describeActionError(error, 'Could not create a link') };
   return { url: data.signedUrl, error: null };
 }
 
@@ -50,5 +51,5 @@ export async function removeFamilyDocument(
   path: string,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
-  return { error: error?.message ?? null };
+  return { error: error ? describeActionError(error) : null };
 }

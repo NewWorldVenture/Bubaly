@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getProvider } from '@/lib/recipes/providers';
 import type { Database } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredients'];
 type SaveResult = { ok: true; id: string; already?: boolean } | { ok: false; error: string };
@@ -108,7 +109,7 @@ export async function saveDiscoveredRecipe(input: { provider: string; sourceReci
       const { data: raced, error: racedError } = await probeVault();
       if (!racedError && raced) return { ok: true, id: raced.id, already: true };
     }
-    return { ok: false, error: error?.message ?? 'Could not save recipe.' };
+    return { ok: false, error: describeActionError(error, 'Could not save recipe.') };
   }
   revalidatePath('/dashboard/recipes');
   return { ok: true, id: data.id };

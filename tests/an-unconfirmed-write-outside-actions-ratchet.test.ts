@@ -64,7 +64,7 @@ const BASELINE = new Map<string, number>([
   // in retireAeoQuestionsForPath, where zero rows is the ordinary case.
   ['lib/marketing/platform.ts', 3],
   ['lib/marketing/recurring-ads-runner.ts', 1],
-  ['lib/network/aggregate-server.ts', 3],
+  ['lib/network/aggregate-server.ts', 2], // the two-branch prune is one chunked delete since the merge with PR #548
   ['lib/server/notification-emails.ts', 1],
   ['lib/server/profiles.ts', 1],
   ['lib/server/push.ts', 3],
@@ -149,7 +149,9 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
   it('the baseline total matches what finalaudit.md records', () => {
     // 51 since the merge with main (Audit C1-S9-89): the twin edge prune.
     // 52 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement.
+    // 51 since PR #548 merged main at 2eb62151 (finalaudit.md Q73): the network
+    // prune's two branches are one chunked delete.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(52);
+    expect(total).toBe(51);
   });
 });

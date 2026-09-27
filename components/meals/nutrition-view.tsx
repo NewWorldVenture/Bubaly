@@ -41,8 +41,11 @@ export function NutritionView() {
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
   async function remove(id: string) {
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
-    const { data: removed, error } = await createClient().from('nutrition_logs').delete().eq('id', id).select('id');
+    // RLS filters this delete rather than refusing it, so the silent path was a
+    // removal that did not happen and said nothing at all — this function had no
+    // success toast either, which made the no-op completely invisible. Audit C1-S9-84.
+    const { data: removed, error } = await createClient().from('nutrition_logs').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }

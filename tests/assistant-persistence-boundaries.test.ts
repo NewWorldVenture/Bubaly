@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildAssistantTools, type AssistantCtx } from '@/lib/assistant/tools';
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 type DbArg = Parameters<typeof buildAssistantTools>[0];
 type Operation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
 type Result = { data?: unknown; error?: unknown; count?: number };
@@ -12,6 +17,7 @@ function fakeDb(resolveResult: (table: string, operation: Operation, count: numb
   const counts = new Map<string, number>();
 
   const db = {
+    rpc: missingDefaultListRpc,
     from(table: string) {
       let operation: Operation = 'select';
       let payload: unknown;

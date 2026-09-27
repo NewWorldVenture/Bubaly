@@ -20,6 +20,7 @@ import { parseEvent } from '@/lib/capture/parse';
 import { classifyIntent as classifyInbound } from '@/lib/contact-center/routing';
 import { detectIntent } from '@/lib/intent/detect';
 import { classifyVoiceCommand } from '@/lib/voice/command-router';
+import { asWallClockUtc, instantForLocalTime } from '@/lib/time/zoned';
 import type { AIProvider } from '@/lib/ai/provider';
 import { structured, type StructuredMeter } from '@/lib/ai/structured';
 import type { ServiceScope } from '@/lib/services/types';
@@ -112,6 +113,13 @@ export type ClassifyOptions = {
    */
   meter?: StructuredMeter | null;
   now?: Date;
+  /**
+   * The family's IANA zone. "Dinner tomorrow at 6" is a WALL CLOCK, and
+   * resolving it needs to know whose wall. Without it the fast path resolves
+   * against the host's, which on a UTC server is the wrong day from 5pm
+   * Pacific onward.
+   */
+  timezone?: string;
 };
 
 // ── Fast paths ──────────────────────────────────────────────────────────────
@@ -191,7 +199,7 @@ function firstMatch(text: string): IntentClassification | null {
  * Pure: no I/O, no provider — `tests/intent-classify.test.ts` calls it directly
  * and `classifyIntent` proves it wins before any model call.
  */
-export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pageContext' | 'now'> = {}): IntentClassification | null {
+export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pageContext' | 'now' | 'timezone'> = {}): IntentClassification | null {
   const q = text.trim();
   if (!q) return { intent: 'other', confidence: 1, entities: {}, source: 'fast_path' };
   const now = opts.now ?? new Date();
@@ -237,8 +245,25 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
   // 5. Captures: the voice router applies the explicit "remind me to…" /
   //    "add … to the grocery list" rules and the capture heuristics; a concrete
   //    date+time is treated as an event even without a verb.
-  const voice = classifyVoiceCommand(q, now);
-  const event = parseEvent(q, now);
+  // The family's zone, through BOTH parsers.
+  //
+  // `classifyVoiceCommand` has taken an optional `timezone` all along, and
+  // lib/voice/command-router.ts carries a long header explaining exactly why:
+  // a wall clock carried in LOCAL date fields is normalised by the runtime's
+  // own DST rules, so it anchors the clock in UTC and maps the answer back
+  // with `instantForLocalTime`. This call site never passed one — and neither
+  // did the `parseEvent` call beside it, which resolves against LOCAL_OPS by
+  // default. The machinery for getting this right was built, documented, and
+  // then not reached by the path that needed it.
+  //
+  // It matters because line ~250 does not merely CLASSIFY on the result: it
+  // serialises `event.startsAt.toISOString()` into the capture's entities. So
+  // "dinner tomorrow at 6" said to the assistant from California after 5pm was
+  // put on the calendar for the wrong day.
+  const tz = opts.timezone;
+  const clock = tz ? asWallClockUtc(now, tz) : now;
+  const voice = classifyVoiceCommand(q, now, tz);
+  const event = parseEvent(q, clock, { utc: Boolean(tz) });
   // A question about a day is a question, not a capture: "What's on tomorrow?"
   // parses as an event because it names a date, and without this guard Bubaly
   // would answer by trying to put something ON the calendar. An explicit
@@ -247,8 +272,23 @@ export function classifyIntentFast(text: string, opts: Pick<ClassifyOptions, 'pa
   if (voice.explicit || (!asksAQuestion && (event.matched || /^(buy|purchase)\b/i.test(q)))) {
     const entities: Record<string, string> = { kind: voice.kind, text: voice.text };
     if (event.matched) {
-      entities.startsAt = event.startsAt.toISOString();
-      entities.allDay = String(event.allDay);
+      // The parser answered in the family's WALL CLOCK (UTC-anchored when a
+      // zone was given); this maps it back to a real instant exactly as
+      // `withDates` does in the voice router — `instantForLocalTime` rather
+      // than `zonedLocalToInstant`, so that on the spring-forward morning a
+      // named time that does not exist moves to the first minute that does
+      // instead of vanishing.
+      const wall = event.startsAt;
+      const resolved = tz
+        ? instantForLocalTime(
+            wall.getUTCFullYear(), wall.getUTCMonth() + 1, wall.getUTCDate(),
+            wall.getUTCHours() * 60 + wall.getUTCMinutes(), tz,
+          )
+        : wall;
+      if (resolved) {
+        entities.startsAt = resolved.toISOString();
+        entities.allDay = String(event.allDay);
+      }
     }
     return { intent: 'capture', confidence: voice.explicit ? 0.9 : 0.75, entities, source: 'fast_path' };
   }
@@ -324,11 +364,19 @@ const MAX_CLASSIFY_CHARS = 1200;
  * and lets the planner ask rather than guess.
  */
 export async function classifyIntent(
-  scope: Pick<ServiceScope, 'familyId' | 'requestId' | 'now'>,
+  scope: Pick<ServiceScope, 'familyId' | 'requestId' | 'now' | 'tz'>,
   text: string,
   opts: ClassifyOptions = {},
 ): Promise<IntentClassification> {
-  const fast = classifyIntentFast(text, { pageContext: opts.pageContext ?? null, now: opts.now ?? scope.now });
+  // `tz` was not in this Pick, and that omission was the defect: the scope has
+  // carried the family's zone all along, and the fast path — which resolves
+  // "tomorrow at 6" into an instant it hands back as the capture's startsAt —
+  // was handed everything except the one thing that says whose tomorrow.
+  const fast = classifyIntentFast(text, {
+    pageContext: opts.pageContext ?? null,
+    now: opts.now ?? scope.now,
+    timezone: opts.timezone ?? scope.tz,
+  });
   if (fast) return fast;
 
   const reply = await structured({

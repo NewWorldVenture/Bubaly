@@ -7,6 +7,7 @@ import { CONTACT_BAND_META, type ContactBand } from '@/lib/marketing/contact-sco
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export const metadata: Metadata = { title: 'Visitor Intelligence', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ async function count(
 ): Promise<{ value: number; error: string | null }> {
   try {
     const { count: c, error } = await build(admin);
-    return { value: c ?? 0, error: error?.message ?? null };
+    return { value: c ?? 0, error: error ? describeActionError(error) : null };
   } catch (error) {
     return { value: 0, error: error instanceof Error ? error.message : 'Unknown analytics read failure' };
   }

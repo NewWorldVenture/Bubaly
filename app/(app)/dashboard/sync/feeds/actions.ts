@@ -8,6 +8,7 @@ import { syncFeed } from '@/lib/server/calendar-feeds';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * `alreadySubscribedAs` is set when "Add & Sync Now" re-synced a subscription
@@ -107,7 +108,9 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
       if (!winner.ok || !winner.feed) return { ok: false, error: t('calendarSync.couldNotCheckExistingFeeds') };
       feed = winner.feed;
     } else if (error || !data) {
-      return { ok: false, error: error?.message ?? 'Could not save the feed' };
+      // Classified, not raw: the browser gets a sentence it can act on, never
+      // the database's own message (tests/the-database-does-not-talk-to-the-browser).
+      return { ok: false, error: describeActionError(error, 'Could not save the feed') };
     } else {
       feed = data;
       createdHere = true;
@@ -203,7 +206,7 @@ export async function removeCalendarFeed(feedId: string): Promise<ActionResult> 
     .eq('id', feedId)
     .eq('family_id', ctx.active.familyId)
     .select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(removed)) return { ok: false, error: t('actions.feedNotFound') };
 
   revalidatePath('/dashboard/settings');

@@ -130,7 +130,10 @@ describe('learning the family playbook from a read that did not finish', () => {
     // The whole point: the family is NOT told what their household looks like
     // on the strength of the first 4,000 rows of it.
     expect(result.ok, 'a conclusion drawn from a prefix is not ok').toBe(false);
-    expect(result.error, 'the caller is told the rows were a prefix').toContain('PREFIX');
+    // Told in the family's words; readAll's PREFIX diagnostic goes to the log,
+    // because Postgres and paging internals do not belong on the page.
+    expect(result.error, 'the caller is told nothing was learned').toBe(
+      'Could not read all of your family’s plans, so nothing new was learned. Try again.');
     expect(upserts, 'nothing is written from a truncated read').toEqual([]);
   });
 
@@ -139,7 +142,8 @@ describe('learning the family playbook from a read that did not finish', () => {
 
     const result = await refreshPlaybookAction();
 
-    expect(result).toMatchObject({ ok: false, error: 'canceling statement due to statement timeout' });
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain('canceling statement');
     expect(upserts).toEqual([]);
   });
 
@@ -155,7 +159,9 @@ describe('learning the family playbook from a read that did not finish', () => {
     const result = await refreshPlaybookAction();
 
     expect(result.ok, `a refused ${table} read must not become an empty ${table}`).toBe(false);
-    expect(result.error).toBe(error.message);
+    // Reported, and described rather than repeated.
+    expect(result.error).toBeTruthy();
+    expect(result.error).not.toBe(error.message);
     expect(upserts).toEqual([]);
   });
 

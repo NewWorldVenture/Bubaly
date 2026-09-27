@@ -76,8 +76,12 @@ export type WeekWindow = {
 };
 
 /**
- * Computes the look-ahead (next 7 days, today inclusive) and recap (previous 7
- * days, ending yesterday) windows around `now`.
+ * The look-ahead (next 7 days, today inclusive) and recap (previous 7 days,
+ * ending yesterday) windows around `now`, in the FAMILY's zone.
+ *
+ * `tz` is required rather than defaulted. A default is how this was wrong in the
+ * first place: the previous version silently meant UTC, and every caller looked
+ * correct.
  */
 export function weekWindow(now: Date, tz: string): WeekWindow {
   // `tz` is REQUIRED rather than defaulted to 'UTC'. A default is what let this
@@ -149,7 +153,12 @@ export function bucketByDay<T>(
     // the one the repo's existing guard cannot see, because
     // tests/family-day-not-greenwich-day.test.ts scans for a literal
     // `.toISOString()` before the slice and a column read has none.
-    const parsed = Date.parse(raw);
+    //
+    // And a `date` column arrives as 'YYYY-MM-DD', which is ALREADY the
+    // family's calendar day. `Date.parse` reads it as Greenwich midnight, so
+    // pushing it through the zone would file it a day EARLY for every family
+    // west of Greenwich. Only a full instant is asked which local day it was.
+    const parsed = raw.length <= 10 ? Number.NaN : Date.parse(raw);
     const key = Number.isNaN(parsed) ? raw.slice(0, 10) : dayKeyInZone(parsed, tz) ?? raw.slice(0, 10);
     if (key in buckets) buckets[key].push(item);
   }

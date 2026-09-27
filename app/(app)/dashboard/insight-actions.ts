@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -27,7 +27,7 @@ async function setInsightStatus(id: string, status: 'dismissed' | 'acted'): Prom
     .eq('id', id)
     .eq('family_id', ctx.active.familyId) // RLS also enforces this; explicit for clarity
     .select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(set)) return { ok: false, error: t('insightActions.invalidInsight') };
   revalidatePath('/dashboard');
   return { ok: true };

@@ -25,7 +25,7 @@ export default async function EconomyPage() {
     supabase.from('family_currencies').select('id, name, emoji, unit_label, is_active').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
     supabase.from('family_members').select('id, display_name, color, role').eq('family_id', familyId).eq('is_active', true),
     // Balances are summed from these rows, so a capped read is a wrong balance.
-    readAllAsQuery((from, to) => supabase.from('currency_transactions').select('currency_id, member_id, direction, amount').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
+    readAllAsQuery((from, to) => supabase.from('currency_transactions').select('currency_id, member_id, direction, amount').eq('family_id', familyId).order('id').range(from, to), { max: 5000, failOnMax: true }),
     supabase.from('economy_rewards').select('id, currency_id, title, emoji, cost, stock, is_active').eq('family_id', familyId).eq('is_active', true).order('sort_order'),
     supabase.from('economy_redemptions').select('id, currency_id, member_id, title, cost, status, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100),
   ]);

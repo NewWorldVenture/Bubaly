@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { openOnKey } from '@/lib/ui/a11y';
 import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
   Search, User, Stethoscope, GraduationCap, Trophy, Home,
@@ -191,7 +192,9 @@ export function ContactsModule() {
                 const isSelected = selected?.id === contact.id;
                 return (
                   <div key={contact.id}
+                    role="button" tabIndex={0}
                     onClick={() => setSelected(isSelected ? null : contact)}
+                    onKeyDown={(e) => openOnKey(e, () => setSelected(isSelected ? null : contact))}
                     className={cn(
                       'flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition last:border-0',
                       isSelected ? 'bg-brand/10' : 'hover:bg-elevated/30',

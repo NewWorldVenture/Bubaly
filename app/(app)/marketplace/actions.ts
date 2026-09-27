@@ -57,7 +57,8 @@ export async function toggleSaveAction(listingId: string): Promise<Result | { ok
     // `existing` came from a family-scoped read, so the id is already proven to
     // belong — but the row can be gone by the time this runs, and the caller is
     // told `saved: false` either way. Audit C1-S9-56.
-    const { data: unsaved, error } = await supabase.from('marketplace_saves').delete().eq('id', existing.id).select('id');
+    const { data: unsaved, error } = await supabase.from('marketplace_saves').delete()
+      .eq('id', existing.id).eq('family_id', ctx.active.familyId).select('id');
     if (error) return actionFailure('remove the saved listing', t('marketplace.couldNotRemoveTheSavedListing'), error);
     if (wroteNoRows(unsaved)) return { ok: false, error: t('marketplace.couldNotRemoveTheSavedListing') };
     revalidatePath(MARKETPLACE);
@@ -88,7 +89,8 @@ export async function toggleFollowAction(storeId: string): Promise<Result | { ok
 
   if (readError) return actionFailure('check the followed store', t('marketplace.couldNotCheckTheFollowedStore'), readError);
   if (existing) {
-    const { data: unfollowed, error } = await supabase.from('marketplace_follows').delete().eq('id', existing.id).select('id');
+    const { data: unfollowed, error } = await supabase.from('marketplace_follows').delete()
+      .eq('id', existing.id).eq('family_id', ctx.active.familyId).select('id');
     if (error) return actionFailure('unfollow the store', t('marketplace.couldNotUnfollowTheStore'), error);
     if (wroteNoRows(unfollowed)) return { ok: false, error: t('marketplace.couldNotUnfollowTheStore') };
     revalidatePath(MARKETPLACE);
@@ -148,7 +150,9 @@ export async function setOrderStatusAction(orderId: string, status: string): Pro
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!(ORDER_FLOW[order.status] ?? []).includes(status)) {
-    return { ok: false, error: `Can’t go from ${order.status} to ${status}` };
+    // Was an English template literal on the one path a person actually hits when
+    // they mis-click a lifecycle button.
+    return { ok: false, error: t('marketplace.cannotGoFromStatusToStatus', { from: order.status, to: status }) };
   }
 
   // CLAIM the transition rather than assuming it. The status was validated

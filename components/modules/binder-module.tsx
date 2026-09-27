@@ -29,6 +29,8 @@ export function BinderModule() {
     fetcher: (sb) => sb.from('household_info').select('*').eq('family_id', familyId).order('category').order('sort'),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const groups = useMemo(() => groupByCategory((items ?? []) as (Info & InfoLike)[]), [items]);
@@ -39,20 +41,33 @@ export function BinderModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.label.trim()) return;
-    const row = { category: form.category, label: form.label.trim(), value: form.value.trim() || null, note: form.note.trim() || null, is_sensitive: form.is_sensitive };
-    const supabase = createClient();
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
-    const { data: saved, error } = form.id
-      ? await supabase.from('household_info').update(row).eq('id', form.id).select('id')
-      : await supabase.from('household_info').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
-    success(form.id ? 'Updated' : 'Saved'); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.label.trim()) return;
+      const row = { category: form.category, label: form.label.trim(), value: form.value.trim() || null, note: form.note.trim() || null, is_sensitive: form.is_sensitive };
+      const supabase = createClient();
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+      const { data: saved, error } = form.id
+        ? await supabase.from('household_info').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('household_info').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+      success(form.id ? 'Updated' : 'Saved'); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function remove(id: string) {
     if (!confirm(t('binderModule.deleteThisEntry'))) return;
-    const { data: removed, error } = await createClient().from('household_info').delete().eq('id', id).select('id');
+    const { data: removed, error } = await createClient().from('household_info').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('binderModule.deleted'));
   }
   function edit(i: Info) {
@@ -112,7 +127,7 @@ export function BinderModule() {
             <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })} className="h-4 w-4 accent-[var(--brand)]" /> {t('binder.sensitiveMaskByDefault')}</label>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('binder.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

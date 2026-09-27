@@ -43,7 +43,11 @@ export function ExitIntent() {
   // `aria-modal="true"`. Scroll lock stays with useLockBodyScroll above.
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeOffer = useCallback(() => setOpen(false), []);
-  useDialogBehavior(dialogRef, open, { onClose: closeOffer, lockScroll: false });
+  // `open` alone, not `Boolean(offer) && open`: this banner is ALWAYS mounted
+  // and returns null below, so the hook must not act while there is no offer to
+  // show. main gates it with lockScroll: false for the same reason — a banner
+  // is not a modal and must not freeze the page behind it.
+  useDialogBehavior(dialogRef, Boolean(offer) && open, { onClose: closeOffer, lockScroll: false });
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {

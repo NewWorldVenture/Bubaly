@@ -17,6 +17,7 @@ import type { Database } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { departurePlanDriveTime, firstDriveTime, type DriveTimeFetcher } from '@/lib/trips/drive-time';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
+import { settleAll } from '@/lib/supabase/settle';
 import {
   buildScheduleIntelligence,
   type CareCoverageWindow, type ScheduleEventRow, type ScheduleIntelligence, type ScheduleMealRow,
@@ -57,7 +58,7 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
   const toDay = dayKeyInZone(toMs + DAY, opts.tz) ?? toIso.slice(0, 10);
   const familyId = opts.familyId;
 
-  const [eventsRes, membersRes, ridesRes, vehiclesRes, mealsRes, sittersRes, plansRes] = await Promise.all([
+  const [eventsRes, membersRes, ridesRes, vehiclesRes, mealsRes, sittersRes, plansRes] = await settleAll([
     db.from('calendar_events')
       .select('id, title, category, location, starts_at, ends_at, all_day, assignee_id, description')
       .eq('family_id', familyId).eq('all_day', false)

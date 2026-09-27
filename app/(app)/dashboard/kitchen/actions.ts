@@ -6,6 +6,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -100,11 +101,10 @@ export async function snapshotFoodScoreAction(input: {
   // the next save on that day silently overwrote it: two calendar days of a
   // once-a-day history collapsed into one row, and the UI reported both saves as
   // saved. The page that COMPUTES this score resolves the same zone with the same
-  // `|| 'UTC'` (kitchen/page.tsx:30-31), through `dayKeyInTz` rather than
-  // `todayInZone`; both are the same en-CA Intl day with the same UTC-slice
-  // fallback (scope.ts dayKeyInTz, zoned.ts dayKeyInZone), so the day the score
-  // was computed for and the day it is filed on compare equal.
-  const today = todayInZone(ctx.active.family.timezone || 'UTC');
+  // `|| 'UTC'` (kitchen/page.tsx:30-31) through `dayKeyInTz`, and `todayKeyFor`
+  // is `dayKeyInTz` with that fallback written once (scope.ts), so the day the
+  // score was computed for and the day it is filed on compare equal.
+  const today = todayKeyFor(ctx);
   const { error } = await supabase
     .from('family_food_scores')
     .upsert(
