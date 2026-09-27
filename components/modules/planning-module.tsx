@@ -31,7 +31,7 @@ const URGENCY_STYLE: Record<string, string> = {
   soon: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
   later: 'text-muted border-border',
 };
-const URGENCY_LABEL: Record<string, string> = { now: 'Start now', soon: 'Coming up', later: 'On the horizon' };
+const URGENCY_KEY: Record<string, string> = { now: 'planningModule.urgency.now', soon: 'planningModule.urgency.soon', later: 'planningModule.urgency.later' };
 
 /**
  * Whole calendar days from `todayKey` to `dateStr`, both day KEYS.
@@ -87,7 +87,7 @@ export function PlanningModule({ tz }: { tz: string }) {
     setGenerating(true);
     const res = await generatePrepPlansAction();
     setGenerating(false);
-    if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
+    if (!res.ok) { toastError(res.error ?? t('planningModule.couldNotGenerate')); return; }
     if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
     success(res.plans === 1 ? t('planning.prepPlanReadyOne', { count: res.plans ?? 0 }) : t('planning.prepPlansReadyMany', { count: res.plans ?? 0 }));
   }
@@ -147,7 +147,7 @@ export function PlanningModule({ tz }: { tz: string }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[p.urgency] ?? URGENCY_STYLE.later)}>{URGENCY_LABEL[p.urgency] ?? p.urgency}</span>
+                    <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[p.urgency] ?? URGENCY_STYLE.later)}>{URGENCY_KEY[p.urgency] ? t(URGENCY_KEY[p.urgency]) : p.urgency}</span>
                     <button onClick={() => dismiss(p.id)} className="rounded-full p-1 text-muted hover:bg-muted/10" aria-label={t('planning.dismissPlan')}><X className="size-4" /></button>
                   </div>
                 </div>

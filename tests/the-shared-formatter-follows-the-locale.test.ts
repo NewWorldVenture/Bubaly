@@ -16,7 +16,7 @@
 // order, not just the words, because that is the half a locale-aware date-fns call
 // would still get wrong.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFormat, KNOWN_DATE_PATTERNS,
@@ -169,7 +169,7 @@ describe('the shared formatter follows the locale', () => {
   // date-fns and render un-localised. This reads every pattern the app actually
   // passes out of the source and requires each to be mapped.
   it('knows every date pattern the app passes it', () => {
-    const files = execSync("git ls-files 'app/**/*.tsx' 'app/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts'",
+    const files = execFileSync('git', ['ls-files', 'app/**/*.tsx', 'app/**/*.ts', 'components/**/*.tsx', 'lib/**/*.ts'],
       { encoding: 'utf8' }).split('\n').filter(Boolean);
     const passed = new Set<string>();
     for (const file of files) {

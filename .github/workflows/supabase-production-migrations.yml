@@ -2,6 +2,11 @@ name: Supabase production migrations
 
 on:
   workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply reviewed production migrations and marketing backfills
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -35,7 +40,7 @@ concurrency:
 
 jobs:
   migrate-and-verify:
-    name: Apply ordered migrations and verify production
+    name: Verify production and optionally apply reviewed migrations
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
@@ -103,21 +108,26 @@ jobs:
           if-no-files-found: warn
 
       - name: Apply ordered migrations
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: supabase db push --yes
 
       - name: Verify household module schema
         run: npm run db:audit:schema
 
       - name: Backfill and enforce media provenance
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: npm run marketing:backfill:provenance -- --apply
 
       - name: Backfill canonical marketing pages
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: npm run marketing:backfill:pages -- --apply
 
       - name: Backfill blog image provenance
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: npm run marketing:backfill:image-provenance -- --apply
 
       - name: Reconcile canonical SEO and AEO coverage
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true
         run: npm run marketing:backfill:coverage -- --apply
 
       - name: Verify platform schema

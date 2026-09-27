@@ -120,8 +120,12 @@ jobs:
         run: npm run typecheck
         env:
           # Checks app + tests + the .next/types route types the Build step
-          # just generated; needs the same schema/type heap as before.
-          NODE_OPTIONS: --max-old-space-size=4096
+          # just generated. At 4,096 MB this ran out of heap on main at
+          # fda9dcfc ("Ineffective mark-compacts near heap limit", exit 134)
+          # after passing at the same cap on the heads before it: the checked
+          # program has grown to the cap. It runs alone after the build, on a
+          # 16 GB runner, so it gets 6,144 MB.
+          NODE_OPTIONS: --max-old-space-size=6144
 
   mobile:
     # The Expo app (mobile/) is its own npm project sharing design/tokens.json

@@ -152,7 +152,7 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
   revalidatePath('/admin/marketing/content');
   revalidatePath('/admin/marketing/aeo');
   // Public AEO reads are cached per path; drop them so the new answers show.
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
   revalidatePath('/blog');
   revalidatePath(`/blog/${payload.slug}`);
   revalidatePath('/faq');
@@ -198,7 +198,7 @@ export async function unpublishBlogPostAction(slug: string): Promise<void> {
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');
   revalidatePath(`/blog/${slug}`);
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
   revalidatePath('/faq');
 }
 
@@ -246,6 +246,6 @@ export async function archiveContentAction(formData: FormData): Promise<void> {
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_content_item', resourceId: id });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
   revalidatePath('/faq');
 }

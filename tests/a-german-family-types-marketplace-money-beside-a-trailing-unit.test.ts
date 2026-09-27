@@ -87,6 +87,9 @@ vi.mock('react', async (original) => {
     useRef: (initial: unknown) => h.slots[slot({ current: initial })],
     useMemo: (make: () => unknown) => make(),
     useCallback: (callback: unknown) => callback,
+    // This fixture expands a server-rendered tree. Actual React hydration and
+    // its browser snapshot transition are covered by format-hydration.spec.ts.
+    useSyncExternalStore: (_subscribe: unknown, _getSnapshot: () => unknown, getServerSnapshot: () => unknown) => getServerSnapshot(),
     useEffect: (effect: () => void | (() => void)) => { h.effects.push(effect); },
     useTransition: () => [false, (work: () => unknown) => { void work(); }],
   };

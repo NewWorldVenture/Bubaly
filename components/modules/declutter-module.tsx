@@ -33,7 +33,16 @@ const HEALTH_STYLE = {
   overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-200',
   never: 'border-border bg-surface/60 text-muted',
 } as const;
-const HEALTH_LABEL = { fresh: 'Fresh', due: 'Due for a reset', overdue: 'Overdue', never: 'Never reset' } as const;
+// lib/declutter/missions.ts holds English labels as data; the reader sees the
+// catalogue's word for each zone kind and clutter score (audit C1-S9-128).
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+/** A built-in mission template's title in the reader's language (the lib's
+ *  English stays the canonical data); a title the family typed stays theirs. */
+function templateTitle(tr: Tr, kind: DeclutterZoneKind, title: string): string {
+  const i = zoneKindMeta(kind).templates.findIndex((t) => t.title === title);
+  return i >= 0 ? tr(`declutterModule.template.${kind}.t${i}`) : title;
+}
+const HEALTH_KEY = { fresh: 'declutterModule.health.fresh', due: 'declutterModule.health.due', overdue: 'declutterModule.health.overdue', never: 'declutterModule.health.never' } as const;
 
 export function DeclutterModule() {
   const locale = useLocale();
@@ -87,7 +96,7 @@ export function DeclutterModule() {
     if (!plan.length) return toastError(tr('declutterModule.everyZoneAlreadyHasA'));
     setPlanning(true);
     const { error } = await createClient().from('declutter_missions').insert(plan.map((p) => ({
-      family_id: familyId, zone_id: p.zone.id, title: p.template.title, minutes: p.template.minutes, points: p.template.points,
+      family_id: familyId, zone_id: p.zone.id, title: templateTitle(tr, p.zone.kind, p.template.title), minutes: p.template.minutes, points: p.template.points,
       assignee_id: p.assigneeId, scheduled_for: p.day, status: 'planned' as const, created_by: userId,
     })));
     setPlanning(false);
@@ -196,7 +205,7 @@ export function DeclutterModule() {
       <div className="grid gap-4 md:grid-cols-4">
         <div className={cn('rounded-2xl border p-5', summary.avgScore !== null && summary.avgScore >= 3.5 ? 'border-rose-500/30 bg-rose-500/10' : summary.avgScore !== null && summary.avgScore <= 1.5 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-brand-text" /> {tr('declutter.homeRightNow')}</div>
-          <p className="mt-2 text-lg font-bold">{summary.text}</p>
+          <p className="mt-2 text-lg font-bold">{summary.zones === 0 ? tr('declutterModule.summary.noZones') : summary.avgScore !== null && summary.avgScore <= 1.5 ? tr('declutterModule.summary.greatShape') : plural('declutterModule.summary.zonesDue', summary.dueZones, { avg: summary.avgScore ?? '—' })}</p>
           <p className="mt-1 text-xs text-muted">{summary.worst ? tr('declutter.worstSpot', { name: summary.worst.name, score: tr(SCORE_LABEL_KEYS[summary.worst.clutter_score]) }) : tr('declutter.addMessySpots')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -239,7 +248,7 @@ export function DeclutterModule() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium">{z.name}</p>
                           {z.room && <span className="text-xs text-muted">{z.room}</span>}
-                          <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{HEALTH_LABEL[h.health]}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
+                          <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{tr(HEALTH_KEY[h.health])}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <div className="flex gap-0.5" aria-label={tr('declutter.clutterScoreOfFive', { score: z.clutter_score })}>
@@ -253,11 +262,11 @@ export function DeclutterModule() {
                             </span>
                           )}
                         </div>
-                        {z.target_state && <p className="mt-1 text-xs text-muted">Goal: {z.target_state}</p>}
+                        {z.target_state && <p className="mt-1 text-xs text-muted">{tr('declutterModule.goal', { goal: z.target_state })}</p>}
                         {z.is_active && (
                           <div className="mt-3 flex flex-wrap items-center gap-1.5">
                             {missionsForZone(z).slice(0, 2).map((t) => (
-                              <button key={t.title} onClick={() => setMissionForm({ open: true, mission: null, zoneId: z.id, preset: t })} className="rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs text-brand-text hover:bg-brand/20 coarse:min-h-9">+ {t.title} · {t.minutes}m</button>
+                              <button key={t.title} onClick={() => setMissionForm({ open: true, mission: null, zoneId: z.id, preset: { ...t, title: templateTitle(tr, z.kind, t.title) } })} className="rounded-full border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs text-brand-text hover:bg-brand/20 coarse:min-h-9">+ {templateTitle(tr, z.kind, t.title)} · {t.minutes}m</button>
                             ))}
                             {openHere > 0 && <span className="text-xs text-muted">{openHere} open</span>}
                           </div>
@@ -297,7 +306,7 @@ export function DeclutterModule() {
               }) : tr('declutter.addZoneFirst')}</p>
               {plan.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-xs text-muted sm:grid-cols-2">
-                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {p.template.title} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
+                  {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
                 </ul>
               )}
             </div>
@@ -380,7 +389,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
           <Field label={tr('declutter.name')} required>{(id) => <Input id={id} name="name" defaultValue={zone?.name ?? ''} placeholder={tr('declutter.kitchenCounter')} autoFocus />}</Field>
           <Field label={tr('declutter.room')}>{(id) => <Input id={id} name="room" defaultValue={zone?.room ?? ''} placeholder={tr('declutter.kitchen')} />}</Field>
         </div>
-        <Field label={tr('declutter.kind')} hint={tr('declutterModule.picksTheMissionTemplates')}>{(id) => <Select id={id} name="kind" defaultValue={zone?.kind ?? 'surface'}>{ZONE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
+        <Field label={tr('declutter.kind')} hint={tr('declutterModule.picksTheMissionTemplates')}>{(id) => <Select id={id} name="kind" defaultValue={zone?.kind ?? 'surface'}>{ZONE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {tr(`declutterModule.kind.${k.value}`)}</option>)}</Select>}</Field>
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{tr('declutter.howBadIsItRightNow')}</p>
           <div className="flex gap-2" role="radiogroup" aria-label={tr('declutter.clutterScore')}>
@@ -406,7 +415,8 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [zone, setZone] = useState(mission?.zone_id ?? zoneId ?? zones[0]?.id ?? '');
-  const templates = zone ? zoneKindMeta(zones.find((z) => z.id === zone)?.kind ?? 'other').templates : [];
+  const zoneKind = zones.find((z) => z.id === zone)?.kind ?? 'other';
+  const templates = zone ? zoneKindMeta(zoneKind).templates : [];
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -435,7 +445,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('declutter.zone')}>{(id) => <Select id={id} name="zone_id" value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{tr('declutter.noZone')}</option>{zones.map((z) => <option key={z.id} value={z.id}>{zoneKindMeta(z.kind).emoji} {z.name}{z.room ? ` · ${z.room}` : ''}</option>)}</Select>}</Field>
         <Field label={tr('declutter.mission')} required>{(id) => <Input id={id} name="title" list="mission-ideas" defaultValue={mission?.title ?? preset?.title ?? ''} placeholder={tr('declutter.clearEverythingThatDoesntLiveHere')} autoFocus={!preset} />}</Field>
-        {templates.length > 0 && <datalist id="mission-ideas">{templates.map((t) => <option key={t.title} value={t.title} />)}</datalist>}
+        {templates.length > 0 && <datalist id="mission-ideas">{templates.map((t) => { const title = templateTitle(tr, zoneKind, t.title); return <option key={t.title} value={title} />; })}</datalist>}
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('declutter.minutes')}>{(id) => <Input id={id} name="minutes" type="number" min={5} max={60} step={5} defaultValue={mission?.minutes ?? preset?.minutes ?? 15} />}</Field>
           <Field label={tr('declutter.points')}>{(id) => <Input id={id} name="points" type="number" min={0} max={100} defaultValue={mission?.points ?? preset?.points ?? 5} />}</Field>

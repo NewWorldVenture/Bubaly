@@ -57,10 +57,10 @@ const SUBSTITUTION_REASON_KEYS: Record<Substitution['reasonKey'], string> = {
 };
 
 const TABS = [
-  { id: 'plan' as const, label: 'Meal Plan' },
-  { id: 'recipes' as const, label: 'Recipes' },
-  { id: 'groceries' as const, label: 'Groceries' },
-  { id: 'favorites' as const, label: 'Favorites' },
+  { id: 'plan' as const, labelKey: 'mealsModule.tab.plan' },
+  { id: 'recipes' as const, labelKey: 'mealsModule.tab.recipes' },
+  { id: 'groceries' as const, labelKey: 'mealsModule.tab.groceries' },
+  { id: 'favorites' as const, labelKey: 'mealsModule.tab.favorites' },
 ];
 type TabId = (typeof TABS)[number]['id'];
 
@@ -386,7 +386,7 @@ export function MealsModule() {
             {TABS.map((t) => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 className={cn('tab-item', tab === t.id ? 'tab-item-active' : 'tab-item-inactive')}>
-                {t.label}
+                {tr(t.labelKey)}
               </button>
             ))}
           </div>

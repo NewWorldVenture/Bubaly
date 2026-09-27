@@ -41,10 +41,17 @@ describe("the React replay-cursor backport (react/react#37584)", () => {
   it.each([
     ['production', 'next'],
     ['development', 'unitOfWork'],
-  ])('applies to the installed %s react-dom client, in the replay\'s HostComponent case', (build, fiber) => {
+  ])('the installed %s react-dom client carries the fix, and the backport restores it in the replay\'s HostComponent case', (build, fiber) => {
     const file = REACT_DOM(build);
-    const source = readFileSync(file, 'utf8');
-    expect(source, 'the installed React does not already carry the fix').not.toMatch(/=== hydrationParentFiber &&\s*\(\s*isHydrating/);
+    const installed = readFileSync(file, 'utf8');
+    // Next 16.3.6 bundles React 19.3, which ships the fix itself: the loader
+    // must leave that React byte-for-byte as it is.
+    expect(installed, 'the installed React carries React 19.3\'s fix').toMatch(/=== hydrationParentFiber &&\s*\(\s*isHydrating/);
+    expect(applyReplayFix(installed, file), 'the loader leaves a fixed React alone').toBe(installed);
+    // The same file with React's fix taken out is the shape Next 15.5 shipped;
+    // the backport has to put the fix back where React 19.3 has it.
+    const source = installed.replace(/(case 5:\s*resetHooksOnUnwind\((\w+)\);)[\s\S]*?(\n\s*default:)/, '$1$3');
+    expect(source, 'the fixture has the fix removed').not.toMatch(/=== hydrationParentFiber &&\s*\(\s*isHydrating/);
     const patched = applyReplayFix(source, file);
     const site = patched.search(new RegExp(`case 5:\\s*resetHooksOnUnwind\\(${fiber}\\);`));
     expect(site, "the replay's HostComponent case").not.toBe(-1);

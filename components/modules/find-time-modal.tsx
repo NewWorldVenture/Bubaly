@@ -19,15 +19,15 @@ type Member = ReturnType<typeof useApp>['members'][number];
 type Slot = { startISO: string; endISO: string };
 
 const DURATIONS = [
-  { label: '30 min', min: 30 },
-  { label: '1 hour', min: 60 },
-  { label: '90 min', min: 90 },
-  { label: '2 hours', min: 120 },
+  { labelKey: 'findTimeModal.duration.min30', min: 30 },
+  { labelKey: 'findTimeModal.duration.hour1', min: 60 },
+  { labelKey: 'findTimeModal.duration.min90', min: 90 },
+  { labelKey: 'findTimeModal.duration.hours2', min: 120 },
 ];
 const WINDOWS = [
-  { label: 'Next 7 days', days: 7 },
-  { label: 'Next 2 weeks', days: 14 },
-  { label: 'Next 30 days', days: 30 },
+  { labelKey: 'findTimeModal.window.days7', days: 7 },
+  { labelKey: 'findTimeModal.window.weeks2', days: 14 },
+  { labelKey: 'findTimeModal.window.days30', days: 30 },
 ];
 
 /**
@@ -175,7 +175,7 @@ export function FindTimeModal({
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
                 className={cn('rounded-full border px-3 py-1 text-xs font-medium transition',
                   durationMin === d.min ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                {d.label}
+                {tr(d.labelKey)}
               </button>
             ))}
           </div>
@@ -189,7 +189,7 @@ export function FindTimeModal({
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
                 className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                   windowDays === w.days ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                {w.label}
+                {tr(w.labelKey)}
               </button>
             ))}
           </div>
