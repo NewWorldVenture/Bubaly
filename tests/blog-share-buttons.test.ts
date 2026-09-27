@@ -35,3 +35,17 @@ describe('blog share bar', () => {
     expect(src).toMatch(/target="_blank"/);
   });
 });
+
+// Audit C1-S9-95 — found by the page audit crawl: every blog post raised a
+// hydration mismatch (React #418) because the share links were built from
+// `window.location.origin` in the browser and a hard-coded host on the server.
+// The address now comes from canonicalUrl on both sides, so there is one href.
+describe('share links are the same on the server and in the browser (C1-S9-95)', () => {
+  it('builds the shared address from the canonical URL, not the current origin', () => {
+    // Comments stripped: the component's own note quotes the old expression.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).not.toMatch(/window\.location/);
+    expect(src).toContain('canonicalUrl(`/blog/${slug}`)');
+    expect(src).toContain('navigator.clipboard.writeText(url)');
+  });
+});

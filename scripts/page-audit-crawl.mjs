@@ -18,9 +18,19 @@
 //          are visited with a real id; unmapped ones use a well-formed
 //          placeholder and are marked `placeholder: true` in the result.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { build } from './page-audit-register.mjs';
+
+/**
+ * Playwright pins a browser build; a container may ship a different one. Point
+ * at PLAYWRIGHT_CHROMIUM (or the preinstalled /opt/pw-browsers/chromium) when
+ * the pinned build is absent rather than downloading one.
+ */
+function launchOptions() {
+  const exe = process.env.PLAYWRIGHT_CHROMIUM ?? (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
+  return exe ? { executablePath: exe } : {};
+}
 
 const arg = (name, fallback = undefined) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -103,7 +113,31 @@ async function visit(context, route) {
   return result;
 }
 
+/**
+ * Failures that are this machine's network, not the page: the image optimiser
+ * fetching an external origin the sandbox cannot reach answers 403/5xx, and
+ * the browser logs one "Failed to load resource" per image. They are kept on
+ * the result as `environmental`, and left out of the verdict, so a sandboxed
+ * crawl does not report every photo on the blog as a defect.
+ */
+function splitEnvironmental(r) {
+  const env = r.failed.filter((f) => /\/_next\/image\?url=https?%3A%2F%2F/.test(f));
+  let owed = env.length;
+  r.failed = r.failed.filter((f) => !env.includes(f));
+  r.consoleErrors = r.consoleErrors.filter((c) => {
+    if (owed > 0 && /Failed to load resource: the server responded with a status of (403|5\d\d)/.test(c)) { owed--; return false; }
+    return true;
+  });
+  // A route crawled with a placeholder id SHOULD answer 404; the browser's
+  // own log line for that document is the expected outcome, not an error.
+  if (r.placeholder && r.status === 404) {
+    r.consoleErrors = r.consoleErrors.filter((c) => !/status of 404 \(Not Found\)/.test(c));
+  }
+  r.environmental = env;
+}
+
 export function verdict(r) {
+  splitEnvironmental(r);
   const problems = [];
   if (r.status >= 500 || r.status === 0) problems.push(`status ${r.status}`);
   if (r.errorBoundary) problems.push('error boundary');
@@ -122,7 +156,13 @@ async function main() {
     .filter((l) => !laneFilter || l.lane.id === laneFilter)
     .flatMap((l) => l.rows.map((r) => ({ route: r.route, lane: l.lane.id })));
   if (only) routes = routes.filter((r) => r.route.startsWith(only));
-  const browser = await chromium.launch();
+  // --urls: a file of concrete paths (e.g. every <loc> in /sitemap.xml), each
+  // visited as-is — the literal "every page the site advertises" crawl.
+  if (arg('urls')) {
+    routes = readFileSync(arg('urls'), 'utf8').split('\n').map((s) => s.trim()).filter(Boolean)
+      .map((u) => ({ route: u.replace(/^https?:\/\/[^/]+/, '') || '/', lane: 'SITEMAP' }));
+  }
+  const browser = await chromium.launch(launchOptions());
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     ...(arg('state') ? { storageState: arg('state') } : {}),

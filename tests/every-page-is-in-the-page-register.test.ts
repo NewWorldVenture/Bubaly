@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 // one the lane files produce — so a new page, a deleted page or a hand edit of
 // the generated table fails here by name. Audit C1-S9-93.
 //
-// @ts-expect-error — a plain .mjs script, imported for its pure helpers.
+// A plain .mjs script, imported for its pure helpers.
 const register = await import('../scripts/page-audit-register.mjs');
 
 const pages: string[] = execSync("git ls-files 'app/**/page.tsx' 'app/page.tsx'", { encoding: 'utf8' })

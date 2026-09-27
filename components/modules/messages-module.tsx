@@ -28,6 +28,7 @@ import {
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -229,8 +230,7 @@ export function MessagesModule() {
   useEffect(() => {
     if (!activeConv) return;
     const supabase = createClient();
-    const ch = supabase
-      .channel(`msgs:${activeConv.id}`)
+    const ch = ownChannel(supabase, `msgs:${activeConv.id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'family_messages',
         filter: `conversation_id=eq.${activeConv.id}`,
@@ -259,8 +259,7 @@ export function MessagesModule() {
   // ── Realtime for conversations ──────────────────────────────
   useEffect(() => {
     const supabase = createClient();
-    const ch = supabase
-      .channel(`convs:${familyId}`)
+    const ch = ownChannel(supabase, `convs:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_conversations', filter: `family_id=eq.${familyId}` },
         () => { void loadConversations(); })
       .subscribe();

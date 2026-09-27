@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Copy, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { canonicalUrl, CANONICAL_ORIGIN } from '@/lib/marketing/sitemap-urls';
 
 // Brand glyphs (inline SVG — lucide dropped brand icons). Paths are the official
 // simple-icons marks. Note X uses the X logo, NOT the legacy Twitter bird.
@@ -48,12 +49,17 @@ export function ShareButtons({ title, slug }: { title: string; slug: string }) {
   const tr = useTranslations();
   const [copied, setCopied] = useState(false);
 
-  const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/blog/${slug}`
-    : `https://www.bubaly.com/blog/${slug}`;
+  // The CANONICAL address, on the server and in the browser alike. This used
+  // to be `window.location.origin` in the browser and a hard-coded
+  // www.bubaly.com on the server, so on any other origin — the apex domain, a
+  // preview deployment — every share link hydrated with a different href than
+  // the server sent and React left the server's in place (a hydration error
+  // on every blog post). A share also should not carry whatever host the
+  // reader happened to be on. Audit C1-S9-95.
+  const url = canonicalUrl(`/blog/${slug}`) ?? `${CANONICAL_ORIGIN}/blog/${slug}`;
 
   function copyLink() {
-    navigator.clipboard.writeText(`${window.location.origin}/blog/${slug}`).then(() => {
+    navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
