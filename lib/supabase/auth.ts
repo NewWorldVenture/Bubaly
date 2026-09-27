@@ -7,7 +7,8 @@ import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { isRetryableAuthError } from '@/lib/auth/session';
 import type { MemberRole } from '@/lib/constants/roles';
-import type { Tables } from '@/lib/database.types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database, Tables } from '@/lib/database.types';
 
 export type FamilyMembership = {
   familyId: string;
@@ -73,10 +74,13 @@ export async function getUser() {
  * super_admins allowlist, independent of family membership). Unlike family roles,
  * this grants oversight of the whole site, not a single household — use sparingly.
  */
-export async function isSuperAdmin(authenticatedClient?: Awaited<ReturnType<typeof createServer>>): Promise<boolean> {
-  // Route handlers may authenticate a bearer token ahead of browser cookies.
-  // The override must use that same authenticated principal.
-  const supabase = authenticatedClient ?? await createServer();
+export async function isSuperAdmin(client?: SupabaseClient<Database>): Promise<boolean> {
+  // `client` is the caller the request actually authenticated. A route that
+  // accepts a bearer token (/api/ai does, ahead of cookies) must ask about
+  // THAT principal: the cookie default would answer for whoever else's session
+  // the browser carries — an ordinary bearer with an admin's cookie passed,
+  // an admin's bearer with no cookie was refused (review on #585).
+  const supabase = client ?? await createServer();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) {
     if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);
