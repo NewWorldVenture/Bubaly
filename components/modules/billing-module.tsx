@@ -51,7 +51,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin } from '@/lib/constants/roles';
-import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
 import { PLAN_CURRENCY } from '@/lib/marketing/value';
 import { formatCents } from '@/lib/wallet/ledger';
 import {
@@ -987,6 +987,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const subConfig = STATUS_CONFIG[status];
   const plan = PLAN_LABELS[subscription?.plan ?? 'free'] ?? PLAN_LABELS.free;
   const hasActiveAccess = ['active', 'trialing'].includes(status);
+  // What the family's own plan includes: the same list the plan picker shows
+  // for that tier. Free has none; the picker below lists what each plan adds.
+  const currentTier = TIER_DEFS.find((d) => d.level === planLevel(subscription?.plan ?? null));
   // A live paid plan (drives the Cancel control) + whether a cancel is scheduled.
   const hasPaidPlan = slugToStripePlan(subscription?.plan) !== null && ['active', 'trialing', 'past_due'].includes(status);
   const subCanceling = Boolean(subscription?.cancel_at_period_end) && hasPaidPlan;
@@ -1481,6 +1484,108 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     }
   };
 
+  // A family sent here by the plan gate (?upgrade=1&need=N) or the demo's
+  // plan picker (?checkout=…) came for this card, not for the transactions:
+  // it renders first for them, where PlanManager says which plan unlocks the
+  // feature they tapped (or, for anyone but a parent, who to ask), and in its
+  // usual place below the tabs otherwise. Page audit B7 (P-13).
+  const planCard = (
+    <div id="plan" className="rounded-2xl border border-border bg-surface/30 p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <CreditCard className="h-5 w-5 text-brand-text" />
+        <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
+      </div>
+      {/* #437 states the recorded measure; #446 derives the price
+          comparison from it and hides itself when ineligible. Both PRs
+          mount their own card here and test for it, so both stay. */}
+      <div className="mb-4"><FamilyDeliveredValue /></div>
+      <div className="mb-4"><FamilyValueComparison /></div>
+      {/* #475/#481 replaced the boolean with a three-state read so a
+          FAILED subscription lookup stops looking like "no plan". */}
+      {subReadStatus === 'loading' ? <SkeletonList /> : subReadStatus === 'unavailable' ? (
+        <ErrorState message={tr('changePlan.subscriptionStatusIsTemporarilyUnavailable')} onRetry={() => void loadSub()} />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-lg font-bold">{tr(plan.nameKey)}</p>
+              <p className="mt-1 text-sm text-muted">{tr(plan.descriptionKey)}</p>
+              {subscription?.current_period_end && (
+                <p className="mt-2 text-sm text-muted">
+                  {subCanceling
+                    ? `Cancels — access until ${fmtDate(subscription.current_period_end)}`
+                    : `${['canceled', 'incomplete_expired'].includes(status) ? 'Access until' : 'Renews'} ${fmtDate(subscription.current_period_end)}`}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge tone={subConfig.tone as 'success' | 'warning' | 'danger' | 'neutral'}>
+                <span className="flex items-center gap-1">{subConfig.icon} {tr(subConfig.labelKey)}</span>
+              </Badge>
+              {admin && subscription && (
+                <Button size="sm" variant="ghost" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => {
+                  if (admin && isCurrentReady() && reviewInFlight.current !== reviewAccount && waitingReadback.current?.account !== reviewAccount) startTransition(async () => { const r = await openPortal(); if (!r.ok) toastError(r.error ?? tr('billingModule.portalUnavailable')); });
+                }}>{tr('billing.paymentAmpInvoices')}</Button>
+              )}
+            </div>
+          </div>
+
+          {/* Scheduled-cancel banner with one-tap Resume. */}
+          {admin && subCanceling && (
+            <div className="mb-4 flex flex-col gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span>{tr('billing.yourPlanEndsOn')} {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} {tr('billing.andDropsToFree')}</span>
+              <Button size="sm" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => setCancel(true)}>{tr('billing.resumePlan')}</Button>
+            </div>
+          )}
+
+          {/* Plan picker — always available to admins so they can upgrade,
+              downgrade, or switch billing interval at any time. */}
+          {admin && !hasReviewHint && !reviewNeedsReadback && (
+            <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending || reviewBusy} onChoose={changePlan} />
+          )}
+          {admin && effectiveReviewPlan && (
+            <SelectedPlanReview key={JSON.stringify([familyId, userId, role, reviewQuery, reviewNeedsReadback])}
+              initialPlan={effectiveReviewPlan} familyName={family.name} currentSlug={subscription?.plan ?? null}
+              hasLiveSubscription={canChangeSubscriptionInPlace(subscription)} canceling={!!subscription?.cancel_at_period_end}
+              pending={reviewBusy} syncPending={reviewNeedsReadback} onRefresh={refreshReviewStatus} onConfirm={confirmReview} />
+          )}
+          {hasReviewHint && !reviewPlan && (
+            <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm" role="status">
+              <p>{tr('billingReview.invalid')}</p>
+              <Link href="/pricing" className="mt-2 inline-block font-semibold underline underline-offset-2">{tr('billingReview.chooseAgain')}</Link>
+            </div>
+          )}
+          {admin && !hasReviewHint && !reviewNeedsReadback && serviceFeeNotice && (
+            <p className="mt-3 text-center text-xs text-muted">{serviceFeeNotice}</p>
+          )}
+
+          {/* Cancel control for paying families that aren't already canceling. */}
+          {admin && hasPaidPlan && !subCanceling && (
+            <div className="mt-3 text-right">
+              <button onClick={() => setCancel(false)} disabled={pending || reviewBusy || reviewNeedsReadback} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
+                {tr('billing.cancelAmpDowngradeToFree')}
+              </button>
+            </div>
+          )}
+          {/* This grid used to be one fixed list for every plan, so a Free
+              family whose card said "up to 5 members" saw "Unlimited family
+              members", "All modules" and "Priority support" ticked beside it.
+              Page audit B7 (P-14). */}
+          {currentTier && (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {currentTier.features.map((f) => (
+                <div key={f} className="flex items-center gap-2 text-xs text-muted">
+                  <CheckCircle2 className={cn('h-3.5 w-3.5 shrink-0', hasActiveAccess ? 'text-emerald-400' : 'text-muted/60')} />{tr(f)}
+                </div>
+              ))}
+            </div>
+          )}
+          {!admin && <p className="mt-4 text-center text-sm text-muted">{tr('billing.contactYourFamilyAdminToManage')}</p>}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="module-with-sidebar">
       <div className="module-main module-page">
@@ -1496,6 +1601,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           }
         />
 
+        {needLevel !== undefined && planCard}
+
         <div className="flex items-center justify-between border-b border-border">
           <div className="tab-bar">
             {TABS.map((t) => (
@@ -1509,94 +1616,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
         {renderTabContent()}
 
         {/* ── Stripe Subscription Section ────────────────────────────────── */}
-        <div className="rounded-2xl border border-border bg-surface/30 p-5">
-          <div className="mb-4 flex items-center gap-3">
-            <CreditCard className="h-5 w-5 text-brand-text" />
-            <h2 className="font-semibold">{tr('billing.bubalySubscription')}</h2>
-          </div>
-          {/* #437 states the recorded measure; #446 derives the price
-              comparison from it and hides itself when ineligible. Both PRs
-              mount their own card here and test for it, so both stay. */}
-          <div className="mb-4"><FamilyDeliveredValue /></div>
-          <div className="mb-4"><FamilyValueComparison /></div>
-          {/* #475/#481 replaced the boolean with a three-state read so a
-              FAILED subscription lookup stops looking like "no plan". */}
-          {subReadStatus === 'loading' ? <SkeletonList /> : subReadStatus === 'unavailable' ? (
-            <ErrorState message={tr('changePlan.subscriptionStatusIsTemporarilyUnavailable')} onRetry={() => void loadSub()} />
-          ) : (
-            <>
-              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-lg font-bold">{tr(plan.nameKey)}</p>
-                  <p className="mt-1 text-sm text-muted">{tr(plan.descriptionKey)}</p>
-                  {subscription?.current_period_end && (
-                    <p className="mt-2 text-sm text-muted">
-                      {subCanceling
-                        ? `Cancels — access until ${fmtDate(subscription.current_period_end)}`
-                        : `${['canceled', 'incomplete_expired'].includes(status) ? 'Access until' : 'Renews'} ${fmtDate(subscription.current_period_end)}`}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge tone={subConfig.tone as 'success' | 'warning' | 'danger' | 'neutral'}>
-                    <span className="flex items-center gap-1">{subConfig.icon} {tr(subConfig.labelKey)}</span>
-                  </Badge>
-                  {admin && subscription && (
-                    <Button size="sm" variant="ghost" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => {
-                      if (admin && isCurrentReady() && reviewInFlight.current !== reviewAccount && waitingReadback.current?.account !== reviewAccount) startTransition(async () => { const r = await openPortal(); if (!r.ok) toastError(r.error ?? tr('billingModule.portalUnavailable')); });
-                    }}>{tr('billing.paymentAmpInvoices')}</Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Scheduled-cancel banner with one-tap Resume. */}
-              {admin && subCanceling && (
-                <div className="mb-4 flex flex-col gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                  <span>{tr('billing.yourPlanEndsOn')} {subscription?.current_period_end ? fmtDate(subscription.current_period_end) : 'the period end'} {tr('billing.andDropsToFree')}</span>
-                  <Button size="sm" loading={pending} disabled={reviewBusy || reviewNeedsReadback} onClick={() => setCancel(true)}>{tr('billing.resumePlan')}</Button>
-                </div>
-              )}
-
-              {/* Plan picker — always available to admins so they can upgrade,
-                  downgrade, or switch billing interval at any time. */}
-              {admin && !hasReviewHint && !reviewNeedsReadback && (
-                <PlanManager currentSlug={subscription?.plan ?? null} highlight={needLevel} pending={pending || reviewBusy} onChoose={changePlan} />
-              )}
-              {admin && effectiveReviewPlan && (
-                <SelectedPlanReview key={JSON.stringify([familyId, userId, role, reviewQuery, reviewNeedsReadback])}
-                  initialPlan={effectiveReviewPlan} familyName={family.name} currentSlug={subscription?.plan ?? null}
-                  hasLiveSubscription={canChangeSubscriptionInPlace(subscription)} canceling={!!subscription?.cancel_at_period_end}
-                  pending={reviewBusy} syncPending={reviewNeedsReadback} onRefresh={refreshReviewStatus} onConfirm={confirmReview} />
-              )}
-              {hasReviewHint && !reviewPlan && (
-                <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm" role="status">
-                  <p>{tr('billingReview.invalid')}</p>
-                  <Link href="/pricing" className="mt-2 inline-block font-semibold underline underline-offset-2">{tr('billingReview.chooseAgain')}</Link>
-                </div>
-              )}
-              {admin && !hasReviewHint && !reviewNeedsReadback && serviceFeeNotice && (
-                <p className="mt-3 text-center text-xs text-muted">{serviceFeeNotice}</p>
-              )}
-
-              {/* Cancel control for paying families that aren't already canceling. */}
-              {admin && hasPaidPlan && !subCanceling && (
-                <div className="mt-3 text-right">
-                  <button onClick={() => setCancel(false)} disabled={pending || reviewBusy || reviewNeedsReadback} className="text-xs text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50">
-                    {tr('billing.cancelAmpDowngradeToFree')}
-                  </button>
-                </div>
-              )}
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {['billingModule.includes.unlimitedMembers', 'billingModule.includes.aiAssistant', 'billingModule.includes.allModules', 'billingModule.includes.realTimeSync', 'billingModule.includes.documentVault', 'billingModule.includes.mealPlanning', 'billingModule.includes.schoolSports', 'billingModule.tier.prioritySupport'].map((f) => (
-                  <div key={f} className="flex items-center gap-2 text-xs text-muted">
-                    <CheckCircle2 className={cn('h-3.5 w-3.5 shrink-0', hasActiveAccess ? 'text-emerald-400' : 'text-muted/60')} />{tr(f)}
-                  </div>
-                ))}
-              </div>
-              {!admin && <p className="mt-4 text-center text-sm text-muted">{tr('billing.contactYourFamilyAdminToManage')}</p>}
-            </>
-          )}
-        </div>
+        {needLevel === undefined && planCard}
       </div>
 
       {/* Sidebar — stacks below the main column on mobile, right rail on desktop */}
