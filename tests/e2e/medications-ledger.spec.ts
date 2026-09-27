@@ -21,7 +21,7 @@ const sources = Object.fromEntries([
   'lib/time/zoned.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
-  'components/ui/input.tsx', 'components/ui/modal.tsx',
+  'components/ui/input.tsx', 'components/ui/modal.tsx', 'lib/hooks/use-hydrated.ts',
   // medications-module.tsx asks before a destructive write via useConfirm; the
   // provider reaches the loader with it, so its source belongs here too.
   'components/ui/confirm.tsx', 'components/app/page-header.tsx',

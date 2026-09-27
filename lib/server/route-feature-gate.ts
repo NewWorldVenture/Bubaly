@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
+import { isSuperAdmin } from '@/lib/supabase/auth';
 
 type DB = SupabaseClient<Database>;
 
@@ -48,6 +49,15 @@ export async function refuseUnlessEntitled(
     }
   }
 
+  // The page in front of this endpoint lets a super administrator through
+  // (`requireFeature` and `requirePlanLevel` both do, to preview and support).
+  // Refusing them here left those pages half-broken for the one account that
+  // can open them regardless of plan: /dashboard/autopilot and
+  // /dashboard/briefing rendered and then got 403 from their own endpoints
+  // (2026-09-27 page audit). Asked only once the family itself was refused,
+  // and a lookup that fails is "no" — never a reason to let a request through.
+  if (await callerIsSuperAdmin()) return null;
+
   if (outcomes.every((o) => o.reason === 'off')) {
     return NextResponse.json({ error: 'Not found.', code: 'feature_off' }, { status: 404 });
   }
@@ -63,4 +73,13 @@ export async function refuseUnlessEntitled(
     },
     { status: 403 },
   );
+}
+
+async function callerIsSuperAdmin(): Promise<boolean> {
+  try {
+    return await isSuperAdmin();
+  } catch (error) {
+    console.error('[route-feature-gate] super-admin check failed; applying the family gate', error);
+    return false;
+  }
 }

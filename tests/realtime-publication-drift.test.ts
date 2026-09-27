@@ -186,7 +186,9 @@ describe('no channel is opened for a table that can never fire', () => {
     const hook = readFileSync('lib/hooks/use-realtime-query.ts', 'utf8');
     expect(hook).toContain('realtimeChannelFor(table, familyId)');
     expect(hook).toContain('if (!spec) return;');
-    expect(hook).toContain('.channel(spec.name)');
+    // The topic is the shared name plus a per-hook id: two widgets reading one
+    // table must not be handed the same realtime-js channel.
+    expect(hook).toContain('.channel(`${spec.name}:${channelId}`)');
     expect(hook).not.toMatch(/\.channel\(`\$\{table\}/);
   });
 });

@@ -76,13 +76,18 @@ async function auditOne(context, path) {
   });
   page.on('response', (r) => {
     if (r.url().startsWith(origin) && r.status() >= 400 && r.request().resourceType() !== 'document') {
-      badRequests.push(`${r.status()} ${r.url().replace(origin, '')}`);
+      // Who answered a 5xx matters: a sandbox egress proxy's 502 carries no
+      // `server: Vercel`/`x-vercel-id`, and is not the site's defect.
+      const h = r.headers();
+      const via = r.status() >= 500 ? ` [server=${h.server ?? '-'}${h['x-vercel-id'] ? ' vercel' : ''}]` : '';
+      badRequests.push(`${r.status()} ${r.url().replace(origin, '')}${via}`);
     }
   });
   const row = { path, base, mobile, at: new Date().toISOString() };
   try {
     const res = await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 });
     row.status = res?.status() ?? null;
+    if (res && res.status() >= 500) row.server = `${res.headers().server ?? '-'}${res.headers()['x-vercel-id'] ? ' vercel' : ''}`;
     row.finalPath = new URL(page.url()).pathname + new URL(page.url()).search;
     const probe = await page.evaluate(() => {
       const text = document.body?.innerText ?? '';
