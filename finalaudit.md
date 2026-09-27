@@ -45896,6 +45896,26 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][ASSISTANT]` C1-S9-113 — the assistant greeted, suggested and labelled in English in every locale
+
+**File/path:** `components/modules/assistant-module.tsx`, `tests/assistant-workspace.test.ts`; seven catalogues.
+
+**Problem.** `/dashboard/assistant` (part of the `C1-S9-101` burn-down) showed English in every locale:
+- the opening greeting, which also called a nameless reader "there"
+- the five suggestion chips, the five "Popular requests" cards and the "Try asking" prompts. Pressing one sent the English text as the reader's own message.
+- the four "At a glance" labels and "… added to calendar"
+- every outcome chip in the thread ("Meal plan · 7 days", "1 conflict", "Needs your approval")
+- the failure line "Something went wrong"
+
+**Fix.**
+- Chips, cards and prompts hold catalogue keys. They are worded when shown and when sent, so the message goes in the reader's language.
+- `cardChipLabel()` takes the translator and counts through the locale's plural rules.
+- A reader with no name gets a greeting without one.
+
+**Status:** FIXED. Scanner findings for `assistant-module` drop from 23 to 0. `tests/assistant-workspace.test.ts` pins the English chips and a German one ("Essensplan · 7 Tage").
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
