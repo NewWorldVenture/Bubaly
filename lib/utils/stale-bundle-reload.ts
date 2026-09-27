@@ -36,10 +36,16 @@ export function shouldReloadForChunkFailure(
   return !(last && last.path === path && now - last.at < RELOAD_WINDOW_MS);
 }
 
-function readLast(): LastReload | null {
+function readLast(): LastReload | null | undefined {
+  let raw: string | null;
   try {
-    const raw = sessionStorage.getItem(RELOAD_KEY);
-    if (!raw) return null;
+    raw = sessionStorage.getItem(RELOAD_KEY);
+  } catch {
+    // Without a readable marker, even a successful write cannot prevent a loop.
+    return undefined;
+  }
+  if (!raw) return null;
+  try {
     const parsed = JSON.parse(raw) as Partial<LastReload>;
     return typeof parsed.path === 'string' && typeof parsed.at === 'number' ? { path: parsed.path, at: parsed.at } : null;
   } catch {
@@ -58,7 +64,8 @@ export function reloadOnceForChunkFailure(error: { name?: string; message?: stri
   if (typeof window === 'undefined') return false;
   const path = window.location.pathname + window.location.search;
   const now = Date.now();
-  if (!shouldReloadForChunkFailure(error, path, readLast(), now)) return false;
+  const last = readLast();
+  if (last === undefined || !shouldReloadForChunkFailure(error, path, last, now)) return false;
   try {
     sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ path, at: now }));
   } catch {

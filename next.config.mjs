@@ -41,8 +41,9 @@ const nextConfig = {
   // React #418 on about 0.7% of signed-in loads, on a tree identical on server
   // and client: react/react#37584 in the React Next 15.5 bundles, where a host
   // element that suspends mid-hydration is replayed without rewinding the
-  // hydration cursor. The loader backports the upstream fix into Next's own
-  // react-dom client and fails the build if that React changes shape.
+  // hydration cursor. The loader backports React 19.3's fix into Next's own
+  // react-dom client, leaves a React that already has it (Next 16's) alone, and
+  // fails the build on a React it does not recognise.
   // tests/react-hydration-replay-fix.test.ts holds the wiring.
   webpack(config) {
     config.module.rules.push({ test: REACT_DOM_CLIENT, use: [{ loader: REACT_HYDRATION_REPLAY_FIX }] });

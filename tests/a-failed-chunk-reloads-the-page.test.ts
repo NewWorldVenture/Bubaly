@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import GlobalError from '@/app/global-error';
 import { contrastRatio } from '@/lib/utils/readable-text';
-import { RELOAD_WINDOW_MS, shouldReloadForChunkFailure } from '@/lib/utils/stale-bundle-reload';
+import { RELOAD_WINDOW_MS, reloadOnceForChunkFailure, shouldReloadForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
 // The production crawl's 8 of 786: one JavaScript chunk answered 502 and the
 // page sat on the error boundary, whose "Try again" re-renders the same bundle
@@ -74,5 +74,64 @@ describe('the root error page', () => {
     const body = style(/<body[^>]*style="([^"]+)"/);
     const reference = style(/<p style="([^"]+)">Reference:/);
     expect(contrastRatio(reference.color, body.background)!).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Exercise the actual browser entrypoint as well as the pure decision helper.
+// Native Chromium/sessionStorage/reload verification is retained in the review receipt.
+describe('the chunk recovery entrypoint', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  function browserState() {
+    const values = new Map<string, string>();
+    const reload = vi.fn();
+    const getItem = vi.fn((key: string) => values.get(key) ?? null);
+    const setItem = vi.fn((key: string, value: string) => { values.set(key, value); });
+    vi.spyOn(Date, 'now').mockReturnValue(100_000);
+    vi.stubGlobal('window', { location: { pathname: '/fixture', search: '?case=1', reload } });
+    vi.stubGlobal('sessionStorage', { getItem, setItem });
+    return { values, reload, getItem, setItem };
+  }
+
+  it('persists before reload and suppresses duplicate boundary effects', () => {
+    const state = browserState();
+    state.reload.mockImplementation(() => {
+      expect(JSON.parse(state.values.get('bubaly.staleBundleReload')!)).toEqual({ path: '/fixture?case=1', at: 100_000 });
+    });
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(true);
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(false);
+    expect(state.reload).toHaveBeenCalledTimes(1);
+    expect(state.setItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when reads throw even though writes could succeed', () => {
+    const state = browserState();
+    state.getItem.mockImplementation(() => { throw new Error('Storage read denied'); });
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(false);
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(false);
+    expect(state.setItem).not.toHaveBeenCalled();
+    expect(state.reload).not.toHaveBeenCalled();
+  });
+
+  it('does not reload when writing the marker fails', () => {
+    const state = browserState();
+    state.setItem.mockImplementation(() => { throw new Error('Storage write denied'); });
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(false);
+    expect(state.reload).not.toHaveBeenCalled();
+  });
+
+  it('repairs malformed markers without disabling loop suppression', () => {
+    const state = browserState();
+    state.values.set('bubaly.staleBundleReload', 'invalid-json');
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(true);
+    expect(reloadOnceForChunkFailure(CHUNK)).toBe(false);
+    expect(state.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains ordinary error cards without writing a reload marker', () => {
+    const state = browserState();
+    expect(reloadOnceForChunkFailure({ name: 'TypeError', message: 'x is not a function' })).toBe(false);
+    expect(state.setItem).not.toHaveBeenCalled();
+    expect(state.reload).not.toHaveBeenCalled();
   });
 });
