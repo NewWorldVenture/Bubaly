@@ -5473,6 +5473,8 @@
   "feedbackFeedbackBoard.tryClearingAFilterOrAdd": "Versuchen Sie, einen Filter zu entfernen, oder fügen Sie oben eine neue Idee hinzu.",
   "feedbackFeedbackBoard.whatAreYouSharing": "Was teilen Sie?",
   "feedbackGithubSync.unauthorized": "Nicht autorisiert",
+  "fieldName.pageType": "Seitentyp",
+  "fieldName.status": "Status",
   "filesHub.cancel": "Abbrechen",
   "filesHub.eGTravelSchoolFinances": "z. B. Reisen, Schule, Finanzen",
   "filesHub.file": "Datei",

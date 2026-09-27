@@ -5473,6 +5473,8 @@
   "feedbackFeedbackBoard.tryClearingAFilterOrAdd": "Probeer een filter te wissen, of voeg hierboven een nieuw idee toe.",
   "feedbackFeedbackBoard.whatAreYouSharing": "Wat deel je?",
   "feedbackGithubSync.unauthorized": "Niet geautoriseerd",
+  "fieldName.pageType": "Paginatype",
+  "fieldName.status": "Status",
   "filesHub.cancel": "Annuleren",
   "filesHub.eGTravelSchoolFinances": "bijv. Reizen, School, Financiën",
   "filesHub.file": "Bestand",
