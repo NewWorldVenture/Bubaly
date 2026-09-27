@@ -7,6 +7,7 @@ import { cacheIdentity, cacheKey, getCacheGeneration, readPartitionedCache, subs
 import { isAuthenticatedCacheScopeCurrent, useAuthenticatedCacheScope } from '@/lib/offline/cache-scope';
 import { realtimeChannelFor } from '@/lib/realtime/published-tables';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Fetcher<T> = (supabase: SupabaseBrowser) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
 export type QueryRefreshConfirmation =
@@ -182,8 +183,7 @@ export function useRealtimeQuery<T>({
     if (!spec) return;
     if (scope.authScope && (!isAuthenticatedCacheScopeCurrent(scope.authScope) || scope.authScope.familyId !== familyId)) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(spec.name)
+    const channel = ownChannel(supabase, spec.name)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table, filter: spec.filter },

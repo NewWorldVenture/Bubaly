@@ -40,6 +40,11 @@ export default function GlobalError({
 
   return (
     <html lang="en">
+      {/* The document is replaced, so the root layout's <title> is gone with it;
+          without one the tab reads the bare URL and axe fails document-title. */}
+      <head>
+        <title>{`${t('globalError.somethingWentWrong')} · Bubaly`}</title>
+      </head>
       <body
         style={{
           margin: 0,

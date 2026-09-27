@@ -26,7 +26,7 @@ import { searchHousehold, MAX_LIMIT, MIN_QUERY_CHARS } from '@/lib/services/sear
 import { groupByKind, kindLabelKey, type SearchKind } from '@/lib/search/rank';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Household search | Bubaly' };
+export const metadata: Metadata = { title: 'Household search' };
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<SearchKind, typeof FileText> = {

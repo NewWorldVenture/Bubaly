@@ -16,7 +16,7 @@ describe('marketplace storefront + negotiations surface a failed read (A-14 §3e
   it('storefront throws on a real store read error and reserves notFound() for a missing store', () => {
     expect(store).toContain('data: store, error: storeError');
     expect(store).toContain('if (storeError) throw new Error(');
-    expect(at(store, 'if (storeError) throw')).toBeLessThan(at(store, 'if (!store) notFound();'));
+    expect(at(store, 'if (storeError) throw')).toBeLessThan(at(store, 'if (!store) return <AppNotFound backHref="/marketplace/creators" />;'));
   });
 
   it('negotiations inbox returns a retryable ErrorState before the false-empty', () => {

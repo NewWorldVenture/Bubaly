@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { CheckCircle2, XCircle, ArrowLeft, ExternalLink } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -15,6 +14,7 @@ import { ProviderControls } from '@/components/sync/provider-controls';
 import { isProviderConfigured, getAdapter } from '@/lib/sync/registry';
 import type { SyncProviderEnum } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Sync provider' };
 export const dynamic = 'force-dynamic';
@@ -102,7 +102,7 @@ export default async function SyncProviderPage({
   const { provider: raw } = await params;
   const sp = await searchParams;
   const provider = raw as SyncProvider;
-  if (!VALID.includes(provider)) notFound();
+  if (!VALID.includes(provider)) return <AppNotFound backHref="/dashboard/sync" />;
 
   const statusKey = Object.keys(STATUS_MSG).find((k) => {
     const [key, val] = k.split('=');

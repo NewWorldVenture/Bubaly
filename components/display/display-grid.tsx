@@ -356,7 +356,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
 }
 
 function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
-  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/40"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
+  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/60"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
 }
 
 
@@ -885,9 +885,9 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
 
         {/* Footer band (padded clear of the hints ticker; hidden on the kiosk
             fit so the grid gets the full viewport — the pencil still edits) */}
-        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40', !editing && 'lg:hidden')}>
+        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/60', !editing && 'lg:hidden')}>
           <Sparkles className="h-3.5 w-3.5" /> {data.familyName} {tr('displayGrid.bubalyKitchenDisplay')}
-          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
+          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/80 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
         </p>
       </div>
 

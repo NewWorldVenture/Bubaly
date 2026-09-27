@@ -21,6 +21,15 @@ const PATH = '/resources/benchmarks';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
+  // The same gate as the page. Unpublished, the page is a 404 that must be
+  // indistinguishable from one that never existed — and its tab title and
+  // description were still announcing "Household Benchmarks". A read that
+  // FAILED keeps the real title: the page renders its own error card then.
+  const configured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const publication = configured ? await readBenchmarksPublication(createServiceClient()) : null;
+  if (!publication || (publication.ok && !publication.published)) {
+    return { title: t('publicPages.pageNotFound'), robots: { index: false } };
+  }
   return resolveMarketingMetadata(PATH, {
     title: t('benchmarksPage.metaTitle'),
     description: t('benchmarksPage.metaDescription', { floor: K_ANONYMITY_FLOOR }),

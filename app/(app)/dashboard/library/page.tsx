@@ -108,7 +108,7 @@ export default async function LibraryPage() {
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           {inProgress.length > 0 && (
             <Card>

@@ -157,7 +157,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
       {showAdd && <AddSourcePanel busy={busy} onClose={() => setShowAdd(false)} onAdd={(p, name, handle, cat) => run('add', () => addSourceAction({ platform: p, displayName: name, handle, category: cat }), 'Source added').then(() => setShowAdd(false))} />}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ── Main feed column ── */}
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface/40 p-3">
@@ -270,7 +270,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                     <PlatformGlyph platform={i.platform} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{i.authorName}</p>
-                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
+                      <p suppressHydrationWarning className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -322,7 +322,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             <p className="flex items-center gap-1 text-sm font-semibold">
               {item.authorName}
               {item.verified && <BadgeCheck className="h-3.5 w-3.5 text-sky-500" />}
-              <span className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
+              <span suppressHydrationWarning className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
             </p>
             <p className={cn('text-xs', m.tint)}>{m.label}{item.authorHandle ? ` · ${item.authorHandle}` : ''}</p>
           </div>

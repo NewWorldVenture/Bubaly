@@ -8,7 +8,7 @@ import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Decision Engine | Bubaly' };
+export const metadata: Metadata = { title: 'Decision Engine' };
 export const dynamic = 'force-dynamic';
 
 export default async function DecisionsPage() {

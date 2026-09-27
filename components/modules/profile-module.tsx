@@ -146,6 +146,9 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
             <span className="flex-1 text-sm font-medium">{isDark ? 'Dark Mode' : 'Light Mode'}</span>
             <button
               type="button"
+              role="switch"
+              aria-checked={isDark}
+              aria-label={t('profile.darkMode')}
               onClick={toggleTheme}
               className={cn(
                 'relative h-6 w-11 rounded-full transition-colors',

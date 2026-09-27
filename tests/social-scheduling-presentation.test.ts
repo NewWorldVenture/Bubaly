@@ -189,7 +189,7 @@ describe('social detail rendered schedule presentation', () => {
   });
 
   it('keeps missing and unavailable posts distinct and invokes no publishing action during render', async () => {
-    boundary.post.mockResolvedValue({ post: null, targets: [], variants: [], results: [] }); await expect(detail()).rejects.toThrow('FIXTURE_NOT_FOUND');
+    boundary.post.mockResolvedValue({ post: null, targets: [], variants: [], results: [] }); expect(await DetailPage({ params: Promise.resolve({ id: postId }) })).toMatchObject({ type: expect.objectContaining({ name: 'AppNotFound' }), props: { backHref: '/dashboard/social' } });
     boundary.post.mockRejectedValue(new Error('Fixture required post read unavailable')); await expect(detail()).rejects.toThrow('Fixture required post read unavailable');
     expect(boundary.retry).not.toHaveBeenCalled();
   });

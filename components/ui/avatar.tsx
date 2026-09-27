@@ -1,5 +1,6 @@
 import { initials } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { readableTextOn } from '@/lib/utils/readable-text';
 
 export function Avatar({
   name,
@@ -17,7 +18,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold',
         className,
       )}
       style={{
@@ -25,6 +26,9 @@ export function Avatar({
         height: size,
         fontSize: size * 0.4,
         backgroundColor: color ?? 'rgb(var(--brand))',
+        // White on some member colours is under AA; the initials take white
+        // or black, whichever reads on this one.
+        color: readableTextOn(color),
       }}
       aria-hidden={!name}
     >

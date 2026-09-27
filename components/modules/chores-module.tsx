@@ -343,7 +343,7 @@ export function ChoresModule() {
                     <span className="text-2xl">{choreEmoji(a.chore)}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{a.chore?.title ?? 'Chore'}</div>
-                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
+                      <div className="text-xs text-muted" suppressHydrationWarning>{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts</span>
                     {manager && (
@@ -494,7 +494,7 @@ export function ChoresModule() {
                   <Avatar name={m?.display_name ?? '?'} color={m?.color} size={26} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs"><span className="font-medium">{m?.display_name ?? 'Someone'}</span> submitted <span className="font-medium">{a.chore?.title}</span></div>
-                    <div className="text-[10px] text-muted">{timeAgo(a.submitted_at)}</div>
+                    <div className="text-[10px] text-muted" suppressHydrationWarning>{timeAgo(a.submitted_at)}</div>
                   </div>
                   {manager && (
                     <button onClick={() => approve(a)} disabled={busy === a.id}
@@ -557,7 +557,7 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
         <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-bold text-brand-text">{rows.length}</span>
       </div>
       <div className="overflow-hidden rounded-xl border border-border bg-surface/30">
-        <div className="hidden grid-cols-[1fr_150px_120px_110px_140px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted lg:grid">
+        <div className="hidden grid-cols-[minmax(0,1fr)_150px_120px_110px_140px_40px] border-b border-border bg-surface/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted lg:grid">
           <div>{tr('chores.chore')}</div><div>{tr('chores.assignee')}</div><div>Due</div><div>{tr('chores.reward')}</div><div>{tr('chores.status')}</div><div />
         </div>
         <div className="divide-y divide-border/50">
@@ -597,7 +597,7 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
   const nextStatus = a.status === 'todo' ? 'in_progress' : a.status === 'in_progress' ? 'submitted' : null;
 
   return (
-    <div className="grid grid-cols-1 items-center gap-2 px-4 py-3 transition hover:bg-surface/20 lg:grid-cols-[1fr_150px_120px_110px_140px_40px]">
+    <div className="grid grid-cols-1 items-center gap-2 px-4 py-3 transition hover:bg-surface/20 lg:grid-cols-[minmax(0,1fr)_150px_120px_110px_140px_40px]">
       {/* Chore */}
       <div className="flex items-center gap-3 min-w-0">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-elevated text-lg">{choreEmoji(a.chore)}</span>

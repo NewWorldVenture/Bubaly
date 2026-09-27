@@ -3,7 +3,7 @@ import { RelatedOutcomes } from '@/components/outcomes/related-outcomes';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { WishlistsModule } from '@/components/modules/wishlists-module';
 
-export const metadata: Metadata = { title: 'Wish Lists | Bubaly' };
+export const metadata: Metadata = { title: 'Wish Lists' };
 
 export default async function WishlistsPage() {
   await requireUserContext();

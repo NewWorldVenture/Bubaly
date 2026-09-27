@@ -128,7 +128,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
           )}
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-5">
             <div className="grid-stats">
               <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docs.length} tone="bg-brand/10 text-brand-text" />
@@ -140,11 +140,11 @@ export default async function AdminContentPage({ searchParams }: Params) {
             <Card>
               <FilterForm action="/admin/content" hidden={{ tab }}>
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminContent.searchContentByTitleOrFamily')} />
-                <FilterSelect name="category" defaultValue={categoryFilter} options={[
+                <FilterSelect name="category" label={tr('adminContent.category')} defaultValue={categoryFilter} options={[
                   { value: '', label: 'All Categories' },
                   ...categories.map((c) => ({ value: c, label: c })),
                 ]} />
-                <FilterSelect name="family" defaultValue={familyFilter} options={[
+                <FilterSelect name="family" label={tr('adminContent.family')} defaultValue={familyFilter} options={[
                   { value: '', label: 'All Families' },
                   ...(families ?? []).map((f) => ({ value: f.id, label: f.name })),
                 ]} />

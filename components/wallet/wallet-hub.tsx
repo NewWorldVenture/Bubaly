@@ -186,7 +186,7 @@ export function WalletHub() {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         {/* MAIN */}
         <div className="min-w-0 space-y-6">
           {/* Overview */}

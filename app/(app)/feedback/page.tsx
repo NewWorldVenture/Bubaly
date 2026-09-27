@@ -77,7 +77,7 @@ export default async function FeedbackPage() {
       </div>
 
       {/* Board + rail */}
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
           <FeedbackBoard initialIdeas={ideas} votedIds={votedIds} userId={ctx.user.id} isSuperAdmin={admin} />
         </div>

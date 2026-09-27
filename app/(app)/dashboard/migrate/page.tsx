@@ -9,7 +9,7 @@ import { getFormat } from '@/lib/utils/format-server';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Switch to Bubaly' };
+export const metadata: Metadata = { title: { absolute: 'Switch to Bubaly' } };
 export const dynamic = 'force-dynamic';
 
 export default async function MigratePage() {

@@ -174,7 +174,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: Params) {
             <StatCard icon={TrendingDown} label={tr('adminSubscriptions.churn30d')} value={`${churnRate.toFixed(1)}%`} tone="bg-danger/10 text-danger" />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Card>
               <h2 className="mb-4 text-base font-semibold">{tr('adminSubscriptions.subscriptionsOverTime')} <span className="text-muted">{tr('adminSubscriptions.last30Days')}</span></h2>
               <GrowthChart timestamps={subs.map((s) => s.created_at)} />

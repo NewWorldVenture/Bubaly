@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import {
   ArrowLeft, Tag, MapPin, Star, ShieldCheck, Clock, Package, Gift, HelpCircle,
   ShoppingBag, Repeat, HandHeart, Store as StoreIcon, AlertTriangle,
@@ -28,8 +27,9 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
-export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Listing · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {
@@ -63,7 +63,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     reportRead('Listing', listingError);
     return <ErrorState message={t('item.couldNotLoadThisListing')} />;
   }
-  if (!listing) notFound();
+  if (!listing) return <AppNotFound backHref="/marketplace" />;
 
   const isAuctionListing = listing.sale_format === 'auction';
   const { data: bidRows, error: bidsError } = isAuctionListing

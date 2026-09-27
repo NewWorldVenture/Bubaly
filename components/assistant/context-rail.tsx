@@ -78,7 +78,7 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
             })}
           </ul>
         ) : (
-          <p className="py-4 text-center text-sm text-muted/60">{t('contextRail.nothingComingUp')}</p>
+          <p className="py-4 text-center text-sm text-muted">{t('contextRail.nothingComingUp')}</p>
         )}
       </RailCard>
 
@@ -110,12 +110,12 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
               <li key={a.text} className="flex items-center gap-3 py-2 text-xs">
                 <a.icon className={cn('h-4 w-4 shrink-0', a.color)} aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-fg/80">{a.text}</span>
-                <span className="shrink-0 text-muted/60">{a.time}</span>
+                <span className="shrink-0 text-muted">{a.time}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="py-3 text-center text-xs text-muted/60">{t('contextRail.noRecentActivity')}</p>
+          <p className="py-3 text-center text-xs text-muted">{t('contextRail.noRecentActivity')}</p>
         )}
       </RailCard>
     </div>

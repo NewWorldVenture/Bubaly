@@ -42,15 +42,17 @@ function iconFor(kind: string) {
   return KIND_ICON[kind] ?? CircleDot;
 }
 
-export function AutopilotModule() {
+/** `preview`: a super admin looking at a family without Autopilot. The scan
+ *  route answers them 403, so the screen does not scan on open, and says why. */
+export function AutopilotModule({ preview = false }: { preview?: boolean } = {}) {
   const { familyId, userId, role, selfMember } = useApp();
   const owner = `${userId}:${familyId}:${selfMember?.id ?? ''}:${role}`;
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
-  return <FamilyAutopilot key={owner} owner={owner} currentOwner={currentOwner} />;
+  return <FamilyAutopilot key={owner} owner={owner} currentOwner={currentOwner} preview={preview} />;
 }
 
-function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner: { current: string } }) {
+function FamilyAutopilot({ owner, currentOwner, preview }: { owner: string; currentOwner: { current: string }; preview: boolean }) {
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -94,12 +96,12 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
 
   // Auto-scan once when the screen opens.
   useEffect(() => {
-    if (!scannedOnce && familyId) {
+    if (!preview && !scannedOnce && familyId) {
       setScannedOnce(true);
       void runScan();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId, scannedOnce]);
+  }, [familyId, preview, scannedOnce]);
 
   const open = useMemo(() => data.filter((s) => s.family_id === familyId && s.status === 'open'), [data, familyId]);
   const handled = useMemo(() => data.filter((s) => s.family_id === familyId && (s.status === 'auto_executed' || s.status === 'executed')), [data, familyId]);
@@ -166,6 +168,9 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
 
   return (
     <div className="module-page">
+      {preview && (
+        <p role="status" className="mb-4 rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">{t('featurePreview.notOnThisPlan')}</p>
+      )}
       <PageHeader
         title={t('autopilot.familyAutopilot')}
         description={t('autopilotModule.missionControlBubalyPredictsWhat')}

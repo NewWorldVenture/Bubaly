@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Plane, Sparkles, MapPin, CalendarDays, Users, Gauge } from 'lucide-react';
@@ -73,7 +73,13 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
 
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState<ReturnType<typeof blank> | null>(openCreate ? blank() : null);
+  const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  // /dashboard/vacations/new opens "New trip" on arrival. Opened in the first
+  // render, the dialog was a portal the client drew during hydration where the
+  // server (no document) had drawn nothing: React #418 on every visit (page
+  // audit, signed-in sweep). Opened after mount, the server and the client's
+  // first render agree.
+  useEffect(() => { if (openCreate) setForm(blank()); }, [openCreate]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();

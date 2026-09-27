@@ -9,7 +9,7 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Saved · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Saved · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceSavedPage() {

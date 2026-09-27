@@ -179,14 +179,14 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
       </div>
 
       {/* Main grid */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* Left: table */}
         <div className="space-y-5">
           <Card>
             {/* Filter bar */}
             <FilterForm action="/admin/support-tickets" hidden={{ tab }}>
               <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminSupportTickets.searchTickets')} />
-              <FilterSelect name="status" defaultValue={statusFilter} options={[
+              <FilterSelect name="status" label={tr('adminSupportTickets.status')} defaultValue={statusFilter} options={[
                 { value: '', label: 'All Status' },
                 { value: 'open',        label: 'Open' },
                 { value: 'in_progress', label: 'In Progress' },
@@ -194,18 +194,18 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 { value: 'resolved',    label: 'Resolved' },
                 { value: 'closed',      label: 'Closed' },
               ]} />
-              <FilterSelect name="priority" defaultValue={priorityFilter} options={[
+              <FilterSelect name="priority" label={tr('adminSupportTickets.priority')} defaultValue={priorityFilter} options={[
                 { value: '', label: 'All Priority' },
                 { value: 'urgent', label: 'Urgent' },
                 { value: 'high',   label: 'High' },
                 { value: 'medium', label: 'Medium' },
                 { value: 'low',    label: 'Low' },
               ]} />
-              <FilterSelect name="category" defaultValue={categoryFilter} options={[
+              <FilterSelect name="category" label={tr('adminSupportTickets.category')} defaultValue={categoryFilter} options={[
                 { value: '', label: 'All Categories' },
                 ...Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l })),
               ]} />
-              <FilterSelect name="agent" defaultValue={agentFilter} options={[
+              <FilterSelect name="agent" label={tr('adminSupportTickets.agent')} defaultValue={agentFilter} options={[
                 { value: '', label: 'All Agents' },
                 ...agentNames.map((n) => ({ value: n, label: n })),
               ]} />
@@ -272,7 +272,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                               <span className="text-xs">{ticket.assigned_agent_name}</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted/60 italic">{tr('supportTickets.unassigned')}</span>
+                            <span className="text-xs text-muted italic">{tr('supportTickets.unassigned')}</span>
                           )}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted whitespace-nowrap">
@@ -391,7 +391,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                       {/* @ts-expect-error dynamic icon */}
                       <Icon className="h-4 w-4" /> {label}
                     </span>
-                    <span className="text-muted/50">›</span>
+                    <span className="text-muted">›</span>
                   </a>
                 </li>
               ))}
@@ -444,11 +444,13 @@ function AvatarInitials({ name, size = 32 }: { name: string; size?: number }) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');
-  const colors = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-amber-500'];
+  // White on the 700 shade: at least 5:1 on every one. The theme's text-fg on
+  // the 500s read as low as 1.88:1 (amber), under AA's 4.5:1 for this size.
+  const colors = ['bg-violet-700 text-white', 'bg-blue-700 text-white', 'bg-emerald-700 text-white', 'bg-orange-700 text-white', 'bg-rose-700 text-white', 'bg-amber-700 text-white'];
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-fg ${color}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold ${color}`}
       style={{ width: size, height: size, fontSize: size * 0.35 }}
     >
       {initials || '?'}
