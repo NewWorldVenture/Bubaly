@@ -1511,6 +1511,7 @@
   "adminSecurity.theMostRecentSignUpsReset": "De nieuwste aanmeldingen — reset een wachtwoord of blokkeer een account dat ingrijpen vereist.",
   "adminSecurity.unconfirmedEmails": "Onbevestigde e-mails",
   "adminSecurity.whatsActuallyTrueAboutThisApplications": "Wat er werkelijk waar is over de architectuur van deze applicatie — geen live scan, maar een beschrijving van hoe ze is gebouwd.",
+  "adminServices.couldNotLoadTheOverrides": "De huidige dienstbeschrijvingen konden niet worden geladen. Vernieuw voordat je iets bewerkt — er is niets gewijzigd.",
   "adminServices.serviceCatalog": "Servicecatalogus",
   "adminSettings.configuration": "Configuratie",
   "adminSettings.connectedServices": "Verbonden diensten",

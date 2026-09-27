@@ -1511,6 +1511,7 @@
   "adminSecurity.theMostRecentSignUpsReset": "The most recent sign-ups — reset a password or ban an account that needs intervention.",
   "adminSecurity.unconfirmedEmails": "Unconfirmed emails",
   "adminSecurity.whatsActuallyTrueAboutThisApplications": "What’s actually true about this application’s architecture — not a live scan, a description of how it’s built.",
+  "adminServices.couldNotLoadTheOverrides": "Could not load the current service descriptions. Refresh before editing — nothing was changed.",
   "adminServices.serviceCatalog": "Service Catalog",
   "adminSettings.configuration": "Configuration",
   "adminSettings.connectedServices": "Connected services",

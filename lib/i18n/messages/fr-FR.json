@@ -1511,6 +1511,7 @@
   "adminSecurity.theMostRecentSignUpsReset": "Les inscriptions les plus récentes — réinitialisez un mot de passe ou bannissez un compte nécessitant une intervention.",
   "adminSecurity.unconfirmedEmails": "E-mails non confirmés",
   "adminSecurity.whatsActuallyTrueAboutThisApplications": "Ce qui est réellement vrai de l'architecture de cette application — pas une analyse en direct, mais une description de sa construction.",
+  "adminServices.couldNotLoadTheOverrides": "Impossible de charger les descriptions actuelles des services. Rechargez avant de modifier — rien n’a été changé.",
   "adminServices.serviceCatalog": "Catalogue de services",
   "adminSettings.configuration": "Configuration",
   "adminSettings.connectedServices": "Services connectés",

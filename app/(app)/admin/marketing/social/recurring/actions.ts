@@ -121,13 +121,22 @@ export async function createRecurringAdAction(formData: FormData): Promise<Actio
 }
 
 export async function setRecurringAdStatusAction(id: string, status: 'active' | 'paused'): Promise<ActionResult> {
+  const t = await getTranslations();
   const gate = await requireAdmin();
   if ('error' in gate) return { ok: false, error: gate.error };
   const supabase = createServiceClient();
 
   const { data: row, error: readError } = await supabase
     .from('marketing_recurring_ads').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
-  if (readError || !row) return { ok: false, error: 'That campaign could not be found.' };
+  // A read that FAILED is not "that campaign could not be found". On Pause, the
+  // operator saw a card that says Active, was told it was gone, and the cron
+  // then posted on schedule; and nothing reached the logs, so an outage and a
+  // deletion looked the same afterwards (SRV-001 l0).
+  if (readError) {
+    console.error('[recurring-ads] status change read failed', id, readError);
+    return { ok: false, error: t('campaigns.couldNotLoadThisMarketing') };
+  }
+  if (!row) return { ok: false, error: 'That campaign could not be found.' };
 
   // Resuming recomputes the next run from NOW. Keeping the stored one would
   // make a campaign paused over a holiday fire the moment it came back, for a
@@ -198,7 +207,13 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
 
   const { data: row, error: readError } = await supabase
     .from('marketing_recurring_ads').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
-  if (readError || !row) return { ok: false, error: 'That campaign could not be found.' };
+  // As in setRecurringAdStatusAction: a read that failed is not a missing
+  // campaign, and it is logged (SRV-001 l0).
+  if (readError) {
+    console.error('[recurring-ads] run now read failed', id, readError);
+    return { ok: false, error: t('campaigns.couldNotLoadThisMarketing') };
+  }
+  if (!row) return { ok: false, error: 'That campaign could not be found.' };
   const ad = row as unknown as AdRow;
   const now = new Date();
 

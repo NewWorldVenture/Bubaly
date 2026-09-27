@@ -1511,6 +1511,7 @@
   "adminSecurity.theMostRecentSignUpsReset": "Die neuesten Anmeldungen – setzen Sie ein Passwort zurück oder sperren Sie ein Konto, das eingreifen erfordert.",
   "adminSecurity.unconfirmedEmails": "Unbestätigte E-Mails",
   "adminSecurity.whatsActuallyTrueAboutThisApplications": "Was über die Architektur dieser Anwendung tatsächlich stimmt – kein Live-Scan, sondern eine Beschreibung ihres Aufbaus.",
+  "adminServices.couldNotLoadTheOverrides": "Die aktuellen Dienstbeschreibungen konnten nicht geladen werden. Lade die Seite neu, bevor du etwas bearbeitest – es wurde nichts geändert.",
   "adminServices.serviceCatalog": "Servicekatalog",
   "adminSettings.configuration": "Konfiguration",
   "adminSettings.connectedServices": "Verbundene Dienste",
