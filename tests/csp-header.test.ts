@@ -23,6 +23,22 @@ describe('Content-Security-Policy composition', () => {
     expect(prod['connect-src']).not.toContain('*');
   });
 
+  // Family photos, attachments and videos are Storage objects, rendered from
+  // signed URLs on the project's own origin since family-media went private
+  // (SEC-001, 0459). `https:` covers a hosted project, but not one on plain
+  // http — every local stack and CI's disposable Supabase — where the page
+  // refused every photo it had just signed. The configured origin is named,
+  // as connect-src names it, so the policy fits whichever project it serves.
+  it('lets the configured Supabase project serve images and media, on http as on https', () => {
+    expect(prod['img-src']).toContain('https:');
+    expect(prod['media-src']).toContain('https:');
+    const local = parseContentSecurityPolicy(buildContentSecurityPolicy({ supabaseUrl: 'http://127.0.0.1:54321', isProduction: true }));
+    expect(local['img-src']).toContain('http://127.0.0.1:54321');
+    expect(local['media-src']).toContain('http://127.0.0.1:54321');
+    expect(local['img-src']).not.toContain('http:');
+    expect(local['img-src']).not.toContain('*');
+  });
+
   it('permits only the third-party scripts and frames the codebase uses', () => {
     expect(prod['script-src']).toEqual(["'self'", "'unsafe-inline'", 'https://js.stripe.com']);
     expect(prod['script-src']).not.toContain("'unsafe-eval'");
