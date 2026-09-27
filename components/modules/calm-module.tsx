@@ -110,7 +110,7 @@ export function CalmModule({ inbox }: { inbox: CalmInbox }) {
         <p className="mt-2 px-2 text-center text-xs text-muted">
           {t('calm.bubalyIsTrackingTheseAcrossYour')}
           {' '}<Link href="/dashboard/family-operating-index" className="text-brand-text hover:underline">{t('calm.operatingIndex')}</Link>{' '}
-          or <Link href="/dashboard/agents" className="text-brand-text hover:underline">{t('calm.familyAssistant')}</Link> {t('calm.toSeeTheFullPicture')}
+          or <Link href="/dashboard/agents" className="text-brand-text underline underline-offset-2">{t('calm.familyAssistant')}</Link> {t('calm.toSeeTheFullPicture')}
         </p>
       )}
     </div>
