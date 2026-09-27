@@ -75,11 +75,23 @@ test.use({ trace: 'off', screenshot: 'off', video: 'off', locale: 'en-US' });
 const dinner = (page: Page, day: 'Monday' | 'Tuesday') => page.getByRole('button', { name: new RegExp(`^Dinner for ${day}`) });
 const dialog = (page: Page) => page.getByRole('dialog');
 
+async function acknowledgeMealSaved(page: Page) {
+  // The real mobile notification can cover the next picker's Create a meal
+  // control. Hover pauses its accessible dismissal timer, so the next click
+  // can remain blocked. Acknowledge the visible success through
+  // its actual Dismiss control before continuing; never force a covered click.
+  const saved = page.getByRole('status').filter({ hasText: 'Meal saved.' });
+  await expect(saved).toBeVisible();
+  await saved.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(saved).toHaveCount(0);
+}
+
 async function pickSaved(page: Page, day: 'Monday' | 'Tuesday', name: string) {
   await dinner(page, day).click();
   await dialog(page).getByRole('button', { name: new RegExp(name) }).click();
   await dialog(page).getByRole('button', { name: 'Save meal', exact: true }).click();
   await expect(dialog(page)).toHaveCount(0);
+  await acknowledgeMealSaved(page);
   await expect(dinner(page, day)).toContainText(name);
 }
 
@@ -160,6 +172,7 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       await dialog(page).getByRole('textbox', { name: 'Unit 2', exact: true }).fill('handful');
       await dialog(page).getByRole('button', { name: 'Save meal', exact: true }).click();
       await expect(dialog(page)).toHaveCount(0);
+      await acknowledgeMealSaved(page);
       await expect(dinner(page, 'Tuesday')).toContainText('Fixture herbed beans');
 
       phase = 'checking the persisted custom meal';
