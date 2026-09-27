@@ -53,6 +53,11 @@ describe('wallet and Stripe money action boundaries', () => {
     expect(walletMoneyActions).toContain('wroteNoRows(rolledBack)');
     expect(walletMoneyActions).toContain('a hold may be stranded');
     expect(walletMoneyActions).toContain("return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'))");
+    // And the readback itself is what `wroteNoRows(rolledBack)` above reads:
+    // RLS FILTERS the cancel rather than refusing it, so without it the one
+    // case worth logging — a held debit with no approval row that could ever
+    // resolve it — raised nothing and logged nothing.
+    expect(walletMoneyActions).toMatch(/const \{ data: rolledBack, error: rollbackError \}/);
   });
 
   it('does not silently downgrade entitlement when subscription reads fail', () => {

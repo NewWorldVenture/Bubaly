@@ -50,7 +50,12 @@ export default async function SyncHubPage() {
 
   const [connections, calendars, openConflicts, recentRuns] = await settleAll([
     supabase.from('sync_connections').select('id, provider, health, sync_status, last_synced_at, last_error').eq('family_id', familyId),
-    supabase.from('sync_calendars').select('id, feed_enabled', { count: 'exact' }).eq('family_id', familyId),
+    // Only the count is read (calendarCount below), so head-only — the idiom the
+    // conflicts query on the next line already uses. This was selecting `id,
+    // feed_enabled` for every calendar in the family and discarding the rows;
+    // feed_enabled in particular is a column nothing ever sets, so it was a
+    // column that cannot vary, fetched to be thrown away.
+    supabase.from('sync_calendars').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
     supabase.from('sync_conflicts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'open'),
     supabase.from('sync_job_runs').select('id, provider, status, items_imported, items_exported, conflicts_found, finished_at').eq('family_id', familyId).order('started_at', { ascending: false }).limit(5),
   ]);

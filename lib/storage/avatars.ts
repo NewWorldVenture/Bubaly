@@ -5,6 +5,7 @@
 //   SELECT: true (public read)
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { unguessableObjectName } from './object-name';
+import { describeActionError } from '@/lib/supabase/errors';
 
 const BUCKET = 'avatars';
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -29,7 +30,7 @@ export async function uploadAvatar(
     contentType: file.type,
     upsert: true,
   });
-  if (error) return { url: null, error: error.message };
+  if (error) return { url: null, error: describeActionError(error) };
 
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return { url: publicUrl, error: null };

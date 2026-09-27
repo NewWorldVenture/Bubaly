@@ -20,12 +20,20 @@ export default async function ReconciliationPage() {
     // This page RECONCILES the ledger, so reading part of it is worse than not
     // reading it at all: `.limit(20000)` returned 1,000 rows (PostgREST caps at
     // db-max-rows) and every discrepancy past that went unreported.
-    readAllAsQuery((from, to) => supabase.from('wallet_buckets').select('id, kind').order('id').range(from, to), { max: 20000 }),
+    //
+    // `failOnMax` closes the second half of the same problem. readAll honoured
+    // the 20,000 and then reported `error: null` whether the ledger held 14,000
+    // rows or 400,000 — and this read is platform-wide, ordered created_at DESC,
+    // so the rows dropped were the OLDEST. A ledger reconciled from its newest
+    // 20,000 rows is not incomplete, it is arithmetically wrong, and the page
+    // rendered "Everything reconciles" off that prefix. Reaching the ceiling now
+    // takes the readError branch below, which is the correct answer at the cap.
+    readAllAsQuery((from, to) => supabase.from('wallet_buckets').select('id, kind').order('id').range(from, to), { max: 20000, failOnMax: true }),
     readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, direction, amount_cents, status, type, reverses_id, created_at')
       .order('created_at', { ascending: false })
       .order('id')
-      .range(from, to), { max: 20000 }),
+      .range(from, to), { max: 20000, failOnMax: true }),
   ]);
 
   const readError = bucketsResult.error ?? txnsResult.error;

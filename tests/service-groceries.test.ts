@@ -18,6 +18,11 @@ import {
 } from '@/lib/services/groceries';
 import type { ServiceScope } from '@/lib/services/types';
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 afterEach(() => vi.restoreAllMocks());
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
@@ -47,7 +52,7 @@ function makeDb(respond: (call: Call) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  return { db: { from, rpc: missingDefaultListRpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 function scopeWith(db: SupabaseClient<Database>, extra?: Partial<ServiceScope>): ServiceScope {
@@ -87,7 +92,7 @@ describe('ensureDefaultList', () => {
   it('reuses the oldest un-archived list', async () => {
     const { db, calls } = makeDb(() => ({ data: { id: 'list-1' }, error: null }));
     const res = await ensureDefaultList(scopeWith(db));
-    expect(res).toEqual({ ok: true, data: { id: 'list-1', created: false } });
+    expect(res).toEqual({ ok: true, data: { id: 'list-1' } });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
     expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', is_archived: false });
   });
@@ -95,7 +100,7 @@ describe('ensureDefaultList', () => {
   it('creates one named Groceries with the auth user id', async () => {
     const { db, calls } = makeDb((call) => (call.kind === 'insert' ? { data: { id: 'list-new' }, error: null } : { data: null, error: null }));
     const res = await ensureDefaultList(scopeWith(db));
-    expect(res).toEqual({ ok: true, data: { id: 'list-new', created: true } });
+    expect(res).toEqual({ ok: true, data: { id: 'list-new' } });
     // grocery_lists.created_by references auth.users (0002).
     expect(calls.find((c) => c.kind === 'insert')?.payload).toEqual({
       family_id: 'fam-1', name: 'Groceries', created_by: 'auth-user-1',

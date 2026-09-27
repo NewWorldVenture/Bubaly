@@ -324,6 +324,10 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // materialised showed up in neither. `approved_at` is when the person said
   // yes; it is not a completion time and nothing may read it as one.
   // One clock read: the yes and the finish are the same moment on this path.
+  //
+  // RLS FILTERS this update rather than refusing it, so `error: null` did not mean
+  // the run's status moved. Everything below treats the run as executed, so a
+  // filtered write leaves it `pending` and the plan can be applied a second time.
   const now = new Date().toISOString();
   const { data: stamped, error: runErr } = await sb.from('family_automation_runs').update({
     status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
@@ -476,12 +480,12 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
         .select('id');
       if (retryError) {
         console.error('[concierge] autopilot policy insert-race update failed', { familyId, effect, error: retryError });
-        return { ok: false, error: retryError.message };
+        return { ok: false, error: describeActionError(retryError, t('actions.couldNotUpdateThatPolicy')) };
       }
       if (!retried?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
     } else if (insertError) {
       console.error('[concierge] autopilot policy insert failed', { familyId, effect, error: insertError });
-      return { ok: false, error: insertError.message };
+      return { ok: false, error: describeActionError(insertError, t('actions.couldNotUpdateThatPolicy')) };
     }
   }
 

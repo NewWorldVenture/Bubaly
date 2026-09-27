@@ -16,6 +16,8 @@ import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureTodoListId } from '@/lib/services/tasks';
 
 type DB = SupabaseClient<Database>;
 
@@ -77,29 +79,21 @@ function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
   return partial?.id ?? null;
 }
 
-/** Get-or-create the family's default grocery list. */
+/**
+ * Get-or-create the family's default grocery list — through the one serialised
+ * get-or-create (0443, DATA-007) the rest of the product uses, so two first
+ * captures at once, one from the assistant and one from the app, cannot give a
+ * family two lists. The name stays what the assistant always used.
+ */
 async function ensureGroceryList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
-  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
-  // `archived_at` (0014) — and only `archived_at` is ever written, by the
-  // shopping module. Asking one of them calls an archived list open and
-  // quietly files the family's groceries where nobody is looking.
-  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) return { id: null, error: lookupError };
-  if (existing?.id) return { id: existing.id };
-  const { data, error: createError } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
-  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('Grocery list was not created') };
+  const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');
+  return list.id ? { id: list.id } : { id: null, error: list.error };
 }
 
 /** Get-or-create the family's default to-do list. `memberId` is a family_members id (0015). */
 async function ensureTodoList(supabase: DB, familyId: string, memberId: string | null): Promise<ListResult> {
-  const { data: existing, error: lookupError } = await supabase.from('todo_lists').select('id')
-    .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) return { id: null, error: lookupError };
-  if (existing?.id) return { id: existing.id };
-  const { data, error: createError } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: memberId }).select('id').single();
-  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('To-do list was not created') };
+  const list = await ensureTodoListId(supabase, familyId, memberId, 'Tasks', false);
+  return list.id ? { id: list.id } : { id: null, error: list.error };
 }
 
 export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[] {

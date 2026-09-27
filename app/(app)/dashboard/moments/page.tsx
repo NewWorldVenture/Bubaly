@@ -9,7 +9,7 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
-import { dayKeyInTz } from '@/lib/services/scope';
+import { dayKeyInTz, addDaysToDayKey, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -54,10 +54,17 @@ export default async function Page() {
   let organizerMoments: OrganizerMoment[] = [];
   try {
     const now = new Date();
-    const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
+    const tz = ctx.active.family.timezone || 'UTC';
+    const todayIso = dayKeyInTz(now, tz);
     const in21 = new Date(now.getTime() + 21 * DAY).toISOString();
-    const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);
+    // `todayIso` above already asks for the family's day; this pair did not, so
+    // one expression resolved "today" in the household's zone and the next
+    // resolved "tomorrow" in the host's. Tomorrow's bounds come from the day
+    // key, which also keeps them on a real local midnight across the 23- and
+    // 25-hour DST days — `+ DAY` would not.
+    const tomorrowBounds = zonedDayBoundsMs(addDaysToDayKey(todayIso, 1), tz);
+    const tomorrowStart = new Date(tomorrowBounds.start);
+    const tomorrowEnd = new Date(tomorrowBounds.end);
 
     const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),

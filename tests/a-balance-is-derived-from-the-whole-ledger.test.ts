@@ -62,11 +62,12 @@ function chains(source: string, table: string): { text: string; line: number }[]
  */
 function isBounded(chain: string): boolean {
   if (!/\.select\(/.test(chain)) return true;           // insert / update / delete
-  // A write CONFIRMED with `.select('id')` is still a write: it returns the rows
-  // it changed, not a ledger to total. The C1-S9-53 hold rollback in
-  // app/(app)/wallet/actions.ts is the case that taught this (merge with main,
-  // Audit C1-S9-89).
-  if (/^\.from\([^)]*\)\s*\.(insert|update|upsert|delete)\(/.test(chain)) return true;
+  // A write READ BACK is still a write. The audit branch's rule is that every
+  // write on an RLS-gated table chains `.select('id')` so a filtered write is
+  // not reported as a landed one, and the rows that returns are the rows the
+  // write touched — never a total. Without this, the rollback that cancels one
+  // held debit by id read as an unbounded ledger read.
+  if (/\.(update|insert|upsert|delete)\(/.test(chain)) return true;
   if (/\.(maybeSingle|single)\(/.test(chain)) return true;
   if (/head:\s*true|count:\s*'exact'/.test(chain)) return true;
   if (/\.range\(/.test(chain)) return true;               // paged by readAll/readAllAsQuery

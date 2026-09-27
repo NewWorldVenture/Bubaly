@@ -76,7 +76,8 @@ export function InsuranceModule() {
   async function removePolicy(id: string) {
     if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: updated, error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id).select('id');
+    const { data: updated, error } = await createClient().from('family_insurance_policies').update({ is_active: false })
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setSelected(null);

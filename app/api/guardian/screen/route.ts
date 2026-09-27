@@ -5,8 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
-import { screeningTurn, summarizeScreening, type ScreeningTurn } from '@/lib/guardian/ai-screen';
+import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
 import {
   wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlDial, twimlHangup,
   sendSms, validateTwilioSignature,
@@ -18,10 +17,11 @@ import { isNextScreeningTurn } from '@/lib/guardian/screening-turn';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -63,8 +63,6 @@ export async function POST(req: NextRequest) {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return twimlResponse(xml);
   };
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Load session.
   //
@@ -77,7 +75,7 @@ export async function POST(req: NextRequest) {
   // to the caller from being screened out. Guardian screens for scams against
   // the people least able to absorb one; the call it drops this way is as
   // likely to be a real grandchild as a fraudster. Audit C1-S9-39.
-  const { data: session, error: sessionError } = await gFrom('guardian_screening_sessions')
+  const { data: session, error: sessionError } = await supabase.from('guardian_screening_sessions')
     .select('*, communication_id')
     .eq('id', sessionId)
     .maybeSingle();
@@ -104,13 +102,12 @@ export async function POST(req: NextRequest) {
     ));
   }
 
-  const sess = session as {
-    id: string;
-    family_id: string;
-    communication_id: string | null;
-    messages: ScreeningTurn[];
-    caller_number: string | null;
-    turn: number;
+  // `messages` is jsonb, so the row type says `Json`. The rows this route reads
+  // are the ones it wrote, turn by turn, as ScreeningTurn[] — narrow through
+  // `unknown` rather than widening the column's type for everyone.
+  const sess = {
+    ...session,
+    messages: (session.messages ?? []) as unknown as ScreeningTurn[],
   };
 
   // Quick scam check on what caller said
@@ -129,7 +126,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Load member/family context for AI
-  const { data: memberProfile } = await gFrom('guardian_member_profiles')
+  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
     .select('*')
     .eq('family_id', sess.family_id)
     .maybeSingle();
@@ -167,7 +164,7 @@ export async function POST(req: NextRequest) {
   // turn reasons from, so a silent failure leaves the screening AI deciding on
   // a conversation that stops two turns ago. Confirmed and logged, never raised.
   // Audit C1-S9-63.
-  const { data: historySaved, error: historyError } = await gFrom('guardian_screening_sessions').update({
+  const { data: historySaved, error: historyError } = await supabase.from('guardian_screening_sessions').update({
     messages: newHistory,
     turn,
     caller_name_stated: decision?.callerName ?? (session as { caller_name_stated?: string }).caller_name_stated,
@@ -242,7 +239,7 @@ export async function POST(req: NextRequest) {
     const summary = await summarizeScreening(newHistory, decision?.callerName ?? null, memberName);
     if (sess.communication_id) {
       // Logged, not raised, as above. Audit C1-S9-63.
-      const { data: summarised, error: summaryError } = await gFrom('guardian_communications')
+      const { data: summarised, error: summaryError } = await supabase.from('guardian_communications')
         .update({ summary, status: 'handled' }).eq('id', sess.communication_id).select('id');
       if (summaryError || wroteNoRows(summarised)) {
         console.error('[guardian/screen] voicemail summary save failed', {
@@ -289,17 +286,24 @@ async function endScreening(
   supabase: ReturnType<typeof createServiceClient>,
   sessionId: string,
   commId: string | null,
-  finalAction: string,
-  meta: { ai_risk: string; ai_urgency: string; ai_intent: string; resolution_summary: string },
+  // The decision's own field types, not `string`. These land in columns with
+  // CHECK constraints, so a value outside the set is rejected by Postgres at
+  // write time and the session silently stays open. Taking the union here
+  // makes that a compile error instead.
+  finalAction: ScreeningDecision['action'],
+  meta: {
+    ai_risk: ScreeningDecision['risk'];
+    ai_urgency: ScreeningDecision['urgency'];
+    ai_intent: string;
+    resolution_summary: string;
+  },
 ) {
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // The session left unresolved stays "in progress" in the family's call log,
   // and the communication left unhandled keeps its risk unrecorded — which is
   // the one field a parent reviewing a scam call reads. Logged, never raised:
   // the caller is still on the line. Audit C1-S9-63.
-  const { data: resolved, error: resolveError } = await gFrom('guardian_screening_sessions').update({
+  const { data: resolved, error: resolveError } = await supabase.from('guardian_screening_sessions').update({
     status: 'resolved',
     final_action: finalAction,
     ai_risk: meta.ai_risk,
@@ -312,7 +316,7 @@ async function endScreening(
   }
 
   if (commId) {
-    const { data: handled, error: handledError } = await gFrom('guardian_communications').update({
+    const { data: handled, error: handledError } = await supabase.from('guardian_communications').update({
       status: 'handled',
       ai_decision_reason: meta.resolution_summary,
       sentiment: meta.ai_urgency === 'emergency' ? 'urgent' : meta.ai_risk.includes('scam') ? 'suspicious' : 'neutral',

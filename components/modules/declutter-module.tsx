@@ -18,7 +18,7 @@ import type { Tables, DeclutterZoneKind } from '@/lib/database.types';
 import {
   ZONE_KINDS, SCORE_LABELS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useConfirm } from '@/components/ui/confirm';
 
@@ -39,6 +39,7 @@ export function DeclutterModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const plural = usePlural();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -91,7 +92,7 @@ export function DeclutterModule() {
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
-    success(`${plan.length} mission${plan.length === 1 ? '' : 's'} planned for the week`);
+    success(plural('declutter.missionsPlanned', plan.length));
   }
 
   async function skipMission(m: Mission) {
@@ -121,7 +122,7 @@ export function DeclutterModule() {
     const { data: updated3, error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(`${z.name} reset to tidy`);
+    success(tr('modules.zoneResetToTidy', { name: z.name }));
   }
 
   async function bumpScore(z: Zone, delta: 1 | -1) {
@@ -147,6 +148,7 @@ export function DeclutterModule() {
 
   const MissionRow = ({ m }: { m: Mission }) => {
   const tr = useTranslations();
+  const plural = usePlural();
     const z = zoneOf(m.zone_id);
     const overdue = m.status === 'planned' && m.scheduled_for && m.scheduled_for < todayIso;
     return (
@@ -209,7 +211,7 @@ export function DeclutterModule() {
         </div>
         <div className={cn('rounded-2xl border p-5', summary.streak >= 3 ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> {tr('declutter.streak')}</div>
-          <p className="mt-2 text-2xl font-bold">{summary.streak}<span className="text-sm font-normal text-muted"> day{summary.streak === 1 ? '' : 's'}</span></p>
+          <p className="mt-2 text-2xl font-bold">{summary.streak}<span className="text-sm font-normal text-muted"> {plural('declutter.dayUnit', summary.streak)}</span></p>
           <p className="mt-1 text-xs text-muted">{summary.streak ? 'A session today keeps it alive' : 'Log a session to start one'}</p>
         </div>
       </div>
@@ -316,7 +318,7 @@ export function DeclutterModule() {
                 {sessions.data.slice(0, 6).map((s) => (
                   <li key={s.id} className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm">
                     <p className="font-medium">{s.minutes} min{zoneOf(s.zone_id) ? ` · ${zoneOf(s.zone_id)?.name}` : ''}</p>
-                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${s.missions_done} mission${s.missions_done === 1 ? '' : 's'}` : ''}</p>
+                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${plural('declutter.missionCount', s.missions_done)}` : ''}</p>
                   </li>
                 ))}
               </ul>
@@ -333,7 +335,7 @@ export function DeclutterModule() {
           onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
-        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
+        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(tr('modules.missionDonePoints', { points: pts })); }} />
       )}
       {sessionOpen && (
         <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />

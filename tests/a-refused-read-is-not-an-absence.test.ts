@@ -35,6 +35,9 @@ type Call = { table: string; op: string; payload?: unknown };
 /** Reads resolve per table in order; writes are recorded and succeed. */
 function fakeDb(reads: Record<string, Outcome[]>, calls: Call[]) {
   return {
+    // A database without 0443's get-or-create (PGRST202), so the default-list
+    // helper takes the read-then-insert path these cases were written against.
+    rpc: async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }),
     from(table: string) {
       let op = 'select';
       const chain: Record<string, unknown> = {};
@@ -45,7 +48,9 @@ function fakeDb(reads: Record<string, Outcome[]>, calls: Call[]) {
       };
       Object.assign(chain, {
         select: () => chain, eq: () => chain, is: () => chain, in: () => chain, order: () => chain, limit: () => chain,
-        maybeSingle: settle,
+        // One row or null, as PostgREST answers it — the same unwrapping
+        // `single` below does, so a spec's array means the same to both.
+        maybeSingle: () => settle().then((r) => ({ ...r, data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data })),
         single: () => settle().then((r) => ({ ...r, data: Array.isArray(r.data) ? r.data[0] : r.data })),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => settle().then(res, rej),
         insert: (payload: unknown) => { op = 'insert'; calls.push({ table, op, payload }); return chain; },

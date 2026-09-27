@@ -35,7 +35,7 @@ export function TierFeaturesClient({ resolved }: { resolved: Record<string, Feat
         setState((s) => ({ ...s, [key]: prev }));
         error(t('tierFeaturesClient.couldNotUpdateAdminOnly'));
       } else {
-        success(`Saved · pricing updated`);
+        success(t('tierFeatures.savedPricingUpdated'));
       }
     });
   }

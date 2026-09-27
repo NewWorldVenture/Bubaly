@@ -23,6 +23,7 @@ describe('the behavior-log delete control', () => {
 
   it('reports a delete that removed nothing as not saved', () => {
     expect(source).toMatch(/\.from\('behavior_logs'\)\.delete\(\)[^;]*\.select\('id'\)/);
-    expect(source).toMatch(/!data\?\.length\) toastError\(tr\('errors\.thatChangeWasNotSaved'\)\)/);
+    // Either spelling of "no rows": the inline test or the shared helper.
+    expect(source).toMatch(/(?:!data\?\.length|wroteNoRows\(data\))\) toastError\(tr\('errors\.thatChangeWasNotSaved'\)\)/);
   });
 });

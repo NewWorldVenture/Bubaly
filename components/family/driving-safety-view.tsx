@@ -45,7 +45,11 @@ export function DrivingSafetyView() {
 
   async function remove(id: string) {
     if (!confirm(tr('drivingSafetyView.deleteThisTrip'))) return;
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    // main's 0365 ("a driving record is not the driver's to erase") narrows
+    // writes here, and RLS FILTERS a delete rather than refusing it — so without
+    // the readback a removal the policy blocked came back `error: null` and was
+    // reported as "Deleted". The family scope answers a different question from
+    // the readback: whose row it was, rather than whether anything went.
     const { data, error } = await createClient().from('driving_trips').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));

@@ -45,28 +45,33 @@ const de = (key: string, p?: Record<string, string | number>) => ({
 
 const NOW = new Date(2026, 6, 14, 12, 0, 0);           // Tuesday 14 July 2026, local
 const at = (d: number, h = 12) => new Date(2026, 6, 14 + d, h, 0, 0).toISOString();
+// dueLabel reads the day in the FAMILY's zone (the chores-dashboard tests pin
+// that); these pin the words and the date format, so they use one zone.
+const TODAY = '2026-07-14';
+const TZ = 'UTC';
+const due = (d: number) => `2026-07-${String(14 + d).padStart(2, '0')}T12:00:00Z`;
 
 describe('lib/chores/dashboard dueLabel', () => {
   it('keeps English and the same tones when no translator is supplied', () => {
-    expect(dueLabel(null, NOW)).toEqual({ label: 'No due date', tone: 'none' });
-    expect(dueLabel(at(-1), NOW)).toEqual({ label: 'Overdue', tone: 'overdue' });
-    expect(dueLabel(at(0), NOW)).toEqual({ label: 'Today', tone: 'today' });
-    expect(dueLabel(at(1), NOW)).toEqual({ label: 'Tomorrow', tone: 'soon' });
-    expect(dueLabel(at(4), NOW)).toEqual({ label: 'Sat, Jul 18', tone: 'normal' });
+    expect(dueLabel(null, TODAY, TZ)).toEqual({ label: 'No due date', tone: 'none' });
+    expect(dueLabel(due(-1), TODAY, TZ)).toEqual({ label: 'Overdue', tone: 'overdue' });
+    expect(dueLabel(due(0), TODAY, TZ)).toEqual({ label: 'Today', tone: 'today' });
+    expect(dueLabel(due(1), TODAY, TZ)).toEqual({ label: 'Tomorrow', tone: 'soon' });
+    expect(dueLabel(due(4), TODAY, TZ)).toEqual({ label: 'Sat, Jul 18', tone: 'normal' });
   });
 
   it('translates the words and localises the date, and the TONE never moves', () => {
-    expect(dueLabel(at(-1), NOW, 'de-DE', de)).toEqual({ label: 'Überfällig', tone: 'overdue' });
-    expect(dueLabel(at(0), NOW, 'de-DE', de)).toEqual({ label: 'Heute', tone: 'today' });
-    expect(dueLabel(at(4), NOW, 'de-DE', de)).toEqual({ label: 'Sa., 18. Juli', tone: 'normal' });
+    expect(dueLabel(due(-1), TODAY, TZ, 'de-DE', de)).toEqual({ label: 'Überfällig', tone: 'overdue' });
+    expect(dueLabel(due(0), TODAY, TZ, 'de-DE', de)).toEqual({ label: 'Heute', tone: 'today' });
+    expect(dueLabel(due(4), TODAY, TZ, 'de-DE', de)).toEqual({ label: 'Sa., 18. Juli', tone: 'normal' });
     // The tone drives colour and urgency. A locale must never reach it.
     for (const days of [-1, 0, 1, 4]) {
-      expect(dueLabel(at(days), NOW, 'de-DE', de).tone).toBe(dueLabel(at(days), NOW).tone);
+      expect(dueLabel(due(days), TODAY, TZ, 'de-DE', de).tone).toBe(dueLabel(due(days), TODAY, TZ).tone);
     }
   });
 
   it('still reports an unparseable due date as having none', () => {
-    expect(dueLabel('not-a-date', NOW, 'de-DE', de).label).toBe('Kein Fälligkeitsdatum');
+    expect(dueLabel('not-a-date', TODAY, TZ, 'de-DE', de).label).toBe('Kein Fälligkeitsdatum');
   });
 });
 

@@ -55,11 +55,37 @@ type PageResult<T, E> = { data: T[] | null; error: E | null };
  * considered bound. Measured: a table of 6,500 rows answered `.limit(5000)`
  * with exactly 1,000. Pass the number you actually mean here and it is honoured
  * by paging to it.
+ *
+ * REACHING that ceiling is an ERROR. It used to be the one silent exit left in
+ * this file: a caller asking for `{ max: 20000 }` got `error: null` whether the
+ * table held 14,000 rows or 400,000, which is the same "you received rows and
+ * believe that is the table" this helper was written against — only now with the
+ * caller's own number on it. `truncated` also says which happened, for a caller
+ * that wants to render the fact rather than the failure.
+ *
+ * `failOnMax: false` opts out, and is the ONLY way to get a prefix back without
+ * an error. That direction matters: the alternative — silence by default, error
+ * on request — is the same defect one level up, because the call site that most
+ * needs the error is the one nobody thought about.
+ *
+ * Telling the two apart costs ONE extra ROW, not an extra round trip: the paging
+ * loop runs to `max + 1` and the final range simply reaches one past the
+ * ceiling. A table of exactly `max` rows answers that page empty and is reported
+ * complete; a larger one hands back the extra row, which is dropped from the
+ * result and used only as evidence. This is the same trade the short-page rule
+ * above makes, for the same reason — a count that might be the end and might be
+ * a cap is not an answer.
+ *
+ * Pass `failOnMax: false` only where the rows are LISTED rather than summed, and
+ * ordered so that the prefix is the useful end of the set. A truncated list is a
+ * display bug; a truncated sum is a wrong number presented as a right one, and
+ * the reconciler's correct behaviour at the cap is the error state it already
+ * renders, not a green "everything reconciles".
  */
 export async function readAll<T, E = { message: string }>(
   page: (from: number, to: number) => PromiseLike<PageResult<T, E>>,
-  options: { max?: number } = {},
-): Promise<{ rows: T[]; error: E | { message: string } | null }> {
+  options: { max?: number; failOnMax?: boolean } = {},
+): Promise<{ rows: T[]; error: E | { message: string } | null; truncated: boolean }> {
   // A ceiling the CALLER chose is a destination; the default one is a tripwire.
   // Reaching the second means the query is not terminating. Reaching the first
   // used to be treated as success — and that was wrong, which is the whole point
@@ -94,29 +120,51 @@ export async function readAll<T, E = { message: string }>(
     try {
       ({ data, error } = await page(from, from + want - 1));
     } catch (cause) {
-      return { rows, error: { message: cause instanceof Error ? cause.message : String(cause) } };
+      return { rows, error: { message: cause instanceof Error ? cause.message : String(cause) }, truncated: false };
     }
-    if (error) return { rows, error };
-    if (!data) return { rows, error: new Error('The data page was unavailable') };
-    if (data.length === 0) return { rows, error: null };
+    if (error) return { rows, error, truncated: false };
+    if (!data) return { rows, error: new Error('The data page was unavailable'), truncated: false };
+    if (data.length === 0) return { rows, error: null, truncated: false };
 
     rows.push(...data);
     from += data.length;
   }
 
-  if (options.max !== undefined) {
+  // Falling out of the loop means `probe` rows arrived — one MORE than the
+  // ceiling — so the set is demonstrably larger than the ceiling. A table of
+  // exactly `max` rows never reaches here: it exits above on the empty page,
+  // reported complete. That is what the extra row buys, and it costs no extra
+  // round trip because it rides along on the last page's range.
+  const capped = rows.slice(0, ceiling);
+
+  if (options.max === undefined) {
     return {
-      rows: rows.slice(0, ceiling),
-      error: {
-        message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
-          + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
-          + 'or raise the max.',
-      },
+      rows: capped,
+      error: { message: `readAll stopped at ${ceiling} rows; the query is probably not terminating.` },
+      truncated: true,
     };
   }
+
+  // Truncation is an ERROR BY DEFAULT. A caller's `max` is a bound they expect
+  // the data to fit under, so reaching it is not success — it means rows exist
+  // that were never read, and the admin reconciliation page's own header says
+  // reading part of a ledger is worse than not reading it at all.
+  //
+  // `failOnMax: false` is the explicit opt-out, for the one shape where a prefix
+  // IS the answer: a list ordered newest-first that shows recent activity rather
+  // than summing it. Making that the opt-out rather than the opt-in means a new
+  // call site that forgets the flag gets the error, not the silence.
+  if (options.failOnMax === false) {
+    return { rows: capped, error: null, truncated: true };
+  }
   return {
-    rows: rows.slice(0, ceiling),
-    error: { message: `readAll stopped at ${ceiling} rows; the query is probably not terminating.` },
+    rows: capped,
+    error: {
+      message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
+        + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
+        + 'or raise the max.',
+    },
+    truncated: true,
   };
 }
 
@@ -133,11 +181,11 @@ export async function readAll<T, E = { message: string }>(
  */
 export async function readAllAsQuery<T, E = { message: string }>(
   page: (from: number, to: number) => PromiseLike<PageResult<T, E>>,
-  options: { max?: number } = {},
-): Promise<{ data: T[] | null; count: null; error: E | { message: string } | null }> {
-  const { rows, error } = await readAll<T, E>(page, options);
+  options: { max?: number; failOnMax?: boolean } = {},
+): Promise<{ data: T[] | null; count: null; error: E | { message: string } | null; truncated: boolean }> {
+  const { rows, error, truncated } = await readAll<T, E>(page, options);
   // A failed read is not an empty table, and inside a batch that difference is
   // the whole point: `data: null` is what the caller's own error branch keys on.
-  if (error) return { data: null, count: null, error };
-  return { data: rows, count: null, error: null };
+  if (error) return { data: null, count: null, error, truncated };
+  return { data: rows, count: null, error: null, truncated };
 }

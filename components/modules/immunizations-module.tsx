@@ -43,6 +43,8 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
     fetcher: (sb) => sb.from('immunizations').select('*').eq('family_id', familyId),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
@@ -55,34 +57,62 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.vaccine.trim()) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      vaccine: form.vaccine.trim(),
-      dose_label: form.dose_label.trim() || null,
-      date_given: form.date_given || null,
-      next_due_date: form.next_due_date || null,
-      provider_name: form.provider_name.trim() || null,
-      lot_number: form.lot_number.trim() || null,
-      notes: form.notes.trim() || null,
-    };
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
-    const { data: saved, error } = form.id
-      ? await supabase.from('immunizations').update(row).eq('id', form.id).select('id')
-      : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
-    success(form.id ? 'Record updated' : 'Immunization added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.vaccine.trim()) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        vaccine: form.vaccine.trim(),
+        dose_label: form.dose_label.trim() || null,
+        date_given: form.date_given || null,
+        next_due_date: form.next_due_date || null,
+        provider_name: form.provider_name.trim() || null,
+        lot_number: form.lot_number.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+      // The SAME reasoning as `remove` below, which is the point worth recording:
+      // that fix landed on the DELETE and stopped one line short of the UPDATE in
+      // the same function. RLS filters both identically — 0430 makes this a Rule B
+      // table, a record of medical fact its subject may not rewrite — so an edit a
+      // member is not allowed to make comes back `error: null` with nothing
+      // changed, and "Record updated" was the answer either way. The family_id
+      // predicate bounds it to one household; `.select('id')` makes the empty
+      // result an answer. An INSERT needs neither: RLS REFUSES an insert with an
+      // error rather than filtering it away.
+      const { data, error } = form.id
+        ? await supabase.from('immunizations').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
+      success(form.id ? t('immunizationsModule.recordUpdated') : t('immunizationsModule.immunizationAdded'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
-    const { data: deleted, error } = await createClient().from('immunizations').delete().eq('id', id).select('id');
-    if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(deleted)) toastError(t('errors.thatChangeWasNotSaved'));
-    else success(t('immunizationsModule.deleted'));
+    // `.select('id')` is the whole point: RLS filters a DELETE rather than
+    // refusing it, so a row this member may not remove comes back as
+    // `error: null` with nothing deleted. 0430 makes immunizations a Rule B
+    // table — a record of medical fact, which its SUBJECT may not erase — so
+    // that is a live outcome for a child pressing this button, and reporting it
+    // as "Deleted" told them their record was gone when it was not.
+    const { data, error } = await createClient().from('immunizations').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
+    if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(data)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {
@@ -190,7 +220,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
             <Field label={t('immunizations.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('immunizations.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

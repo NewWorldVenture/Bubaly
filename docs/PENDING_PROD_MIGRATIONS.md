@@ -2921,3 +2921,53 @@ cannot read the document. No writer upserts this table. `vacation_flights` and
 `vacation_tickets` carry the same `document_id` column with the same FK, and
 this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
 writes either column or follows it today.
+
+### `0426`–`0443`, PR #548's block — all unapplied, and four numbers deliberately left empty
+
+PR #548 numbered this block `0318`–`0338`, then `0361`–`0382`, and each time
+`main` landed the same numbers first (its own `0318`–`0360`, then #579's
+`0344`–`0380` and #581's `0381`–`0387`). It now sits at `0426`–`0443`, in the
+range assigned to the PR, in its original order. Fourteen files:
+
+| # | Subject |
+|---|---|
+| `0426_a_policy_should_say_what_it_checks` | Blanket family-member policies restated with the predicate they check — skipped wherever `main` has already replaced the blanket policy |
+| `0428_a_reward_costs_what_the_parent_set` | An economy redemption names a reward and is charged that reward's price; `economy_decide_redemption` (0196) replaced in place |
+| `0429_a_family_cannot_write_its_own_entitlement` | `subscriptions` and `billing_customers` are not the family's to write |
+| `0430_a_health_record_is_not_a_siblings_to_rewrite` | Nine health tables |
+| `0432_a_guardian_number_belongs_to_one_family` | A unique index on the Guardian phone number |
+| `0433_the_terms_of_a_deal_are_fixed_when_it_is_struck` | Marketplace offer/order terms fixed once struck |
+| `0434_a_prescription_is_a_parents_to_write` | Medications |
+| `0435_a_childs_own_record_is_not_theirs_to_rewrite` | `grades` and `screen_time_limits` |
+| `0438_a_diagnosis_is_not_the_familys_to_browse` | `medical_profiles` reads, and `family_allergies()` for the household's allergies |
+| `0439_a_reward_is_paid_for_with_points_that_exist` | A reward-balance trigger on `reward_redemptions` |
+| `0440_a_device_is_buzzed_once_per_notification` | `push_deliveries` |
+| `0441_an_email_event_is_counted_once` | `apply_resend_campaign_counter()` |
+| `0442_a_childs_milestones_are_a_parents_to_mark` | `independence_milestones` |
+| `0443_a_family_gets_one_default_list` | `ensure_default_grocery_list()` / `ensure_default_todo_list()` (DATA-007) |
+
+**Deploy coupling, where it was checked.** `0438` is **coupled with app code**:
+`addFromMealPlan` (`lib/services/groceries`) and the meal service
+(`lib/services/meals`) read allergies through `family_allergies()` with no
+missing-function fallback, so on a schema without `0438` both fail closed
+("Could not read …") — apply it before, or with, the deploy that ships this
+code. `0441` and `0443` are safe before apply: their callers take `PGRST202` as
+"not migrated yet" and use the path that ran before. The other files' deploy
+order is not asserted here.
+
+**`0427`, `0431`, `0436` and `0437` are deliberately empty.** Each was this
+PR's fix for a subject `main` had since closed, and each, laid after `main`'s,
+replaced or widened `main`'s rule. They are recorded rather than renumbered, as
+`0334` and `0337` are:
+
+| Empty | Was | Duplicates | Shown by |
+|---|---|---|---|
+| `0427` | a driving score | `main`'s `0365` | `driving-score-write-boundary-check.sql`: with it, a teen erases the trip they logged |
+| `0431` | safety check-ins | `main`'s `0379` | `locator-write-boundary-check.sql` step 6: with it, a child files a check-in naming no member (and a parent can no longer file one for a child) |
+| `0436` | behaviour-note authorship | `main`'s `0377` | `access-record-write-boundary-check.sql`: with it, a child rewrites a note they logged |
+| `0437` | journals | `main`'s `0364` | `private-journal-check.sql` (main's): 2 failures with it |
+
+**Evidence.** A private PG16 database replayed from empty: 412 migrations
+applied, 0 failed; `docs/audit/run-probes.sh` twice on it, 137 of 137 passed,
+none skipped. Each empty number's file was then put back on a copy of that
+database and the probe named above went red.

@@ -13,7 +13,7 @@ import { createServer } from '@/lib/supabase/server';
 import { launchLifeEvent, LIFE_EVENT_ROLLBACK_INCOMPLETE, type LifeEventHandoff } from '@/lib/life-events/launch';
 import { getTemplate } from '@/lib/life-events/templates';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type LaunchResult = {
   ok: boolean;
@@ -68,7 +68,7 @@ export async function setLifeEventStatusAction(planId: string, status: 'active' 
     .eq('id', planId)
     .eq('family_id', ctx.active.familyId)
     .select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(set)) return { ok: false, error: t('lifeEventActions.invalidPlan') };
   return { ok: true };
 }

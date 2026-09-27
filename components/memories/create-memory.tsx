@@ -96,7 +96,7 @@ export function CreateMemory() {
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (upErr) {
-        toastError(`Couldn’t upload ${file.name}. Please try again.`);
+        toastError(t('memories.couldNotUploadFile', { name: file.name }));
       } else {
         const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
         const { data: row, error: insErr } = await supabase.from('family_photos').insert({

@@ -9,6 +9,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 const PREF_KEY = 'momentPrep';
 
@@ -90,7 +91,7 @@ export async function setMomentPrepDoneAction(input: { eventId: string; stepId: 
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
   if (readError) {
     console.error('[dashboard/moment-prep] preferences read failed', readError);
-    return { ok: false, error: readError.message };
+    return { ok: false, error: describeActionError(readError) };
   }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const map = (prefs[PREF_KEY] && typeof prefs[PREF_KEY] === 'object' && !Array.isArray(prefs[PREF_KEY]))
@@ -105,7 +106,7 @@ export async function setMomentPrepDoneAction(input: { eventId: string; stepId: 
 
   const { error } = await supabase.from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -121,33 +122,27 @@ export async function addMomentGroceryAction(input: {
     .map((s) => (typeof s === 'string' ? s.trim() : ''))
     .filter(Boolean))).slice(0, 20);
   if (names.length === 0) return { ok: false, error: t('momentActions.nothingToAdd') };
+  // The family is the session's, not the caller's. RLS would still refuse a
+  // family the member is not in, but a member of two households could otherwise
+  // drop a moment's shopping into the one they are not looking at.
+  const familyId = ctx.active.familyId;
+  if (input.familyId && input.familyId !== familyId) return { ok: false, error: t('momentActions.couldNotAddToGroceries') };
   const supabase = await createServer();
 
-  // Resolve the active (non-archived) list, or create "Groceries" — same rule the
-  // Grocery module uses, so the moment's items land exactly where the family shops.
-  // Both archive columns: only `archived_at` is ever written (the shopping
-  // module stamps it), so `is_archived` alone calls an archived list active.
-  // A refused read is NOT "this family has no list": `lists` is null on failure
-  // and `[]` when genuinely empty, and `?.[0]?.id` flattens both to undefined,
-  // so falling through created a SECOND "Groceries" list and put the snacks on
-  // it. The shopping module opens the oldest list, so those items land where
-  // nobody shops while the toast says they were added. Fail closed — the same
-  // guard lib/services/groceries ensureDefaultList and the recipes module use.
-  const { data: lists, error: listLookupError } = await supabase.from('grocery_lists')
-    .select('id').eq('family_id', input.familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at').limit(1);
-  if (listLookupError) {
-    console.error('[dashboard/moment-prep] grocery list read failed', listLookupError);
+  // The family's default list — found or created as ONE operation (0443,
+  // DATA-007), the same get-or-create the Grocery module, the assistant and
+  // quick capture use, so the moment's items land exactly where the family
+  // shops and two taps at once cannot make a second "Groceries".
+  //
+  // A refused read is NOT "this family has no list": the helper returns the
+  // error rather than falling through to a create, so a failed read never
+  // puts the snacks on a SECOND list nobody opens. Fail closed.
+  const list = await ensureDefaultGroceryListId(supabase, familyId, ctx.user.id, 'Groceries');
+  if (!list.id) {
+    console.error('[dashboard/moment-prep] grocery list get-or-create failed', list.error);
     return { ok: false, error: t('momentActions.couldNotOpenYourGroceryList') };
   }
-  let listId = lists?.[0]?.id;
-  if (!listId) {
-    const { data: created, error: listErr } = await supabase.from('grocery_lists')
-      .insert({ family_id: input.familyId, name: 'Groceries', created_by: ctx.user.id })
-      .select('id').single();
-    if (listErr || !created) return { ok: false, error: listErr?.message ?? 'Could not create a list' };
-    listId = created.id;
-  }
+  const listId = list.id;
 
   // Skip items already present (unchecked) so re-tapping is idempotent. The
   // idempotence in the docstring above is THIS read, and `existing ?? []` turned
@@ -167,9 +162,9 @@ export async function addMomentGroceryAction(input: {
   if (toAdd.length === 0) return { ok: true, added: 0, ids: [] };
 
   const { data: inserted, error } = await supabase.from('grocery_items').insert(
-    toAdd.map((name) => ({ family_id: input.familyId, list_id: listId as string, name, created_by: ctx.user.id })),
+    toAdd.map((name) => ({ family_id: familyId, list_id: listId as string, name, created_by: ctx.user.id })),
   ).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true, added: toAdd.length, ids: (inserted ?? []).map((r) => r.id) };
 }
 
@@ -185,7 +180,7 @@ export async function removeMomentGroceryAction(input: { ids: string[] }): Promi
   // some of the items by hand still gets their undo. Zero of them means the undo
   // removed nothing while reporting success. Audit C1-S9-60.
   const { data: removed, error } = await supabase.from('grocery_items').delete().in('id', ids).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotUndoThatGroceryAdd') };
   return { ok: true };
 }
@@ -210,6 +205,6 @@ export async function createMomentReminderAction(input: {
     related_id: input.eventId || null,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

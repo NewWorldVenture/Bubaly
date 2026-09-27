@@ -9,7 +9,6 @@
 // endpoint is never an open relay; permitted in dev for local testing.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
@@ -38,19 +37,12 @@ import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 // carries the send, with a retry and a 503 instead of a swallowed catch. The
 // decision did not move; the import did, so it is not re-added here.
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
+import { secretEquals } from '@/lib/server/secret-equals';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
-
-function secretsMatch(provided: string, secret: string): boolean {
-  // Constant-time: `===` on a secret leaks its prefix through timing, and this
-  // endpoint is reachable by anyone who can guess the URL. Audit C3-S5-08.
-  const a = Buffer.from(provided);
-  const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
@@ -67,7 +59,8 @@ function authorized(req: NextRequest): boolean {
     console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header');
   }
   const provided = header ?? query;
-  return !!provided && secretsMatch(provided, secret);
+  // Constant-time, by HMAC digest (lib/server/secret-equals). Audit C3-S5-08.
+  return secretEquals(provided, secret);
 }
 
 // Pull the fields we need from either a parsed form or a JSON body.

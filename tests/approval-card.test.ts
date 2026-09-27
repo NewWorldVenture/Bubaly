@@ -17,7 +17,7 @@ import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
 // its English copy, which passed only on that fallback and mounted the
 // component in a way the product never does. Shadowing the import fixes every
 // call site at once and changes no assertion.
-import { withLocale } from './helpers/render-translated';
+import { withLocale, renderTranslated } from './helpers/render-translated';
 const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
@@ -49,7 +49,7 @@ const row = {
 };
 
 function render(node: React.ReactElement) {
-  return renderToStaticMarkup(React.createElement(ToastProvider, null, node));
+  return renderTranslated(React.createElement(ToastProvider, null, node));
 }
 
 describe('ApprovalCard', () => {

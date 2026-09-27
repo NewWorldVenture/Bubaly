@@ -321,7 +321,7 @@ describe('guardian does not hang up on a live call because a read failed (C1-S9-
     expect(at(guardVoice, 'if (sessionError || !session?.id)')).toBeLessThan(at(guardVoice, 'twimlGather({'));
     // And `.single()` is not used to detect it — that throws on absence rather
     // than reporting it, which is the trap C1-S9-38 documents.
-    expect(bodyOf(guardVoice, "gFrom('guardian_screening_sessions').insert(", '.maybeSingle();')).not.toContain('.single()');
+    expect(bodyOf(guardVoice, "supabase.from('guardian_screening_sessions').insert(", '.maybeSingle();')).not.toContain('.single()');
   });
 
   it.each([

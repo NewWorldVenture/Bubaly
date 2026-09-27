@@ -6,7 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { describeReadError, settle, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { addItems, type GroceryItemInput } from '@/lib/services/groceries';
 import { parseIngredients } from '@/lib/services/meals';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -35,14 +35,14 @@ export async function createMealVote(input: {
     meal_date: input.mealDate || null, meal_type: input.mealType || null,
     allow_maybe: input.allowMaybe ?? true,
   }).select('id').single();
-  if (error || !vote) return { ok: false, error: error?.message ?? 'Could not create vote' };
+  if (error || !vote) return { ok: false, error: describeActionError(error, 'Could not create vote') };
 
   const rows = options.map((o) => ({
     vote_id: vote.id, family_id: familyId,
     recipe_id: o.recipeId || null, label: o.label.trim(), photo_url: o.photoUrl || null,
   }));
   const { error: optErr } = await supabase.from('meal_vote_options').insert(rows);
-  if (optErr) return { ok: false, error: optErr.message };
+  if (optErr) return { ok: false, error: describeActionError(optErr) };
 
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true, id: vote.id };
@@ -59,7 +59,7 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
     vote_id: input.voteId, option_id: input.optionId, family_id: ctx.active.familyId,
     member_id: memberId, choice: input.choice,
   }, { onConflict: 'option_id,member_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
@@ -90,7 +90,7 @@ export async function closeMealVote(voteId: string): Promise<Result> {
   const { data: closed, error } = await supabase.from('meal_votes')
     .update({ status: 'closed', winner_option_id: winner })
     .eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(closed)) return { ok: false, error: t('actions.couldNotCloseThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
@@ -102,7 +102,7 @@ export async function reopenMealVote(voteId: string): Promise<Result> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { data: reopenedVote, error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(reopenedVote)) return { ok: false, error: t('actions.couldNotReopenThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };

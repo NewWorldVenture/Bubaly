@@ -172,7 +172,10 @@ describe('a generation that cannot read what the family decided', () => {
     // FAIL CLOSED: the caller is told, and nothing was written on a value the
     // function does not have.
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('canceling statement due to statement timeout');
+    // Reported — and described rather than repeated: the Postgres text is
+    // logged, not handed to the page.
+    expect(result.error).toBeTruthy();
+    expect(result.error).not.toContain('canceling statement');
     expect(result.plans).toBe(0);
 
     expect(planFor(db, 'm-mia')?.status).toBe('dismissed');

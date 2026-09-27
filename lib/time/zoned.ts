@@ -55,6 +55,30 @@ export function localPartsAt(instant: Date, timezone: string): LocalParts {
   };
 }
 
+/**
+ * The calendar day an instant falls on, in `timezone`, as `YYYY-MM-DD`.
+ *
+ * This is the SAME answer `lib/services/scope.ts:dayKeyInTz` gives, and that
+ * one now delegates here. It lives in this module because `scope.ts` carries
+ * `import 'server-only'` and a client component may legitimately need to ask
+ * the question: "does this expire today?" has to mean the same day for the
+ * parent looking at a server-rendered page and the child looking at the
+ * browser-rendered one, and it only does if both ask about the FAMILY's zone
+ * rather than about whatever clock they happen to be standing next to.
+ *
+ * An unusable IANA name falls back to UTC rather than throwing, for the reason
+ * `dayKeyInTz` already gives: a bad zone must not take a household's page down.
+ */
+export function dayKeyIn(instant: Date, timezone: string): string {
+  try {
+    const p = localPartsAt(instant, timezone);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+  } catch {
+    return instant.toISOString().slice(0, 10);
+  }
+}
+
 /** Zone offset in ms at a given instant (positive east of UTC). */
 function offsetMsAt(instant: Date, timezone: string): number {
   const p = localPartsAt(instant, timezone);

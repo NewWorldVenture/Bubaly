@@ -3,7 +3,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -16,7 +16,7 @@ export async function toggleFavoriteAction(id: string, next: boolean): Promise<R
   // leaves it filled in until something else forces a re-read. Audit C1-S9-60.
   const { data: toggled, error } = await supabase.from('dining_out')
     .update({ is_favorite: next }).eq('id', id).eq('family_id', ctx.active.familyId).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatRestaurant') };
   return { ok: true };
 }
@@ -40,7 +40,7 @@ export async function addRestaurantAction(input: {
     distance_km: input.distanceKm ?? null,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }
 
@@ -62,6 +62,6 @@ export async function logVisitAction(input: {
     visited_at: input.visitedAt || new Date().toISOString(),
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

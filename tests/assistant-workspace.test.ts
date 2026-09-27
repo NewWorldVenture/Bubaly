@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
@@ -44,7 +45,7 @@ import { withLocale } from './helpers/render-translated';
 const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
-const render = (node: React.ReactElement) => renderToStaticMarkup(React.createElement(ToastProvider, null, node));
+const render = (node: React.ReactElement) => renderTranslated(React.createElement(ToastProvider, null, node));
 
 const CARDS: ResultCard[] = [
   { kind: 'meal_plan', title: '5 dinners planned', week_start: '2026-09-07', replaced: 1, created_meals: 2, href: '/dashboard/meals', days: Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-0${i + 1}`, label: `Day ${i + 1}`, meals: [{ meal_type: 'breakfast', name: 'Oats' }, { meal_type: 'dinner', name: i === 3 ? null : `Dish ${i + 1}` }] })) },

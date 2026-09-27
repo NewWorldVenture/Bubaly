@@ -66,8 +66,12 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       {url
+        // A short-lived signed URL for a private card photo: next/image would
+        // re-host it through the optimizer, which is exactly what the signed
+        // read exists to avoid. The suppression sits on the <img> it covers;
+        // one line higher it silenced nothing.
+        // eslint-disable-next-line @next/next/no-img-element
         ? <img src={url} alt={label} className="h-24 w-full object-cover" />
         : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>
@@ -153,7 +157,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     // update/delete, so it matches nothing and succeeds. `.select('id')` asks
     // for the rows back, which is the only way to tell.
     const { data: rows, error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).eq('family_id', familyId).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
@@ -168,7 +172,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     // of thing a family looks up at a walk-in clinic, and there is no undo.
     if (!(await askConfirm({ title: t('medicalRecords.deleteProviderQ'), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', p.id).select('id');
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', p.id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
@@ -207,7 +211,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: policyForm.notes || null,
     };
     const { data: rows, error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).eq('family_id', familyId).select('id')
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
@@ -219,7 +223,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deletePolicy(id: string) {
     if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));

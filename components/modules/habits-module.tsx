@@ -3,7 +3,7 @@
 // Habit Tracker — build personal & family routines with streaks, a heatmap,
 // one-tap check-ins, and an AI coach. 100% Supabase-wired via the `habits` and
 // `habit_logs` tables (family-scoped RLS); streak math lives in lib/habits.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Flame, Plus, Trash2, Check, Sparkles, X, Pencil, Trophy, Target, CalendarCheck, Archive,
   Minus,
@@ -12,6 +12,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { labelledGroup } from '@/lib/ui/a11y';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -440,6 +441,12 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
   const [presetKey, setPresetKey] = useState<string | null>(null);
   const [presetCategory, setPresetCategory] = useState<HabitPreset['category']>('hydration');
   const memberAge = ageOn(members.find((m) => m.id === memberId)?.birthday, new Date());
+  // Three of the rows below are a SET of buttons, not one control, so their
+  // caption is a `<span>` the group points at — a `<label>` with neither
+  // `htmlFor` nor a control inside it names nothing at all.
+  const colorGroupId = useId();
+  const cadenceGroupId = useId();
+  const weekdayGroupId = useId();
 
   function applyPreset(preset: HabitPreset) {
     const row = presetToHabit(preset, { id: memberId, age: memberAge });
@@ -496,8 +503,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
         </Field>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('habits.color')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={colorGroupId} className="mb-1.5 block text-sm font-medium">{t('habits.color')}</span>
+          <div {...labelledGroup(colorGroupId)} className="flex flex-wrap gap-2">
             {COLORS.map((c) => (
               <button key={c.id} type="button" onClick={() => setColor(c.id)}
                 className={cn('h-7 w-7 rounded-full transition hover:scale-110', c.dot,
@@ -507,8 +514,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium">{t('habits.cadence')}</label>
-          <div className="flex gap-2">
+          <span id={cadenceGroupId} className="mb-1.5 block text-sm font-medium">{t('habits.cadence')}</span>
+          <div {...labelledGroup(cadenceGroupId)} className="flex gap-2">
             {(['daily', 'weekly'] as const).map((cd) => (
               <button key={cd} type="button" onClick={() => setCadence(cd)}
                 className={cn('flex-1 rounded-xl border-2 px-3 py-2 text-sm font-medium capitalize transition',
@@ -529,8 +536,8 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
               {(id) => <Input id={id} type="number" min={1} max={30} value={target} onChange={(e) => setTarget(Number(e.target.value))} />}
             </Field>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">{t('habits.daysOptionalLeaveBlankForEvery')}</label>
-            <div className="flex gap-1.5">
+            <span id={weekdayGroupId} className="mb-1.5 block text-sm font-medium">{t('habits.daysOptionalLeaveBlankForEvery')}</span>
+            <div {...labelledGroup(weekdayGroupId)} className="flex gap-1.5">
               {WEEKDAYS.map((d, i) => (
                 <button key={i} type="button" onClick={() => toggleWeekday(i)}
                   className={cn('h-9 w-9 rounded-full text-sm font-medium transition',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthError, marketingRefusalBody } from '@/lib/marketing/admin';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { sendEmailCampaign, resolveRecipients } from '@/lib/marketing/send';
 
@@ -23,10 +23,12 @@ export async function GET(req: NextRequest) {
     const recipients = await resolveRecipients(supabase, c);
     return NextResponse.json({ recipients: recipients.length });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '';
-    const forbidden = message.includes('sign in') || message.includes('permission');
-    if (!forbidden) console.error('[admin-marketing-email] recipient preview failed', err);
-    return NextResponse.json({ error: forbidden ? 'Forbidden' : t('send.couldNotLoadCampaignRecipients') }, { status: forbidden ? 403 : 502 });
+    // The status rides on the error now, rather than being recovered by reading
+    // the refusal's own sentence back — reword the sentence and this kept
+    // compiling while answering 502 to a non-admin.
+    if (isMarketingAuthError(err)) return NextResponse.json({ error: marketingRefusalBody(err) }, { status: err.status });
+    console.error('[admin-marketing-email] recipient preview failed', err);
+    return NextResponse.json({ error: t('send.couldNotLoadCampaignRecipients') }, { status: 502 });
   }
 }
 
@@ -43,12 +45,16 @@ export async function POST(req: NextRequest) {
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'send', resource: 'marketing_email_campaign', resourceId: id, metadata: { sent } });
     return NextResponse.json({ sent });
   } catch (err) {
+    if (isMarketingAuthError(err)) return NextResponse.json({ error: marketingRefusalBody(err) }, { status: err.status });
     console.error('Marketing email send failed:', err);
+    // The provider branch still reads the message, because a provider failure
+    // arrives as whatever the provider threw and there is no typed error to
+    // carry. That is the remaining instance of the shape, and it is confined to
+    // one branch of one route rather than deciding an authorization outcome.
     const message = err instanceof Error ? err.message : '';
-    const forbidden = message.includes('sign in') || message.includes('permission') || message.includes('Forbidden');
     const providerFailure = message.includes('Provider') || message.includes('provider') || message.includes('delivery state');
     return NextResponse.json({
-      error: forbidden ? 'Forbidden' : providerFailure ? 'The email provider rejected the campaign.' : 'Could not send campaign.',
-    }, { status: forbidden ? 403 : providerFailure ? 502 : 400 });
+      error: providerFailure ? 'The email provider rejected the campaign.' : 'Could not send campaign.',
+    }, { status: providerFailure ? 502 : 400 });
   }
 }

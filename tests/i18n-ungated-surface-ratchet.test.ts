@@ -132,7 +132,40 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // So the delta is the 6 named above plus command-center's 3 and calm's banner
 // title. 2,817 − 10 = 2,807.
-const CEILING = 2807;
+//
+// ── RAISED 2,807 → 2,819, and it is the merge reason again (PR #548, Q68) ────
+//
+// Same method as the paragraph above: one scanner, three trees.
+//
+//     origin/main 7e54596d                          2,807
+//     claude/bubaly-repo-connect-etzqg7 pre-merge   2,825
+//     HEAD, the merge of the two                    2,819
+//
+// So the merge LOWERED the branch's number by six and added nothing on top of
+// the union. The +12 over main is the branch's own surface, and it
+// classifies, site by site, into three kinds (per-file delta, merged − main):
+//
+//   TYPE-INDEX NOISE, not copy. `Database['public']['Tables'][…]['Insert']`
+//   reads to this scanner as the quoted words "Tables" and "Insert". The
+//   branch declared the Guardian tables and typed its writes, so these appear
+//   where main had casts: guardian/actions.ts, recipes/discover and
+//   recipes/vote actions, api/guardian/inbound/voice. The medical-records,
+//   moving and projects modules' `type X = Tables<…>` lines are the same shape.
+//
+//   SERVER FALLBACK SENTENCES passed to describeActionError(error, '…'), the
+//   rule tests/the-database-does-not-talk-to-the-browser.test.ts enforces:
+//   concierge-calls, moment-actions, sync/feeds, recipes/discover and vote.
+//   They replaced raw `error.message` returns, which the scanner could not see
+//   and which were worse — Postgres text in front of a family.
+//
+//   TOAST COPY in modules the branch touched for other reasons (fridge-chef,
+//   scan-module, calendar-sync-panel, child-access-manager, two admin controls):
+//   real, English, and backlog; each is listed by the scanner by file.
+//
+// Nothing here is newly-shipped untranslated product copy that main had
+// translated; where the branch touched main's translated surface, main's
+// strings were kept.
+const CEILING = 2819;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Resend } from 'resend';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 let resendClient: Resend | null = null;
 
@@ -20,11 +21,19 @@ export const emailEnabled = (): boolean => Boolean(process.env.RESEND_API_KEY);
 export const FROM_EMAIL =
   process.env.EMAIL_FROM ?? 'Bubaly <onboarding@resend.dev>';
 
-/** Public base URL used to build links inside emails. */
-export const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  'https://www.bubaly.com';
+/**
+ * Public base URL used to build links inside emails.
+ *
+ * The SITE_URL step is this module's own precedence and stays; what changed is
+ * what happens to the value once chosen. It was interpolated raw, so a
+ * NEXT_PUBLIC_APP_URL ending in `/` put `https://host//dashboard` into every
+ * link in every email. Harmless where a browser is doing the resolving, unlike
+ * the same slash on the Twilio signature path — but there is no reason to
+ * normalise in one place and not the other. See lib/server/app-url.ts.
+ */
+export const APP_URL = appBaseUrl(
+  process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL,
+);
 
 type SendReactArgs = {
   to: string | string[];

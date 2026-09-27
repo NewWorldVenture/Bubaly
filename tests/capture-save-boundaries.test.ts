@@ -50,12 +50,30 @@ describe('capture prerequisites and operation lifetime', () => {
     expect(requests).toHaveLength(1);
   });
   it.each(['task', 'shopping'] as const)('allows confirmed empty %s lookup, preserves creator identity and returns checked Undo', async kind => {
-    const { client, requests } = fixture([{ body: [] }, { body: [{ id: LIST }], status: 201 }, { body: [{ id: ITEM }], status: 201 }]);
+    const { client, requests } = fixture([{ body: [] }, { body: LIST }, { body: [{ id: ITEM }], status: 201 }]);
     const result = await saveCapture(client, { ...BASE, kind });
     expect(result).toMatchObject({ count: 1, undo: { ids: [ITEM], familyId: FAMILY } });
     expect(requests.map(request => request.method)).toEqual(['GET', 'POST', 'POST']);
-    expect(requests[1].body).toMatchObject({ family_id: FAMILY, created_by: kind === 'task' ? MEMBER : USER });
+    // DATA-007: an empty lookup creates through the serialised get-or-create,
+    // never a bare insert, so two first captures at once share one list.
+    expect(requests[1].table).toBe(kind === 'task' ? 'ensure_default_todo_list' : 'ensure_default_grocery_list');
+    expect(requests[1].body).toMatchObject({ p_family_id: FAMILY, p_created_by: kind === 'task' ? MEMBER : USER });
     expect(requests[2].body).toMatchObject(kind === 'task' ? { list_id: LIST, created_by: MEMBER, assigned_to_id: MEMBER } : [{ list_id: LIST, created_by: USER }]);
+  });
+  it.each(['task', 'shopping'] as const)('keeps its own %s list insert on a database without the get-or-create', async kind => {
+    const missing = { status: 404, body: { code: 'PGRST202', message: 'Could not find the function', details: null, hint: null } };
+    const { client, requests } = fixture([{ body: [] }, missing, { body: [{ id: LIST }], status: 201 }, { body: [{ id: ITEM }], status: 201 }]);
+    const result = await saveCapture(client, { ...BASE, kind });
+    expect(result).toMatchObject({ count: 1, undo: { ids: [ITEM] } });
+    expect(requests.map(request => request.table)).toEqual(kind === 'task'
+      ? ['todo_lists', 'ensure_default_todo_list', 'todo_lists', 'todo_items']
+      : ['grocery_lists', 'ensure_default_grocery_list', 'grocery_lists', 'grocery_items']);
+    expect(requests[2].body).toMatchObject({ family_id: FAMILY, created_by: kind === 'task' ? MEMBER : USER });
+  });
+  it.each(['task', 'shopping'] as const)('holds a %s list the get-or-create answered with no id', async kind => {
+    const { client, requests } = fixture([{ body: [] }, { body: 'not-a-uuid' }]);
+    await expect(saveCapture(client, { ...BASE, kind })).rejects.toMatchObject({ outcome: 'uncertain', stage: 'list', dispatched: true });
+    expect(requests).toHaveLength(2);
   });
   it.each(['task', 'shopping'] as const)('stops after a definitive %s list create failure', async kind => {
     const { client, requests } = fixture([{ body: [] }, denied]);
@@ -96,14 +114,14 @@ describe('capture prerequisites and operation lifetime', () => {
   });
   it.each(['task', 'shopping'] as const)('retires %s after creating a list before its item write', async kind => {
     let current = true;
-    const { client, requests } = fixture([{ body: [] }, { body: [{ id: LIST }], status: 201, beforeReply: () => { current = false; } }]);
+    const { client, requests } = fixture([{ body: [] }, { body: LIST, beforeReply: () => { current = false; } }]);
     await expect(saveCapture(client, { ...BASE, kind, isCurrent: () => current })).rejects.toMatchObject({ outcome: 'retired', dispatched: true });
     expect(requests.map(request => request.method)).toEqual(['GET', 'POST']);
   });
   it('does not substitute the auth user for an absent optional task member', async () => {
-    const { client, requests } = fixture([{ body: [] }, { body: [{ id: LIST }] }, { body: [{ id: ITEM }] }]);
+    const { client, requests } = fixture([{ body: [] }, { body: LIST }, { body: [{ id: ITEM }] }]);
     await saveCapture(client, { ...BASE, kind: 'task', memberId: null });
-    expect(requests[1].body).toMatchObject({ created_by: null });
+    expect(requests[1].body).toMatchObject({ p_created_by: null });
     expect(requests[2].body).toMatchObject({ created_by: null, assigned_to_id: null });
   });
 });

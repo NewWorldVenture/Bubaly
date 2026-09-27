@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { IndependenceModule } from '@/components/modules/independence-module';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
-import { isMissingRelationError } from '@/lib/supabase/errors';
 
 export const metadata: Metadata = { title: 'Independence' };
 export const dynamic = 'force-dynamic';

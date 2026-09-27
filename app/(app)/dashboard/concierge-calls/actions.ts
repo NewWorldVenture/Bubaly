@@ -8,6 +8,7 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { buildCallBrief, type CallTaskKind, type CallCategory } from '@/lib/concierge-calls/brief';
 import type { Json } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -73,7 +74,7 @@ export async function requestCallAction(input: {
     scheduled_for: input.scheduledFor || null,
     created_by: ctx.user.id,
   }).select('id').single();
-  if (error || !data) return { ok: false, error: error?.message ?? 'Could not create the call request' };
+  if (error || !data) return { ok: false, error: describeActionError(error, 'Could not create the call request') };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'create',
@@ -103,7 +104,7 @@ export async function cancelCallAction(id: string): Promise<Result> {
     .update({ status: 'cancelled' })
     .eq('id', id).eq('family_id', ctx.active.familyId)
     .in('status', ['draft', 'queued', 'action_needed']).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };
   return { ok: true };
 }
@@ -126,7 +127,7 @@ export async function requeueCallAction(id: string, phone?: string): Promise<Res
     .update(patch)
     .eq('id', id).eq('family_id', ctx.active.familyId)
     .in('status', ['draft', 'failed', 'action_needed']).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };
   return { ok: true };
 }
@@ -149,7 +150,7 @@ export async function logCallOutcomeAction(id: string, outcome: string): Promise
     .update({ status: 'completed', outcome: text.slice(0, 2000), completed_at: new Date().toISOString() })
     .eq('id', id).eq('family_id', ctx.active.familyId)
     .in('status', ['draft', 'queued', 'failed', 'action_needed']).select('id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   // No audit row for a write that changed nothing: the outcome the family typed
   // was not recorded, so saying it was is the lie this check exists to stop.
   if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };

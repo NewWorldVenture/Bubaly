@@ -11,11 +11,12 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+const BASE_URL = appBaseUrl();
 const MAX_BODY = 64 * 1024;
 
 export async function POST(req: NextRequest) {

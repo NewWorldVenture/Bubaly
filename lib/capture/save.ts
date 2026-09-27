@@ -4,6 +4,7 @@
 // multi-item shopping). Persistence lives here; the parsing lives in ./parse.
 
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { isMissingFunctionError } from '@/lib/supabase/errors';
 import { parseEvent, parseDueDate, splitItems, parseGroceryItem, type CaptureKind } from './parse';
 
 export type CaptureTable = 'notes' | 'calendar_events' | 'todo_items' | 'grocery_items';
@@ -127,6 +128,23 @@ export type CaptureSaveInput = CaptureOperationGuard & {
   memberId?: string | null;
 };
 
+const NO_FUNCTION = Symbol('no-function');
+
+/** The serialised get-or-create (0443), for when the lookup found no list. The
+ *  lookup and the insert are two requests, so two first captures at once (the
+ *  sheet and voice, two phones) both read "no list" and both insert: the family
+ *  gets two default lists and half its items land in each. The function
+ *  re-reads under a per-family lock and returns the winner's list. On a database
+ *  without it, resolves to NO_FUNCTION and the caller keeps its own insert. */
+async function lockedListId(operation: Operation, build: (signal: AbortSignal) => PromiseLike<Reply>): Promise<string | typeof NO_FUNCTION> {
+  const data = await request(operation, 'list', true, signal => build(signal)
+    .then(reply => isMissingFunctionError(reply.error) ? { data: NO_FUNCTION, error: null } : reply));
+  current(operation, 'list');
+  if (data === NO_FUNCTION) return NO_FUNCTION;
+  if (!validId(data)) failure(operation, 'list', 'uncertain');
+  return data;
+}
+
 /** Get-or-create the family's default to-do list. `todo_lists.created_by`
  *  references family_members(id), not auth.users, so it takes the member id. */
 async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, memberId: string | null, operation: Operation): Promise<string> {
@@ -137,6 +155,9 @@ async function defaultTodoListId(supabase: SupabaseBrowser, familyId: string, me
     if (typeof existing !== 'object' || !('id' in existing) || !validId(existing.id)) failure(operation, 'lookup', 'failed');
     return existing.id;
   }
+  const locked = await lockedListId(operation, signal => supabase.rpc('ensure_default_todo_list',
+    { p_family_id: familyId, p_name: 'To-Do', p_match_name: false, p_created_by: memberId }).abortSignal(signal));
+  if (locked !== NO_FUNCTION) return locked;
   return (await write(operation, 'list', 1, signal => supabase.from('todo_lists')
     .insert({ family_id: familyId, name: 'To-Do', created_by: memberId }).select('id').abortSignal(signal)))[0];
 }
@@ -156,6 +177,9 @@ async function defaultGroceryListId(supabase: SupabaseBrowser, familyId: string,
     if (typeof existing !== 'object' || !('id' in existing) || !validId(existing.id)) failure(operation, 'lookup', 'failed');
     return existing.id;
   }
+  const locked = await lockedListId(operation, signal => supabase.rpc('ensure_default_grocery_list',
+    { p_family_id: familyId, p_name: 'Shopping List', p_created_by: userId }).abortSignal(signal));
+  if (locked !== NO_FUNCTION) return locked;
   return (await write(operation, 'list', 1, signal => supabase.from('grocery_lists')
     .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').abortSignal(signal)))[0];
 }

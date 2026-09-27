@@ -53,7 +53,9 @@ import type { Messages } from '@/lib/i18n/messages';
 // narrower one. Its dismiss control carries `aria-label={tr('toast.dismiss')}`,
 // so leaving it out meant a screen reader on /cookies reading the literal
 // string "toast.dismiss" the moment the English fallback is removed.
-export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo', 'language', 'toast'] as const;
+// `modal` is here for the same reason as `toast`: the modal primitive's close control
+// renders under every surface that opens a dialog.
+export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo', 'language', 'modal', 'toast'] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
@@ -114,6 +116,8 @@ export const AUTH_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'kidLogin', 'legalConsent', 'login', 'loginForm', 'oauthButtons',
   'phoneAuth', 'signup', 'signupForm',
+  // The phone field's own labels, reached through components/ui/phone-input.tsx.
+  'phoneInput',
   // Password recovery, sign-out and step-up reach the auth surface as client
   // components too. Without these namespaces their strings are not shipped, and
   // this scope's whole failure mode — per tests/i18n-client-scope.test.ts — is

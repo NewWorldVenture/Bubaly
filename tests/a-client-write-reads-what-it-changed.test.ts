@@ -279,7 +279,9 @@ describe('a refused listing save lets go of nothing it uploaded (C1-S9-85)', () 
     const src = readFileSync('components/modules/marketplace-module.tsx', 'utf8');
     expect(src).toContain('if (err || wroteNoRows(saved)) {');
     expect(at(src, 'if (err || wroteNoRows(saved)) {')).toBeLessThan(at(src, 'await cleanupOwnedPhoto();'));
-    expect(at(src, 'await cleanupOwnedPhoto();')).toBeLessThan(at(src, "success(form.id ? 'Listing updated' : 'Posted to the family marketplace')"));
+    // The success toast is translated on this branch (marketplaceModule.*); the
+    // order it must come in is unchanged.
+    expect(at(src, 'await cleanupOwnedPhoto();')).toBeLessThan(at(src, "success(form.id ? t('marketplaceModule.listingUpdated') : t('marketplaceModule.postedToTheFamilyMarketplace'))"));
   });
 
   it('reminders: both attempts read back their row, and zero rows stops the claim', () => {

@@ -244,11 +244,11 @@ const WRITE_ALLOWED = new Map([
   // slices. Google's API uses a bare `date` to MEAN all-day, so the protocol is
   // asking for a day here, not for a day key taken off an instant.
   ['lib/sync/providers/google.ts', 'all-day branch only; a bare date is how Google means all-day'],
-  // Server actions that take a family but no zone. Converting means threading a
-  // zone through the action's `ctx()`, which is worth doing and not yet done.
-  ['app/(app)/dashboard/auto/actions.ts', 'server action; needs a zone threaded through ctx()'],
-  ['app/(app)/dashboard/home/actions.ts', 'server action; needs a zone threaded through ctx()'],
-  ['app/(app)/wallet/hub-actions.ts', 'server action; needs a zone threaded through ctx()'],
+  // The three server-action entries that stood here — dashboard/auto,
+  // dashboard/home and wallet/hub-actions — are gone. Their note read "needs a
+  // zone threaded through ctx(), which is worth doing and not yet done"; the
+  // audit branch threaded it, and they now take the day key from
+  // `todayKeyFor(ctx)`.
   // `reasoning_snapshots` is keyed (family_id, as_of_date) and upserted once a
   // day. Changing the key changes what "already snapshotted today" means, so it
   // wants its own change with the idempotency thought through, not a drive-by.
