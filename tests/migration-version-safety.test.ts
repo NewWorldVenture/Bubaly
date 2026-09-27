@@ -302,6 +302,13 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
+    // 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql narrows a
+    // member session's INSERT on notifications to rows addressed to the
+    // member themselves; notify() writes everyone else's with the service
+    // role. Held by docs/audit/notification-authorship-check.sql (re-
+    // controlled) and tests/a-notification-for-someone-else-is-written-by-
+    // bubaly.test.ts.
+    //
     // 0406–0418, less 0412, 0413 and 0417, are the audit branch's (PR #556):
     // ten files, and the FIFTH time that branch's numbers have moved. They sat
     // at 0300/0304–0309, then 0318–0330, then 0361–0370, and main claimed each
@@ -320,10 +327,10 @@ describe('Supabase migration filename safety', () => {
     // 0335, and stacking them broke 0335's own negative control; and its
     // behaviour/care-log policy contradicted 0338's probe on whether a child
     // may log behaviour — recorded in finalaudit.md for the owner to decide
-    // rather than settled by whichever merge came last. 0381–0387 went to
-    // the paragraphs above (#581) after that block was picked, and 0388–0405
-    // stay free, spoken for by other in-flight branches at the time; a number
-    // below the one pinned is still free to land.
+    // rather than settled by whichever merge came last. 0381–0388 went to
+    // the paragraphs above (#581, #584) after that block was picked, and
+    // 0389–0405 stay free, spoken for by other in-flight branches at the time;
+    // a number below the one pinned is still free to land.
     //
     // 0406 puts the OAuth token store (social_account_tokens) back behind the
     // service role — 0034 created it deny-all and said never to add a policy,

@@ -29,7 +29,13 @@ export async function POST() {
         { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
       );
     }
-    const created = await generateFamilyNotifications(supabase, ctx.active.familyId);
+    // Generation is the cron's job run on demand, and it writes the same rows
+    // the cron writes: reminders addressed to every member of the family. A
+    // member's session may only INSERT notifications addressed to itself
+    // (0388), so this runs as the service role, for the caller's own active
+    // family (requireUserContext + the entitlement gate above), exactly as the
+    // cron does for every family.
+    const created = await generateFamilyNotifications(createServiceClient(), ctx.active.familyId);
     // Push delivery needs cross-user device reads → service client, family-scoped.
     try {
       await dispatchPendingPushes(createServiceClient(), { familyId: ctx.active.familyId });
