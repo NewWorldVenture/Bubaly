@@ -2731,6 +2731,7 @@ of these, so none gates a deploy:
 | `0401` service-only functions | no | two server functions are callable with the anon key |
 | `0402` auction close | no | no auction closes (as today) |
 | `0403` member login link | no | a manager can write a stranger's login onto a member row |
+| `0404` profile visibility | no | a removed member and their old household still see each other's profiles |
 
 ### `0389` — a sharing circle could never be created
 
