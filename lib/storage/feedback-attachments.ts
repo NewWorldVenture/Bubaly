@@ -24,6 +24,27 @@ export function feedbackAttachmentPathFromUrl(value: string, expectedOrigin?: st
   }
 }
 
+/**
+ * The storage path for a stored attachment value, whether it is a bare path or
+ * one of the public URLs this bucket used to hand out.
+ *
+ * The bucket is private as of 0325, so `getPublicUrl` no longer produces
+ * anything that resolves and new uploads record the path itself. Rows written
+ * before that still hold the full `/storage/v1/object/public/...` URL, and they
+ * are not rewritten: this reads either, and the admin console signs whatever
+ * comes back. A value that is neither — an external link, a malformed string,
+ * a path that escapes its folder — returns null rather than something to sign.
+ */
+export function feedbackAttachmentPath(value: string, expectedOrigin?: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (raw.includes('://')) return feedbackAttachmentPathFromUrl(raw, expectedOrigin);
+  const parts = raw.split('/');
+  if (parts.length < 2 || !UUID.test(parts[0])) return null;
+  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
+  return raw;
+}
+
 export async function removeFeedbackAttachmentPath(
   supabase: SupabaseBrowser,
   path: string,

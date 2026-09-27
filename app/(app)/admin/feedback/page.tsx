@@ -9,6 +9,7 @@ import { FeedbackAdmin, type AdminComment, type AdminNotification } from '@/comp
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { signFeedbackAttachments } from '@/lib/storage/feedback-attachment-signing';
 
 export const metadata: Metadata = { title: 'Admin · Feedback & Ideas', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,11 @@ export default async function AdminFeedbackPage() {
     return <AdminFeedbackReadError />;
   }
 
-  const { data: ideas } = ideasResult;
+  // `feedback-attachments` is private as of 0325, so the stored value — a bare
+  // path on new rows, an old public URL on rows written before it — is not
+  // something an <img src> can load. This is the only surface that draws these
+  // screenshots, so it is the only place that has to sign them.
+  const ideas = await signFeedbackAttachments(supabase, ideasResult.data ?? []);
   const { data: comments } = commentsResult;
   const { data: notes } = notesResult;
 

@@ -322,7 +322,10 @@ describe('Supabase migration filename safety', () => {
     // 0392_a_stored_credential_is_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0324 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0393');
+    // 0393_a_feedback_screenshot_is_not_world_readable.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0325 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0394');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
