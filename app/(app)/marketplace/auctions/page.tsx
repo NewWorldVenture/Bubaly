@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 
 export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -45,13 +46,18 @@ export default async function AuctionsPage() {
   const now = new Date();
 
   // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
-  const { data, error } = await sb
-    .from('marketplace_listings')
-    .select('id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, has_reserve, reserve_met, buy_now_cents, auction_starts_at, auction_ends_at')
-    .eq('sale_format', 'auction').eq('status', 'available')
-    .gt('auction_ends_at', now.toISOString())
-    .order('auction_ends_at', { ascending: true })
-    .limit(60);
+  // Through readWithReserveView: this has to render on a database 0397 has not
+  // reached yet as well as one it has (lib/marketplace/reserve-view.ts).
+  const { data, error } = await readWithReserveView<Row[]>(
+    `id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, auction_starts_at, auction_ends_at`,
+    (columns) => sb
+      .from('marketplace_listings')
+      .select(columns)
+      .eq('sale_format', 'auction').eq('status', 'available')
+      .gt('auction_ends_at', now.toISOString())
+      .order('auction_ends_at', { ascending: true })
+      .limit(60),
+  );
   if (error) {
     console.error('[marketplace-auctions] listing read failed', error);
     return <ReadFailure />;

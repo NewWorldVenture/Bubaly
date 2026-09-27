@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { reserveMet } from '@/lib/marketplace/auction';
+import { RESERVE_VIEW_COLUMNS } from '@/lib/marketplace/reserve-view';
 
 // SEC-016. In a proxy auction the leader's maximum is the one thing the
 // mechanism depends on nobody knowing. 0183's own column comments call two
@@ -46,7 +47,19 @@ export function auctionReads(file: string, source: string): Read[] {
     let columns = m[4] ?? '*';
     if (m[5]) {
       const def = new RegExp(`const\\s+${m[5]}\\s*=\\s*(['"\`])([\\s\\S]*?)\\1`).exec(source);
-      columns = def ? def[2] : `<unresolved ${m[5]}>`;
+      // Or it is the callback parameter of readWithReserveView, whose FIRST
+      // argument is the list actually selected (lib/marketplace/reserve-view.ts
+      // swaps in reserve_cents only when the database predates 0397).
+      const call = def ? null : [...source.slice(Math.max(0, m.index! - 900), m.index!)
+        .matchAll(/readWithReserveView(?:<[\s\S]*?>)?\(\s*(?:(['"`])([\s\S]*?)\1|([A-Za-z_$][\w$]*))\s*,\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g)]
+        .filter((c) => c[4] === m[5]).pop();
+      if (def) columns = def[2];
+      else if (call?.[2] !== undefined) columns = call[2];
+      else if (call?.[3]) {
+        const held = new RegExp(`const\\s+${call[3]}\\s*=\\s*(['"\`])([\\s\\S]*?)\\1`).exec(source);
+        columns = held ? held[2] : `<unresolved ${call[3]}>`;
+      } else columns = `<unresolved ${m[5]}>`;
+      columns = columns.replace(/\$\{RESERVE_VIEW_COLUMNS\}/g, RESERVE_VIEW_COLUMNS);
     }
     // Stop at a chain that ended before this select (another statement).
     if (/;\s*$/.test(m[2].split('\n')[0] ?? '')) continue;
@@ -88,6 +101,13 @@ describe('a proxy bid ceiling is secret (SEC-016)', () => {
     expect(problemWith(auctionReads('x.ts', board)[0])).toMatch(/selects reserve_cents/);
     expect(problemWith(auctionReads('x.ts', star)[0])).toMatch(/selects \*/);
     expect(problemWith(auctionReads('x.ts', bids)[0])).toMatch(/selects max_cents/);
+  });
+
+  it('resolves a select list passed through readWithReserveView', () => {
+    const through = "readWithReserveView<Row[]>(`id, reserve_cents, ${RESERVE_VIEW_COLUMNS}`, (columns) => sb.from('marketplace_listings').select(columns).eq('id', x))";
+    expect(problemWith(auctionReads('x.ts', through)[0])).toMatch(/selects reserve_cents/);
+    const clean = "readWithReserveView<Row[]>(`id, ${RESERVE_VIEW_COLUMNS}`, (columns) => sb.from('marketplace_listings').select(columns))";
+    expect(problemWith(auctionReads('x.ts', clean)[0])).toBeNull();
   });
 
   it('resolves a select list held in a constant', () => {

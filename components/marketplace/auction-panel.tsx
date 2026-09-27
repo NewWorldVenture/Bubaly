@@ -20,6 +20,8 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { useMoneyUnit } from '@/components/marketplace/money-unit';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import type { Database } from '@/lib/database.types';
 
 type Bid = { id: string; bidder_family_id: string; amount_cents: number; status: string; created_at: string; is_auto: boolean };
 
@@ -59,7 +61,13 @@ export function AuctionPanel({
   refetch.current = async () => {
     const sb = createClient();
     const [{ data: l }, { data: b }] = await settleAll([
-      sb.from('marketplace_listings').select('sale_format, status, starting_bid_cents, current_bid_cents, bid_count, has_reserve, reserve_met, buy_now_cents, auction_starts_at, auction_ends_at, highest_bidder_family_id').eq('id', listingId).maybeSingle(),
+      // Works whether or not 0397 has reached this database (lib/marketplace/reserve-view.ts).
+      readWithReserveView<Pick<Database['public']['Tables']['marketplace_listings']['Row'],
+        'sale_format' | 'status' | 'starting_bid_cents' | 'current_bid_cents' | 'bid_count' | 'has_reserve' | 'reserve_met'
+        | 'buy_now_cents' | 'auction_starts_at' | 'auction_ends_at' | 'highest_bidder_family_id'>>(
+        `sale_format, status, starting_bid_cents, current_bid_cents, bid_count, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, auction_starts_at, auction_ends_at, highest_bidder_family_id`,
+        (columns) => sb.from('marketplace_listings').select(columns).eq('id', listingId).maybeSingle(),
+      ),
       sb.from('marketplace_bids').select('id, bidder_family_id, amount_cents, status, created_at, is_auto').eq('listing_id', listingId).order('created_at', { ascending: false }).limit(20),
     ]);
     if (l) setA({

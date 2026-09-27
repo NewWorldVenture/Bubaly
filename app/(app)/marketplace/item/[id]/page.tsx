@@ -28,6 +28,14 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import type { Database } from '@/lib/database.types';
+
+type ListingRow = Pick<Database['public']['Tables']['marketplace_listings']['Row'],
+  'id' | 'member_id' | 'title' | 'description' | 'kind' | 'category' | 'condition' | 'price_cents' | 'rent_period'
+  | 'photo_url' | 'location' | 'status' | 'created_at' | 'sale_format' | 'auction_starts_at' | 'auction_ends_at'
+  | 'starting_bid_cents' | 'has_reserve' | 'reserve_met' | 'buy_now_cents' | 'current_bid_cents' | 'bid_count'
+  | 'highest_bidder_family_id'>;
 
 export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -55,10 +63,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     dataWarnings.push(label);
   };
 
-  const { data: listing, error: listingError } = await sb
-    .from('marketplace_listings')
-    .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, has_reserve, reserve_met, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id')
-    .eq('id', id).eq('family_id', familyId).maybeSingle();
+  // Through readWithReserveView so the page renders whether or not 0397 has
+  // reached this database (lib/marketplace/reserve-view.ts).
+  const { data: listing, error: listingError } = await readWithReserveView<ListingRow>(
+    `id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, ${RESERVE_VIEW_COLUMNS}, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id`,
+    (columns) => sb.from('marketplace_listings').select(columns).eq('id', id).eq('family_id', familyId).maybeSingle(),
+  );
   if (listingError) {
     reportRead('Listing', listingError);
     return <ErrorState message={t('item.couldNotLoadThisListing')} />;
