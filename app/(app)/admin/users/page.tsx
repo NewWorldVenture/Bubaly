@@ -246,16 +246,16 @@ export default async function AdminUsersPage({ searchParams }: Params) {
             <Card>
               <FilterForm action="/admin/users" hidden={{ tab: 'all' }}>
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminUsers.searchUsersByNameEmailOr')} />
-                <FilterSelect name="role" defaultValue={roleFilter} options={[
+                <FilterSelect name="role" label={tr('adminUsers.role')} defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
                   ...Object.entries(ROLE_LABELS).map(([v, label]) => ({ value: v, label })),
                 ]} />
-                <FilterSelect name="status" defaultValue={statusFilter} options={[
+                <FilterSelect name="status" label={tr('adminUsers.status')} defaultValue={statusFilter} options={[
                   { value: '', label: 'All Statuses' },
                   { value: 'active', label: 'Has account' },
                   { value: 'no_account', label: 'No account' },
                 ]} />
-                <FilterSelect name="plan" defaultValue={planFilter} options={[
+                <FilterSelect name="plan" label={tr('adminUsers.plan')} defaultValue={planFilter} options={[
                   { value: '', label: 'All Plans' },
                   ...PLANS.map((p) => ({ value: p.id, label: p.name })),
                 ]} />

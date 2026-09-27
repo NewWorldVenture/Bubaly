@@ -179,10 +179,10 @@ export function WeekendModule() {
               onKeyDown={(e) => e.key === 'Enter' && discover()}
               className="h-11 border-0 bg-transparent px-1" />
           </div>
-          <Select value={String(radius)} onChange={(e) => { setTouched(true); setRadius(Number(e.target.value)); }} className="h-11 sm:w-36">
+          <Select value={String(radius)} onChange={(e) => { setTouched(true); setRadius(Number(e.target.value)); }} aria-label={t('weekend.searchRadius')} className="h-11 sm:w-36">
             {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{t('weekend.within')} {r} mi</option>)}
           </Select>
-          <Select value={String(days)} onChange={(e) => { setTouched(true); setDays(Number(e.target.value)); }} className="h-11 sm:w-36">
+          <Select value={String(days)} onChange={(e) => { setTouched(true); setDays(Number(e.target.value)); }} aria-label={t('weekend.daysAhead')} className="h-11 sm:w-36">
             {[3, 6, 10, 14].map((d) => <option key={d} value={d}>{t('weekend.next')} {d} days</option>)}
           </Select>
           <Button onClick={discover} loading={busy} className="h-11"><Search className="h-4 w-4" /> {t('weekend.findEvents')}</Button>

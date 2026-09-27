@@ -113,7 +113,7 @@ export default async function AeoPage() {
           <h2 className="mb-3 font-semibold">{t('adminMarketingAeo.addAQuestion')}</h2>
           <form action={addAeoQuestion} className="space-y-3 text-sm">
             <input name="question" required placeholder={t('adminMarketingAeo.whatIsTheBestFamilyOrganizer')} className={inputCls} />
-            <select name="pattern" className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
+            <select name="pattern" aria-label={t('aeo.pattern')} className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
             <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
             <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
             <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />

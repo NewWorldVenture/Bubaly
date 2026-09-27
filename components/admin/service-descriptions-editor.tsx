@@ -6,7 +6,7 @@
 // or matching the shipped default removes the override so it falls back to code.
 // Search filters live; per-row dirty state + save/reset with toasts.
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Loader2, RotateCcw, Search, Check } from 'lucide-react';
 import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
 import { saveServiceDescriptionAction } from '@/app/(app)/admin/services/actions';
@@ -21,6 +21,9 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
   overrides: Record<string, string>;
 }) {
   const t = useTranslations();
+  // Each textarea's id, so the service's name above it can be its <label>:
+  // the href (unique here, the page dedupes it) under a prefix of our own.
+  const idBase = useId();
   const { success, error: toastError } = useToast();
   const [query, setQuery] = useState('');
   // Working values start from override-or-default; saved snapshot tracks "clean".
@@ -113,16 +116,18 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                 const dirty = value.trim() !== (saved[it.key] ?? '').trim();
                 const isOverride = (saved[it.key] ?? '') !== (SERVICE_DESCRIPTIONS[it.key] ?? '');
                 const isBusy = busy === it.key;
+                const fieldId = `${idBase}${it.key}`;
                 return (
                   <div key={it.key} className="rounded-xl border border-border bg-surface/40 p-3">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-fg">{it.label}</span>
+                        <label htmlFor={fieldId} className="text-sm font-semibold text-fg">{it.label}</label>
                         {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">{t('serviceDescriptionsEditor.custom')}</span>}
                       </div>
                       <code className="hidden text-[11px] text-muted/60 sm:block">{it.key}</code>
                     </div>
                     <textarea
+                      id={fieldId}
                       value={value}
                       onChange={(e) => setValues((v) => ({ ...v, [it.key]: e.target.value }))}
                       rows={2}

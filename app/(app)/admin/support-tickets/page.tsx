@@ -186,7 +186,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
             {/* Filter bar */}
             <FilterForm action="/admin/support-tickets" hidden={{ tab }}>
               <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminSupportTickets.searchTickets')} />
-              <FilterSelect name="status" defaultValue={statusFilter} options={[
+              <FilterSelect name="status" label={tr('adminSupportTickets.status')} defaultValue={statusFilter} options={[
                 { value: '', label: 'All Status' },
                 { value: 'open',        label: 'Open' },
                 { value: 'in_progress', label: 'In Progress' },
@@ -194,18 +194,18 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                 { value: 'resolved',    label: 'Resolved' },
                 { value: 'closed',      label: 'Closed' },
               ]} />
-              <FilterSelect name="priority" defaultValue={priorityFilter} options={[
+              <FilterSelect name="priority" label={tr('adminSupportTickets.priority')} defaultValue={priorityFilter} options={[
                 { value: '', label: 'All Priority' },
                 { value: 'urgent', label: 'Urgent' },
                 { value: 'high',   label: 'High' },
                 { value: 'medium', label: 'Medium' },
                 { value: 'low',    label: 'Low' },
               ]} />
-              <FilterSelect name="category" defaultValue={categoryFilter} options={[
+              <FilterSelect name="category" label={tr('adminSupportTickets.category')} defaultValue={categoryFilter} options={[
                 { value: '', label: 'All Categories' },
                 ...Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l })),
               ]} />
-              <FilterSelect name="agent" defaultValue={agentFilter} options={[
+              <FilterSelect name="agent" label={tr('adminSupportTickets.agent')} defaultValue={agentFilter} options={[
                 { value: '', label: 'All Agents' },
                 ...agentNames.map((n) => ({ value: n, label: n })),
               ]} />
