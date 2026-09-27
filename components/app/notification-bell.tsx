@@ -14,6 +14,9 @@ export function NotificationBell() {
 
   useEffect(() => {
     const supabase = createClient();
+    // A count read for the previous family (or before unmount) must not land on
+    // this badge after the effect is gone (MAIN-F-D09).
+    let active = true;
     const load = async () => {
       const { count: c, error } = await supabase
         .from('notifications')
@@ -39,7 +42,7 @@ export function NotificationBell() {
       // On a transient read failure, keep the current badge rather than falsely
       // clearing it to 0 (which would tell the user they have no notifications).
       // A realtime change or the next mount will retry.
-      if (error) return;
+      if (error || !active) return;
       setCount(c ?? 0);
     };
     void load();
@@ -51,7 +54,7 @@ export function NotificationBell() {
         () => { void load(); },
       )
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { active = false; void supabase.removeChannel(channel); };
   }, [familyId, userId]);
 
   return (

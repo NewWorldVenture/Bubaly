@@ -30,15 +30,24 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Switching trips must not show the previous trip's conversation when its
+    // read lands second (MAIN-F-D09).
+    let active = true;
+    // And a trip with no conversation yet starts empty, not showing the last one.
+    setConversationId(null);
+    setMessages([]);
     (async () => {
       const sb = createClient();
       const { data: convo } = await sb.from('vacation_ai_conversations').select('id').eq('family_id', familyId).eq('vacation_id', vacationId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      if (!active) return;
       if (convo) {
         setConversationId(convo.id);
         const { data: msgs } = await sb.from('vacation_ai_messages').select('role, content').eq('conversation_id', convo.id).order('created_at', { ascending: true });
+        if (!active) return;
         setMessages((msgs ?? []).filter((m) => m.role === 'user' || m.role === 'assistant') as Msg[]);
       }
     })();
+    return () => { active = false; };
   }, [familyId, vacationId]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);

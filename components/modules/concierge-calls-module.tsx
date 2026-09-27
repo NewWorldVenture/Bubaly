@@ -63,16 +63,20 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
   useEffect(() => {
     if (!isRealtimePublished('concierge_calls')) return;
     const supabase = createClient();
+    // A refresh started for the previous family (or before unmount) must not
+    // replace this family's list when it lands (MAIN-F-D09).
+    let active = true;
     const ch = supabase.channel(`concierge_calls:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'concierge_calls', filter: `family_id=eq.${familyId}` },
         async () => {
           const { data, error } = await supabase.from('concierge_calls').select('*')
             .eq('family_id', familyId).order('created_at', { ascending: false }).limit(100);
+          if (!active) return;
           if (error) { console.error('[concierge-calls] refresh read failed', error); return; }
           if (data) setCalls(data as Call[]);
         })
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
+    return () => { active = false; void supabase.removeChannel(ch); };
   }, [familyId]);
 
   const stats = useMemo(() => {
