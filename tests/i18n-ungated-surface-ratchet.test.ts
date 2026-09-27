@@ -210,7 +210,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then the Insurance Hub and Trip Planner: each policy type, frequency, trip
 // status and item kind carries the catalogue key it shows, and the policy
 // detail rows are keys, 2,654 -> 2,645.
-const CEILING = 2645;
+//
+// Then the first batch of sentence templates (two of them confirm prompts
+// this scanner already read), 2,645 -> 2,644.
+const CEILING = 2644;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
