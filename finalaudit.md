@@ -807,7 +807,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-27 (PR601/82da production verified; PR602 Web/Database/Mobile pass, E2E pending; corrected PR607 full gates pending)
-- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-12, and a status row for all 398 routes.
+- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-22, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
 - Total Audit Items: 14226 — recounted from the current Register B rows; every prior ID is retained. Ten recorded closures remain source-qualified; no new closure is added by this checkpoint.
@@ -49754,7 +49754,7 @@ because this audit has no production login and must not create data there.
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP (first pass); session_01DXw2nu25BjyRfA6Fg3YiMS (second pass) | ✅ done: first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px); second pass (a `/kid-login` PIN child and a teen, 354 signed-in routes each at 1280 and 390, in a household on no plan and then on Family+; P-19 to P-22 fixed, see "B7, second pass" below) | 2026-09-27 19:10 |
-| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
+| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (public: 41 pages × 10 locales, production; signed in: 278 family routes × 10 locales, local, 2,780 loads; P-11, P-12 found and fixed) | 2026-09-27 19:30 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
 | B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
@@ -49974,7 +49974,7 @@ it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
 every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
 (red without it). Re-crawled after the fix: food, planning, kitchen and the
 connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
-390 px; it-IT is re-checked on the next build.
+390 px, and it-IT with them on a rebuild of `5155f0b2`.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
@@ -49985,6 +49985,14 @@ group is now `min-w-0` with a wrapping title and the link `shrink-0`.
 wide-tracked capitals, ran 62 px out of its card — a text overflow no
 element's box shows, found by measuring text ranges. It is now in a
 shrinkable span that may break (`[overflow-wrap:anywhere]`).
+
+*The kid-login form (found by this session on the same afternoon, first
+numbered P-13, then P-19, then P-19a as three sessions met):* the same defect
+is **P-22**, found and fixed by the B7 second-pass session
+(`session_01DXw2nu25BjyRfA6Fg3YiMS`) with labels that name the child; its fix
+is the one on `main`, this session's duplicate keys were dropped, and
+`tests/a-kid-login-form-says-what-each-field-is.test.ts` now pins main's
+shape (every control named, every key in all seven catalogues).
 
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one
@@ -50205,6 +50213,52 @@ Verified on a rebuild of `e52ec95a`: `/favicon.ico` answers 200
 phrase filed `feature | chat.assistant | Assistant chat | completed` in
 `ai_requests` (there had been no feature row before), no `ai_requests` row
 contains the phrase, and the member's own conversation holds it as sent.
+
+### B8 — the signed-in pages in ten locales
+
+All 278 family routes as the Family+ parent, once per locale, 1280 px, on the
+local stack (2,780 loads). `en-GB`, `es-MX` and `es-US` came back clean. The
+rest:
+
+| Locale(s) | Route | What | Now |
+| --- | --- | --- | --- |
+| de-DE, es-ES, fr-CA, fr-FR, it-IT, nl-NL, pt-PT | `/dashboard/social/accounts/connect` | React #418: a bare `toLocaleString()` (and, in Italian, runtimes that disagree on grouping) | **P-11**, fixed; passes in all seven at 1280 and 390 px |
+| de-DE, nl-NL | `/dashboard/food` (+17 / +54 px), `/dashboard/planning` (+39), `/dashboard/kitchen` (+13) | sideways scroll from long words | **P-12**, fixed; passes at both widths |
+| de-DE, nl-NL (and B7 teen, `/wallet/gift`) | `/dashboard/trip-memories`, `/dashboard/medications` | `ChunkLoadError` for chunk `29335` (clsx/tailwind-merge) and the root error page | **watch**: 3 times in ~3,300 loads, only with four pages loading at once beside a second crawl; not reproduced in 35 serial loads nor with that chunk aborted on purpose; the request was aborted (the crawler drops `ERR_ABORTED`), not refused |
+| all | `/resources/benchmarks` | 404 | by design (recorded above) |
+
+### B6a, admin — every `/admin` route clicked through
+
+The interaction pass as the super administrator on all 78 `/admin` routes:
+225 clicks, no click threw, logged an error, failed a request or reached an
+error boundary. Two text flags, neither a defect: `offline.access` on
+`/admin/social/providers` (the OAuth scope, recorded above) and
+`briefing.morning` on `/admin/ai-activity` — the feature key of an
+`ai_requests` row, which that diagnostic page lists by design (rows that exist
+at all only since P-10).
+
+### Production, again — every public page on the day's last deploy
+
+Re-crawled after #585 and #604 reached production (`9c7e4947`) and the other
+sessions' merges with them: the 1,063 sitemap pages plus the routes the
+sitemap omits, 1,404 loads at 1280 px. **No page is flagged for anything the
+site did.** 23 loads saw a 502 on a prefetch, `/api/mkt/track` or
+`/api/blog/save`, every one answered by this sandbox's egress proxy
+(`server=-`, no `x-vercel-id`); re-loaded one at a time, 21 were clean and
+the other was a 502 on the same `/api/blog/save` URL, which `curl` then got
+200 from Vercel three times running (`server: Vercel`, `iad1`). The last is
+`/resources/benchmarks`, 404 by design. No `ChunkLoadError` on production.
+
+The chunk `29335` watch item was chased once more on the local stack: the
+three pages it hit, six loads at a time for 15 rounds (90 loads) and 35
+serial loads, with every failed or aborted chunk request logged — none. It
+stays a watch item, local-only so far — and #605 ("a failed chunk reloads the
+page once") has since made the page recover from it rather than stop on the
+error screen.
+
+B12 (another session's claim) re-crawls production after later merges at both
+widths; this pass, at 1280 px on `9c7e4947`, is there for it to compare
+against.
 
 ### Every route (first pass)
 
