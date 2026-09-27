@@ -45445,6 +45445,18 @@ is recorded so the #419 in the logs has a known cause.
 
 ---
 
+### `[CLAUDE-1][LOW][I18N]` C1-S9-103 — the blog's save and subscribe controls answered in English
+
+**File/path:** `components/blog/heart-button.tsx`, `components/blog/subscribe-form.tsx`, `lib/i18n/scopes.ts`, `scripts/i18n-scan.mjs`.
+
+**Problem.** Found while reading the PUBLIC lane's forms. Every blog post's save button had four English labels ("Save this article", "Sign in to save this article" and two more). The subscribe form's failure message, "Something went wrong — try again in a moment.", was English on a translated blog. `components/blog` sat outside every gated i18n surface. The scanner also misses a literal in a ternary or a `setMessage('…')` argument, so the static read under-counts. `C1-S9-101`'s 2,765 is a floor, not a ceiling.
+
+**Fix.** Five keys in seven catalogues. The save button's keys use a `blogHeartButton` prefix, which is added to the marketing client scope. `components/blog` is now a gated surface (`marketing-blog-components`).
+
+**Status:** FIXED.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
