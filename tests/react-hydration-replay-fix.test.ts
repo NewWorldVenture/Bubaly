@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { between } from './helpers/source-order';
 
 // The page audit's last intermittent defect: React #418 on about 0.7% of
 // signed-in loads, a different page each time, on a tree that is identical on
@@ -46,13 +47,14 @@ describe("the React replay-cursor backport (react/react#37584)", () => {
     expect(source, 'the installed React does not already carry the fix').not.toMatch(/=== hydrationParentFiber &&\s*\(\s*isHydrating/);
     const patched = applyReplayFix(source, file);
     const site = patched.search(new RegExp(`case 5:\\s*resetHooksOnUnwind\\(${fiber}\\);`));
+    expect(site, "the replay's HostComponent case").not.toBe(-1);
     const after = patched.slice(site, site + 700);
     // Right after the hooks reset, before the fiber is reset and begun again,
     // exactly as React 19.3 does it.
-    expect(after.indexOf(MARKER)).toBeGreaterThan(0);
-    expect(after.indexOf(MARKER)).toBeLessThan(after.indexOf('default:'));
-    expect(after).toContain(`var replayedHostFiber = ${fiber};`);
-    expect(after).toMatch(/replayedHostFiber === hydrationParentFiber &&\s+\(isHydrating\s+\? \(popToNextHostParent\(replayedHostFiber\),\s+5 === replayedHostFiber\.tag &&\s+null != replayedHostFiber\.stateNode &&\s+\(nextHydratableInstance = replayedHostFiber\.stateNode\)\)\s+: \(popToNextHostParent\(replayedHostFiber\), \(isHydrating = !0\)\)\);/);
+    expect(between(after, `resetHooksOnUnwind(${fiber});`, MARKER)).toBe(`resetHooksOnUnwind(${fiber});\n`);
+    const injected = between(after, MARKER, 'default:');
+    expect(injected).toContain(`var replayedHostFiber = ${fiber};`);
+    expect(injected).toMatch(/replayedHostFiber === hydrationParentFiber &&\s+\(isHydrating\s+\? \(popToNextHostParent\(replayedHostFiber\),\s+5 === replayedHostFiber\.tag &&\s+null != replayedHostFiber\.stateNode &&\s+\(nextHydratableInstance = replayedHostFiber\.stateNode\)\)\s+: \(popToNextHostParent\(replayedHostFiber\), \(isHydrating = !0\)\)\);/);
     expect(patched.length - source.length).toBeLessThan(500);
     expect(() => new Script(patched, { filename: file }), 'the patched React still parses').not.toThrow();
     expect(applyReplayFix(patched, file)).toBe(patched);
