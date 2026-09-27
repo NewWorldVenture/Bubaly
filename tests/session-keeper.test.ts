@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pendingEffects: [] as (() => void)[],
   router: { refresh: vi.fn() },
   getSession: vi.fn<() => Promise<SessionResult>>(),
+  cookieSnapshot: vi.fn(),
   authCallback: undefined as AuthCallback | undefined,
   unsubscribe: vi.fn(),
   isNative: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }));
 vi.mock('@/lib/native/capacitor', () => ({ isNative: mocks.isNative }));
-vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnapshot: () => null }));
+vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnapshot: mocks.cookieSnapshot }));
 vi.mock('@capacitor/app', () => ({ App: { addListener: mocks.addListener } }));
 
 function session(userId: string): Session {
@@ -57,6 +58,7 @@ function session(userId: string): Session {
     user: { id, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-09-09T00:00:00Z' },
   };
 }
+function saveCookies(userId: string | null) { mocks.cookieSnapshot.mockReturnValue(userId ? { accessToken: session(userId).access_token } : null); }
 function result(userId: string | null, error: Error | null = null): SessionResult {
   return { data: { session: userId === null ? null : session(userId) }, error };
 }
@@ -75,6 +77,7 @@ function unmount() {
   mocks.effect = undefined;
 }
 function emit(event: AuthChangeEvent, userId: string | null = 'user-a') {
+  if (event !== 'INITIAL_SESSION') saveCookies(userId);
   mocks.authCallback!(event, userId === null ? null : session(userId));
 }
 async function settle() {
@@ -95,6 +98,7 @@ beforeEach(() => {
   mocks.pendingEffects = [];
   mocks.authCallback = undefined;
   mocks.getSession.mockReset().mockResolvedValue(result('user-a'));
+  mocks.cookieSnapshot.mockReset(); saveCookies('user-a');
   mocks.isNative.mockReset().mockReturnValue(false);
   mocks.removeResume.mockReset().mockResolvedValue(undefined);
   mocks.addListener.mockReset().mockResolvedValue({ remove: mocks.removeResume });
@@ -112,7 +116,7 @@ afterEach(() => {
 describe('SessionKeeper identity reconciliation', () => {
   it('reconciles an explicit cookie removal inside the ordinary focus throttle', async () => {
     render(); await settle();
-    mocks.getSession.mockResolvedValue(result(null));
+    saveCookies(null); mocks.getSession.mockResolvedValue(result(null));
     windowTarget.dispatchEvent(new Event('focus'));
     await settle(); expect(mocks.getSession).toHaveBeenCalledTimes(1);
     notifySessionStorageChanged(); await settle();
@@ -124,7 +128,7 @@ describe('SessionKeeper identity reconciliation', () => {
     const old = deferred<SessionResult>();
     mocks.getSession.mockReturnValueOnce(old.promise).mockResolvedValue(result(null));
     render(); await settle();
-    notifySessionStorageChanged(); await settle();
+    saveCookies(null); notifySessionStorageChanged(); await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(2);
     expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
     old.resolve(result('user-a')); await settle();
@@ -132,7 +136,7 @@ describe('SessionKeeper identity reconciliation', () => {
   });
 
   it('a delayed logout signal keeps a newer server identity and current login', async () => {
-    mocks.getSession.mockResolvedValue(result('user-b'));
+    saveCookies('user-b'); mocks.getSession.mockResolvedValue(result('user-b'));
     render('user-b'); await settle();
     notifySessionStorageChanged(); await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(2);
@@ -166,7 +170,7 @@ describe('SessionKeeper identity reconciliation', () => {
   it.each([null, 'user-b'])('refreshes after a successful stored identity change to %s', async (userId) => {
     // A server POST in another tab can clear the auth cookie without emitting
     // SIGNED_OUT through this tab's client instance.
-    mocks.getSession.mockResolvedValue(result(userId));
+    saveCookies(userId); mocks.getSession.mockResolvedValue(result(userId));
     render();
     windowTarget.dispatchEvent(new Event('focus'));
     await settle();
@@ -182,7 +186,7 @@ describe('SessionKeeper identity reconciliation', () => {
   });
 
   it('retries after a rejected refresh without treating the failure as sign-out', async () => {
-    mocks.getSession.mockRejectedValueOnce(new Error('network unavailable')).mockResolvedValue(result('user-b'));
+    saveCookies('user-b'); mocks.getSession.mockRejectedValueOnce(new Error('network unavailable')).mockResolvedValue(result('user-b'));
     render();
     windowTarget.dispatchEvent(new Event('focus'));
     await settle();
@@ -255,7 +259,7 @@ describe('SessionKeeper identity reconciliation', () => {
     render();
     const oldCallback = mocks.authCallback!;
     windowTarget.dispatchEvent(new Event('focus'));
-    render('user-b');
+    saveCookies('user-b'); render('user-b');
     expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
     oldCallback('SIGNED_OUT', null);
     pending.resolve(result(null));
