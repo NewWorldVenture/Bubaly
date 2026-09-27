@@ -259,7 +259,7 @@ export async function releaseNumber(sid: string): Promise<boolean> {
   if (!isTwilioConfigured() || !/^PN[0-9a-f]{32}$/i.test(sid)) return false;
   let res: Response | undefined;
   try {
-    res = await fetchExternal(
+    res = await fetchWithDeadline(
       `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${encodeURIComponent(sid)}.json`,
       { method: 'DELETE', redirect: 'manual', cache: 'no-store', headers: { authorization: authHeader() } },
       15_000,
