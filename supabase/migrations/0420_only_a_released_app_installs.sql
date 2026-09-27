@@ -12,7 +12,8 @@
 -- anything but published or beta, and an INSTALLED app keeps its Remove
 -- control whatever its status now says. This is the database half: two
 -- RESTRICTIVE policies on family_app_installs, for INSERT (WITH CHECK) and
--- UPDATE (WITH CHECK), requiring the row's app to be published or beta.
+-- UPDATE (USING and WITH CHECK), requiring the row's app to be published or
+-- beta.
 -- `to authenticated, anon`, the roles that reach the table over the API.
 --
 -- DELETE is deliberately NOT guarded: removing an install must work whatever
@@ -42,7 +43,13 @@ create policy family_app_installs_released_insert_guard on public.family_app_ins
 drop policy if exists family_app_installs_released_update_guard on public.family_app_installs;
 create policy family_app_installs_released_update_guard on public.family_app_installs
   as restrictive for update to authenticated, anon
-  using (true)
+  -- The same condition on the row as it is (USING) and as it would become
+  -- (WITH CHECK): an install of an app that went back to coming-soon cannot be
+  -- edited, only removed, and nothing can be re-pointed at an unreleased app.
+  using (exists (
+    select 1 from public.family_apps a
+     where a.id = app_id and a.status in ('published', 'beta')
+  ))
   with check (exists (
     select 1 from public.family_apps a
      where a.id = app_id and a.status in ('published', 'beta')

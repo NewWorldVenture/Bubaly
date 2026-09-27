@@ -3109,8 +3109,8 @@ a child included, could install an unreleased app through the action or over
 `/rest/v1`, and the card then showed "Unavailable" with nothing to press.
 
 **What closes it**: two RESTRICTIVE policies on `family_app_installs`, for
-INSERT and UPDATE (WITH CHECK), requiring the row's app to be published or
-beta, `to authenticated, anon`. DELETE is deliberately left open, so an
+INSERT (WITH CHECK) and UPDATE (USING and WITH CHECK), requiring the row's app
+to be published or beta, `to authenticated, anon`. DELETE is deliberately left open, so an
 install whose app later moved back to coming-soon can always be removed.
 Existing rows are untouched. Replay-safe.
 
