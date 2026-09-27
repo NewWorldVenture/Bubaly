@@ -46045,7 +46045,7 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 **Fix.**
 - These labels now come from catalogue keys (`labelKey`).
 - The documents test pins the translated calls for the three actions.
-- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`.
+- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`. After merging main at `e96e745a`, the ceiling is 2432. The extra 13 are main's P-10 change (`711b15c3`), which writes a fixed English label on each AI-request ledger row across 13 route files. That is stored row data, and it stays with that change's owner.
 
 **Status:** FIXED.
 - `documents-module`: scanner findings drop from 15 to 0.
