@@ -46053,6 +46053,28 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CONCIERGE/SUBSCRIPTIONS/EXPENSES]` C1-S9-121 — concierge kinds and prompts, subscription labels and usage lines, and expense categories were English in every locale
+
+**File/path:** `components/modules/concierge-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/expenses-module.tsx`, `lib/finance/category-label.ts`, `tests/route-plan-gate.test.ts`; seven catalogues.
+
+**Problem.**
+- **Concierge.** The seven plan kinds, their opening lines, the five inspiration tips and their reply were English in every locale. A saved plan took its kind's English name, or "New Plan", as its title.
+- **Subscriptions.** Categories, cadence and status pickers (shown as raw ids), "/mo" and "/yr", "trial", "next …", the four usage lines and the last-used hint were English in every locale.
+- **Expenses.** Categories were English in every locale.
+
+**Fix.**
+- Every label listed above is now a catalogue key, rendered in the reader's language.
+- Stored values stay as they are. Expense categories go through the shared `categoryLabel()`, which now knows Travel and Household.
+- A saved concierge plan's title is written in the reader's language.
+- `route-plan-gate` now expects main's merged gate (#585) to treat a failed account read as "not a super admin". The family's own 403 stands, and nothing passes.
+- The health goal's stored label stays canonical English. `tests/health-localization.test.ts` pins that on purpose, so it is left unchanged.
+
+**Status:** FIXED.
+- Scanner findings: `concierge-module` 12 → 0.
+- `subscriptions-module` and `expenses-module`: only stored category values remain.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

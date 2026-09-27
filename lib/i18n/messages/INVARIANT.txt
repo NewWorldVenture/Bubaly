@@ -125,3 +125,6 @@ WhatsApp
 # A call classification in the Front Desk (front-desk-module CLASS_CONFIG);
 # the loanword is what every language we ship uses.
 Spam
+# A subscription category (subscriptions-module CATEGORIES); the loanword is
+# what every language we ship uses.
+Streaming
