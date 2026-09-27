@@ -98,10 +98,10 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
       {stats && (
         <div className="grid grid-cols-4 gap-2">
           {[
-            { value: stats.points30d, label: 'Points · 30d', emoji: '⭐' },
-            { value: stats.choresDone30d, label: 'Chores done', emoji: '✅' },
-            { value: stats.upcoming7d, label: 'This week', emoji: '📅' },
-            { value: stats.milestones, label: 'Milestones', emoji: '🏆' },
+            { value: stats.points30d, label: t('profileModule.stat.points30d'), emoji: '⭐' },
+            { value: stats.choresDone30d, label: t('profileModule.stat.choresDone'), emoji: '✅' },
+            { value: stats.upcoming7d, label: t('profileModule.stat.thisWeek'), emoji: '📅' },
+            { value: stats.milestones, label: t('profileModule.stat.milestones'), emoji: '🏆' },
           ].map(s => (
             <div key={s.label} className="flex flex-col items-center gap-0.5 rounded-2xl border border-border bg-surface/40 px-1 py-3 text-center">
               <span className="text-base leading-none">{s.emoji}</span>

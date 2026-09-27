@@ -30,7 +30,7 @@ export function TripFamily({ vacationId }: { vacationId: string }) {
       fields={fields} emptyText={t('tripFamily.noTravelersAdded')} addLabel="Add traveler"
       renderRow={(m, members) => {
         const fm = m.member_id ? members.get(m.member_id) : null;
-        const name = fm?.display_name || m.guest_name || 'Traveler';
+        const name = fm?.display_name || m.guest_name || t('tripEmergency.traveler');
         return (
           <div className="flex items-start gap-3">
             <Avatar name={name} color={fm?.color ?? null} size={36} />

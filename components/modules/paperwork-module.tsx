@@ -50,10 +50,10 @@ const KIND_ICON: Record<PaperworkKind, typeof FileText> = {
 };
 
 const FILTERS = [
-  { key: 'needs_action', label: 'Needs action' },
-  { key: 'in_progress', label: 'In progress' },
-  { key: 'done', label: 'Done' },
-  { key: 'archived', label: 'Archived' },
+  { key: 'needs_action', labelKey: 'paperworkModule.filter.needsAction' },
+  { key: 'in_progress', labelKey: 'paperworkModule.filter.inProgress' },
+  { key: 'done', labelKey: 'paperworkModule.filter.done' },
+  { key: 'archived', labelKey: 'paperworkModule.filter.archived' },
 ] as const;
 
 const URGENCY_RANK: Record<string, number> = { urgent: 0, soon: 1, normal: 2 };
@@ -179,7 +179,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                 : 'border-border text-muted hover:bg-elevated',
             )}
           >
-            {f.label}
+            {t(f.labelKey)}
             {(counts[f.key] ?? 0) > 0 && (
               <span className={cn('rounded-full px-1.5 text-[10px]', filter === f.key ? 'bg-brand/20' : 'bg-elevated')}>
                 {counts[f.key]}

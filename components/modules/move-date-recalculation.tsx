@@ -10,10 +10,10 @@ import {
   type MoveDatePreview, type MoveDateResult, type MoveDateReviewContext, type MoveDateTask,
 } from '@/lib/moving/recalculation';
 
-const reasons: Record<MoveDateTask['reason'], string> = {
-  relative: 'Follows the move date', completed: 'Completed task: kept',
-  skipped: 'Skipped task: kept', fixed: 'Fixed date: kept',
-  no_date: 'No recorded deadline: kept', out_of_sync: 'Date differs from its recorded offset: kept',
+const reasonKey: Record<MoveDateTask['reason'], string> = {
+  relative: 'moveDateRecalculation.reason.relative', completed: 'moveDateRecalculation.reason.completed',
+  skipped: 'moveDateRecalculation.reason.skipped', fixed: 'moveDateRecalculation.reason.fixed',
+  no_date: 'moveDateRecalculation.reason.noDate', out_of_sync: 'moveDateRecalculation.reason.outOfSync',
 };
 
 export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
@@ -102,8 +102,8 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
         || body.preview.moveId !== move.id || body.preview.fromDate !== move.move_date || body.preview.toDate !== date
         || body.applied !== apply || (confirmed && (body.requestId !== confirmed.requestId || !sameMoveDatePreview(body.preview, confirmed.preview)))) {
         setError(apply
-          ? 'The save response could not be confirmed. Retry this same reviewed change or refresh; do not assume it failed.'
-          : 'The review did not match this move. Refresh before trying again.');
+          ? t('moveDateRecalculation.saveUnconfirmed')
+          : t('moveDateRecalculation.reviewMismatch'));
         return;
       }
       if (apply) {
@@ -148,7 +148,7 @@ export function MoveDateRecalculation({ context, move, onClose, onSaved }: {
                 <li key={task.id} className="rounded-lg bg-surface/50 p-2 text-sm">
                   <p className="font-medium">{task.title}</p>
                   <p>{task.dueDate ?? 'No date'}{task.action === 'shift' ? ' to ' + task.nextDueDate : ' (unchanged)'}</p>
-                  <p className="text-xs text-muted">{reasons[task.reason]}</p>
+                  <p className="text-xs text-muted">{t(reasonKey[task.reason])}</p>
                 </li>
               ))}
             </ul>

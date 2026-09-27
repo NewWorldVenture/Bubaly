@@ -37,9 +37,9 @@ const blank = () => ({
 });
 type Form = ReturnType<typeof blank>;
 
-const CATEGORY_LABEL: Record<string, string> = {
-  general: 'General', meal: 'Meal', vacation: 'Vacation', shopping: 'Shopping', activity: 'Activity',
-};
+// Stored as the id; the reader sees its label (audit C1-S9-127).
+const CATEGORIES = ['general', 'meal', 'vacation', 'shopping', 'activity'];
+const categoryLabel = (tr: (key: string) => string, c: string) => CATEGORIES.includes(c) ? tr(`votingModule.category.${c}`) : c;
 
 const parseTags = (s: string): string[] =>
   s.split(',').map((t) => t.trim()).filter(Boolean);
@@ -235,7 +235,7 @@ export function VotingModule() {
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{p.question}</p>
                   {p.decision_category !== 'general' && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">{CATEGORY_LABEL[p.decision_category] ?? p.decision_category}</span>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">{categoryLabel(tr, p.decision_category)}</span>
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
@@ -347,7 +347,7 @@ export function VotingModule() {
             <Field label={tr('voting.question')}>{(id) => <Input id={id} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} placeholder={tr('voting.whereShouldWeGoThisSummer')} />}</Field>
             <Field label={tr('voting.descriptionOptional')}>{(id) => <Textarea id={id} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />}</Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label={tr('voting.category')}>{(id) => <Select id={id} value={form.decision_category} onChange={(e) => setForm({ ...form, decision_category: e.target.value })}>{Object.entries(CATEGORY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select>}</Field>
+              <Field label={tr('voting.category')}>{(id) => <Select id={id} value={form.decision_category} onChange={(e) => setForm({ ...form, decision_category: e.target.value })}>{CATEGORIES.map((v) => <option key={v} value={v}>{categoryLabel(tr, v)}</option>)}</Select>}</Field>
               <Field label={tr('voting.type')}>{(id) => <Select id={id} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}><option value="single">{tr('voting.singleChoice')}</option><option value="multi">{tr('voting.multipleChoice')}</option></Select>}</Field>
               <Field label={tr('voting.budgetCapOptional')}>{(id) => <Input id={id} type="number" min="0" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder={tr('voting.usesYourBudgetIfBlank')} />}</Field>
               <Field label={tr('voting.closesOptional')}>{(id) => <Input id={id} type="datetime-local" value={form.closes_at} onChange={(e) => setForm({ ...form, closes_at: e.target.value })} />}</Field>
