@@ -4,6 +4,15 @@
 
 LIVE: main a6dcd18e (PR600,17:17:56UTC) exact public acceptance PASS17:25:42–48UTC;
 native wrapper1/1PASS4.9s. No auth submission or private-provider image journey.
+HOSTED a6 FAILED:600 CI36335871720 Web20752each3zones/1624files,build247/types/lint,
+DB/Mobile PASS; E2E1773passed+1failed+1flaky/1775,15.0m.
+Weekly-meal durable timed out120s twice; original await masked by cleanup failure.
+Both snapshots stop at reopened Tuesday saved picker; Meal saved toast remains.
+Session-storage-reconcile storage-only/both first failed, automatic retry PASS.
+37c phase breadcrumbs are diagnostics, not a demonstrated repair. New601 gates pending.
+Four integration guard repairs110/110PASS; localization ceiling tightened2819→2650.
+Public/native acceptance above remains narrower valid proof; no full600PASS claim.
+Receipt:Temp/bubaly-5b-ci36335871720-terminal-20260927.json.
 MEDIA COVERAGE CLOSED:599 CI36335077710 all4SUCCESS, clean1775/1775 E2E12.8m;
 Web20735 each3zones/1623files,build247/types/lintPASS. Same tested/reviewed/e70tree.
 Three media fixture rows now FIXED+PASS; prior three worker closures remain.
