@@ -381,7 +381,12 @@ export async function approveSubmissionAction(formData: FormData): Promise<Missi
       familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
-  } catch {
+  } catch (err) {
+    // The worst of the seven. finalizeApproval mints the wallet reward, so a
+    // throw here means the assignment had already flipped to approved and the
+    // child is owed something recorded nowhere. Rolling back is right; doing it
+    // silently is not.
+    console.error('[chore state] approval finalise failed', err);
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
     // Reopening a dispute whose resolution failed. Zero rows here is ambiguous
     // in the same way as the wallet hold in C1-S9-53 — the `.eq('status',

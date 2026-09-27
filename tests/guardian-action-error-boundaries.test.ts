@@ -13,7 +13,7 @@ describe('Guardian safety action boundaries', () => {
     // (guardian_audit_log is SELECT-only for members; the parent's session
     // can't INSERT — see PLA-0617), logging failures rather than throwing.
     expect(actions).toContain("if (error) console.error('[guardian-audit] write was not logged', error);");
-    expect(actions).toContain('withGuardianTables(createServiceClient())');
+    expect(actions).toContain('const svc = createServiceClient();');
     expect(actions).toContain("supabase.rpc('guardian_review_suggestion'");
   });
 

@@ -9,6 +9,7 @@
 //   4. records an audit log entry.
 import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -227,11 +228,19 @@ export async function resolveAutomationRun(
   id: string,
   decision: 'approved' | 'skipped',
 ): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) {
-    return { ok: false, error: 'Only parents and adults can approve automations.' };
+    // Was an English literal, on the refusal path of a manager-gated action —
+    // the same half-translated shape found across eight modules: the path the
+    // code was written for is translated and the path it falls back to is not.
+    return { ok: false, error: t('actions.onlyParentsAndAdultsCanApprove') };
   }
   const supabase = await createServer();
+  // RLS FILTERS this update rather than refusing it. `logAudit` below records the
+  // decision unconditionally, so a filtered write wrote an audit entry for an
+  // approval that never happened — the log and the table disagreeing is worse
+  // than either being wrong alone.
   const { data: resolved, error } = await supabase
     .from('family_automation_runs')
     .update({
@@ -246,7 +255,7 @@ export async function resolveAutomationRun(
   // The same failure mode as the concierge autopilot in C1-S9-48: a manager
   // approves an automation, is told it worked, and the run stays pending — so
   // it is offered to them again, or the automation simply never executes.
-  if (wroteNoRows(resolved)) return { ok: false, error: 'Could not resolve that automation.' };
+  if (wroteNoRows(resolved)) return { ok: false, error: t('actions.couldNotResolveThatAutomation') };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id,
     action: decision === 'approved' ? 'approve' : 'skip',

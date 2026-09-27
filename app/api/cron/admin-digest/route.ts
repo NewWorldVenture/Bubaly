@@ -46,12 +46,17 @@ export async function GET(req: NextRequest) {
   // second. A truncated read is a failed read, so both cases answer 502 and the
   // scheduler retries rather than delivering a confident undercount. Twenty
   // thousand admin notifications in one day is itself an incident worth a 502.
+  //
+  // (created_at, title) is not unique — two notifications of one kind in the
+  // same instant tie — so `.range()` could move a page boundary inside the tie
+  // and drop a row. `id` makes the order total.
   const { rows: feed, error: feedError } = await readAll<DigestRow>((from, to) => admin
     .from('admin_notifications')
     .select('kind, title, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .order('title')
+    .order('id')
     .range(from, to), { max: 20_000 });
 
   if (feedError) {

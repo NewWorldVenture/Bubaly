@@ -179,7 +179,11 @@ export function HomeModule() {
   async function removeAsset(id: string) {
     if (!(await askConfirm({ title: tr('home.deleteAssetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { data: removed, error } = await supabase.from('home_assets').delete().eq('id', id).select('id');
+    // Family-scoped, and read back: 0336 makes this table manager-written, and
+    // RLS FILTERS a delete rather than refusing it, so a refused one answered
+    // `error: null` and the toast said the asset was gone while it stayed.
+    const { data: removed, error } = await supabase.from('home_assets').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.assetRemoved'));
@@ -399,12 +403,13 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function saveDate() {
     setSavingDate(true);
     const supabase = createClient();
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as saved. Audit C1-S9-82.
-    const { data: dated, error } = await supabase.from('home_assets')
-      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id).select('id');
+    const { data: saved, error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null })
+      .eq('id', asset.id).eq('family_id', asset.family_id).select('id');
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(dated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // A filtered update (0336: managers only) is not a saved date.
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }
@@ -471,7 +476,7 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
       setRemovingId(null);
       return toastError(storageError);
     }
-    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
+    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).eq('family_id', familyId).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));

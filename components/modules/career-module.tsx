@@ -21,6 +21,7 @@ import {
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useConfirm } from '@/components/ui/confirm';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
@@ -118,7 +119,7 @@ export function CareerModule() {
     if (wroteNoRows(made)) return toastError(tr('errors.thatChangeWasNotSaved'));
     const { error: clearError } = await supabase.from('resume_versions').update({ is_primary: false }).eq('profile_id', r.profile_id).neq('id', r.id);
     if (clearError) return toastError(describeDbError(clearError));
-    success(`${r.title} is now the primary resume`);
+    success(tr('modules.primaryResumeSet', { title: r.title }));
   }
 
   async function deleteResume(r: Resume) {
@@ -170,7 +171,7 @@ export function CareerModule() {
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
-            {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+            {a.url && <a href={safeWebLink(a.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
             <button onClick={() => setAppForm({ open: true, application: a })} aria-label={`Edit ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
             <button onClick={() => deleteApplication(a)} aria-label={`Delete ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>

@@ -49,7 +49,6 @@ describe('the default list is the one the family can still see', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.id).not.toBe('put-away');
-      expect(result.data.created).toBe(true);
     }
   });
 

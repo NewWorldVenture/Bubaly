@@ -25,6 +25,7 @@ const CLASSIFIED: Record<string, { count: number; how: string }> = {
   'lib/planning/prep-server.ts': { count: 1, how: 'idempotent regeneration; reports plans, not steps' },
   'lib/contact-center/urgent-delivery.ts': { count: 1, how: 'readback: verifies the notification identity' },
   'lib/marketing/automation-events.ts': { count: 1, how: '.select() claim, then reads the existing run on a duplicate' },
+  'lib/server/push.ts': { count: 1, how: 'delivery receipt (0440): a duplicate IS the goal state — already recorded; reports nothing' },
 };
 
 function found(): Map<string, number> {

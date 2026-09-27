@@ -223,6 +223,17 @@ begin
   exception when insufficient_privilege then
     failures := array_append(failures, 'a PARENT was refused an edit of a child''s care entry — this guard broke a legitimate path');
   end;
+  -- …and cannot RE-SIGN one either. Leg 7 above runs as the child, and the
+  -- audit branch's 0430 refuses a child's UPDATE of a parent's care entry
+  -- outright, so on the merged chain leg 7 holds for 0430's reason as well as
+  -- the trigger's. A parent is allowed the UPDATE by every policy, so this is
+  -- the leg where the trigger is the ONLY thing that keeps the name, and it is
+  -- the one the negative control below reverses.
+  update public.care_log set logged_by = kid_m where id = genuine;
+  select count(*) into n from public.care_log where id = genuine and logged_by = parent_m;
+  if n <> 1 then
+    failures := array_append(failures, 'a PARENT re-signed a care entry through a direct UPDATE — the attribution is not immutable');
+  end if;
 
   -- 9. Reads stay open to the household on all four.
   perform set_config('request.jwt.claim.sub', kid_u::text, true);
@@ -252,6 +263,9 @@ begin
   exception when insufficient_privilege then
     failures := array_append(failures, 'with the guard removed the child STILL could not sign as the parent — this probe is decoration, not a boundary');
   end;
+  -- As the PARENT, for the reason given at leg 8: the child's UPDATE of a
+  -- parent's entry is refused by 0430 whether or not the trigger is there.
+  perform set_config('request.jwt.claim.sub', parent_u::text, true);
   update public.care_log set logged_by = kid_m where id = genuine;
 
   perform set_config('role','postgres', true);

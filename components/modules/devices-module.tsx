@@ -30,6 +30,8 @@ export function DevicesModule() {
     fetcher: (sb) => sb.from('smart_devices').select('*').eq('family_id', familyId).order('room').order('name'),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const all = useMemo(() => devices ?? [], [devices]);
   const stats = useMemo(() => summarizeDevices(all as DeviceLike[]), [all]);
@@ -37,16 +39,29 @@ export function DevicesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.name.trim()) return;
-    const row = { name: form.name.trim(), type: form.type, room: form.room.trim() || null, brand: form.brand.trim() || null, integration: form.integration, status: form.status, last_state: form.last_state.trim() || null, note: form.note.trim() || null };
-    const supabase = createClient();
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
-    const { data: saved, error } = form.id
-      ? await supabase.from('smart_devices').update(row).eq('id', form.id).select('id')
-      : await supabase.from('smart_devices').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(form.id ? 'Updated' : 'Added'); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.name.trim()) return;
+      const row = { name: form.name.trim(), type: form.type, room: form.room.trim() || null, brand: form.brand.trim() || null, integration: form.integration, status: form.status, last_state: form.last_state.trim() || null, note: form.note.trim() || null };
+      const supabase = createClient();
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+      const { data: saved, error } = form.id
+        ? await supabase.from('smart_devices').update(row).eq('id', form.id).select('id')
+        : await supabase.from('smart_devices').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      success(form.id ? 'Updated' : 'Added'); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function cycleStatus(d: Device) {
     const next = d.status === 'online' ? 'offline' : d.status === 'offline' ? 'unknown' : 'online';
@@ -127,7 +142,7 @@ export function DevicesModule() {
             <Field label={tr('devices.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('devices.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

@@ -22,10 +22,11 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
@@ -42,16 +43,13 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
   return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 };
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
-}
 
 export function InventoryModule() {
   const locale = useLocale();
   const money = moneyIn(locale.code);
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const plural = usePlural();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -195,7 +193,7 @@ export function InventoryModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> {tr('inventory.catalog')}</div>
           <p className="mt-2 text-xl font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${summary.overdueLoans} loan${summary.overdueLoans === 1 ? '' : 's'} overdue` : ''}</p>
+          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${plural('inventory.loansOverdue', summary.overdueLoans)}` : ''}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
@@ -267,7 +265,7 @@ export function InventoryModule() {
               <option value="all">{tr('inventory.owned')}</option>
               {ITEM_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
             </Select>
-            <span className="text-xs text-muted">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+            <span className="text-xs text-muted">{plural('inventory.itemCount', filtered.length)}</span>
           </div>
           {items.data.length === 0 ? (
             <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description={tr('inventoryModule.startWithTheThingsYou')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />
@@ -276,14 +274,11 @@ export function InventoryModule() {
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
-                const url = photoUrl(item.photo_path);
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
-                    {url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-                      <img src={url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
-                    ) : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>}
+                    <FamilyMediaImg src={item.photo_path} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover"
+                      fallback={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{item.name}{item.quantity > 1 ? <span className="text-muted"> ×{item.quantity}</span> : null}</p>
                       <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
@@ -340,7 +335,7 @@ export function InventoryModule() {
           onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success(tr('inventoryModule.moveLogged')); }} />
       )}
       {lendFor && (
-        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(`${lendFor.name} marked as lent out`); }} />
+        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(tr('modules.markedLentOut', { name: lendFor.name })); }} />
       )}
     </div>
   );
@@ -370,7 +365,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'inventory', file.name);
@@ -414,7 +409,6 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -441,10 +435,8 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
           <Field label={tr('inventory.tags')} hint="Comma-separated">{(id) => <Input id={id} name="tags" defaultValue={item?.tags.join(', ') ?? ''} placeholder={tr('inventory.travelInsured')} />}</Field>
         </div>
         <div className="flex items-center gap-3">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-            <img src={url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-          ) : <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>}
+          <FamilyMediaImg src={photoPath} alt="" className="h-12 w-12 rounded-xl object-cover"
+            fallback={<span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>} />
           <label className="cursor-pointer text-sm text-brand-text">
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />

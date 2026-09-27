@@ -69,6 +69,12 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   db = createInMemorySupabase<DB>();
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'UTC' }]);
+  // Both ends of a delegation must be members of THIS family (PR #548's
+  // cross-household check), so the household has the two it delegates between.
+  db.seed('family_members', [
+    { id: 'member-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true },
+    { id: 'member-2', family_id: FAMILY, user_id: 'user-2', role: 'parent', is_active: true },
+  ]);
   db.seed('trust_policies', [{ id: 'policy-1', family_id: FAMILY, name: 'Ask first', enabled: true }]);
   db.seed('trust_delegations', [{ id: 'deleg-1', family_id: FAMILY, revoked_at: null }]);
   db.seed('emergency_sessions', [{ id: 'emg-1', family_id: FAMILY, ended_at: null }]);

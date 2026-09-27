@@ -29,7 +29,7 @@
 // `messages[key]` cannot differ.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { translate, type Messages } from '@/lib/i18n/translate';
+import { translate, pluralize as basePluralize, type Messages } from '@/lib/i18n/translate';
 
 import deDE from '@/lib/i18n/messages/de-DE.json';
 import enGB from '@/lib/i18n/messages/en-GB.json';
@@ -46,7 +46,6 @@ import ptPT from '@/lib/i18n/messages/pt-PT.json';
 /** The English catalogue's keys are the contract; every other catalogue is a
  *  partial of it, so a translation can lag without breaking the build. */
 export type MessageKey = keyof typeof enUS;
-export { translate };
 export type { Messages };
 
 const CATALOGUES: Record<LocaleCode, Messages> = {
@@ -170,10 +169,26 @@ export function getRawMessages(locale: LocaleCode): Messages {
 }
 
 /**
- * Look up `key` and substitute `{name}` placeholders.
- *
- * Interpolation is deliberately dumb — a single pass over `{token}` — because
- * catalogue values are our own content, never visitor input, and anything
- * cleverer (nested expressions, function calls in strings) turns a translation
- * file into an execution surface.
+ * The lookup, re-exported from `lib/i18n/translate.ts` — main's contract, taken
+ * at the merge. It carries no English fallback of its own: every map this
+ * module hands out (`getMessages`) is already English with the locale laid
+ * over it, so a fallback here could only ever fire for a caller that built a
+ * PARTIAL map by hand, and for that caller the bare key is the honest answer.
+ * tests/i18n-locale-resolution.test.ts holds it.
  */
+export { translate };
+
+/**
+ * The server-side pluraliser, with the same English fallback as `translate`
+ * above and for the same reason: a counted phrase a translation has not reached
+ * yet should read as English, not as `inventory.overdueLoans`.
+ */
+export function pluralize(
+  messages: Messages,
+  locale: string,
+  key: string,
+  count: number,
+  params?: Record<string, string | number>,
+): string {
+  return basePluralize(messages, locale, key, count, params, SOURCE_MESSAGES);
+}

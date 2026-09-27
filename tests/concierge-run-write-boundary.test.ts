@@ -56,6 +56,16 @@ describe('dismissQueuedRunAction write boundary', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('returns ok:false when RLS filtered the dismiss away, with no error at all', async () => {
+    // The case the readback exists for: zero rows and `error: null`. Before it, the
+    // run stayed "pending" and the manager was told it was dismissed — the exact
+    // defect the header describes, one layer down from the one it fixed.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null, []));
+    const res = await dismissQueuedRunAction('r1');
+    expect(res.ok).toBe(false);
+  });
+
   it('returns ok:true when the dismiss succeeds', async () => {
     createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null));
     const res = await dismissQueuedRunAction('r1');

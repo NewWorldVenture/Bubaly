@@ -81,10 +81,13 @@ export function SleepModule() {
   const maxMinutes = Math.max(summary.target.max * 60, ...fortnight.map((l) => l.duration_min), 1);
 
   async function deleteLog(log: Log) {
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
-    const { data: removed, error } = await createClient().from('sleep_logs').delete().eq('id', log.id).select('id');
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    const { data, error } = await createClient().from('sleep_logs').delete()
+      .eq('id', log.id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('sleepModule.nightRemoved'));
   }
 

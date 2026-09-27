@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildAssistantTools, type AssistantCtx } from '@/lib/assistant/tools';
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 // Who the chat assistant says did the thing.
 //
 // `AssistantCtx` carries two ids that look interchangeable and are not:
@@ -22,6 +27,7 @@ type Call = { table: string; operation: Operation; payload?: unknown };
 function fakeDb(rowsFor: (table: string) => unknown[]) {
   const calls: Call[] = [];
   const db = {
+    rpc: missingDefaultListRpc,
     from(table: string) {
       let operation: Operation = 'select';
       let payload: unknown;

@@ -25,7 +25,10 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (k: string) => k }));
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: () => true }));
-vi.mock('@/lib/services/scope', () => ({
+// Partial: the route also takes `dayKeyInTz` from here — "due today" is the
+// FAMILY's today (PR #548) — so only the scope lookup is replaced.
+vi.mock('@/lib/services/scope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/services/scope')>()),
   systemScopeForFamily: async (_db: unknown, familyId: string) => ({ familyId, tz: 'UTC' }),
 }));
 vi.mock('@/lib/services/notifications', () => ({

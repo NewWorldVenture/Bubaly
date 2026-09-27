@@ -125,7 +125,7 @@ export function GraphModule() {
       // The projection wrote; the screen has not read it yet. Stay "Syncing…"
       // until the new nodes and links are actually in hand.
       if (!await readBack()) { toastError(t('graphModule.rebuiltButNotOnScreen')); return; }
-      success(`Twin synced — ${res.entities} entities, ${res.edges} links from your data`);
+      success(t('modules.twinSynced', { entities: res.entities ?? 0, edges: res.edges ?? 0 }));
     } finally {
       setProjecting(false);
     }
@@ -149,7 +149,7 @@ export function GraphModule() {
     const shown = await readBack();
     if (opening === entityOpening.current) setAddEntity(false);
     if (!shown) { toastError(t('graphModule.savedButNotOnScreen')); return; }
-    success(`Added ${name}`);
+    success(t('modules.addedNamed', { name }));
   }
 
   async function edgeWasSaved() {

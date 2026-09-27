@@ -52,6 +52,12 @@ beforeEach(() => {
   db = createInMemorySupabase<DB>({ defaults: { reward_redemptions: { status: 'requested', cost_points: 0 } } });
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'UTC' }]);
   db.seed('rewards', [{ id: 'reward-1', family_id: FAMILY, title: 'Extra screen time', cost_points: 100 }]);
+  db.seed('family_members', [
+    { id: 'member-parent', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true },
+    { id: 'member-child', family_id: FAMILY, user_id: 'user-2', role: 'child', is_active: true },
+    { id: 'member-sibling', family_id: FAMILY, user_id: 'user-3', role: 'child', is_active: true },
+    { id: 'member-elsewhere', family_id: 'family-2', user_id: 'user-4', role: 'child', is_active: true },
+  ]);
   state.db = db;
   state.role = 'parent';
   state.memberId = 'member-parent';
@@ -106,6 +112,25 @@ describe('asking for a reward', () => {
   });
 });
 
+describe('whose points a request may spend (DATA-004)', () => {
+  it('refuses a child asking against a sibling\u2019s balance', async () => {
+    state.role = 'child';
+    state.memberId = 'member-child';
+
+    const result = await requestRedemptionAction({ rewardId: 'reward-1', forMemberId: 'member-sibling' });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(redemptions()).toHaveLength(0);
+  });
+
+  it('refuses a manager spending a member of another family', async () => {
+    const result = await requestRedemptionAction({ rewardId: 'reward-1', forMemberId: 'member-elsewhere' });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(redemptions()).toHaveLength(0);
+  });
+});
+
 describe('deciding a queued redemption', () => {
   beforeEach(() => {
     db.seed('reward_redemptions', [{
@@ -138,6 +163,31 @@ describe('deciding a queued redemption', () => {
     await decideRedemptionAction({ id: 'red-1', decision: 'rejected' });
 
     expect(redemptions()[0]).toMatchObject({ status: 'rejected', decided_by: 'member-parent' });
+  });
+
+  it('only moves the row it expected: a second approval of the same request changes nothing', async () => {
+    // Two parents deciding at once: the first moves requested → approved; the
+    // second finds no 'requested' row and must not overwrite the first.
+    await decideRedemptionAction({ id: 'red-1', decision: 'approved' });
+    const second = await decideRedemptionAction({ id: 'red-1', decision: 'rejected' });
+
+    expect(second).toMatchObject({ ok: false });
+    expect(redemptions()[0]).toMatchObject({ status: 'approved' });
+  });
+
+  it('cannot fulfil a reward nobody approved', async () => {
+    const result = await decideRedemptionAction({ id: 'red-1', decision: 'fulfilled' });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(redemptions()[0]).toMatchObject({ status: 'requested' });
+  });
+
+  it('fulfils one that was approved', async () => {
+    await decideRedemptionAction({ id: 'red-1', decision: 'approved' });
+    const result = await decideRedemptionAction({ id: 'red-1', decision: 'fulfilled' });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(redemptions()[0]).toMatchObject({ status: 'fulfilled' });
   });
 
   it('refuses a decision that is not one', async () => {

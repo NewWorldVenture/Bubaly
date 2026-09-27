@@ -32,9 +32,12 @@ describe('requesting a redemption', () => {
     harness.db = db;
     db.seed('rewards', [{ id: 'reward-1', family_id: 'family-1', title: 'Movie night', cost_points: 100 }]);
     db.seed('economy_rewards', [{ id: 'erew-1', family_id: 'family-1', currency_id: 'cur-1', title: 'Ice cream', cost: 5, is_active: true, stock: null }]);
+    // `is_active` is what requestRedemptionAction asks of the member it is
+    // asked for (a removed member is not handed a redemption), so the fixture
+    // says so — the rows are otherwise exactly what the product writes.
     db.seed('family_members', [
-      { id: 'member-a', family_id: 'family-1', role: 'child' },
-      { id: 'member-b', family_id: 'family-1', role: 'child' },
+      { id: 'member-a', family_id: 'family-1', role: 'child', is_active: true },
+      { id: 'member-b', family_id: 'family-1', role: 'child', is_active: true },
     ]);
   });
 

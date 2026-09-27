@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthError, marketingRefusalBody } from '@/lib/marketing/admin';
 import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
@@ -85,8 +85,14 @@ Use ONLY the real data provided as grounding. Never fabricate metrics, rankings,
 
     return NextResponse.json({ text: completion.text });
   } catch (err) {
+    // A refusal is not a fault, and it is not this route's to log as one: the
+    // status now travels on the error rather than being read back out of its
+    // English, which is why this used to answer 500 with "check that the OpenAI
+    // API key is set" to a caller whose only problem was not being an admin.
+    if (isMarketingAuthError(err)) {
+      return NextResponse.json({ error: marketingRefusalBody(err) }, { status: err.status });
+    }
     console.error('Marketing AI error:', err);
-    const msg = err instanceof Error && err.message.includes('Forbidden') ? 'Forbidden' : 'Could not generate. Check that the OpenAI API key is set.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: 'Could not generate. Check that the OpenAI API key is set.' }, { status: 500 });
   }
 }

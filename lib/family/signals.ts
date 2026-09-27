@@ -23,7 +23,7 @@
 // conversion, because there is no instant to convert.
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { addDaysToDayKey, dayKeyInTz, zonedTimeMs } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
 

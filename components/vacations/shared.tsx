@@ -117,24 +117,38 @@ export function TripCrudSection<T extends Row>({
   });
 
   const rows = useMemo(() => (orderBy ? [...data].sort(orderBy) : data), [data, orderBy]);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string | boolean> | null>(null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const req = fields.find((f) => f.required && !String(form[f.name] ?? '').trim());
-    if (req) return toastError(`${req.label} is required`);
-    const supabase = createClient() as any;
-    const row = toRow(form, fields);
-    const id = form.id as string;
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
-    const { data: saved, error } = id
-      ? await supabase.from(table).update(row).eq('id', id).select('id')
-      : await supabase.from(table).insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId }).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(id ? 'Saved' : 'Added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const req = fields.find((f) => f.required && !String(form[f.name] ?? '').trim());
+      if (req) return toastError(t('trips.fieldIsRequired', { field: req.label }));
+      const supabase = createClient() as any;
+      const row = toRow(form, fields);
+      const id = form.id as string;
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+      const { data: saved, error } = id
+        ? await supabase.from(table).update(row).eq('id', id).select('id')
+        : await supabase.from(table).insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      success(id ? 'Saved' : 'Added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -207,7 +221,7 @@ export function TripCrudSection<T extends Row>({
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('shared.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

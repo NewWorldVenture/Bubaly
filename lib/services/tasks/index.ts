@@ -14,7 +14,7 @@
 // "the family"; a chore with nobody to do it is a chore nobody does.
 import 'server-only';
 import type { Priority, RecurrenceFreq, TaskStatus, Tables, Updatable } from '@/lib/database.types';
-import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows, isMissingFunctionError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import {
   keyedProbe, sameId, sameInstant, withIdempotency, type IdempotencyProbe, type KeyedCreateOptions,
@@ -41,36 +41,58 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
  * using it instead of accumulating a second "To-Do" every time the assistant
  * runs. Creation is only attempted when no list exists at all.
  */
-export async function ensureTodoList(scope: ServiceScope, name?: string): Promise<ServiceResult<{ id: string; created: boolean }>> {
-  const wanted = name?.trim() || DEFAULT_TODO_LIST_NAME;
+/**
+ * Get-or-create a family's to-do list — the oldest open one, or the oldest
+ * open one with `name` — as ONE operation (DATA-007). The same race and the
+ * same fix as `ensureDefaultGroceryListId` in lib/services/groceries: 0443's
+ * `ensure_default_todo_list` serialises the read and the insert per family
+ * (and per name, when one is asked for), and a database without it falls back
+ * to the read-then-insert that ran before.
+ *
+ * `createdBy` is a family_members id — see the header note on this file.
+ */
+export async function ensureTodoListId(
+  db: ServiceScope['db'],
+  familyId: string,
+  createdBy: string | null,
+  name: string,
+  matchName: boolean,
+): Promise<{ id: string; error: null } | { id: null; error: unknown }> {
+  const { data, error } = await db.rpc('ensure_default_todo_list', {
+    p_family_id: familyId, p_name: name, p_match_name: matchName, p_created_by: createdBy,
+  });
+  if (!error && typeof data === 'string') return { id: data, error: null };
+  if (error && !isMissingFunctionError(error)) return { id: null, error };
 
-  let lookup = scope.db
+  let lookup = db
     .from('todo_lists')
     .select('id')
-    .eq('family_id', scope.familyId)
+    .eq('family_id', familyId)
     .is('archived_at', null)
     .order('created_at', { ascending: true })
     .limit(1);
-  if (name?.trim()) lookup = lookup.eq('name', wanted);
-
+  if (matchName) lookup = lookup.eq('name', name);
   const { data: existing, error: lookupError } = await lookup.maybeSingle();
-  if (lookupError) {
-    console.error('[service:tasks] to-do list lookup failed', lookupError);
-    return fail(describeDbError(lookupError, 'Could not open your to-do lists.'), { code: SERVICE_CODES.db });
-  }
-  if (existing?.id) return ok({ id: existing.id, created: false });
+  if (lookupError) return { id: null, error: lookupError };
+  if (existing?.id) return { id: existing.id, error: null };
 
-  const { data, error } = await scope.db
+  const { data: created, error: createError } = await db
     .from('todo_lists')
-    // created_by references family_members(id) — see the header note.
-    .insert({ family_id: scope.familyId, name: wanted, created_by: scope.memberId })
+    .insert({ family_id: familyId, name, created_by: createdBy })
     .select('id')
     .single();
-  if (error || !data) {
-    console.error('[service:tasks] to-do list create failed', error);
-    return fail(describeDbError(error, 'Could not create a to-do list.'), { code: SERVICE_CODES.db });
+  if (createError || !created) return { id: null, error: createError ?? new Error('To-do list was not created') };
+  return { id: created.id, error: null };
+}
+
+export async function ensureTodoList(scope: ServiceScope, name?: string): Promise<ServiceResult<{ id: string }>> {
+  const wanted = name?.trim() || DEFAULT_TODO_LIST_NAME;
+  const list = await ensureTodoListId(scope.db, scope.familyId, scope.memberId, wanted, Boolean(name?.trim()));
+  if (list.error || !list.id) {
+    console.error('[service:tasks] to-do list get-or-create failed', list.error);
+    return fail(describeDbError(list.error as never, 'Could not open your to-do lists.'), { code: SERVICE_CODES.db });
   }
-  return ok({ id: data.id, created: true });
+  return ok({ id: list.id });
 }
 
 export type CreateTodoInput = {
@@ -118,7 +140,7 @@ export async function createTodo(
     return fail('A due date must look like 2026-09-05.', { code: SERVICE_CODES.invalidInput });
   }
 
-  const list = input.listId ? { ok: true as const, data: { id: input.listId, created: false } } : await ensureTodoList(scope);
+  const list = input.listId ? { ok: true as const, data: { id: input.listId } } : await ensureTodoList(scope);
   if (!list.ok) return list;
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';

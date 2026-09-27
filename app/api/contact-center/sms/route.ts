@@ -16,11 +16,12 @@ import { autoReplyText, classifyIntent, summarizeInbound } from '@/lib/contact-c
 import { safeContactText } from '@/lib/contact-center/text';
 import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
 import { captureSmsIngress, readSmsIngress, readLegacySmsReplyForIngress, readLegacyUrgentForIngress, type SmsIngressReceipt } from '@/lib/contact-center/sms-ingress';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+const BASE_URL = appBaseUrl();
 const MAX_BODY = 64 * 1024;
 
 function xml(body: string): NextResponse {

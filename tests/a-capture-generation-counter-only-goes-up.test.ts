@@ -29,8 +29,14 @@ const source = readFileSync('components/capture/document-capture.tsx', 'utf8');
 describe('the capture generation counter only ever goes up (C1-S9-11)', () => {
   it('increments in the effect body and again in its cleanup', () => {
     const effect = between(source, 'useEffect(() => {', '}, [familyId, userId]);');
-    expect(effect).toContain('generation.current++;');
-    expect(effect).toContain('return () => { generation.current++; };');
+    // Either the ref itself, or an alias of the REF OBJECT (`const gen =
+    // generation;`, which the lint budget on PR #548 settled on): both write the
+    // live counter. What is forbidden is an alias of its VALUE, below.
+    const alias = /const (\w+) = generation;/.exec(effect)?.[1];
+    const ref = alias ?? 'generation';
+    expect(effect).toContain(`${ref}.current++;`);
+    expect(effect).toContain(`return () => { ${ref}.current++; };`);
+    expect(effect).not.toMatch(/=\s*generation\.current\s*;/);
   });
 
   it('never assigns the counter from a captured local', () => {

@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 const PATH = '/dashboard/app-store';
@@ -27,7 +27,7 @@ export async function installAppAction(appId: string): Promise<Result> {
     family_id: ctx.active.familyId, app_id: appId, installed_by: ctx.active.member.id,
     enabled: true, created_by: ctx.user.id,
   }, { onConflict: 'family_id,app_id' }).select('app_id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(installed)) return { ok: false, error: t('actions.couldNotInstallThatApp') };
   revalidatePath(PATH);
   return { ok: true };
@@ -40,7 +40,7 @@ export async function uninstallAppAction(appId: string): Promise<Result> {
   const sb = await createServer();
   const { data: removed, error } = await sb.from('family_app_installs').delete()
     .eq('family_id', ctx.active.familyId).eq('app_id', appId).select('app_id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotRemoveThatApp') };
   revalidatePath(PATH);
   return { ok: true };
@@ -53,7 +53,7 @@ export async function toggleAppAction(appId: string, enabled: boolean): Promise<
   const sb = await createServer();
   const { data: toggled, error } = await sb.from('family_app_installs').update({ enabled })
     .eq('family_id', ctx.active.familyId).eq('app_id', appId).select('app_id');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatApp') };
   revalidatePath(PATH);
   return { ok: true };

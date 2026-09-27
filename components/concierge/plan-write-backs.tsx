@@ -22,6 +22,9 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [applied, setApplied] = useState<Set<WriteBackKind>>(new Set());
+  // Unknown is not "nothing applied yet": offering the buttons after a failed
+  // read invites adding the same event, reminder or task a second time.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<WriteBackKind | null>(null);
   const [, startTransition] = useTransition();
 
@@ -31,11 +34,12 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
     (async () => {
       try {
         const sb = createClient();
-        // A refused read shows nothing as applied yet; re-applying is safe
-        // because the materializer is idempotent (C1-S9-48). The error is now
-        // logged rather than dropped. Audit C1-S9-71.
         const { data, error } = await sb.from('concierge_plan_actions').select('action_kind').eq('plan_id', planId);
+        // Logged whether or not this view is still mounted (Audit C1-S9-71), and
+        // shown as a load failure while it is.
         if (error) console.error('[concierge] applied write-backs read failed', error);
+        if (!active) return;
+        if (error) { setLoadFailed(true); return; }
         if (active && data) setApplied(new Set(data.map((r) => r.action_kind as WriteBackKind)));
       } catch { /* table not applied yet → no applied state */ }
     })();
@@ -66,7 +70,7 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
         {options.map((o) => {
           const Icon = ICON[o.kind];
           const done = applied.has(o.kind);
-          const disabled = !o.available || done || busy === o.kind;
+          const disabled = !o.available || done || busy === o.kind || loadFailed;
           return (
             <button
               key={o.kind}
@@ -89,6 +93,7 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
           );
         })}
       </div>
+      {loadFailed && <p role="alert" className="mt-1 text-[10px] text-danger">{t('planWriteBacks.couldNotLoadApplied')}</p>}
     </div>
   );
 }
