@@ -190,7 +190,7 @@ export function MessagesModule() {
         void loadConversations();
       }
     })();
-  }, [familyId, userId, members, loadConversations]);
+  }, [familyId, userId, members, loadConversations, tr]);
 
   // ── Load messages for active conv ──────────────────────────
   // `toastError` is in the deps because it IS a dependency — this callback
