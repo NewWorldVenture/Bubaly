@@ -130,11 +130,28 @@ export async function POST(req: NextRequest) {
       country: clean(body.country),
       session_count: 1,
     }).select('id').single();
-    if (createError) {
+    if (createError && createError.code === '23505') {
+      // Two events from a visitor's first page (the page view and the one
+      // fired beside it on /ai, say) both read "no visitor" and both insert;
+      // the loser hit the unique key and answered 503. The row it lost to is
+      // the visitor it was about to create: read it and record against it.
+      // Found by the 2026-09-27 page audit (P-08).
+      const { data: winner, error: winnerError } = await supabase
+        .from('mkt_visitors')
+        .select('id')
+        .eq('anonymous_id', anonymousId)
+        .maybeSingle();
+      if (winnerError || !winner) {
+        console.error('[mkt-track] visitor re-read after a concurrent create failed', winnerError ?? 'no row');
+        return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
+      }
+      visitorId = winner.id;
+    } else if (createError) {
       console.error('[mkt-track] visitor create failed', createError);
       return NextResponse.json({ error: t('track.analyticsIsTemporarilyUnavailable') }, { status: 503 });
+    } else {
+      visitorId = created?.id ?? null;
     }
-    visitorId = created?.id ?? null;
   }
   if (!visitorId) return NextResponse.json({ error: t('track.couldNotRecordVisitor') }, { status: 500 });
 

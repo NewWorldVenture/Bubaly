@@ -26,7 +26,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 
 ## Audit Status — Session A (this register)
 - Started: 2026-09-13
-- Last Updated: 2026-09-27
+- Last Updated: 2026-09-27T12:54:00Z
 - Total Audit Items: 841 (re-derived from the tree in Session 9, not carried
   forward: `C1-S9-14` found 20 items across four axes with no permanent ID)
 - Not Started: 448
@@ -47883,10 +47883,10 @@ because this audit has no production login and must not create data there.
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render | — | ⬜ open, claimable | — |
-| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | — | ⬜ open, claimable | — |
-| B8 | The other six locales (`nl-NL`, `fr-FR`, `de-DE`, `es-ES`, `it-IT`, `pt-PT`): every public page, and the signed-in pages B4 lists | — | ⬜ open, claimable | — |
+| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 13:45 (teen + child accounts in the Family+ household) | — |
+| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half open, claimable | 2026-09-27 13:40 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
-| B10 | Signed-in pages at 390 px for every route (B4/B5 ran 390 only where a fix landed) | — | ⬜ open, claimable | — |
+| B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 13:40 |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -47973,6 +47973,19 @@ on a read that never failed. A network `TypeError` is now retried twice
 `tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts`.
 Commit 3a3ec37b.
 
+**P-08 · Medium · A visitor's first page could lose its analytics event to a
+503 (production).** `/api/mkt/track` read the visitor by `anonymous_id` and
+inserted it when absent. A first page that sends two events at once (the page
+view and the one beside it on `/ai`) ran both reads before either insert; the
+loser hit `mkt_visitors_anonymous_id_key` and answered 503 — a console error on
+the page and a lost touchpoint. Reproduced locally on every signed-in `/ai`
+load and on production in the locale pass (`/ai` es-MX, `/mobile` de-DE, both
+answered by `server: Vercel`). A unique violation (23505) now re-reads the row
+the other request created and records against it; any other create failure,
+or a winner that cannot be read back, is still a 503.
+`tests/a-first-visit-with-two-events-records-both.test.ts` (4 cases; the race
+case fails with the fix reverted).
+
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one
   502 on a prefetch, an API call or an asset — a different one each time,
@@ -47997,6 +48010,26 @@ Commit 3a3ec37b.
 - *Missing tokens* (`/gift/…`, `/pay/…`, `/s/…`) answer a "this link is
   not active" page with 200 and `noindex` — a deliberate soft answer for a
   shared link, not a crawlable page.
+- *`/dashboard/knowledge/seed`* is the knowledge-base seeding tool and is
+  `notFound()` for everyone but a super administrator, by design; a family
+  parent sees the not-found page (with the #419 above).
+
+### Round 2 — the merged tree, after #588 and 339 other commits from main
+
+Re-crawled on `9c348703` (this branch merged with `main` at `19a24334`), local
+stack migrated to 0443, server on Node 24.21:
+
+| Pass | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| Family+ parent, every family route, 1280 px | 278 | 2 | `/ai` (P-08, fixed after this build) and `/resources/benchmarks` (404 by design) |
+| Family+ parent, every family route, 390 px (B10) | 278 | 2 | `/resources/benchmarks`; `/dashboard/knowledge/seed` super-admin-only (above) |
+| Super admin, every `/admin` route, 1280 + 390 px (B5, B10) | 78 × 2 | 1 × 2 | `/admin/social/providers` — the OAuth scope, above |
+| Id-based routes with seeded rows, 1280 + 390 px | 37 × 2 | 4 | all four are deliberately missing ids: the not-found page with #419, above |
+| Public pages in the ten other locales, production (B8, public half) | 41 × 10 | 12 | `/resources/benchmarks` × 10, and P-08 twice |
+
+Every family route has exactly one `<h1>` at both widths (P-06 holds), no
+route overflows at 390 px, and no page in any locale renders a raw
+catalogue key.
 
 ### Every route (first pass)
 
@@ -48090,7 +48123,7 @@ finding.
 | `/admin/users` | local 1280/390 | ✅ FIXED | P-01 |
 | `/admin/wallet` | local 1280 | ✅ PASS |  |
 | `/admin/wallet/reconciliation` | local 1280 | ✅ PASS |  |
-| `/ai` | local + prod 1280/390 | ✅ PASS |  |
+| `/ai` | local + prod 1280/390 | ✅ FIXED | P-08 (a 503 from /api/mkt/track, first-visit race; production, answered by Vercel) |
 | `/alternatives/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
 | `/audiences/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
 | `/auth/complete` | local + prod 1280/390 | ✅ PASS |  |
@@ -48373,7 +48406,7 @@ finding.
 | `/marketplace/store` | local 1280 | ✅ PASS |  |
 | `/missions` | local 1280 | ✅ PASS |  |
 | `/missions/new` | local 1280 | ✅ FIXED | P-06 |
-| `/mobile` | local + prod 1280/390 | ✅ PASS |  |
+| `/mobile` | local + prod 1280/390 | ✅ FIXED | P-08 (a 503 from /api/mkt/track, first-visit race; production, answered by Vercel) |
 | `/offline` | local + prod 1280/390 | ✅ PASS |  |
 | `/onboarding` | local + prod 1280/390 | ✅ PASS |  |
 | `/p/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |

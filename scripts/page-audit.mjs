@@ -4,7 +4,7 @@
 //
 //   node scripts/page-audit.mjs --base https://www.bubaly.com --sitemap \
 //     --out /tmp/pages.jsonl [--paths file.txt] [--storage state.json] \
-//     [--concurrency 4] [--mobile]
+//     [--concurrency 4] [--mobile] [--locale fr-FR]
 //
 // For each path it loads the page in Chromium and records, as one JSON line:
 //   status        the document's HTTP status (after redirects)
@@ -37,6 +37,9 @@ const out = opt('out', 'page-audit.jsonl');
 const concurrency = Number(opt('concurrency', '4'));
 const storage = opt('storage', undefined);
 const mobile = flag('mobile');
+// The browser's language: the site picks its locale from the NEXT_LOCALE
+// cookie or, failing that, Accept-Language, which this sets.
+const locale = opt('locale', 'en-US');
 const origin = new URL(base).origin;
 
 async function loadPaths() {
@@ -83,7 +86,7 @@ async function auditOne(context, path) {
       badRequests.push(`${r.status()} ${r.url().replace(origin, '')}${via}`);
     }
   });
-  const row = { path, base, mobile, at: new Date().toISOString() };
+  const row = { path, base, mobile, locale, at: new Date().toISOString() };
   try {
     const res = await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 });
     row.status = res?.status() ?? null;
@@ -137,7 +140,7 @@ writeFileSync(out, '');
 const browser = await chromium.launch(process.env.PAGE_AUDIT_CHROMIUM ? { executablePath: process.env.PAGE_AUDIT_CHROMIUM } : {});
 const context = await browser.newContext({
   storageState: storage,
-  locale: 'en-US',
+  locale,
   viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
   isMobile: mobile,
   hasTouch: mobile,
