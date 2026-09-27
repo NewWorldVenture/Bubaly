@@ -2,48 +2,48 @@
 
 ## Codex integration — 2026-09-27
 
-CURRENT: Worker PR592 published as main e14b12e899fe62cf5a3993cfbe92121aab0a41f9
-at16:19:13UTC; tree52e0d1e equals candidate850cc4. Corrected CI36332783206 pending.
-PRODUCTION: Vercel dpl_57FH8FY8JZsuTFEo68uwkWJ7A34h SUCCESS16:22:37UTC;
-GitHub deployment6694707719 SUCCESS16:22:38UTC. Exact public acceptance PASS
-16:23:30–35UTC; full native production wrapper1/1PASS4.3s on final507a6cd.
-Real worker/install/icon and synthetic private-cache/offline/library controls,
-then scripts-disabled top-level navigation; before/after revision/hash guards.
-No auth/provider writes/private production bytes. Receipts:
-Temp/bubaly-sw-production-e14b12e8-20260927.json;
-Temp/bubaly-native-production-e14b12e8-retained-receipt-20260927.json.
-LOCAL WORKER: Combined657 UTC20,701/1,621, build247, types/lint15PASS;
-85/85controlled in3.8s (72cache+13registration), focused33 separate.
-Final fixture-only delta878a17b verifies5,191files/modes, types/lint15PASS,
-discovery1/1 (not runtime). Parents' three-zone gates remain parent-scoped.
-HISTORY: Original59 CI36331147265 E2E1369/1370 failed only native iframe;
-Web/DB/MobilePASS. Sandbox and anti-framing fixture failures preserved.
-Invalid Windows full run and repaired preliminary type failures retained.
-INVENTORY: All14,183 prior IDs retained, plus three media-test records:
-SUPPORT-302F04E15861, SUPPORT-BC0F2BFDBFD6 and SUPPORT-4CE6A54076E4,
-all IN PROGRESS.
-RegisterB14,186=13,877NOT STARTED+300IN PROGRESS+4FIXED+PASS+4BLOCKED+1FAIL.
-Three worker/support rows remain IN PROGRESS pending corrected hosted CI;
-fixture coverage does not count as additional completed product workflows.
-MEDIA: SEC-001FAIL. Local owner-scoped cache/inflight repair adopted aftere14,
-NOT DEPLOYED. Matching prototype33/33 and actual React/SDK browser2+2PASS;
-full integrated gates pending. Actual observer-gap RED preserved; only synthetic
-provider/image transport, no live bucket authorization/private bytes.
-HEALTH: e14 core checksOK, degraded with six missing settings:CRON_SECRET,
-CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET,
-FCM_PRIVATE_KEY, APNS_PRIVATE_KEY. Earlier four-setting history retained.
-FOLLOW-UP: Permanent actual React/SDK suite7/7PASS2.6s, types/lintPASS;
-collector registration37/37PASS. e14mainCI36332799249 cancelled by docs-onlyf03;
-PR850CI36332783206 still pending. Initial media full run20,721PASS/1FAIL
-caught display importgraph; repaired display25/25PASS, corrected fullgatespending.
-HYDRATION: Actual FamilyMediaImg SSR→hydrate valid-cookie warning reproduced;
-hydration-aware hooka7822890 passes valid/absent/external controls and immediate
-cached SPA image. Retained fixturee169fe97 has4ownership+3hydration cases;
-final complete source fullgates/hosted/deployment pending.
-NEXT: Corrected hosted result for scoped worker closure; independently verify
-local media follow-up before its release. No production SQL/provider change.
-OWNERSHIP: Root integrates/verifies; auth_current_boundary owns this checkpoint.
-RECORD: docs/final-audit/service-worker-private-cache-cycle.md; finalaudit.md.
+WORKER CLOSED: Corrected850 CI36332783206 all4SUCCESS; E2E1764/1764,
+no failures/flakes/skips reported, finished16:47:07UTC. Web20701x3zones,
+build247/types/lintPASS. Exact candidate/tested/e14 tree52e0d1e matches.
+Separate e14 public+native deployed acceptancePASS; native wrapper1/1 in4.3s.
+Only SUPPORT-98FD1D4C44AD/1A08672F87F3/827E4294FC10 become FIXED+PASS;
+the two fixtures are coverage, not two additional product workflows.
+MEDIA MAIN: PR595 merged57664cfc69e43bdd35b921edde69aa20cfc609ad16:47:39UTC,
+exact b78ff026 tree29a6087. 595 hosted acceptance PENDING.
+LIVE: Exact576 public build/worker guards PASS16:50:52–59UTC, hydrated
+email/phone controls, protected meals307, v6 install/offline200, corehealthOK.
+Zero page errors/failed requests/suppressed writes; six missing features remain.
+Complete native production wrapper1/1PASS2.2s, same507 assertions/guards.
+No authenticated private-provider image journey executed.
+FINAL LOCAL: Source98d5229 UTC20722/1623files, focused146/10files,
+build247/full strict types/lint15existingwarningsPASS; all5194paths mapped,
+5189 non-audit blobs/modes exactly b78. Media7/7 (4ownership+3hydration),
+display25/25 and collector guard37/37PASS. Synthetic transport/build only.
+FAILURES RETAINED: Old native iframe1369/1370; media20,721PASS/1FAIL missing
+display loader import; actual valid-cookie SSR/hydration warning, now fixed.
+SEC-001FAIL: Bucket/privacy/provider scope remains open. New family%2Dmedia
+classification bypass reproduced with actual FamilyMediaImg/SDK: raw synthetic
+A capability renders underB without B signing; canonical control denied.
+No live provider/private data or Storage RLS-bypass claim. Existing finding only.
+PARSER LOCAL:147fa9a once-decodes route/bucket; oldparser12FAIL/34PASS,
+new46/46focusedPASS. Existing browser fixture now11/11PASS3.2s (fournew
+canonical/encoded x Aallow/Bdeny controls). Initial stale-hook7PASS/4FAIL
+private attempt preserved;13 actual source hashes verify corrected rerun.
+Final whole-source gates and parser publication PENDING;576 not yet fixed.
+Calibrated browserRED: currenthook+oldparser canonical2PASS/encoded2FAIL;
+final11PASS receipt:bubaly-encoded-browser-retained-receipt-20260927.json.
+Native576 derived receipt preserves exact wrapper/log hashes and scope.
+INVENTORY:14186=13877NOTSTARTED+297INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
+Three media test rows remainIP; no ID removed. Claude593 page statuses and
+mainf03 laneA claim preserved; auth/device/migration scope remains separate.
+HEALTH: Verified576 degraded/coreOK (same as earlier e14), six missing features:
+CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
+GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
+RECEIPTS: Temp/bubaly-850-ci36332783206-terminal-20260927.json;
+Temp/bubaly-sw-reconcile-20260927/linux-q59-final/final-gates-receipt.json;
+Temp/bubaly-media-encoded-bucket-20260927.json.
+NEXT: Verify595 hosted CI; retain scoped parser follow-up.
+PRODUCTION READY:NO. No source/SQL/provider changes in this documentation update.
 
 > Two sessions ran this board. Both sections are kept.
 
