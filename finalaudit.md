@@ -46341,6 +46341,27 @@ The page title and description, "Whole Family", "Save Changes", "Add Insurance" 
 
 ---
 
+### `[CLAUDE-1][LOW][SETTINGS/MONEY/CALM/CALENDAR/VOTING]` C1-S9-127 — five more modules showed labels in English in every locale
+
+**File/path:** `components/modules/{settings,money-timeline,calm,calendar,voting}-module.tsx`; seven catalogues.
+
+**Problem.** These labels were English in every locale:
+- the money timeline's severity chips (Urgent, Watch, Note)
+- the Calm source labels
+- the calendar's "Show" toggles, "(Me)", the "Family" calendar row and the end-before-start error
+- the voting categories on each poll and in the picker
+
+Settings and the money timeline also carried unused English copies next to keys they already rendered.
+
+**Fix.**
+- These labels now come from catalogue keys.
+- Voting categories stay stored as their id.
+- The unused English copies are removed.
+
+**Status:** FIXED. Scanner findings for all five modules drop to 0, apart from voting's type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
