@@ -63,7 +63,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'build', vacationId }) });
       const data = await res.json();
       if (!res.ok) toastError(data.error || 'Build failed');
-      else success(`Added ${data.added.activities} activities, ${data.added.items} itinerary items, ${data.added.budget} budget lines, ${data.added.packing} packing items`);
+      else success(t('tripConcierge.addedActivitiesItems', { activities: data.added.activities, items: data.added.items, budget: data.added.budget, packing: data.added.packing }));
     } catch { toastError(t('tripConcierge.networkError')); }
     setBuilding(false);
   }

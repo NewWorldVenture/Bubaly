@@ -122,7 +122,7 @@ export function TripCrudSection<T extends Row>({
     e.preventDefault();
     if (!form) return;
     const req = fields.find((f) => f.required && !String(form[f.name] ?? '').trim());
-    if (req) return toastError(`${req.label} is required`);
+    if (req) return toastError(t('vacationsShared.fieldIsRequired', { field: req.label }));
     const supabase = createClient() as any;
     const row = toRow(form, fields);
     const id = form.id as string;

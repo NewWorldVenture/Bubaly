@@ -87,7 +87,7 @@ export function ScanModule() {
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Could not add events.'); return; }
-      success(`Added ${json.created} event${json.created === 1 ? '' : 's'} to your calendar.`);
+      success(json.created === 1 ? t('scan.addedEventToCalendarOne', { count: json.created }) : t('scan.addedEventsToCalendarMany', { count: json.created }));
       setEvents(null); setSelected(new Set()); setPreview(null); setFileName(null);
     } catch {
       toastError(t('scanModule.networkErrorPleaseTryAgain'));
