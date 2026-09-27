@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { assetKindFromMime, buildAssetPath, isAssetKind, parseTags, type AssetKind } from '@/lib/marketing/assets';
+import { refuseInput } from '@/lib/actions/refusal';
 
 const BUCKET = 'marketing-assets';
 const MAX_BYTES = 50 * 1024 * 1024; // matches the bucket file_size_limit
@@ -18,7 +19,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return;
-  if (file.size > MAX_BYTES) throw new Error('Asset exceeds the 50 MB upload limit.');
+  if (file.size > MAX_BYTES) refuseInput('Asset exceeds the 50 MB upload limit.');
 
   // Explicit kind wins; otherwise infer from the file's MIME type.
   const explicit = s(formData, 'kind');
@@ -27,7 +28,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   const license = s(formData, 'license') ?? 'original';
   const { data: duplicate } = await supabase.from('marketing_assets').select('id, name').eq('content_hash', contentHash).is('deleted_at', null).maybeSingle();
-  if (duplicate) throw new Error(`This file is already in the Asset Library as "${duplicate.name}". Choose the existing asset instead of uploading a duplicate.`);
+  if (duplicate) refuseInput(`This file is already in the Asset Library as "${duplicate.name}". Choose the existing asset instead of uploading a duplicate.`, 'duplicate');
 
   const id = crypto.randomUUID();
   const name = s(formData, 'name') ?? file.name;
@@ -96,9 +97,15 @@ export async function deleteAssetAction(id: string, storagePath: string): Promis
     .eq('id', id).is('deleted_at', null).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('delete the marketing asset', error ?? new Error('Marketing asset was already deleted.'));
   const storageFile = asset.storage_path ?? storagePath;
-  const { error: removeError } = storageFile
+  // SEC-015: a refused delete looks exactly like a delete of something absent
+  // (`error: null`, `data: []`), so the returned list is what says it is gone.
+  const removal = storageFile
     ? await supabase.storage.from(BUCKET).remove([storageFile])
-    : { error: null };
+    : { data: [{ name: '' }], error: null };
+  const removeError = removal.error
+    ?? (storageFile && !removal.data?.some((object) => object.name === storageFile)
+      ? new Error('The asset file was not removed.')
+      : null);
   if (removeError) {
     const { error: restoreError } = await supabase.from('marketing_assets').update({ deleted_at: null })
       .eq('id', id).eq('deleted_at', deletedAt).select('id').maybeSingle();

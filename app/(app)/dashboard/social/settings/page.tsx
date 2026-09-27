@@ -13,7 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Settings · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('navLabel.settings')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SocialSettingsPage() {
@@ -47,6 +50,11 @@ export default async function SocialSettingsPage() {
 
   const permByUser = new Map((perms ?? []).map((p) => [p.user_id, p.social_role]));
   const canManage = access?.can('manage_settings') ?? false;
+  // Granting a social role is its own permission, held by an owner alone
+  // (lib/social/roles.ts). Gating these controls on manage_settings gave an
+  // admin or a marketing manager a working "Set" that the action then refused
+  // by throwing, which put them on the section's error page.
+  const canManageAccess = access?.can('manage_access') ?? false;
   const defaultPlatforms = new Set(settings?.default_platforms ?? []);
 
   return (
@@ -110,16 +118,17 @@ export default async function SocialSettingsPage() {
                 <input type="hidden" name="user_id" value={m.user_id} />
                 <span className="min-w-0 flex-1 truncate text-sm">{m.display_name ?? 'Member'}</span>
                 {!explicit && <Badge tone="neutral" title={t('settings.defaultByHouseholdRole')}>default</Badge>}
-                <select name="social_role" defaultValue={effective} disabled={!canManage}
+                <select name="social_role" defaultValue={effective} disabled={!canManageAccess}
                   aria-label={t('dashboardSocialSettings.socialRoleFor', { name: m.display_name ?? 'Member' })}
                   className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
                   {SOCIAL_ROLES.map((r) => <option key={r} value={r}>{SOCIAL_ROLE_LABELS[r]}</option>)}
                 </select>
-                <button disabled={!canManage} className="rounded-lg bg-elevated px-2 py-1 text-xs font-medium disabled:opacity-50">Set</button>
+                <button disabled={!canManageAccess} className="rounded-lg bg-elevated px-2 py-1 text-xs font-medium disabled:opacity-50">Set</button>
               </form>
             );
           })}
         </div>
+        {!canManageAccess && <p className="mt-2 text-[11px] text-muted">{t('dashboardSocialSettings.yourRoleCantChangeAccess')}</p>}
       </Card>
     </div>
   );

@@ -1,6 +1,279 @@
-import ts from 'typescript';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { execSync } from 'node:child_process';
+import ts from 'typescript';
+
+// A small JSX walker for the two accessibility properties the lint rule cannot
+// see (A11Y-002 relied on jsx-a11y/label-has-associated-control, which treats
+// any `{expression}` child, i.e. every `{t('…')}` label, as a possible nested
+// control and so never reports it). Parsed, not grepped: a button split over
+// five lines is still one button.
+
+export type Site = { file: string; line: number; what: string };
+
+export function sourceFiles(): string[] {
+  return execSync("git ls-files 'app/**/*.tsx' 'components/**/*.tsx'", { encoding: 'utf8' })
+    .trim().split('\n').filter((f) => f && !f.includes('.test.'));
+}
+
+function parse(file: string, text = readFileSync(file, 'utf8')) {
+  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
+const attrNames = (attrs: ts.JsxAttributes) =>
+  attrs.properties.map((p) => (ts.isJsxSpreadAttribute(p) ? '...' : p.name.getText()));
+
+const meaningfulChildren = (children: ts.NodeArray<ts.JsxChild>) =>
+  children.filter((c) => !(ts.isJsxText(c) && c.containsOnlyTriviaWhiteSpaces) && !(ts.isJsxExpression(c) && !c.expression));
+
+const isIcon = (n: ts.Node): n is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(n) && /^[A-Z]/.test(n.tagName.getText());
+const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) ? unwrap(e.expression) : e);
+
+/** The icon a child renders if that is ALL it renders: `<Icon />`, `{on ? <A /> : <B />}`, `{on && <A />}`. */
+function iconOnly(child: ts.JsxChild): string | null {
+  if (isIcon(child)) return `<${child.tagName.getText()} />`;
+  if (ts.isJsxExpression(child) && child.expression) {
+    const e = unwrap(child.expression);
+    if (ts.isConditionalExpression(e)) {
+      const a = unwrap(e.whenTrue); const b = unwrap(e.whenFalse);
+      if (isIcon(a) && isIcon(b)) return `<${a.tagName.getText()} /> | <${b.tagName.getText()} />`;
+    }
+    if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && isIcon(unwrap(e.right))) {
+      return `<${(unwrap(e.right) as ts.JsxSelfClosingElement).tagName.getText()} />`;
+    }
+  }
+  return null;
+}
+
+/** A button is labelable: a `<label>` around it names it (HTML-AAM), as in a custom checkbox. */
+function insideLabel(node: ts.Node): boolean {
+  for (let p = node.parent; p; p = p.parent) {
+    if (ts.isJsxElement(p) && p.openingElement.tagName.getText() === 'label') return true;
+    if (ts.isFunctionLike(p)) return false;
+  }
+  return false;
+}
+
+/** `<button …><Icon /></button>`: a native button whose only content is an icon. */
+export function unnamedIconButtons(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'button') {
+      const names = attrNames(node.openingElement.attributes);
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...') || insideLabel(node);
+      const kids = meaningfulChildren(node.children);
+      const icon = kids.length === 1 ? iconOnly(kids[0]) : null;
+      if (!named && icon) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: icon });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+const CONTROL = /^(input|select|textarea|button|meter|progress|output)$|^[A-Z]/;
+
+/** `<label>` with no htmlFor that wraps nothing a user can operate. */
+export function detachedLabels(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const containsControl = (node: ts.Node): boolean => {
+    let found = false;
+    const walk = (n: ts.Node) => {
+      if (found) return;
+      if ((ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && CONTROL.test(n.tagName.getText())) found = true;
+      // `{children}` and other passed-in content: the control arrives from the caller.
+      else if (ts.isJsxExpression(n) && n.expression && ts.isIdentifier(n.expression) && n.expression.text === 'children') found = true;
+      else ts.forEachChild(n, walk);
+    };
+    ts.forEachChild(node, walk);
+    return found;
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'label') {
+      const names = attrNames(node.openingElement.attributes);
+      if (!names.includes('htmlFor') && !names.includes('...') && !containsControl(node)) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: node.children.map((c) => c.getText()).join('').replace(/\s+/g, ' ').trim().slice(0, 60) });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
+ * Which `Field` a file uses. The ui kit's (`@/components/ui/input`) renders
+ * `<label htmlFor={id}>` and hands that id to a render-prop child, so its
+ * control is named only if it takes the id. The home and invest ones wrap the
+ * child in a `<label>`, so anything inside is named.
+ */
+function fieldKindOf(sf: ts.SourceFile): 'render-prop' | 'wrapping' | null {
+  let kind: 'render-prop' | 'wrapping' | null = null;
+  for (const st of sf.statements) {
+    if (ts.isImportDeclaration(st) && /\bField\b/.test(st.importClause?.getText() ?? '')) {
+      kind = (st.moduleSpecifier as ts.StringLiteral).text === '@/components/ui/input' ? 'render-prop' : 'wrapping';
+    }
+    if (ts.isFunctionDeclaration(st) && st.name?.text === 'Field' && /<label\b/.test(st.getText())) kind = /htmlFor/.test(st.getText()) ? 'render-prop' : 'wrapping';
+  }
+  return kind;
+}
+
+function namedByField(node: ts.Node, idText: string | undefined, kind: 'render-prop' | 'wrapping' | null): boolean {
+  if (!kind) return false;
+  for (let p = node.parent; p; p = p.parent) {
+    if (ts.isJsxElement(p) && p.openingElement.tagName.getText() === 'Field') return kind === 'wrapping' || idText !== undefined;
+  }
+  return false;
+}
+
+/**
+ * `<select>` (or the ui `Select`, which spreads its props onto one) with no
+ * accessible name: no aria-label/labelledby/title, no wrapping `<label>`, and
+ * no `<label htmlFor>` in the same file pointing at its id. An id alone names
+ * nothing; the old ratchet counted one as a name.
+ */
+export function unnamedSelects(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const fieldKind = fieldKindOf(sf);
+  const htmlFors = new Set<string>();
+  const collect = (n: ts.Node) => {
+    if (ts.isJsxAttribute(n) && n.name.getText() === 'htmlFor' && n.initializer) htmlFors.add(n.initializer.getText().replace(/^\{|\}$/g, ''));
+    ts.forEachChild(n, collect);
+  };
+  collect(sf);
+  const visit = (node: ts.Node) => {
+    const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+    if (open && /^(select|Select)$/.test(open.tagName.getText())) {
+      const attrs = open.attributes.properties;
+      const names = attrNames(open.attributes);
+      const id = attrs.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'id') as ts.JsxAttribute | undefined;
+      const idText = id?.initializer?.getText().replace(/^\{|\}$/g, '');
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...')
+        || insideLabel(node) || (idText !== undefined && htmlFors.has(idText)) || namedByField(node, idText, fieldKind);
+      if (!named) out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: open.getText().replace(/\s+/g, ' ').slice(0, 80) });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+const NON_INTERACTIVE = /^(div|li|span|tr|td|p|img|section|article|header|footer|figure|ul|main)$/;
+/** A handler that only stops propagation, or only closes something (a click-outside layer). */
+const NOT_AN_ACTION = [
+  /^\{\s*\(?\w*\)?\s*=>\s*\w+\.stopPropagation\(\)\s*\}$/,
+  /^\{\s*(close|onClose|dismiss|onDismiss)\s*\}$/,
+  /^\{\s*\(\)\s*=>\s*\{?\s*(?:(?:\w+\s*&&\s*)?set\w+\((?:false|null)\);?\s*)+\}?\s*\}$/,
+];
+
+/**
+ * A row that holds its own buttons cannot be `role="button"` (that role hides
+ * its children from assistive technology), so its keyboard path is a native
+ * `<button>` inside it with no handler of its own: Enter or Space on it
+ * dispatches a click that bubbles to the row's `onClick`.
+ */
+function bubblesFromAButton(n: ts.Node, outerCall: string | null): boolean {
+  let found = false;
+  const walk = (c: ts.Node) => {
+    if (found) return;
+    const o = ts.isJsxElement(c) ? c.openingElement : ts.isJsxSelfClosingElement(c) ? c : null;
+    if (o && o.tagName.getText() === 'button') {
+      const own = o.attributes.properties.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'onClick') as ts.JsxAttribute | undefined;
+      // Either it has no handler of its own and its click bubbles to the row,
+      // or its own handler performs the row's action itself (typically after
+      // stopPropagation, so the row does not run it twice).
+      if (!own || (outerCall && own.initializer?.getText().replace(/\s+/g, ' ').includes(outerCall))) { found = true; return; }
+    }
+    ts.forEachChild(c, walk);
+  };
+  ts.forEachChild(n, walk);
+  return found;
+}
+
+/** The call an arrow handler makes — `() => onOpen(note)` gives `onOpen(note)`. */
+function handlerCall(handler: string): string | null {
+  const m = /^\{\s*\(\s*\)\s*=>\s*\{?\s*([\w.]+\([^()]*\))\s*;?\s*\}?\s*\}$/.exec(handler);
+  if (m) return m[1];
+  const id = /^\{\s*([\w.]+)\s*\}$/.exec(handler);
+  return id ? id[1] : null;
+}
+
+/**
+ * A non-interactive element that does something on click and cannot be
+ * reached or used from the keyboard: no role, no tabIndex, no key handler.
+ * (MAIN-F-D06: calendar events, notes, recipes and goal cards opened only on a
+ * click.) Click-outside dismiss layers and propagation stops are not actions.
+ */
+export function clickOnlyElements(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const visit = (n: ts.Node) => {
+    const o = ts.isJsxElement(n) ? n.openingElement : ts.isJsxSelfClosingElement(n) ? n : null;
+    if (o && NON_INTERACTIVE.test(o.tagName.getText())) {
+      const props = o.attributes.properties;
+      const at = (k: string) => props.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === k) as ts.JsxAttribute | undefined;
+      const click = at('onClick');
+      const handler = click?.initializer?.getText().replace(/\s+/g, ' ') ?? '';
+      // A backdrop removed from the accessibility tree is a mouse convenience
+      // only when the file also gives the keyboard its own way out:
+      // useDialogBehavior closes the dialog on Escape.
+      const dismissLayer = !!at('aria-hidden') && /useDialogBehavior\s*\(/.test(sf.text);
+      const reachable = (at('role') && at('tabIndex') && (at('onKeyDown') || at('onKeyUp')))
+        || bubblesFromAButton(n, handlerCall(handler)) || dismissLayer;
+      if (click && !props.some(ts.isJsxSpreadAttribute) && !reachable && !NOT_AN_ACTION.some((re) => re.test(handler))) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(n.getStart()).line + 1, what: `<${o.tagName.getText()} onClick=${handler.slice(0, 50)}>` });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+const CANCELLATION = /\blet\s+(active|current|cancelled|canceled|alive|ignore|live|mounted|disposed)\s*=\s*(true|false)|new AbortController\(|\bgeneration\b|\bisCurrent\(/;
+/**
+ * `if (fired.current) return; fired.current = true;` makes an effect run once
+ * for the component's life, so no later run can supersede it. (A cancel flag
+ * there would be wrong: under StrictMode's dev double-invoke the cleanup would
+ * cancel the only run, and the second returns early.)
+ */
+const ONE_SHOT = /if\s*\((\w+)\.current\)\s*return;\s*\1\.current\s*=\s*true;/;
+
+/**
+ * An effect that sets state after an `await` or inside a `.then(`, with no
+ * way to tell that the effect has gone: no flag, no AbortController, no
+ * generation counter. When its dependencies change (a family switch, a new
+ * search) or the component unmounts, the old request can still land and
+ * overwrite the newer answer (MAIN-F-D09). A setter that runs BEFORE the
+ * first await is synchronous and does not count.
+ */
+export function uncancelledAsyncEffects(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const visit = (n: ts.Node) => {
+    if (ts.isCallExpression(n) && /^(useEffect|useLayoutEffect)$/.test(n.expression.getText()) && n.arguments[0]) {
+      const body = n.arguments[0].getText();
+      const firstAsync = body.search(/\bawait\b|\.then\(/);
+      const setAfter = firstAsync >= 0 && /\bset[A-Z]\w*\(/.test(body.slice(firstAsync));
+      if (setAfter && !CANCELLATION.test(body) && !ONE_SHOT.test(body)) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(n.getStart()).line + 1, what: body.replace(/\s+/g, ' ').slice(0, 70) });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The group and label scanner main added independently (tests/a-group-of-
+// controls-needs-a-name.test.ts). Kept whole beside the one above; its two
+// private helpers are renamed so the file has one of each name.
 
 // A JSX scanner built on the TypeScript parser rather than on regular
 // expressions.
@@ -27,7 +300,7 @@ const NAMING_ANCESTORS = new Set(['label', 'Field']);
 
 export type Finding = { file: string; line: number; tag: string };
 
-function attrNames(node: ts.JsxOpeningLikeElement): Set<string> {
+function attrNameSet(node: ts.JsxOpeningLikeElement): Set<string> {
   const names = new Set<string>();
   for (const a of node.attributes.properties) {
     if (ts.isJsxAttribute(a) && a.name) names.add(a.name.getText());
@@ -39,7 +312,7 @@ function attrNames(node: ts.JsxOpeningLikeElement): Set<string> {
   return names;
 }
 
-function tagName(node: ts.JsxOpeningLikeElement): string {
+function jsxTagName(node: ts.JsxOpeningLikeElement): string {
   return node.tagName.getText();
 }
 
@@ -52,10 +325,10 @@ export function scanFile(path: string, root: string, wanted: ReadonlySet<string>
     let pushed = false;
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const open = ts.isJsxElement(node) ? node.openingElement : node;
-      const tag = tagName(open);
+      const tag = jsxTagName(open);
 
       if (wanted.has(tag) && !stack.some((a) => NAMING_ANCESTORS.has(a))) {
-        const attrs = attrNames(open);
+        const attrs = attrNameSet(open);
         if (![...attrs].some((a) => NAMING_ATTRS.has(a))) {
           out.push({
             file: relative(root, path).split(sep).join('/'),

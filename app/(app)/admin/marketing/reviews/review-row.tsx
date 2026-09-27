@@ -6,7 +6,7 @@ import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from '.
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 type Review = {
@@ -17,7 +17,7 @@ type Review = {
 
 export function ReviewRow({ review }: { review: Review }) {
   const t = useTranslations();
-  const { fmtDate } = useFormat();
+  const { fmtDate } = useHydrationSafeFormat();
   const [pending, start] = useTransition();
   const [replyOpen, setReplyOpen] = useState(false);
   const moderate = (status: ReviewStatus) => start(async () => { await moderateReviewAction(review.id, status); });
@@ -26,7 +26,7 @@ export function ReviewRow({ review }: { review: Review }) {
     <div className="rounded-xl border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1 text-amber-400" aria-label={`${review.rating} stars`}>
+          <div className="flex items-center gap-1 text-amber-400" aria-label={review.rating === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: review.rating })}>
             {[1, 2, 3, 4, 5].map((v) => <Star key={v} className={`h-4 w-4 ${v <= review.rating ? 'fill-amber-400' : 'text-border'}`} />)}
           </div>
           {review.title && <p className="mt-1 font-semibold">{review.title}</p>}

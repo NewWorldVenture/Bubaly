@@ -109,6 +109,11 @@ const ROOTS = ['app', 'lib', 'components'];
 const TRACKED = new Set([
   'lib/capture/parse.ts',
   'lib/routines/detect.ts',
+  // startOfLocalDay's own fallback (main, F-F02): reached only for a zone Intl
+  // cannot use, which 0449 and isValidTimezone keep out of the column. It lands
+  // on the old behaviour rather than throwing, so it is the replacement's
+  // safety net, not a surface that means the host's day.
+  'lib/time/zoned.ts',
 ]);
 
 const SERVER_MIDNIGHT = /setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;

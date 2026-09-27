@@ -6,7 +6,10 @@ import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { ErrorState } from '@/components/ui/states';
 import { DiningModule, type DiningRow, type DiningStats } from '@/components/modules/dining-module';
 
-export const metadata: Metadata = { title: 'Dining Out' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.diningOut') };
+}
 export const dynamic = 'force-dynamic';
 
 const COLS = 'id, name, kind, cuisine, category, price_level, rating, distance_km, is_favorite, amount_cents, item_count, visited_at';

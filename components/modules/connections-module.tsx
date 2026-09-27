@@ -63,7 +63,7 @@ export function ConnectionsModule() {
     const { data: removed, error: err } = await sb.from('family_connections').delete().eq('family_id', familyId).eq('provider', p.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(`${p.name} disconnected`);
+    success(t('connections.nameDisconnected', { name: p.name }));
   }
 
   if (loading) return <SkeletonList count={5} />;

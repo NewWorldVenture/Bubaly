@@ -22,9 +22,10 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Family = Tables<'families'>;
@@ -33,34 +34,18 @@ type CalEvent = Pick<Tables<'calendar_events'>, 'id' | 'title' | 'starts_at' | '
 type Album = Pick<Tables<'family_albums'>, 'id' | 'name' | 'cover_url' | 'kind' | 'created_at'>;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-const ROLE_LABEL: Record<MemberRole, string> = {
-  parent: 'Parent', adult: 'Adult', teen: 'Teen', child: 'Kid', caregiver: 'Caregiver', guest: 'Guest',
+const ROLE_LABEL_KEY: Record<MemberRole, string> = {
+  parent: 'familyModule.role.parent', adult: 'familyModule.role.adult', teen: 'familyModule.role.teen',
+  child: 'familyModule.role.kid', caregiver: 'familyModule.role.caregiver', guest: 'familyModule.role.guest',
 };
-function roleBadge(role: MemberRole): { label: string; cls: string; icon: typeof ShieldCheck } {
-  if (role === 'parent') return { label: 'Admin', cls: 'text-emerald-400', icon: ShieldCheck };
-  if (role === 'adult' || role === 'caregiver') return { label: 'Adult', cls: 'text-blue-400', icon: Shield };
-  return { label: 'Kid Account', cls: 'text-sky-400', icon: Shield };
+function roleBadge(role: MemberRole): { labelKey: string; cls: string; icon: typeof ShieldCheck } {
+  if (role === 'parent') return { labelKey: 'familyModule.badge.admin', cls: 'text-emerald-400', icon: ShieldCheck };
+  if (role === 'adult' || role === 'caregiver') return { labelKey: 'familyModule.role.adult', cls: 'text-blue-400', icon: Shield };
+  return { labelKey: 'familyModule.badge.kidAccount', cls: 'text-sky-400', icon: Shield };
 }
 function memberAge(birthday: string | null): number | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
-  return age >= 0 && age < 130 ? age : null;
-}
-function nextBirthday(birthday: string | null, now: Date): { date: Date; inDays: number; turning: number } | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let next = new Date(now.getFullYear(), b.getMonth(), b.getDate());
-  if (next < today) next = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
-  const inDays = Math.round((next.getTime() - today.getTime()) / 86_400_000);
-  const turning = next.getFullYear() - b.getFullYear();
-  return { date: next, inDays, turning };
+  const age = ageOn(birthday, new Date());
+  return age !== null && age >= 0 && age < 130 ? age : null;
 }
 function inLabel(days: number): string {
   if (days === 0) return 'Today';
@@ -103,6 +88,7 @@ export function FamilyModule() {
   const fmtTime = fmtTimeIn(locale.code);
   const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const plural = usePlural();
   const { familyId, userId, role, members, refreshMembers, planLevel } = useApp();
   const { success, error: toastError } = useToast();
   const canManage = MANAGER_ROLES.includes(role);
@@ -218,11 +204,11 @@ export function FamilyModule() {
   }
 
   const sharedCards = [
-    { icon: PhoneIcon, tint: 'bg-rose-500/15 text-rose-400', label: 'Emergency Contacts', count: counts.contacts, unit: 'contacts', href: '/dashboard/contacts' },
-    { icon: FileText, tint: 'bg-blue-500/15 text-blue-400', label: 'Important Documents', count: counts.documents, unit: 'files', href: '/dashboard/documents' },
-    { icon: Shield, tint: 'bg-emerald-500/15 text-emerald-400', label: 'Family Rules', count: counts.notes, unit: 'notes', href: '/dashboard/notes' },
-    { icon: Wifi, tint: 'bg-orange-500/15 text-orange-400', label: 'Wi-Fi & Passwords', count: counts.credentials, unit: 'saved', href: '/dashboard/passwords' },
-    { icon: HeartPulse, tint: 'bg-violet-500/15 text-violet-400', label: 'Medical Info', count: counts.medical, unit: 'profiles', href: '/dashboard/health' },
+    { icon: PhoneIcon, tint: 'bg-rose-500/15 text-rose-400', id: 'emergencyContacts', count: counts.contacts, href: '/dashboard/contacts' },
+    { icon: FileText, tint: 'bg-blue-500/15 text-blue-400', id: 'importantDocuments', count: counts.documents, href: '/dashboard/documents' },
+    { icon: Shield, tint: 'bg-emerald-500/15 text-emerald-400', id: 'familyRules', count: counts.notes, href: '/dashboard/notes' },
+    { icon: Wifi, tint: 'bg-orange-500/15 text-orange-400', id: 'wifiPasswords', count: counts.credentials, href: '/dashboard/passwords' },
+    { icon: HeartPulse, tint: 'bg-violet-500/15 text-violet-400', id: 'medicalInfo', count: counts.medical, href: '/dashboard/health' },
   ];
 
   return (
@@ -267,7 +253,7 @@ export function FamilyModule() {
             {family?.cover_url ? (
               // Free text, so it may be an outside image or one of this family's
               // own photos; the latter is signed like any other (SEC-001).
-              <FamilyMediaImg src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
+              <FamilyMediaImg src={family.cover_url} alt={t('family.coverAlt', { name: famName })} className="h-full w-full object-cover" />
             ) : (
               <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/25 via-violet-600/15 to-blue-900/20 text-muted">
                 <Users className="h-10 w-10" />
@@ -287,7 +273,7 @@ export function FamilyModule() {
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
                     {canManage && !isLastManager(m) && (
                       <div className="absolute right-1.5 top-1.5">
-                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
+                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={t('itemAction.manage', { name: m.display_name })} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                         {menuId === m.id && (
@@ -303,11 +289,11 @@ export function FamilyModule() {
                     )}
                     <Avatar name={m.display_name} src={m.avatar_url} color={m.color} size={56} />
                     <p className="mt-1 truncate text-sm font-semibold">{m.display_name}</p>
-                    <p className="text-xs text-muted">{ROLE_LABEL[m.role]}{age != null ? ` · ${age}` : ''}</p>
+                    <p className="text-xs text-muted">{t(ROLE_LABEL_KEY[m.role])}{age != null ? ` · ${age}` : ''}</p>
                     {m.email && <p className="w-full truncate text-[11px] text-muted">{m.email}</p>}
                     {m.phone && <p className="w-full truncate text-[11px] text-muted">{m.phone}</p>}
                     <span className={cn('mt-1 inline-flex items-center gap-1 text-[11px] font-semibold', badge.cls)}>
-                      <badge.icon className="h-3 w-3" /> {badge.label}
+                      <badge.icon className="h-3 w-3" /> {t(badge.labelKey)}
                     </span>
                   </div>
                 );
@@ -316,7 +302,7 @@ export function FamilyModule() {
           )}
           {activeMembers.length > 12 && (
             <button onClick={() => setShowAllMembers((v) => !v)} className="mt-3 w-full text-center text-sm font-semibold text-brand-text hover:underline">
-              {showAllMembers ? 'Show fewer' : `View all ${activeMembers.length} members`}
+              {showAllMembers ? t('familyModule.showFewer') : t('familyModule.viewAllMembers', { n: activeMembers.length })}
             </button>
           )}
           {canManage && (
@@ -388,11 +374,11 @@ export function FamilyModule() {
           <h2 className="mb-4 font-semibold">{t('family.sharedInformation')}</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {sharedCards.map((c) => (
-              <Link key={c.label} href={c.href} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface/20 p-4 transition hover:bg-elevated">
+              <Link key={c.id} href={c.href} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface/20 p-4 transition hover:bg-elevated">
                 <span className={cn('grid h-10 w-10 place-items-center rounded-xl', c.tint)}><c.icon className="h-5 w-5" /></span>
                 <div>
-                  <p className="text-sm font-semibold">{c.label}</p>
-                  <p className="text-xs text-muted">{c.count != null ? `${c.count} ${c.unit}` : 'View'}</p>
+                  <p className="text-sm font-semibold">{t(`familyModule.shared.${c.id}.label`)}</p>
+                  <p className="text-xs text-muted">{c.count != null ? plural(`familyModule.shared.${c.id}.count`, c.count) : t('family.view')}</p>
                 </div>
                 <span className="text-xs font-semibold text-brand-text">{t('family.view')}</span>
               </Link>
@@ -579,7 +565,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
         <Field label={t('family.role')}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
-            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
           </Select>
         )}</Field>
         <Field label={t('family.birthday')}>{(id) => <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />}</Field>

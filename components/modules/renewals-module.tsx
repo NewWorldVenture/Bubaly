@@ -32,10 +32,8 @@ import { safeWebLink } from '@/lib/utils/safe-link';
 type Renewal = Tables<'renewals'>;
 
 const CATEGORIES = ['id', 'passport', 'license', 'registration', 'warranty', 'insurance', 'subscription', 'other'];
-const CATEGORY_LABELS: Record<string, string> = {
-  id: 'ID', passport: 'Passport', license: 'License', registration: 'Registration',
-  warranty: 'Warranty', insurance: 'Insurance', subscription: 'Subscription', other: 'Other',
-};
+// The stored category is the id; the reader sees its label (audit C1-S9-123).
+const categoryLabel = (t: (key: string) => string, c: string) => CATEGORIES.includes(c) ? t(`renewalsModule.category.${c}`) : c;
 const BUCKET_ORDER: ExpiryBucket[] = ['expired', 'soon', 'upcoming', 'done'];
 const BUCKET_ACCENT: Record<ExpiryBucket, string> = {
   expired: 'text-rose-400', soon: 'text-amber-400', upcoming: 'text-sky-400', done: 'text-emerald-400',
@@ -145,7 +143,7 @@ export function RenewalsModule() {
   };
 
   if (loading) return <SkeletonList count={5} />;
-  if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load renewals'} />;
+  if (error) return <ErrorState message={typeof error === 'string' ? error : t('renewalsModule.failedToLoad')} />;
 
   const buckets = showDone ? BUCKET_ORDER : BUCKET_ORDER.filter((b) => b !== 'done');
 
@@ -206,7 +204,7 @@ export function RenewalsModule() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-fg">{r.title}</span>
-                              {r.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand-text px-1.5 py-0.5">{CATEGORY_LABELS[r.category] ?? r.category}</span>}
+                              {r.category && <span className="text-[10px] uppercase tracking-wide rounded bg-brand/10 text-brand-text px-1.5 py-0.5">{categoryLabel(t, r.category)}</span>}
                               {r.status !== 'active' && <span className="text-[10px] uppercase tracking-wide rounded border border-border text-muted px-1.5 py-0.5">{RENEWAL_STATUS_LABELS[r.status]}</span>}
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
@@ -247,7 +245,7 @@ export function RenewalsModule() {
             <Field label={t('renewals.category')}>
               {(id) => (
                 <Select id={id} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(t, c)}</option>)}
                 </Select>
               )}
             </Field>

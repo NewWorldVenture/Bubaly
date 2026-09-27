@@ -86,11 +86,11 @@ function storageGroup(title: string, mime: string | null): StorageGroup {
   if (['pdf', 'doc', 'docx', 'rtf', 'txt', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'pages', 'numbers', 'key'].includes(e)) return 'documents';
   return 'other';
 }
-const STORAGE_META: Record<StorageGroup, { label: string; color: string }> = {
-  documents: { label: 'Documents', color: '#60a5fa' },
-  photos: { label: 'Photos', color: '#34d399' },
-  videos: { label: 'Videos', color: '#a78bfa' },
-  other: { label: 'Other', color: '#f472b6' },
+const STORAGE_META: Record<StorageGroup, { labelKey: string; color: string }> = {
+  documents: { labelKey: 'documentsModule.type.documents', color: '#60a5fa' },
+  photos: { labelKey: 'documentsModule.type.photos', color: '#34d399' },
+  videos: { labelKey: 'documentsModule.type.videos', color: '#a78bfa' },
+  other: { labelKey: 'documentsModule.type.other', color: '#f472b6' },
 };
 
 // Deterministic folder color from its name (so the same folder is always the
@@ -105,18 +105,18 @@ function folderLabel(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-const TYPE_FILTERS: { value: 'all' | StorageGroup; label: string }[] = [
-  { value: 'all', label: 'All Types' },
-  { value: 'documents', label: 'Documents' },
-  { value: 'photos', label: 'Photos' },
-  { value: 'videos', label: 'Videos' },
-  { value: 'other', label: 'Other' },
+const TYPE_FILTERS: { value: 'all' | StorageGroup; labelKey: string }[] = [
+  { value: 'all', labelKey: 'documentsModule.type.all' },
+  { value: 'documents', labelKey: 'documentsModule.type.documents' },
+  { value: 'photos', labelKey: 'documentsModule.type.photos' },
+  { value: 'videos', labelKey: 'documentsModule.type.videos' },
+  { value: 'other', labelKey: 'documentsModule.type.other' },
 ];
 const SORTS = [
-  { value: 'modified', label: 'Last Modified' },
-  { value: 'name', label: 'Name (A–Z)' },
-  { value: 'size', label: 'Largest first' },
-  { value: 'oldest', label: 'Oldest first' },
+  { value: 'modified', labelKey: 'documentsModule.sort.lastModified' },
+  { value: 'name', labelKey: 'documentsModule.sort.nameAZ' },
+  { value: 'size', labelKey: 'documentsModule.sort.largestFirst' },
+  { value: 'oldest', labelKey: 'documentsModule.sort.oldestFirst' },
 ] as const;
 type SortKey = (typeof SORTS)[number]['value'];
 
@@ -406,10 +406,10 @@ export function DocumentsModule() {
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               <Select aria-label={tr('documents.filterByType')} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | StorageGroup)} className="h-9 w-auto text-sm">
-                {TYPE_FILTERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {TYPE_FILTERS.map((t) => <option key={t.value} value={t.value}>{tr(t.labelKey)}</option>)}
               </Select>
               <Select aria-label={tr('documents.sort')} value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-9 w-auto text-sm">
-                {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {SORTS.map((s) => <option key={s.value} value={s.value}>{tr(s.labelKey)}</option>)}
               </Select>
               <div className="inline-flex items-center rounded-lg border border-border p-0.5">
                 <button onClick={() => setView('list')} aria-label={tr('documents.listView')} className={cn('grid h-7 w-7 place-items-center rounded-md', view === 'list' ? 'bg-elevated text-fg' : 'text-muted')}><List className="h-4 w-4" /></button>
@@ -562,7 +562,7 @@ export function DocumentsModule() {
               {(['documents', 'photos', 'videos', 'other'] as StorageGroup[]).map((g) => (
                 <div key={g} className="flex items-center gap-2 text-xs">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STORAGE_META[g].color }} />
-                  <span className="flex-1 text-muted">{STORAGE_META[g].label}</span>
+                  <span className="flex-1 text-muted">{tr(STORAGE_META[g].labelKey)}</span>
                   <span className="font-semibold tabular-nums">{fmtGb(storage.by[g])}</span>
                 </div>
               ))}
@@ -582,9 +582,9 @@ export function DocumentsModule() {
           <h2 className="mb-4 font-semibold">{tr('documents.quickActions')}</h2>
           <div className="space-y-1.5">
             {[
-              { icon: Upload, label: 'Upload Files', onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
-              { icon: FolderPlus, label: 'Create New Folder', onClick: () => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); } },
-              { icon: ScanLine, label: 'Scan Document', onClick: () => scanInputRef.current?.click() },
+              { icon: Upload, label: tr('documentsModule.action.uploadFiles'), onClick: () => { setForm((f) => ({ ...f, title: '', category: 'general' })); setFile(null); setOpen(true); } },
+              { icon: FolderPlus, label: tr('documentsModule.action.createNewFolder'), onClick: () => { setForm((f) => ({ ...f, title: '', category: '' })); setFile(null); setOpen(true); } },
+              { icon: ScanLine, label: tr('documentsModule.action.scanDocument'), onClick: () => scanInputRef.current?.click() },
             ].map(({ icon: Icon, label, onClick }) => (
               <button key={label} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-elevated">
                 <Icon className="h-4 w-4 text-muted" /> {label}

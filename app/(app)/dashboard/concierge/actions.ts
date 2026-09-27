@@ -409,35 +409,73 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
-  const { applied, failed } = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+
+  // Claim the run before applying anything, so an approval and a dismissal (two
+  // parents, or two tabs) cannot both win. Without the claim the dismissal's
+  // compare-and-set could land while the plan was being applied, leaving real
+  // calendar events behind a run recorded as dismissed. Both columns move:
+  // `state` is what Needs-you, the run views and the kiosk read (DATA-018).
+  const approvedAt = new Date().toISOString();
+  const { data: claimed, error: claimErr } = await sb.from('family_automation_runs').update({
+    status: 'approved', state: 'executing', approved_by: ctx.user.id, approved_at: approvedAt,
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id').maybeSingle();
+  if (claimErr) {
+    console.error('[concierge] run claim failed', { runId, familyId, error: claimErr });
+    return { ok: false, error: describeActionError(claimErr, t('actions.couldNotApproveThatRun')) };
+  }
+  if (!claimed) return { ok: false, error: t('actions.runNotFoundOrAlready') };
+  // Hand the run back to the approval queue if it does not finish, so the
+  // manager can retry: materializePlan is idempotent (it skips kinds already in
+  // concierge_plan_actions), which is what makes a retry safe.
+  // Best-effort and logged, not raised: the caller is already reporting the
+  // failure that made it release. Zero rows means the claim was no longer this
+  // action's (the run was decided elsewhere), which is not a release to retry.
+  const release = async () => {
+    const { data: released, error: releaseErr } = await sb.from('family_automation_runs').update({
+      status: 'pending', state: 'awaiting_approval', approved_by: null, approved_at: null,
+    }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('approved_at', approvedAt).select('id');
+    if (releaseErr) console.error('[concierge] run release failed', { runId, familyId, error: releaseErr });
+    else if (wroteNoRows(released)) console.error('[concierge] run release matched no rows; the claim was no longer held', { runId, familyId });
+  };
+
+  let outcome: MaterializeResult;
+  try {
+    outcome = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  const { applied, failed } = outcome;
   if (failed.length) {
-    // Left `pending`: stamping it executed would retire the one button that
-    // retries, over a plan that did not land. Audit C1-S9-72.
-    console.error('[concierge] queued run materialization incomplete; left pending', { runId, familyId, applied, failed });
+    // Released to `pending`: stamping it executed would retire the one button
+    // that retries, over a plan that did not land. Audit C1-S9-72.
+    console.error('[concierge] queued run materialization incomplete; released to pending', { runId, familyId, applied, failed });
+    await release();
     revalidatePath(PATH);
     return { ok: false, error: t('actions.couldNotFinishApplyingPlan') };
   }
   const summary = runSummary(plan.title, applied);
 
-  // Record the run as executed. materializePlan is idempotent (it skips kinds
-  // already in concierge_plan_actions), so surfacing this failure lets the
-  // manager safely retry rather than leaving the run stuck "pending" with the
-  // plan already applied — which would look like the approval did nothing.
-  //
-  // The reasoning above covers the ERROR path and stops one step short of the
-  // zero-rows one, which lands in the same place: the plan is applied, the run
-  // stays `pending`, and the manager sees a queued run for work already done —
-  // so they approve it again. Idempotence makes the retry safe; reporting
-  // success here is what makes it necessary. (markRunExecuted is a
-  // compare-and-set on 'pending', so zero rows also covers a run someone else
-  // resolved between the read above and this write.)
-  const { data: stamped, error: runErr } = await markRunExecuted(sb, runId, familyId, ctx.user.id, summary, applied);
+  // Record the run as executed — conditional on the claim above still holding,
+  // so a run that was released or taken by another decision is not overwritten.
+  // materializePlan is idempotent, so surfacing a failure here and releasing
+  // the run lets the manager safely retry rather than leaving it stuck with the
+  // plan already applied. Zero rows is the same case as an error: reporting
+  // success over it is what would make a retry necessary and invisible.
+  // `approved_at` stays the claim's: it is when the person said yes, and
+  // `completed_at` is when the plan finished.
+  const { data: stamped, error: runErr } = await sb.from('family_automation_runs').update({
+    status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
+    completed_at: new Date().toISOString(),
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').select('id');
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
+    await release();
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
   if (wroteNoRows(stamped)) {
-    console.error('[concierge] executed-run status update matched no rows', { runId, familyId });
+    console.error('[concierge] executed-run status update matched no rows; the claim was lost', { runId, familyId });
+    await release();
     return { ok: false, error: t('actions.appliedThePlanButCould') };
   }
 

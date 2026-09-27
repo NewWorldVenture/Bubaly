@@ -66,6 +66,7 @@ export function QuickPost({ className }: { className?: string }) {
   useEffect(() => {
     if (!draft || comps !== null) return;
     const sb = createClient();
+    let active = true; // a read for the previous family must not land here (MAIN-F-D09)
     // Best-effort is the right call here and stays: with fewer than two usable
     // comparables `suggestPriceCents` returns null, so a failed read shows no
     // suggestion rather than a wrong one. What was NOT deliberate is that a bare
@@ -82,8 +83,9 @@ export function QuickPost({ className }: { className?: string }) {
       // a family with no past listings, and the two want different answers when
       // someone asks why the price suggestion never appears.
       if (error) console.error('[quick-post] comparables read failed', { message: error.message });
-      setComps((data ?? []) as Comparable[]);
+      if (active) setComps((data ?? []) as Comparable[]);
     })();
+    return () => { active = false; };
   }, [draft, comps, familyId]);
 
   const makeDraft = () => {
@@ -139,7 +141,7 @@ export function QuickPost({ className }: { className?: string }) {
     }
     setPosting(false);
     const secs = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : null;
-    success(secs != null && secs <= 60 ? `Posted in ${secs}s ⚡` : 'Posted to the family marketplace');
+    success(secs != null && secs <= 60 ? t('quickPost.postedInSeconds', { s: secs }) : t('quickPost.postedToMarketplace'));
     reset({ cleanup: false });
   }
 

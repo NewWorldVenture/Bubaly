@@ -98,9 +98,9 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryTile label={`Failed · last ${SUMMARY_WINDOW_HOURS}h`} value={summary.failed} tone={summary.failed > 0 ? 'danger' : 'neutral'} />
-        <SummaryTile label={`In flight · last ${SUMMARY_WINDOW_HOURS}h`} value={summary.inFlight} tone="brand" />
-        <SummaryTile label={`Total · last ${SUMMARY_WINDOW_HOURS}h`} value={summary.total} tone="neutral" />
+        <SummaryTile label={t('adminAiActivity.failedLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.failed} tone={summary.failed > 0 ? 'danger' : 'neutral'} />
+        <SummaryTile label={t('adminAiActivity.inFlightLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.inFlight} tone="brand" />
+        <SummaryTile label={t('adminAiActivity.totalLastHours', { hours: SUMMARY_WINDOW_HOURS })} value={summary.total} tone="neutral" />
       </div>
 
       <SignalPrecisionCard result={precision} retryHref="/admin/ai-activity" allFamilies />

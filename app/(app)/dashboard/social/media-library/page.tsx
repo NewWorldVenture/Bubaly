@@ -9,7 +9,10 @@ import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
-export const metadata: Metadata = { title: 'Media Library · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.mediaLibrary')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON = { image: ImageIcon, video: Film, audio: Music, document: FileText, thumbnail: ImageIcon } as const;
@@ -63,7 +66,9 @@ export default async function MediaLibraryPage() {
             <option value="document">{t('dashboardSocialMediaLibrary.document')}</option>
             <option value="thumbnail">{t('dashboardSocialMediaLibrary.thumbnail')}</option>
           </select>
-          <input name="url" placeholder={t('dashboardSocialMediaLibrary.urlLeaveBlankForAPrompt')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
+          {/* The action refuses anything but an http(s) URL by throwing, which
+              lands on the error page; the browser can say so first. */}
+          <input name="url" type="url" pattern="https?://.+" placeholder={t('dashboardSocialMediaLibrary.urlLeaveBlankForAPrompt')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <input name="alt_text" placeholder={t('dashboardSocialMediaLibrary.altTextAccessibility')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <input name="tags" placeholder={t('dashboardSocialMediaLibrary.tagsCommaSeparated')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <SubmitButton className="h-9 w-full rounded-lg bg-brand text-sm font-medium text-brand-fg">{t('dashboardSocialMediaLibrary.addToLibrary')}</SubmitButton>

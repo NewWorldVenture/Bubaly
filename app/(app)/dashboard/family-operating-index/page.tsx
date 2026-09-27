@@ -21,7 +21,10 @@ import { RelationshipInsights } from '@/components/reasoning/relationship-insigh
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Operating Index' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFamilyOperatingIndex.familyOperatingIndex') };
+}
 export const dynamic = 'force-dynamic';
 
 const BAND_COPY: Record<Band, { label: string; blurb: string; ring: string; text: string; chip: string }> = {
@@ -90,9 +93,9 @@ export default async function FamilyOperatingIndexPage() {
 
   const TrendIcon = trend == null ? Minus : trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
   const trendText = trend == null
-    ? 'First reading — check back tomorrow to see the trend.'
-    : trend === 0 ? 'No change since your last reading.'
-    : `${trend > 0 ? '+' : ''}${trend} vs. your last reading (${priorComposite}).`;
+    ? t('familyOperatingIndex.firstReading')
+    : trend === 0 ? t('familyOperatingIndex.noChange')
+    : t('familyOperatingIndex.trendVsLast', { trend: `${trend > 0 ? '+' : ''}${trend}`, prior: String(priorComposite) });
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
@@ -225,7 +228,7 @@ export default async function FamilyOperatingIndexPage() {
                     </span>
                     <Link
                       href={s.href}
-                      aria-label={`Open ${s.title}`}
+                      aria-label={t('itemAction.open', { name: s.title })}
                       className="group shrink-0 rounded-lg p-1 hover:bg-elevated"
                     >
                       <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />

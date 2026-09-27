@@ -113,7 +113,11 @@ export function MoneyCardsView({
     } finally {
       setBusy(null);
     }
-    if (issued > 0) success(`Issued ${issued} virtual card${issued !== 1 ? 's' : ''}!`);
+    if (issued > 0) {
+      success(issued === 1
+        ? tr('moneyCards.issuedOneVirtualCard')
+        : tr('moneyCards.issuedVirtualCards', { count: issued }));
+    }
     // Refresh either way: the list is the honest record of what now exists, and
     // a partial run must not leave the screen showing the pre-run state.
     router.refresh();
@@ -227,8 +231,8 @@ export function MoneyCardsView({
             <Zap className="h-5 w-5 flex-shrink-0 text-brand-text" />
             <p className="text-sm font-medium">
               {childrenWithoutCards.length === 1
-                ? `${childrenWithoutCards[0].name} doesn't have a card yet.`
-                : `${childrenWithoutCards.length} children don't have cards yet.`}
+                ? t('moneyCards.childNoCard', { name: childrenWithoutCards[0].name })
+                : t('moneyCards.childrenNoCards', { n: childrenWithoutCards.length })}
             </p>
           </div>
           <Button size="sm" onClick={issueAllVirtual} loading={busy === 'issue-all'}>
@@ -437,7 +441,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
   }
 
   return (
-    <Modal open title={`Order physical card — ${child.name}`} onClose={onClose}>
+    <Modal open title={tr('moneyCards.orderPhysicalCardFor', { name: child.name })} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
           <Package className="h-5 w-5 flex-shrink-0 text-brand-text" />

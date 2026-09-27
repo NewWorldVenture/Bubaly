@@ -28,14 +28,16 @@ type Plan = Tables<'concierge_plans'>;
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
-const KIND_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string; prompt: string }> = {
-  getaway:     { icon: Plane,           label: 'Weekend Getaway',    color: 'bg-blue-500/15 text-blue-400',    prompt: 'Help me plan a weekend getaway for my family. Ask about budget, dates, preferences, and number of people.' },
-  restaurant:  { icon: UtensilsCrossed, label: 'Book a Restaurant',  color: 'bg-amber-500/15 text-amber-400',  prompt: 'Help me find and book a restaurant for a family dinner. Ask about cuisine, occasion, number of guests, and budget.' },
-  date_night:  { icon: Heart,           label: 'Date Night',         color: 'bg-pink-500/15 text-pink-400',    prompt: 'Help me plan a special date night. Ask about budget, location preferences, and what kind of experience we want.' },
-  activity:    { icon: Zap,             label: 'Family Activity',     color: 'bg-green-500/15 text-green-400',  prompt: 'Suggest a fun family activity. Ask about age ranges, interests, budget, and whether we prefer indoor or outdoor.' },
-  party:       { icon: PartyPopper,     label: 'Plan a Party',        color: 'bg-violet-500/15 text-violet-400', prompt: 'Help me plan a family party or celebration. Ask about the occasion, number of guests, budget, and venue preference.' },
-  travel:      { icon: MapPin,          label: 'Vacation Planning',   color: 'bg-cyan-500/15 text-cyan-400',    prompt: 'Help me plan a family vacation. Ask about destination preferences, travel dates, budget, and activities we enjoy.' },
-  general:     { icon: Sparkles,        label: 'Ask Anything',        color: 'bg-brand/15 text-brand-text',          prompt: 'I\'m your personal family concierge. What can I help you plan or arrange today?' },
+// Each kind's label and opening line are worded in the reader's language; the
+// label also becomes a saved plan's title (audit C1-S9-121).
+const KIND_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; labelKey: string; color: string; promptKey: string }> = {
+  getaway: { icon: Plane, labelKey: 'conciergeModule.kind.getaway.label', color: 'bg-blue-500/15 text-blue-400', promptKey: 'conciergeModule.kind.getaway.prompt' },
+  restaurant: { icon: UtensilsCrossed, labelKey: 'conciergeModule.kind.restaurant.label', color: 'bg-amber-500/15 text-amber-400', promptKey: 'conciergeModule.kind.restaurant.prompt' },
+  date_night: { icon: Heart, labelKey: 'conciergeModule.kind.dateNight.label', color: 'bg-pink-500/15 text-pink-400', promptKey: 'conciergeModule.kind.dateNight.prompt' },
+  activity: { icon: Zap, labelKey: 'conciergeModule.kind.activity.label', color: 'bg-green-500/15 text-green-400', promptKey: 'conciergeModule.kind.activity.prompt' },
+  party: { icon: PartyPopper, labelKey: 'conciergeModule.kind.party.label', color: 'bg-violet-500/15 text-violet-400', promptKey: 'conciergeModule.kind.party.prompt' },
+  travel: { icon: MapPin, labelKey: 'conciergeModule.kind.travel.label', color: 'bg-cyan-500/15 text-cyan-400', promptKey: 'conciergeModule.kind.travel.prompt' },
+  general: { icon: Sparkles, labelKey: 'conciergeModule.kind.general.label', color: 'bg-brand/15 text-brand-text', promptKey: 'conciergeModule.kind.general.prompt' },
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -88,7 +90,7 @@ export function ConciergeModule() {
   function startChat(kind: string) {
     const cfg = KIND_CONFIG[kind] ?? KIND_CONFIG.general;
     setActiveKind(kind);
-    setMessages([{ role: 'assistant', content: cfg.prompt }]);
+    setMessages([{ role: 'assistant', content: t(cfg.promptKey) }]);
     setInput('');
   }
 
@@ -127,7 +129,7 @@ export function ConciergeModule() {
     const supabase = createClient();
     const { error } = await supabase.from('concierge_plans').insert({
       family_id: familyId, created_by: userId,
-      title: KIND_CONFIG[activeKind]?.label ?? 'New Plan',
+      title: KIND_CONFIG[activeKind] ? t(KIND_CONFIG[activeKind].labelKey) : t('conciergeModule.newPlan'),
       kind: activeKind,
       description: messages.find(m => m.role === 'user')?.content?.slice(0, 200),
       ai_suggestion: lastAi?.content?.slice(0, 500),
@@ -172,7 +174,7 @@ export function ConciergeModule() {
                   {(() => { const Ic = KIND_CONFIG[activeKind]?.icon ?? Sparkles; return <Ic className="h-4 w-4" />; })()}
                 </div>
                 <div>
-                  <p className="font-bold text-sm">{KIND_CONFIG[activeKind]?.label}</p>
+                  <p className="font-bold text-sm">{KIND_CONFIG[activeKind] ? t(KIND_CONFIG[activeKind].labelKey) : null}</p>
                   <p className="text-[10px] text-muted">{t('concierge.aiConcierge')}</p>
                 </div>
                 <div className="ml-auto flex gap-2">
@@ -265,7 +267,7 @@ export function ConciergeModule() {
                       <div className={cn('grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg', cfg.color)}>
                         <cfg.icon className="h-4 w-4" />
                       </div>
-                      <span className="text-xs font-semibold">{cfg.label}</span>
+                      <span className="text-xs font-semibold">{t(cfg.labelKey)}</span>
                     </button>
                   ))}
                   <button onClick={() => startChat('general')}
@@ -387,13 +389,13 @@ export function ConciergeModule() {
               <p className="mb-3 text-sm font-semibold">{t('concierge.inspiration')}</p>
               <div className="space-y-2">
                 {[
-                  { emoji: '🏖️', text: 'Plan a beach trip this summer' },
-                  { emoji: '🍕', text: 'Find a new family pizza spot' },
-                  { emoji: '🎭', text: 'Book a show or event nearby' },
-                  { emoji: '🌲', text: 'Camping or hiking weekend' },
-                  { emoji: '💑', text: 'Surprise date night ideas' },
+                  { emoji: '🏖️', text: t('conciergeModule.tip.beachTrip') },
+                  { emoji: '🍕', text: t('conciergeModule.tip.pizzaSpot') },
+                  { emoji: '🎭', text: t('conciergeModule.tip.showNearby') },
+                  { emoji: '🌲', text: t('conciergeModule.tip.campingWeekend') },
+                  { emoji: '💑', text: t('conciergeModule.tip.dateNightIdeas') },
                 ].map((tip, i) => (
-                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: `I'd love to help with that! Tell me more about "${tip.text}" — what's your timeline and budget?` }]); setInput(tip.text); }}
+                  <button key={i} onClick={() => { setActiveKind('general'); setMessages([{ role: 'assistant', content: t('conciergeModule.tipReply', { tip: tip.text }) }]); setInput(tip.text); }}
                     className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface/60 transition">
                     <span className="text-base">{tip.emoji}</span>
                     <span className="text-muted">{tip.text}</span>
@@ -468,7 +470,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
       <div className="space-y-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{t('concierge.status')}</p>
-          <select value={editStatus} onChange={e => void updateStatus(e.target.value)}
+          <select aria-label={t('fieldName.status')} value={editStatus} onChange={e => void updateStatus(e.target.value)}
             className="w-full rounded-lg border border-border bg-surface/60 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand/30">
             {['idea', 'planning', 'booked', 'confirmed', 'completed', 'cancelled'].map(s => (
               <option key={s} value={s} className="capitalize">{s}</option>
@@ -563,7 +565,7 @@ function AddPlanModal({ familyId, userId, onClose, onSaved }: {
           <Field label={t('concierge.type')}>
             {id => (
               <Select id={id} name="kind">
-                {Object.entries(KIND_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                {Object.entries(KIND_CONFIG).map(([k, v]) => <option key={k} value={k}>{t(v.labelKey)}</option>)}
               </Select>
             )}
           </Field>

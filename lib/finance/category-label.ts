@@ -2,7 +2,7 @@
 //
 // The stored category is the English word: it is data, existing rows hold it,
 // and budgets match transactions by it. What a reader sees is its label. The
-// billing and finances pages offer different pick lists ("Dining" and "Dining
+// billing, finances and shared-expenses pages offer different pick lists ("Dining" and "Dining
 // Out"), so both spellings are known here. Audit C1-S9-109, C1-S9-112.
 
 const CATEGORY_KEY: Record<string, string> = {
@@ -10,7 +10,8 @@ const CATEGORY_KEY: Record<string, string> = {
   Transport: 'transport', Transportation: 'transportation', Utilities: 'utilities', Kids: 'kids',
   Entertainment: 'entertainment', Health: 'health', Healthcare: 'healthcare', Shopping: 'shopping',
   Subscriptions: 'subscriptions', Insurance: 'insurance', Education: 'education', 'Auto & Gas': 'autoGas',
-  'Personal Care': 'personalCare', Gifts: 'gifts', Income: 'income', Transfer: 'transfer', Other: 'other',
+  'Personal Care': 'personalCare', Gifts: 'gifts', Income: 'income', Transfer: 'transfer', Travel: 'travel',
+  Household: 'household', Other: 'other',
 };
 
 /** A known category in the reader's language; a family's own category as they typed it. */

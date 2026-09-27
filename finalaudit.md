@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Source-qualified release checkpoint — 2026-09-27
+
+**PR607's original full run remains FAIL; its other exact-source gates are complete.** Frozen4d807747/tree35a8c6be records 20,848 unit passes and23 failures in the one marketplace React-shim fixture. On the same unchanged5,228 files, build246, generated types, lint with15 existing warnings, production dependency audit0 and all four static audits pass. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-4d807747-20260927/summary.json`, verified through18:43:03 UTC. The corresponding hosted [CI36341275722](https://github.com/NewWorldVenture/Bubaly/actions/runs/36341275722) Web job also fails at18:42:29 on that same missing-hook fixture; Database/Mobile pass. Its superseded E2E run is automatically cancelled at18:45:08 UTC (smoke step cancelled18:44:31); no manual cancellation was issued and no final browser pass is claimed. Log: `C:/Users/Daniel/AppData/Local/Temp/bubaly-4d-ci36341275722-web-108681724963-20260927.log`. These failures are preserved. The reviewed three-line fixture-only correction is pushed as `7e2f27adad2e27667c49fd3ad1ceedf8e990a376`; its32-case scoped pass is recorded below, while corrected-source full canonical and hosted acceptance remain pending.
+
+**Framework PR602 and production601 have separate receipts.** For b718/treebd217, hosted Web completes SUCCESS at18:41:53 UTC:20,858 tests across1,638 files in each of three timezones, build246, generated types, lint and static/production dependency audits pass. Database/Mobile also pass; E2E remains pending at this checkpoint. Actual checkout79ec1110 has the same tree. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-framework-b718-publication-20260927/web-terminal.json`. Current deployed82da, from PR601, has exact public revision/worker verification and native1/1 PASS at18:41:23–30; retained native evidence: `C:/Users/Daniel/AppData/Local/Temp/bubaly-native-production-82da8da6-retained-receipt-20260927.json`, alongside the public/native receipts below. Six missing feature settings still leave health degraded. No authenticated provider journey is certified, and these production checks do not deploy or certify the pending Next16/controls candidates.
+
+**The current Register B header is corrected to its actual rows:**14,226 total =13,831 NOT STARTED +380 IN PROGRESS +10 FIXED + PASS +four BLOCKED +one FAIL. Its stale14,213 total and denominator are corrected; all IDs/statuses and the rounded0.07% signoff remain unchanged. Session A's separate841-row counts and all dated historical totals are preserved. Page closures and the398-row page board are unchanged. **PRODUCTION READY: NO.** This documentation checkpoint records pending work accurately; it is not a source release or a new acceptance claim.
+
 ## Marketplace test fixture correction — 2026-09-27
 
 **The first full next-controls unit run failed and remains recorded.** Frozen PR607 head `4d807747d93395992831b3a57fe5c539330c2f91`, tree `35a8c6be22a5f0a4dddb1defa479e2596a3a1f5e`, verified 5,228 source files before running. UTC produced **20,848 PASS plus 23 FAIL / 20,871 tests** across 1,639 passing files and one failing file in107.08s. All23 failures are in the existing marketplace-money test's hand-built React hook dispatcher, which did not implement the newly used `useSyncExternalStore`. Evidence: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-4d807747-20260927/{unit-UTC.log,unit-UTC.exit,source-before.json}`. Other gates on that frozen source were still running when this corrective checkpoint was written; it is not an all-gates pass.
@@ -342,8 +350,8 @@ PR596 preserves Claude's reported 44 public/auth/marketing page re-crawls on e14
 ### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
 
 Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
-read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
-recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #598) and
+recorded as `C1-S9-94`…`C1-S9-111`. Every lane is claimed by another session, so the rows are
 theirs to update; the findings are listed here rather than edited under someone else's claim.
 
 PR598 (`06cef776e94278d4893fe6979fd37911b5b1b0ed`) extends this reported pass through C1-S9-111; its later detailed entries include C1-S9-112–114. The PR587 attribution above remains historical. These are Claude's source-specific local findings; the selected integration has separate acceptance evidence and does not promote any page row here.
@@ -798,11 +806,11 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 *Different scheme and granularity from the block above; see Register B below.*
 
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27 (a6 production verified;599 hosted clean1775; media coverage closed;585/598 combined full gates pending)
+- Last Updated: 2026-09-27 (PR601/82da production verified; PR602 Web/Database/Mobile pass, E2E pending; corrected PR607 full gates pending)
 - Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-12, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
-- Total Audit Items: 14213 — all14,187 prior IDs retained plus26 integrated source/test/tool paths. Three media regression records close on exact599 hosted/deployed proof; broader SEC-001 remainsFAIL.
+- Total Audit Items: 14226 — recounted from the current Register B rows; every prior ID is retained. Ten recorded closures remain source-qualified; no new closure is added by this checkpoint.
 - Not Started: 13831
 - In Progress: 380
 - Passed: 0
@@ -810,7 +818,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 - Status normalization: MAIN-F-C07, MAIN-F-C09 and MAIN-F-C10 now use IN PROGRESS, matching their pending integrated retests. Their original CLOSED / MITIGATED / MOSTLY MITIGATED verdicts remain verbatim in their Notes and evidence.
 - Blocked: 4
 - Failed: 1 (SEC-001). Repository fixes and replayed-policy checks for AUTHZ-003 and AUTHZ-005 remain recorded as FIXED + PASS with their explicit production-migration limitation. No deployed-policy verification is inferred.
-- Overall Completion: **0.07%** (10 recorded closures / 14,213 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
+- Overall Completion: **0.07%** (10 recorded closures / 14,226 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
 
 > **On these counts, plainly.** *Total Audit Items* is the Codex cycle's
 > enumeration of the whole target space — every route, table, policy, component
@@ -18260,6 +18268,14 @@ The bucket half is an owner decision between two designs, and neither buys anyth
 - **Short-lived signed URLs** resolved at render time: keeps the CDN, but brings the expiry, offline-cache, realtime-row and idle-editor problems listed above, and a signed URL is a bearer credential until it expires.
 
 Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
+
+*Added 2026-09-27 (PORT-001).* The second design is **implemented and ready**, on the audit branch, as commit `68a5a7a1` on `claude/logged-in-pages-supabase-7q6vtf` (24 files). It contains:
+- a reference parser that reads either a stored public URL or a bare path, so no row is rewritten;
+- a batched server signer and a client hook, with every reader listed above moved onto them;
+- the service-worker exclusion;
+- a deploy-coupled migration that sets the bucket private and adds a member-scoped SELECT policy. It is applied only after the readers are live, which is the order stated here.
+
+It is deliberately **not** in the port (#586): this entry leaves the choice between the two designs to the owner. If the owner picks signed URLs, it re-applies onto main in one step. If the owner picks the media route, its reference parser still applies unchanged.
 
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
@@ -46096,6 +46112,243 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][LOW][FRONT-DESK]` C1-S9-115 — the Front Desk's call statuses and classifications were English in every locale
+
+**File/path:** `components/modules/front-desk-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.** On `/dashboard/front-desk`, every call's status (Screened, Voicemail, Forwarded, …) and classification (Important, Robocall, …) was English in every locale. So was "Unknown caller" in the detail view. The stat tiles and "How it works" already rendered through keys, but still carried unused English copies next to them, which the scanner counted as findings.
+
+**Fix.**
+- Statuses and classifications are `labelKey`s.
+- The unused English copies are removed.
+- Both unknown-caller fallbacks use `frontDesk.unknownCaller`.
+- "Spam" is listed as invariant.
+
+**Status:** FIXED. Scanner findings for `front-desk-module` drop from 20 to 0.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SHOPPING/PANTRY]` C1-S9-116 — grocery categories, list presets and pantry stats were English in every locale
+
+**File/path:** `components/modules/shopping-module.tsx`, `components/modules/pantry-module.tsx`, new `lib/i18n/grocery-category.ts`; seven catalogues.
+
+**Problem.**
+- On `/dashboard/shopping`, English showed in every locale:
+  - the category headings on a list (Produce, Dairy & Eggs, …)
+  - the category picker
+  - the "Cleared N completed items" toast
+- The "Grocery" and "Custom" list presets wrote an English list name into the family's data.
+- On `/dashboard/pantry`, the category chips and picker and three of the four stat tiles were English.
+
+**Fix.**
+- Categories stay stored as the English word, since the list groups by it. They are shown through `groceryCategoryLabel()`, which both pages share.
+- The two generic presets are worded when shown and when picked. Store brands stay as they are.
+- The toast is a plural.
+
+**Status:** FIXED.
+- `pantry-module` has no copy findings left. Its remaining findings are the stored category values.
+- `shopping-module`'s remaining findings are the stored categories and the store brand names.
+
+---
+
+### `[CLAUDE-1][MEDIUM][RECIPES]` C1-S9-117 — recipe categories, difficulty, dietary flags and AI remix buttons were English in every locale
+
+**File/path:** `components/modules/recipes-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/recipes` (part of the `C1-S9-101` burn-down), the following were English in every locale:
+- recipe categories and difficulty, on cards, in filters and in the form
+- the dietary flags on a recipe and in the form
+- the ten "AI Remix" buttons (their labels came from `lib/recipes/ai-actions.ts`)
+- the four stat tiles
+
+**Fix.**
+- Categories and difficulty are `labelKey`s.
+- Dietary flags stay stored as the English word and are shown through `flagLabel()`.
+- Remix buttons are worded by action id. The English instruction sent to the model is unchanged.
+
+**Status:** FIXED. Scanner findings for `recipes-module` drop from 19 to 3. The 3 left are stored values: the flag list, and the "Pantry" category a grocery line is filed under.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TODOS]` C1-S9-118 — the task page's priorities, tabs, summary and quick-add were English, and a first task created an English list
+
+**File/path:** `components/modules/todos-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/todos`, the following were English in every locale:
+- the priorities
+- the four tabs
+- the summary donut's legend
+- the Today / Tomorrow / This Week quick-add buttons
+
+Adding a family's first task also created a list named "Tasks" in English, in the family's data.
+
+**Fix.**
+- The labels are catalogue keys.
+- The default list is named in the reader's language when it is created.
+
+**Status:** FIXED. Scanner findings for `todos-module` drop from 16 to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][LOW][FAMILY]` C1-S9-119 — the family page's roles, account badges and shared-information cards were English in every locale
+
+**File/path:** `components/modules/family-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/family`, the following were English in every locale:
+- each member's role (Parent, Kid, …) and account badge (Admin, Kid Account)
+- the role picker
+- the five "Shared information" cards and their counts ("3 contacts", "View")
+
+**Fix.**
+- Roles and badges are catalogue keys.
+- Each card's label and count come from the catalogue, and the count uses the locale's plural rules.
+
+**Status:** FIXED. Scanner findings for `family-module` drop from 16 to 3. All 3 are type-alias fragments.
+
+---
+
+### `[CLAUDE-1][LOW][DOCUMENTS/RELATIONSHIP]` C1-S9-120 — documents filters and actions, and relationship dates and gift statuses, were English in every locale
+
+**File/path:** `components/modules/documents-module.tsx`, `components/modules/relationship-module.tsx`, `tests/documents-import-actions.test.ts`, `tests/i18n-ungated-surface-ratchet.test.ts`; seven catalogues.
+
+**Problem.** The following were English in every locale:
+- On `/dashboard/documents`: the type filter, the sort options, the storage legend and the three quick actions.
+- On `/dashboard/relationship`: the date kinds, the gift statuses and the load-failure fallback.
+
+**Fix.**
+- These labels now come from catalogue keys (`labelKey`).
+- The documents test pins the translated calls for the three actions.
+- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`. After merging main at `e96e745a`, the ceiling is 2432. The extra 13 are main's P-10 change (`711b15c3`), which writes a fixed English label on each AI-request ledger row across 13 route files. That is stored row data, and it stays with that change's owner.
+
+**Status:** FIXED.
+- `documents-module`: scanner findings drop from 15 to 0.
+- `relationship-module`: scanner findings drop from 15 to 3, all type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CONCIERGE/SUBSCRIPTIONS/EXPENSES]` C1-S9-121 — concierge kinds and prompts, subscription labels and usage lines, and expense categories were English in every locale
+
+**File/path:** `components/modules/concierge-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/expenses-module.tsx`, `lib/finance/category-label.ts`, `tests/route-plan-gate.test.ts`; seven catalogues.
+
+**Problem.**
+- **Concierge.** The seven plan kinds, their opening lines, the five inspiration tips and their reply were English in every locale. A saved plan took its kind's English name, or "New Plan", as its title.
+- **Subscriptions.** Categories, cadence and status pickers (shown as raw ids), "/mo" and "/yr", "trial", "next …", the four usage lines and the last-used hint were English in every locale.
+- **Expenses.** Categories were English in every locale.
+
+**Fix.**
+- Every label listed above is now a catalogue key, rendered in the reader's language.
+- Stored values stay as they are. Expense categories go through the shared `categoryLabel()`, which now knows Travel and Household.
+- A saved concierge plan's title is written in the reader's language.
+- `route-plan-gate` now expects main's merged gate (#585) to treat a failed account read as "not a super admin". The family's own 403 stands, and nothing passes.
+- The health goal's stored label stays canonical English. `tests/health-localization.test.ts` pins that on purpose, so it is left unchanged.
+
+**Status:** FIXED.
+- Scanner findings: `concierge-module` 12 → 0.
+- `subscriptions-module` and `expenses-module`: only stored category values remain.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SIGNALS/SOCIAL/VOICE]` C1-S9-122 — family signals, the social feed and voice capture labels were English in every locale; the voice classifier reads only English
+
+**File/path:** `components/modules/family-signals-module.tsx`, `components/modules/social-feed-module.tsx`, `components/modules/voice-module.tsx`, `lib/voice/command-router.ts`; seven catalogues.
+
+**Problem.** English in every locale:
+- `/dashboard/signals`: pattern kinds and stat tiles.
+- `/dashboard/social`: feed tabs, quick filters and "Add {platform}".
+- `/dashboard/voice`:
+  - capture kinds
+  - the confirmation toast ("Added task · 3 items") and its Undo action
+  - history rows, including "Failed"
+
+**Separate finding (OPEN).** `classifyVoiceCommand()` recognises only English phrasing, such as "remind me to", "add … to the shopping list" and "schedule". A command spoken or typed in another language is filed as a note, whatever it asks for.
+
+**Fix.**
+- The labels, toasts and history rows above are now catalogue keys.
+- The voice module words each route itself (`voiceModule.route.*`).
+- `describeRoute()` in `lib/voice/command-router.ts` stays English, because the command bar and its test use it.
+- The four example commands stay English on purpose. Tapping one feeds the classifier, and a translated example would be filed as a note.
+
+**Status:**
+- **FIXED** for the labels. Scanner findings drop to 0 for `family-signals-module` and `social-feed-module`. `voice-module` has 4 left: the deliberate English examples.
+- **OPEN** for the classifier. Making it multilingual means per-locale intent rules or model classification. That is a feature decision for the owner, not a label fix.
+
+---
+
+### `[CLAUDE-1][LOW][RENEWALS/MESSAGES]` C1-S9-123 — renewal categories, message tabs and groups were English, and the family's first conversation was named in English
+
+**File/path:** `components/modules/renewals-module.tsx`, `components/modules/messages-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/renewals` showed English in every locale:
+  - each renewal's category badge and the category picker
+  - the load-failure fallback message
+- `/dashboard/messages` showed English in every locale:
+  - the conversation tabs
+  - the four smart recipient groups
+- The family's first conversation, created automatically, was saved as "Family Chat" in English.
+
+**Fix.**
+- Categories stay stored as their id and are worded through the catalogue.
+- Tabs and groups are `labelKey`s.
+- The first conversation is named in the reader's language.
+
+**Status:** FIXED. Scanner findings: `renewals-module` drops to 0; `messages-module` drops to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][MEDIUM][INSURANCE]` C1-S9-124 — insurance policy types, premium frequencies and the policy detail were English in every locale
+
+**File/path:** `components/modules/insurance-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/insurance` showed its vocabulary in English in every locale:
+- The twelve policy types (Health, Auto, Renters, Umbrella, …) came straight from `lib/insurance/policies.ts` data. They appeared in the list, the gaps line, the renewals line, the form and the detail title ("Auto insurance").
+- So did the four premium frequencies and every "/mo" or "/yr".
+- The detail sheet's eight row labels were English.
+- So was "Whole family".
+
+**Fix.**
+- `typeLabel()` and `perFrequency()` word each stored value through the catalogue.
+- The lib stays as data.
+
+**Status:** FIXED. Scanner findings for `insurance-module` drop from 7 to 0. The lib-sourced labels were a blind spot of the scanner and were found by reading the module.
+
+---
+
+### `[CLAUDE-1][LOW][PASSWORDS/WEEKLY]` C1-S9-125 — password categories and the weekly briefing's load and stress labels were English in every locale
+
+**File/path:** `components/modules/passwords-module.tsx`, `components/modules/weekly-briefing-module.tsx`; seven catalogues.
+
+**Problem.** Two pages showed English in every locale:
+- `/dashboard/passwords`:
+  - the nine category chips, the category picker and each entry's category
+  - the "Actions for …" menu label
+- `/dashboard/weekly`: each day's load (Light, Heavy) and the stress level.
+
+**Fix.** These labels now come from catalogue keys (`labelKey`).
+
+**Status:** FIXED. Scanner findings:
+- `passwords-module`: 6 → 0.
+- `weekly-briefing-module`: 7 → 1, a CSS value.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MEDICAL]` C1-S9-126 — medical and dental records spliced an English provider noun into English sentences in every locale
+
+**File/path:** `components/modules/medical-records-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/medical` and `/dashboard/dental` built their copy from an English noun ("Doctor" or "Dentist") spliced into English templates:
+- "Add Doctor", "Edit Dentist", "Doctor saved", "Could not save dentist"
+- "No doctors yet", "Add your family's dentists and generate …", "Primary doctor"
+- the empty-insurance body
+
+The page title and description, "Whole Family", "Save Changes", "Add Insurance" and both card-upload toasts were English too. None of it could be translated, because no language builds these phrases the English way.
+
+**Fix.** Each kind has whole-sentence catalogue keys (`medicalRecordsModule.{medical,dental}.*`). The module reads them through `k(name)`.
+
+**Status:** FIXED. Scanner findings drop to 2, both type-alias fragments. Most of these were template literals the scanner cannot see.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -48843,6 +49096,29 @@ role changes that touch `parent` need `is_family_admin`, in the fm_update
 policy (a trigger comparing OLD/NEW role) and in the module's role options.
 Not changed without that answer.
 
+*Added 2026-09-27 (PORT-001).* Two facts for that answer.
+
+- **What a self-promoted adult can do.** `families_delete` checks
+  `is_family_admin` and nothing else. So an adult who promotes themselves to
+  parent can **delete the whole family**, and the delete cascades to every
+  member, wallet and document. They can also demote, deactivate or delete the
+  parents first. The audit branch measured seven such breaches as an invited
+  adult.
+- **A fix is ready if the answer is "adult is not a co-owner".** It is commit
+  `f20ebbed` on `claude/logged-in-pages-supabase-7q6vtf` (SEC-026):
+  - a SECURITY INVOKER trigger on `family_members`, under which only a parent
+    may make, change or remove a parent's row, unless the family has no active
+    parent;
+  - the family module hiding Edit/Remove on parent cards from non-parents, and
+    offering Parent in the picker only to someone who may make one;
+  - a probe with controls for adults managing non-parents, parents managing
+    parents, a parentless family making one, and a parent's family delete still
+    cascading.
+
+  It is deliberately **not** in the port (#586), because this entry leaves it to
+  the owner. It re-applies onto main in one step, taking the next free
+  migration number.
+
 ## C1-K-46 · LOW · A sibling could make someone's marketplace offer vanish
 
 `marketplace_offers` INSERT and UPDATE were already the offerer's, or the
@@ -49264,6 +49540,100 @@ here rather than half-fixed.
   retryable error state, never an empty ledger"); `trust-sharing-section` and
   `paperwork-module`'s AI draft path check `res.ok`.
 
+## PORT-001 · The logged-in-pages audit branch, re-applied onto main one fix at a time
+
+*Recorded 2026-09-27 by session 01DXw2nu25BjyRfA6Fg3YiMS, on `claude/port-to-main-7q6vtf`. Not counted in the master-ledger totals above, like the C1-K sections.*
+
+**Why a port and not a merge.** `claude/logged-in-pages-supabase-7q6vtf` and `main` grew apart for weeks. Its twenty-four migrations reused versions main had already given to other files, so merged as-is the production workflow would have skipped them as "already applied". Several fixes on each side closed the same hole differently: the branch's `0319` against main's `0335`, its `0320` against main's `0319`, its `0330` against main's `0318`/`0345`. The merge came to 437 conflict hunks. The owner chose to port instead: start from main, re-apply only what main does not already have, one source commit at a time, each with its own verification, and number the migrations after main's highest.
+
+**Method, per commit.**
+- Apply the commit's diff to main's tree with a three-way merge.
+- Where main already fixed the same finding, keep main's version and carry over only the remainder. Each commit message says which half came from where.
+- Renumber any new migration after main's highest, and check it first against main's `0342`–`0388` and the open PRs (#548, #556, #583).
+- Replay it on a Postgres 16 harness built from scratch, run its probes and tests, and typecheck.
+
+**Status with main merged in (after #583): the port is complete.** All 104 of the branch's commits are handled:
+- 86 ported, each naming its source commit and which half came from main.
+- 14 audit-only: their content was audit text, or main already had all of it. One of them, `338f64a6`, is folded into the commit before it, whose port typed the same test the same way.
+- 4 deferred, each for a reason below: SEC-026, SEC-001, PUSH-003 and EMAIL-002.
+
+The merged tree is green:
+- tsc is clean. `next lint` reports no errors and 15 warnings, all from the two jsx-a11y rules main turned on as warnings (`click-events-have-key-events`, `no-static-element-interactions`); `--max-warnings=15` pins that as a ceiling.
+- 21,118 tests in 1,668 files pass, the full suite run once in America/Los_Angeles and once in UTC.
+- The harness replays 441 migrations from nothing with none failing.
+- 173 of 173 probes pass, `plpgsql-bodies-resolve` included.
+
+**Migrations `0447`–`0458`, all unapplied.** Each has an entry in `docs/PENDING_PROD_MIGRATIONS.md` under "Ported from the audit branch", with a deploy-order table. None gates a deploy.
+
+| Now | Was | Finding | On main |
+|---|---|---|---|
+| dropped | `0318` | a sharing circle could never be created (definer search_path missed `extensions`) | main's `0444` (#609, found independently by the B6b page audit as its P-13) installs the identical function, so the port's `0446` is removed |
+| `0447` | `0321` | an investment order could be rejected but never approved (42804) | carried whole |
+| `0448` | `0322` | a single-choice poll took every choice | carried whole; main's vote-owner probe forges its sibling vote in a second poll |
+| `0449` | `0323` | a family timezone typo silently meant Greenwich | carried whole; the probe asks the server which legacy zones it can resolve |
+| dropped | `0324` | stored OAuth tokens answered client reads | main's `0406` (from #556) is the same rule, so it is not carried |
+| `0450` | `0325` | feedback screenshots readable by URL | reduced to the bucket flag; main's `0369` had scoped the read policy |
+| dropped | `0326` | step-up MFA guarded a redirect, not the data | main's `0391` guards the same vaults, asking only a manager for the code as the app does, so it is not carried |
+| `0451` | `0327` | a sibling could file a chore dispute in another child's name | reduced to `chore_disputes`; main's `0375` covers submissions |
+| `0452` | `0328` | a proxy bid's ceiling was readable by rival bidders | carried; the app reads through a fallback so it works before and after |
+| `0453` | `0330` | any member could write Guardian call history | reduced to `guardian_communications`; main's `0318`/`0345` cover the rest |
+| `0454` | `0331` | a stranger could onboard into another family as its parent (critical) | carried whole |
+| `0455` | `0332` | decided concierge runs stayed on Needs-you | backfill only; main's code already writes `state` |
+| `0456` | `0333` | two server-only functions were callable with the anon key | carried; main revoked them from PUBLIC only |
+| `0457` | `0334` | no auction could ever close | carried whole |
+| `0458` | `0335` | any account could link a stranger's login into its own family (SEC-025) | carried whole; nothing on main guarded `family_members.user_id` |
+| dropped | `0336` | a removed member and their old household still saw each other's profiles (PRIV-002) | main's `0426` (from #548) installs the identical policy, so it is not carried; its probe and test now hold `0426` |
+
+The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
+
+The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **deferred, not dropped**. Main records exactly this as an owner decision ("an adult can make themselves the family's Admin, or demote the parents": not changed without that answer). That entry now also notes that the escalation reaches `families_delete` and points at the ready fix.
+
+The branch's `0338` with its SEC-001 readers (family media private, via signed URLs) is **deferred** for the same reason. Main records the bucket half as the owner's choice between a same-origin media route and signed URLs, and this implements one of them. The SEC-001 entry now points at the ready implementation.
+
+PUSH-003 (retry a partly failed push only to whoever missed it) and EMAIL-002 (count each email event once) were **left to #548**, which carried both findings under the same IDs, and #548's work is now on main through #583:
+- main's `0440` ("a device is buzzed once per notification") keys receipts per **device**, strictly finer than the branch's per-recipient table, since it also re-sends correctly when one of a user's two devices missed.
+- main's `0441` ("an email event is counted once") is the branch's design, down to the `counter_applied_at` column.
+
+So neither is carried, and there is nothing left to re-apply from `417c5817` or `c5d8aad6`.
+
+**Found by the port itself** (on main, not on the branch):
+- The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
+- The page-boundary ratchet found two `invest_holdings` pagers ordered by `asset_id` alone.
+- The select-naming ratchet found a fourth unnamed `<select>` main had added to the marketing platform page.
+- SEC-023's ratchet found six more raw `error.message` returns in server actions.
+- Three main tests and two main probes were pinning the old behaviour, such as the raw database text as the family-facing message.
+- Harness fidelity (TEST-012): the bootstrap's `auth.uid()`/`auth.role()` stubs now read the JSON claims the way Supabase's do, and new functions get Supabase's default grants. That exposed four probe assumptions, all corrected in the probes.
+- Translating the approval card's expiry label would have broken main's expiry check, which compared that label to `'Expired'`. A German family's card would have kept Approve and Decline live on a request the server refuses. The same commit decides expiry from the timestamp, and the German render test is red with the old comparison restored (TEST-014: the test meant to catch this matched the Tailwind class `disabled:cursor-not-allowed` and could never fail).
+- The I18N-006 guard found seven admin sites and voice capture that main still formatted, or listened, in US English.
+- Measured on main's tree rather than copied from the branch: English sentence templates 111 -> 0, now a zero guard; the regex ratchet 2,790 -> 2,368.
+
+**Deploy safety.** Main deploys the app on merge, while no migration from `0318` on has reached production (F-001).
+- `0452`'s code read two columns only the migration creates, so it would have broken every marketplace read in production. `lib/marketplace/reserve-view.ts` now falls back to the pre-migration column on 42703 only, held by `tests/a-reserve-read-works-before-and-after-0452.test.ts`.
+- Every other ported change was checked for the same dependency.
+
+**Coordination.** Main moved while this was open: #583 (366 commits) landed #548's and #556's migration blocks as `0389`–`0391` and `0406`–`0443`, which took the numbers this port had used. Main was merged in with every conflict resolved hunk by hunk, keeping whichever side was the fuller fix and combining them where each carried something the other lacked (309 hunks in 142 files; the catalogues are the union of both sides, 875 keys both had added counted once). The port's thirteen surviving migrations moved as one block, in order, to `0446`–`0458`, above main's newest and the two numbers #583 keeps. Three were dropped because main now carries the same rule: `0393` is main's `0406`, `0395` is main's `0391`, and `0404` is main's `0426`.
+
+**Main merged in again (after #591–#600).** Main moved 46 commits while CI ran, carrying the page-audit fixes (#591, #594) and the media and cache releases (#592, #595, #599, #600), and no migrations, so `0446`–`0458` stay where they are. 111 files conflicted:
+- 61 were page titles: the port's translated `generateMetadata` against main's static title with the doubled brand removed. The port's side already has no brand and is translated, so it is kept. The two whose text ends in the brand ("Switch to Bubaly", "My Bubaly") go through main's `titleWithoutDoubledBrand`.
+- 32 were accessible names both sides had given the same controls. Main's page-specific keys are kept, so none of them is left unused; the port's `fieldName.*` keys stay in use at 78 other sites.
+- The rest were combined: main's own realtime channel (P-03), `role="switch"` and `suppressHydrationWarning`, with the port's translations and its stale-refresh guard.
+- The automatic merge had dropped three en-US keys that both sides had reworded (`actions.couldNotSaveThatPlace`, `couldNotDeleteThatPlace`, `couldNotUpdateThatGeofence`). They are restored with main's fuller wording in all seven catalogues.
+
+Verified after the merge: tsc clean, lint 0 errors / 15 warnings, 21,277 tests in 1,684 files pass in UTC and in America/Los_Angeles.
+
+**What the merge turned up.** Each is fixed in the merge commit and held by a test:
+- **The concierge approval race was open again** (DATA-018). Main's version applied a never-gated plan first and then compare-and-set the run to executed. A dismissal landing in between left real calendar events behind a run recorded as dismissed. The port's claim is restored inside main's structure: take the run (`pending` to `approved`) before applying anything, hand it back if applying throws or leaves kinds unapplied, and confirm the executed stamp and the release by reading back the rows. `tests/a-decided-run-leaves-the-queue.test.ts` races the two actions, and main's `tests/concierge-loop-does-not-claim-a-failed-plan.test.ts` now asserts the claim and the release.
+- The catalogue union had dropped `actions.couldNotApproveThatRun` as orphaned. The restored claim uses it, so it is back in all seven catalogues.
+- Two paged reads ended on a column that can tie: `app/api/ai/savings/route.ts` (transactions by date) and `lib/network/benchmarks-server.ts`. Both now end on `id` (DATA-015's ratchet).
+- Main's timezone guard still declared ten files the port had moved to family day keys, and the port's guard did not know main's `lib/time/zoned.ts` fallback. Both lists now describe the same three files.
+- Main's `family_allergies` RPC took `food.ts` and `shopping.ts` out of PRIV-001's reach baseline, so both entries came off.
+- The photo lightbox keeps `aria-modal`, which the shared dialog hook makes true. Main's newer rule licenses the attribute by that contract, not by component name. Main's older lightbox test and the component's comment still said otherwise; both now match the rule.
+- Eight ordering assertions written on bare `indexOf` now use `at()`, so a deleted statement fails them.
+
+**Main merged in again (through #609).** Main's #609 added `0444`, the same circle fix as the port's `0446`, found independently by the B6b form pass. The port's file is removed rather than renumbered, as `0393`, `0395` and `0404` were. Its analysis stays in `docs/PENDING_PROD_MIGRATIONS.md` under main's number, and the probes and guard that cited `0446` now cite `0444`. Twelve port migrations remain, `0447`–`0458`, and the next free number is `0459` (`0445` and `0446` stay unused).
+
+**Remaining.** Nothing on the branch is left to port. PR #586 (`claude/port-to-main-7q6vtf` into `main`) carries the result. Two items wait on the owner rather than on work: SEC-026 and SEC-001 are decisions main records as the owner's. PRODUCTION READY stays **NO**: nothing here changes F-001, and `0446`–`0458` join the migrations only a person applies to production.
+
 # Final Regression — 2026-09-20, branch `claude/roadmap-implementation-ld8bon`
 
 The section above is the Codex cycle's, pinned to its own frozen trees, and is
@@ -49382,11 +49752,13 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); 🔄 B6b claimed 2026-09-27 18:30 | 2026-09-27 17:30 |
-| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
+| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP (first pass); session_01DXw2nu25BjyRfA6Fg3YiMS (second pass) | ✅ done: first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px); second pass (a `/kid-login` PIN child and a teen, 354 signed-in routes each at 1280 and 390, in a household on no plan and then on Family+; P-19 to P-22 fixed, see "B7, second pass" below) | 2026-09-27 19:10 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
+| B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
+| B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | 🔄 claimed 2026-09-27 20:10 | — |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -49582,6 +49954,27 @@ locale on both sides; money through `fmtMoney`).
 client component and fails on a bare `toLocaleString()` /
 `toLocaleDateString()` / `toLocaleTimeString()` (red with the connect-grid
 line restored).
+*Dates, after review on #604:* the locale alone was not enough for a date or
+a time. `useFormat()` binds no zone, so the server (UTC) and a browser in
+Berlin or New York still drew different text for one timestamp ("0:30",
+"2:30", or the day before) and hydration failed. The four P-11 date and time
+displays (admin notifications, social sync time, review and redemption dates)
+now use `useHydrationSafeFormat()`: the server render and the browser's
+hydrating render both format in UTC, and the render right after hydration
+switches to the reader's zone (`useSyncExternalStore`, no
+`suppressHydrationWarning`). `tests/a-date-renders-the-same-on-the-server-and-at-hydration.test.ts`
+renders with React's server renderer in a process set to America/New_York:
+the hook draws the UTC text, the plain formatter (the control) the New York
+text; 3 of 5 cases fail with the hook removed.
+*Numbers in Italian, found by re-crawling the fixes:* the connect page still
+threw #418 in `it-IT` alone. CLDR gives Italian (and Spanish, Portuguese) a
+two-digit minimum before grouping, and the runtimes ship different data for
+it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
+`fmtNumber` and `fmtMoney` now pass `useGrouping: 'always'`, so both group
+every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
+(red without it). Re-crawled after the fix: food, planning, kitchen and the
+connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
+390 px; it-IT is re-checked on the next build.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
@@ -49621,6 +50014,86 @@ shrinkable span that may break (`[overflow-wrap:anywhere]`).
   `notFound()` for everyone but a super administrator, by design; a family
   parent sees the not-found page (with the #419 above).
 
+**B6b — every form submitted (session_01TRY21ZKsFrfB3qtoP972A4, 2026-09-27).**
+`scripts/page-audit.mjs --submit`, local stack on `a5ad3045`, signed in as a
+Family+ parent who is also a super admin (a child in the household, so "for
+whom" selects have a choice). Every form in `<main>`, and every form an "Add /
+New / Create …" button opens, was filled with valid values in its empty fields
+and submitted by its own button — never a delete, payment, send or publish
+button. 350 routes, 155 with forms: 144 submissions saved or answered as
+designed, 22 skipped by that rule, 10 reported "invalid" by the first run (a
+saved form resets, and its required fields then read `:invalid`; the tool now
+checks validity before the click), and 15 errors, of which 7 were the tool's
+(a covered button; it now falls back to `requestSubmit`) and the rest are
+below. Re-run on the affected routes after the fixes: all save.
+
+**P-13 · High · Creating a marketplace circle has never worked on Supabase.**
+`/marketplace/community` → Create answered "Could not create the circle."
+`marketplace_create_circle` (0176, then 0314) pins `search_path = public` and
+calls pgcrypto's `gen_random_bytes`; Supabase, hosted and local, installs
+pgcrypto in `extensions`, so the call raised 42883 `function
+gen_random_bytes(integer) does not exist`. CI's replay is plain Postgres, where
+0001's `create extension pgcrypto` lands in `public`, so the 0314 probe (400
+circles) passed there. Production at `0176` carries the same pinned path.
+Fix: `0444_a_circle_can_be_created_where_pgcrypto_lives.sql` re-creates the
+function with `search_path = public, extensions`, body unchanged. Probe
+`docs/audit/circle-create-where-pgcrypto-lives-check.sql` moves pgcrypto into
+`extensions` inside a rolled-back transaction (control: `gen_random_bytes`
+must then NOT resolve from `public`) and creates a circle: red on the old
+function with the production error, green after 0444. Every other function
+that calls a pgcrypto function was checked: none else pins a path without
+`extensions`. **Not live until the operator's 0177 step lets 0178+ apply.**
+
+**P-14 · Medium · Social settings offered "Set" to people who may not grant roles.**
+`/dashboard/social/settings` enabled the access controls on
+`manage_settings`; `grantAccessAction` requires `manage_access`, which only a
+social *owner* holds (0348). A parent is a social admin by default, so the
+button worked and the action threw — a 500 and the section's error page. The
+controls now follow `manage_access`, with "Only an owner can change who has
+access." (7 catalogues). 🔒 **Owner decision, recorded here:** no household
+member is a social owner by default (parents default to admin since 0348), so
+no family can grant a social role from the app until an owner row exists.
+
+**P-15 · Low · A recipe photo that is not a URL requested a page.** A photo
+URL of plain text rendered as `<img src="Audit 6">`, a request for
+`/dashboard/Audit%206` (404) on every render of the card and the detail view.
+Photos render only through `safeWebLink` (http/https), and both recipe URL
+fields are `type="url"`.
+
+**P-16 · Low · Two URL fields let through what their action refuses by
+throwing.** `/dashboard/social/media-library` ("Asset URLs must use http or
+https") and `/admin/marketing/video` ("Enter a valid YouTube or Vimeo URL")
+took free text, and the refusal landed on the error page. Both are
+`type="url"` with the pattern the action accepts (the video one: youtube.com,
+youtu.be, vimeo.com, including subdomains; checked in both browser regex
+modes).
+
+**P-17 · Low · An automation workflow could be submitted with no action.**
+`/admin/marketing/automation` → the action throws "Choose at least one
+automation action." The first action now starts ticked. Tests for P-14 to
+P-17: `tests/a-form-a-page-offers-can-be-submitted.test.ts` (all four red
+with the fixes reverted).
+
+**P-18 · Medium · The admin marketing console answered a refusal with its
+error page — fixed.** Its actions (`app/(app)/admin/marketing/**/actions.ts`,
+through `marketingActionFailure` in 20 files, and fifteen direct `throw`s)
+throw on an ordinary refusal — a name or slug already taken, a date before its
+start, a link that is not a link — and a plain `<form action>` turned that into
+the section error page with a reference number; in production Next omits the
+message, so the admin was not told what to change. Seen on
+`/admin/marketing/affiliates` and `/admin/marketing/landing-pages`. Next keeps
+an error's own `digest` and hands it to the boundary, so a refusal now carries
+one of five fixed codes in it (`lib/actions/refusal.ts`: `duplicate`,
+`invalid`, `notAllowed`, `inUse`, `notSaved`, read from the Postgres error code
+— never free text), and `components/app/section-error.tsx`, the boundary of 28
+sections, says "That wasn’t saved" and the reason in the reader's language
+(seven catalogues) with a "Back to the form" button. Every other error keeps
+the page it had. The sender failures in `push/actions.ts` stay plain errors:
+they are not the admin's input. Verified on a local production build: a
+duplicate affiliate now reads "Something with that name or address already
+exists. Choose another and try again.", and the button returns to the form.
+`tests/a-refused-action-says-what-to-change.test.ts`.
+
 ### Round 2 — the merged tree, after #588 and 339 other commits from main
 
 Re-crawled on `9c348703` (this branch merged with `main` at `19a24334`), local
@@ -49651,6 +50124,63 @@ teen should see `/dashboard/trust` and the wallet's activation page at all is a
 product question (both are read-only there, and every write behind them is
 refused by the manager checks recorded in the AUTHZ units); it is left for B6,
 which clicks the controls.
+
+### B7, second pass — a `/kid-login` session, and a household without Family+
+
+*session_01DXw2nu25BjyRfA6Fg3YiMS, claimed on #585 at 14:25Z, run 2026-09-27 17:30–19:10Z.* The first pass (above) used teen and child accounts that sign in with email, in a Family+ household. This pass closes the two gaps it named or implied:
+- a child who signs in the way children do, through `/kid-login` with a username and PIN;
+- a household on no plan, where the plan gate is live.
+
+**Setup.** A local stack from `main` plus #586 (all 0446–0458 migrations applied, Node 24.21, `next build && next start`). The household was seeded with `scripts/seed-personas.mjs`: two parents, a teen with an email login, and a managed child. The child's login was created through the parent's own **Family access → Create login** row, and that child then signed in at `/kid-login`. Id-based routes got seeded rows (a vacation, a contact, a home asset, a run, a listing, a store, a chore assignment, a child wallet).
+
+| Pass | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| Teen, household on no plan, every signed-in route, 1280 px | 354 | 5 | **P-21** (sync accounts page never settles); four sidebar `Failed to fetch` on a redirect (**P-07**, #585, now on main) |
+| Child via `/kid-login`, household on no plan, every signed-in route, 1280 px | 354 | 3 | **P-21**; two sidebar aborts (**P-07**) |
+| Teen and child, the 27 routes the plan gate had redirected, after the household got Family+ | 27 × 2 | 0 | all render in place (`/parent` is an alias of `/dashboard/family-operations`) |
+| Teen and child, every signed-in route, 390 px, on the build with P-19 to P-22 fixed and the household on Family+ | 354 × 2 | 0 | every route renders with no sideways scroll and no console error; `/dashboard/assistant` (and its alias) and `/dashboard/grocery` had no `<h1>` on this build, which predates **P-06** (#585, now on main), and every other route had exactly one |
+
+Where the teen and the child were sent:
+- all 81 `/admin` routes and `/auth/step-up` go to `/dashboard`, correctly;
+- `/dashboard/family-access` goes to `/home`, correctly;
+- with no plan, 25 (teen) and 26 (child) routes go to the plan gate, which is **P-19**.
+
+Every other route renders the member's view.
+
+**P-19 · Medium · The plan gate landed every family on their balances, not on the plan.** `requirePlanLevel` and `requireFeature` send a family below the needed plan to `/dashboard/billing?upgrade=1&need=N`, and `BillingModule` reads both parameters: it highlights the plan that unlocks the feature and tells anyone but a parent to ask one. But `/dashboard/billing` renders `BillingModule` only for `?view=manage`, which the gate never sent. So Missions, Rewards, the Home hub, Sports, the weekly briefing and the rest landed a Free or Basic family on the Finances dashboard, with balances, "Add Transaction" and "Link Account", and no word about why. It was the same for a parent. Pass L's account of the gate ("a billing upsell") described a screen that was never shown.
+
+Fixed: the page shows the plan view for `?upgrade=1` and for the demo's `?checkout=…`, and the plan card renders first for those. Checked on a local build:
+- a parent lands on "Family+ unlocks the feature you tapped — pick a billing period below";
+- a teen lands on the card ending "Contact your family admin to manage billing."
+
+`tests/a-plan-gate-lands-on-the-plan.test.ts` evaluates the page's own routing condition. It fails 3 of 4 on the previous code.
+
+**P-20 · Low · The plan card ticked features the plan does not include.** Under the subscription card, one fixed English list rendered for every plan. A Free family whose card said "The default family organizer for up to 5 members" saw "Unlimited family members", "All modules" and "Priority support" ticked beside it. Fixed: the grid shows the current tier's own features, the same list the plan picker uses, and nothing on Free. Held by the same test file.
+
+**P-21 · Medium · Opening the sync accounts page started an OAuth flow.** `/dashboard/sync/accounts/google` never settled for the teen or the child. Its "Connect Google" (and "Connect Microsoft") button was a Next `<Link>` to `/api/sync/google/auth`, a route handler that:
+- mints an OAuth state and sets its cookie;
+- clears the calendar-onboarding continuation cookie;
+- redirects to the provider.
+
+`<Link>` prefetches what is on screen, so viewing the page did all of that, and a click went through an RSC fetch that fails cross-origin before falling back to a full navigation. The calendar module already links the same starts with a plain `<a>`.
+
+Fixed with a plain `<a>`. On a local build the page settles and makes no OAuth request on view. `tests/a-link-never-prefetches-a-route-handler.test.ts` derives every route handler's path from `app/**/route.ts` and fails any `<Link>` whose literal `href` is one; its sync-page check fails on the previous code.
+
+**P-22 · Low · The child-login controls were unnamed or English.**
+- **`/dashboard/family-access`, "Create login" row:** it renders only after its button is pressed, so no render crawl reached it. The username and PIN inputs were named only by English placeholders ("username", "PIN"), and the confirm button held nothing but a check-mark icon, so a screen reader announced "button" for the step that creates a child's login.
+- **The reset row:** its "Save" was a literal, and the button lost its name while the spinner replaced it.
+- **`/kid-login`:** the show/hide PIN control said "Show PIN" in English in every household.
+
+Fixed: every input and button in both rows is named from the catalogue. The new keys reuse each locale's existing wording for username, PIN, save and show/hide PIN. On a local build `/kid-login` in German reads "PIN anzeigen", and the reset row reads "New PIN for Maya Rivera" / "Save Maya Rivera's new PIN". `tests/a-kid-login-control-is-named-in-the-familys-language.test.ts` fails 3 of 5 on the previous code.
+
+**Seen, and already the owner's call (PROD-002).** A child's `/kid-login` session opens Tax Vault with every row, and the database lets that session edit and delete them too. `tax_documents` is `FOR ALL is_family_member`, and `0391`'s step-up guard binds only managers (`… or not can_manage_family`). So a parent must present a code to read tax documents that their ten-year-old reads without one.
+
+PROD-002 records `tax_documents` among the surfaces whose member access is the owner's decision. Nothing is changed here; this adds the measurement that a PIN-only child session reaches it.
+
+The neighbouring tables hold:
+- `household_info` keeps its sensitive rows (the alarm code) manager-only;
+- `family_insurance_policies` is member-readable and manager-writable;
+- stored passwords (`family_credentials`) are manager-only, and the child's Passwords page shows none.
 
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 

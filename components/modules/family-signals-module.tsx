@@ -30,12 +30,12 @@ export interface SignalView {
   score: number; evidence: Record<string, unknown>; status: string; lastSeenAt: string;
 }
 
-const KIND_META: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; accent: string }> = {
-  ignored_reminder: { icon: AlarmClock, label: 'Ignored reminder', accent: 'text-rose-400 bg-rose-500/10' },
-  stress_window: { icon: Gauge, label: 'Stress window', accent: 'text-amber-400 bg-amber-500/10' },
-  chore_conflict: { icon: Repeat2, label: 'Chore friction', accent: 'text-orange-400 bg-orange-500/10' },
-  routine_adherence: { icon: ListChecks, label: 'Routine slipping', accent: 'text-violet-400 bg-violet-500/10' },
-  budget_drift: { icon: Wallet, label: 'Over budget', accent: 'text-emerald-400 bg-emerald-500/10' },
+const KIND_META: Record<string, { icon: React.ComponentType<{ className?: string }>; labelKey: string; accent: string }> = {
+  ignored_reminder: { icon: AlarmClock, labelKey: 'familySignalsModule.kind.ignoredReminder', accent: 'text-rose-400 bg-rose-500/10' },
+  stress_window: { icon: Gauge, labelKey: 'familySignalsModule.kind.stressWindow', accent: 'text-amber-400 bg-amber-500/10' },
+  chore_conflict: { icon: Repeat2, labelKey: 'familySignalsModule.kind.choreFriction', accent: 'text-orange-400 bg-orange-500/10' },
+  routine_adherence: { icon: ListChecks, labelKey: 'familySignalsModule.kind.routineSlipping', accent: 'text-violet-400 bg-violet-500/10' },
+  budget_drift: { icon: Wallet, labelKey: 'familySignalsModule.kind.overBudget', accent: 'text-emerald-400 bg-emerald-500/10' },
 };
 
 function evidenceChips(kind: string, ev: Record<string, unknown>, t: Translate, locale: LocaleCode): string[] {
@@ -106,12 +106,12 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
             const kindCounts = new Map<string, number>();
             for (const s of active) kindCounts.set(s.kind, (kindCounts.get(s.kind) ?? 0) + 1);
             const top = [...kindCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-            const topLabel = top ? (KIND_META[top[0]]?.label ?? 'Pattern') : '—';
+            const topLabel = top ? t(KIND_META[top[0]]?.labelKey ?? 'familySignalsModule.kind.pattern') : '—';
             return [
-              { label: 'Active patterns', value: active.length, icon: '🧠', small: false },
-              { label: 'Avg confidence', value: avg, icon: '🎯', small: false },
-              { label: 'Most common', value: topLabel, icon: '🔁', small: true },
-              { label: 'Handled', value: hidden.length, icon: '✅', small: false },
+              { label: t('familySignalsModule.stat.activePatterns'), value: active.length, icon: '🧠', small: false },
+              { label: t('familySignalsModule.stat.avgConfidence'), value: avg, icon: '🎯', small: false },
+              { label: t('familySignalsModule.stat.mostCommon'), value: topLabel, icon: '🔁', small: true },
+              { label: t('familySignalsModule.stat.handled'), value: hidden.length, icon: '✅', small: false },
             ].map(s => (
               <div key={s.label} className="stat-card">
                 <span className="text-2xl">{s.icon}</span>
@@ -136,7 +136,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
       ) : (
         <div className="space-y-3">
           {active.map((s) => {
-            const meta = KIND_META[s.kind] ?? { icon: Brain, label: 'Pattern', accent: 'text-brand-text bg-brand/10' };
+            const meta = KIND_META[s.kind] ?? { icon: Brain, labelKey: 'familySignalsModule.kind.pattern', accent: 'text-brand-text bg-brand/10' };
             const Icon = meta.icon;
             const chips = evidenceChips(s.kind, s.evidence, t, locale.code);
             return (
@@ -145,7 +145,7 @@ export function FamilySignalsModule({ active, hidden }: { active: SignalView[]; 
                   <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', meta.accent)}><Icon className="h-5 w-5" /></div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">{meta.label}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">{t(meta.labelKey)}</span>
                       <span className="rounded-full bg-elevated px-1.5 py-0.5 text-[10px] font-bold text-fg/70">{s.score}</span>
                     </div>
                     <p className="mt-0.5 text-sm font-semibold">{s.title}</p>

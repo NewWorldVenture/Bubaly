@@ -39,7 +39,7 @@ export function AIEngineForm({ view }: { view: AIConfigView }) {
   return (
     <form action={onSubmit} className="space-y-5">
       <div>
-        <label className="mb-2 block text-sm font-semibold">{t('adminAiAiEngineForm.aiEngine')}</label>
+        <p className="mb-2 block text-sm font-semibold">{t('adminAiAiEngineForm.aiEngine')}</p>
         <div className="rounded-2xl border border-brand bg-brand/10 p-4 text-left">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand-text" />

@@ -19,7 +19,7 @@ import {
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 
 const ICONS: Record<string, typeof Bell> = {
   feedback_new: MessageSquare,
@@ -44,7 +44,7 @@ function timeAgo(iso: string, fmtDate: (v: string) => string): string {
 
 export function AdminNotificationsList({ notifications }: { notifications: AdminNotificationRow[] }) {
   const t = useTranslations();
-  const { fmtDate } = useFormat();
+  const { fmtDate } = useHydrationSafeFormat();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<'all' | string>('all');

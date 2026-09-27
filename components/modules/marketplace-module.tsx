@@ -30,8 +30,14 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useConfirm } from '@/components/ui/confirm';
+import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 
-type Listing = Tables<'marketplace_listings'>;
+// SEC-016: `reserve_cents` and `highest_max_cents` are not client-selectable
+// (0452), so this module names its columns — a `*` read now fails with 42501.
+type Listing = Omit<Tables<'marketplace_listings'>, 'reserve_cents' | 'highest_max_cents'>;
+// A literal, not a joined array: supabase-js types the result by parsing this
+// string, and a computed one reads as GenericStringError.
+const LISTING_COLUMNS = `id, family_id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, claimed_by, claimed_at, created_by, created_at, updated_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_member_id, highest_bidder_family_id, anti_snipe_minutes, auction_closed_at, ${RESERVE_VIEW_COLUMNS}`;
 type Offer = Tables<'marketplace_offers'>;
 
 const KIND_ICON: Record<ListingKind, typeof Store> = {
@@ -87,7 +93,8 @@ export function MarketplaceModule({
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('marketplace_listings').select('*').eq('family_id', familyId),
+    // Works whether or not 0452 has reached this database (lib/marketplace/reserve-view.ts).
+    fetcher: (sb) => readWithReserveView<Listing[]>(LISTING_COLUMNS, (columns) => sb.from('marketplace_listings').select(columns).eq('family_id', familyId)),
   });
   const { data: offers, error: offersError } = useRealtimeQuery<Offer>({
     table: 'marketplace_offers', familyId, deps: [familyId],
@@ -228,7 +235,7 @@ export function MarketplaceModule({
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`Handed off to ${memberName(offer.member_id)}`);
+    success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
     setOffersFor(null);
   }
 
@@ -309,7 +316,7 @@ export function MarketplaceModule({
               return (
                 <div key={l.id} className={cn('flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/50',
                   l.status === 'claimed' && 'opacity-80')}>
-                  <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={`View ${l.title}`}>
+                  <Link href={`/marketplace/item/${l.id}`} className="group block" aria-label={t('itemAction.view', { name: l.title })}>
                   <ListingImage
                     src={l.photo_url}
                     alt={l.title}
@@ -459,7 +466,7 @@ export function MarketplaceModule({
       </Modal>
 
       {/* Review offers (owner) */}
-      <Modal open={!!offersFor} onClose={() => setOffersFor(null)} title={offersFor ? `Offers on "${offersFor.title}"` : 'Offers'}>
+      <Modal open={!!offersFor} onClose={() => setOffersFor(null)} title={offersFor ? t('marketplace.offersOn', { title: offersFor.title }) : t('marketplace.offersTitle')}>
         {dialogOffers.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('marketplace.noOpenOffersRightNow')}</p>
         ) : (

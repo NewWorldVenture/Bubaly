@@ -77,6 +77,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/i18n/server', () => ({
   getTranslations: async () => (key: string) => SOURCE_MESSAGES[key] ?? key,
+  getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
 }));
 
 // The strategy tiles have their own coverage (strategy-metric-tiles.test.ts).

@@ -31,7 +31,13 @@ type Box = Tables<'move_boxes'>;
 
 const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const fmtLongIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?.label ?? s;
+// Move statuses render from the catalogue (I18N-002); MOVE_STATUSES in lib/
+// stays the English source for non-screen uses.
+const MOVE_STATUS_KEYS: Record<MoveStatus, string> = {
+  planning: 'moving.statusPlanning', packing: 'moving.statusPacking', moving_day: 'moving.statusMovingDay',
+  settling: 'moving.statusSettling', done: 'moving.statusDone', cancelled: 'moving.statusCancelled',
+};
+const statusLabel = (tr: (key: string) => string, s: MoveStatus) => (MOVE_STATUS_KEYS[s] ? tr(MOVE_STATUS_KEYS[s]) : s);
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
 export function MovingModule() {
@@ -108,7 +114,7 @@ export function MovingWorkspace() {
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
-    success(`${plan.length} task${plan.length === 1 ? '' : 's'} added to the timeline`);
+    success(plan.length === 1 ? tr('moving.taskAddedToTimelineOne', { count: plan.length }) : tr('moving.tasksAddedToTimelineMany', { count: plan.length }));
   }
 
   async function setTaskStatus(t: Task, status: Task['status']) {
@@ -149,7 +155,7 @@ export function MovingWorkspace() {
     const { data: updated3, error } = await createClient().from('moves').update({ status }).eq('id', move.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(`Move marked ${statusLabel(status).toLowerCase()}`);
+    success(tr('moving.moveStatusIs', { status: statusLabel(tr, status) }));
   }
 
   async function deleteMove(m: Move) {
@@ -187,10 +193,10 @@ export function MovingWorkspace() {
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {t.status === 'todo' && <button onClick={() => setTaskStatus(t, 'doing')} aria-label={tr('moving.markInProgress')} title={tr('moving.inProgress')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ChevronRight className="h-4 w-4" /></button>}
-          {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={`Skip ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
-          {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={`Restore ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
-          <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={`Edit ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => deleteTask(t)} aria-label={`Delete ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+          {(t.status === 'todo' || t.status === 'doing') && <button onClick={() => setTaskStatus(t, 'skipped')} aria-label={tr('itemAction.skip', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>}
+          {t.status === 'skipped' && <button onClick={() => setTaskStatus(t, 'todo')} aria-label={tr('itemAction.restore', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><RotateCcw className="h-4 w-4" /></button>}
+          <button onClick={() => setTaskForm({ open: true, task: t })} aria-label={tr('itemAction.edit', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+          <button onClick={() => deleteTask(t)} aria-label={tr('itemAction.delete', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
         </div>
       </li>
     );
@@ -207,8 +213,8 @@ export function MovingWorkspace() {
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {b.status !== 'unpacked' && <Button size="sm" variant="secondary" onClick={() => advanceBox(b)}>{boxStatusLabel(BOX_ORDER[BOX_ORDER.indexOf(b.status) + 1])}</Button>}
-          <button onClick={() => setBoxForm({ open: true, box: b })} aria-label={`Edit box ${b.box_number}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-          <button onClick={() => deleteBox(b)} aria-label={`Delete box ${b.box_number}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => setBoxForm({ open: true, box: b })} aria-label={tr('moving.editBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+          <button onClick={() => deleteBox(b)} aria-label={tr('moving.deleteBoxN', { number: b.box_number })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
     </li>
@@ -250,9 +256,9 @@ export function MovingWorkspace() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-semibold">{move.title}</h2>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(move.status)}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">{statusLabel(tr, move.status)}</span>
                   {suggested && suggested !== move.status && move.status !== 'done' && move.status !== 'cancelled' && (
-                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(suggested).toLowerCase()} →</button>
+                    <button onClick={() => setMoveStatus(suggested)} className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs text-brand-text hover:bg-brand/20">{tr('moving.mark')} {statusLabel(tr, suggested)} →</button>
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted"><CalendarClock className="mr-1 inline h-3.5 w-3.5" />{fmtLong(move.move_date)} · {MOVE_KINDS.find((k) => k.value === move.move_kind)?.label}</p>
@@ -309,7 +315,7 @@ export function MovingWorkspace() {
             ))}
             <div className="ml-auto flex items-center gap-2 pb-1">
               {tab === 'timeline' && <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="accent-brand" /> {tr('moving.showDone')}</label>}
-              {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? `Add the ${plan.length}-step checklist` : 'Checklist complete'}</Button>}
+              {tab === 'timeline' && <Button size="sm" onClick={generateTasks} loading={planning} disabled={!plan.length}><Wand2 className="h-3.5 w-3.5" /> {plan.length ? tr('moving.addNStepChecklist', { n: plan.length }) : tr('moving.checklistComplete')}</Button>}
             </div>
           </div>
 
@@ -434,7 +440,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.kindOfMove')}>{(id) => <Select id={id} name="move_kind" defaultValue={move?.move_kind ?? 'local'}>{MOVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</Select>}</Field>
-          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
+          <Field label={tr('moving.status')}>{(id) => <Select id={id} name="status" defaultValue={move?.status ?? 'planning'}>{MOVE_STATUSES.map((s) => <option key={s.value} value={s.value}>{statusLabel(tr, s.value)}</option>)}</Select>}</Field>
         </div>
         <div className="flex flex-wrap gap-2">
           <Toggle label={tr('moving.kidsInSchoolChildcare')} value={kids} onChange={setKids} />
@@ -499,7 +505,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
         <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.category')}>{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
-          <Field label="Due" hint={`Move day is ${fmtDate(move.move_date)}`}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('moving.due')} hint={tr('moving.moveDayIs', { date: fmtDate(move.move_date) })}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> {tr('moving.followTheMoveDate')}</label>
         <p className="text-xs text-muted">{tr('moving.fixedDatesIncludingOlderTasks')}</p>
@@ -539,13 +545,13 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
       ? await supabase.from('move_boxes').update(payload).eq('id', box.id).select('id')
       : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload }).select('id');
     setLoading(false);
-    if (error) return toastError(error.code === '23505' ? `Box #${boxNumber} already exists for this move` : describeDbError(error));
+    if (error) return toastError(error.code === '23505' ? tr('moving.boxExists', { n: boxNumber }) : describeDbError(error));
     if (wroteNoRows(savedBox)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
   return (
-    <Modal open title={box ? `Edit box #${box.box_number}` : `Box #${nextNumber}`} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
+    <Modal open title={box ? tr('moving.editBox', { n: box.box_number }) : tr('moving.boxN', { n: nextNumber })} description={tr('movingModule.writeTheNumberAndDestination')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-[6rem_1fr] gap-3">
           <Field label={tr('moving.number')} required>{(id) => <Input id={id} name="box_number" type="number" min={1} defaultValue={box?.box_number ?? nextNumber} />}</Field>

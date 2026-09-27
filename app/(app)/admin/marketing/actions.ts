@@ -7,6 +7,7 @@ import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from
 import { archiveLegacyLandingOnPlatform, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
+import { refuseInput } from '@/lib/actions/refusal';
 
 function str(v: FormDataEntryValue | null): string {
   return (v == null ? '' : String(v)).trim();
@@ -30,7 +31,7 @@ function revalidatePublicMarketingPath(path: string | null | undefined) {
 }
 
 function requireChoice<T extends string>(value: string, choices: readonly T[], label: string): T {
-  if (!(choices as readonly string[]).includes(value)) throw new Error(`Invalid ${label}.`);
+  if (!(choices as readonly string[]).includes(value)) refuseInput(`Invalid ${label}.`);
   return value as T;
 }
 
@@ -38,7 +39,7 @@ function parseDollars(value: FormDataEntryValue | null, label: string): number {
   const raw = str(value);
   if (!raw) return 0;
   const dollars = Number(raw);
-  if (!Number.isFinite(dollars) || dollars < 0) throw new Error(`${label} must be a non-negative number.`);
+  if (!Number.isFinite(dollars) || dollars < 0) refuseInput(`${label} must be a non-negative number.`);
   return Math.round(dollars * 100);
 }
 
@@ -46,7 +47,7 @@ function parseDate(value: FormDataEntryValue | null, label: string): string | nu
   const raw = str(value);
   if (!raw) return null;
   const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) throw new Error(`${label} must be a valid date.`);
+  if (Number.isNaN(parsed.getTime())) refuseInput(`${label} must be a valid date.`);
   return parsed.toISOString();
 }
 
@@ -60,9 +61,9 @@ function trackedLink(value: string | null, source: string, campaign: string, med
   try {
     url = new URL(value, 'https://www.bubaly.com');
   } catch {
-    throw new Error('Link must be a valid URL.');
+    refuseInput('Link must be a valid URL.');
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Link must use http or https.');
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') refuseInput('Link must use http or https.');
   url.searchParams.set('utm_source', source);
   url.searchParams.set('utm_medium', medium);
   url.searchParams.set('utm_campaign', campaign);
@@ -135,7 +136,7 @@ export async function createCampaign(formData: FormData) {
   const startsAt = parseDate(formData.get('starts_at'), 'Start date');
   const endsAt = parseDate(formData.get('ends_at'), 'End date');
   if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
-    throw new Error('End date must be on or after the start date.');
+    refuseInput('End date must be on or after the start date.');
   }
 
   const { data, error } = await supabase.from('marketing_campaigns').insert({
@@ -405,7 +406,7 @@ export async function createSmsDraft(formData: FormData) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const message = str(formData.get('message'));
   if (!message) return;
-  if (message.length > 320) throw new Error('SMS messages must be 320 characters or fewer.');
+  if (message.length > 320) refuseInput('SMS messages must be 320 characters or fewer.');
   const { data, error } = await supabase.from('marketing_sms_campaigns').insert({
     message, segment_id: str(formData.get('segment_id')) || null, status: 'draft', created_by: actorId,
   }).select('id').single();
@@ -420,7 +421,7 @@ export async function createSocialPost(formData: FormData) {
   if (!content) return;
   const platform = requireChoice(str(formData.get('platform')) || 'instagram', SOCIAL_PLATFORMS, 'social platform');
   const scheduledAt = parseDate(formData.get('scheduled_at'), 'Schedule time');
-  if (scheduledAt && new Date(scheduledAt).getTime() <= Date.now()) throw new Error('Schedule time must be in the future.');
+  if (scheduledAt && new Date(scheduledAt).getTime() <= Date.now()) refuseInput('Schedule time must be in the future.');
   const campaignKey = slug(content);
   const link = trackedLink(str(formData.get('link')) || null, platform, campaignKey, 'social');
   const { data, error } = await supabase.from('marketing_social_posts').insert({
@@ -458,8 +459,8 @@ export async function createAutomation(formData: FormData) {
   if (!name) return;
   const trigger = requireChoice(str(formData.get('trigger')) || 'customer_created', AUTOMATION_TRIGGERS, 'automation trigger');
   const actions = formData.getAll('actions').map(String);
-  if (actions.length === 0) throw new Error('Choose at least one automation action.');
-  if (actions.some((action) => !(AUTOMATION_ACTIONS as readonly string[]).includes(action))) throw new Error('Invalid automation action.');
+  if (actions.length === 0) refuseInput('Choose at least one automation action.');
+  if (actions.some((action) => !(AUTOMATION_ACTIONS as readonly string[]).includes(action))) refuseInput('Invalid automation action.');
   const { data, error } = await supabase.from('marketing_automation_workflows').insert({
     name, trigger,
     steps: actions.map((a, i) => ({ order: i + 1, action: a })) as never,

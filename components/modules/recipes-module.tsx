@@ -44,24 +44,31 @@ function scaleQuantity(quantity: string | null | undefined, multiplier: number):
 interface InstructionStep { step: number; text: string; }
 
 const CATEGORIES = [
-  { id: 'breakfast', label: 'Breakfast', emoji: '🥞', color: 'text-warning' },
-  { id: 'lunch', label: 'Lunch', emoji: '🥗', color: 'text-success' },
-  { id: 'dinner', label: 'Dinner', emoji: '🍝', color: 'text-accent' },
-  { id: 'snack', label: 'Snack', emoji: '🍎', color: 'text-green-400' },
-  { id: 'dessert', label: 'Dessert', emoji: '🍰', color: 'text-pink-400' },
-  { id: 'drink', label: 'Drink', emoji: '🧃', color: 'text-blue-400' },
-  { id: 'side', label: 'Side', emoji: '🥦', color: 'text-teal-400' },
-  { id: 'appetizer', label: 'Appetizer', emoji: '🧆', color: 'text-purple-400' },
-  { id: 'other', label: 'Other', emoji: '🍽️', color: 'text-muted' },
+  { id: 'breakfast', labelKey: 'recipesModule.category.breakfast', emoji: '🥞', color: 'text-warning' },
+  { id: 'lunch', labelKey: 'recipesModule.category.lunch', emoji: '🥗', color: 'text-success' },
+  { id: 'dinner', labelKey: 'recipesModule.category.dinner', emoji: '🍝', color: 'text-accent' },
+  { id: 'snack', labelKey: 'recipesModule.category.snack', emoji: '🍎', color: 'text-green-400' },
+  { id: 'dessert', labelKey: 'recipesModule.category.dessert', emoji: '🍰', color: 'text-pink-400' },
+  { id: 'drink', labelKey: 'recipesModule.category.drink', emoji: '🧃', color: 'text-blue-400' },
+  { id: 'side', labelKey: 'recipesModule.category.side', emoji: '🥦', color: 'text-teal-400' },
+  { id: 'appetizer', labelKey: 'recipesModule.category.appetizer', emoji: '🧆', color: 'text-purple-400' },
+  { id: 'other', labelKey: 'recipesModule.category.other', emoji: '🍽️', color: 'text-muted' },
 ] as const;
 
 const DIFFICULTIES = [
-  { id: 'easy', label: 'Easy', color: 'text-success', badge: 'success' },
-  { id: 'medium', label: 'Medium', color: 'text-warning', badge: 'warning' },
-  { id: 'hard', label: 'Hard', color: 'text-danger', badge: 'danger' },
+  { id: 'easy', labelKey: 'recipesModule.difficulty.easy', color: 'text-success', badge: 'success' },
+  { id: 'medium', labelKey: 'recipesModule.difficulty.medium', color: 'text-warning', badge: 'warning' },
+  { id: 'hard', labelKey: 'recipesModule.difficulty.hard', color: 'text-danger', badge: 'danger' },
 ] as const;
 
+// Stored on the recipe as the English word; shown in the reader's language.
 const ALLERGY_FLAGS = ['Gluten-free', 'Dairy-free', 'Nut-free', 'Vegan', 'Vegetarian', 'Egg-free', 'Soy-free', 'Low-carb'];
+const FLAG_KEY: Record<string, string> = {
+  'Gluten-free': 'glutenFree', 'Dairy-free': 'dairyFree', 'Nut-free': 'nutFree', Vegan: 'vegan',
+  Vegetarian: 'vegetarian', 'Egg-free': 'eggFree', 'Soy-free': 'soyFree', 'Low-carb': 'lowCarb',
+};
+const flagLabel = (tr: (key: string) => string, flag: string) => FLAG_KEY[flag] ? tr(`recipesModule.flag.${FLAG_KEY[flag]}`) : flag;
+const aiActionKey = (id: string) => `recipesModule.aiAction.${id.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())}`;
 
 function categoryMeta(id: string) { return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1]; }
 function difficultyMeta(id: string) { return DIFFICULTIES.find((d) => d.id === id) ?? DIFFICULTIES[1]; }
@@ -275,10 +282,10 @@ export function RecipesModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Total Recipes', value: stats.total, icon: '📖', color: 'text-brand-text' },
-          { label: 'Favorites', value: stats.favorites, icon: '⭐', color: 'text-warning' },
-          { label: 'Times Cooked', value: stats.timesCooked, icon: '🍳', color: 'text-accent' },
-          { label: 'Categories', value: [...new Set(recipes.map((r) => r.category))].length, icon: '🗂️', color: 'text-muted' },
+          { label: tr('recipesModule.stat.totalRecipes'), value: stats.total, icon: '📖', color: 'text-brand-text' },
+          { label: tr('recipesModule.stat.favorites'), value: stats.favorites, icon: '⭐', color: 'text-warning' },
+          { label: tr('recipesModule.stat.timesCooked'), value: stats.timesCooked, icon: '🍳', color: 'text-accent' },
+          { label: tr('recipesModule.stat.categories'), value: [...new Set(recipes.map((r) => r.category))].length, icon: '🗂️', color: 'text-muted' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -303,7 +310,7 @@ export function RecipesModule() {
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label={tr('recipes.category')}
           className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
           <option value="all">{tr('recipes.allCategories')}</option>
-          {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+          {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {tr(c.labelKey)}</option>)}
         </select>
       </div>
 
@@ -327,16 +334,16 @@ export function RecipesModule() {
                 onKeyDown={(e) => openOnKey(e, () => setViewing(recipe))}>
                 {/* Photo / placeholder */}
                 <div className="relative aspect-video overflow-hidden rounded-t-2xl bg-gradient-to-br from-elevated to-surface">
-                  {recipe.photo_url ? (
+                  {safeWebLink(recipe.photo_url) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={recipe.photo_url} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    <img src={safeWebLink(recipe.photo_url) ?? undefined} alt={recipe.name} className="h-full w-full object-cover transition group-hover:scale-105" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-5xl opacity-30">{cat.emoji}</div>
                   )}
                   {/* Badges */}
                   <div className="absolute left-2 top-2 flex gap-1.5">
                     <span className="rounded-lg bg-black/50 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
-                      {cat.emoji} {cat.label}
+                      {cat.emoji} {tr(cat.labelKey)}
                     </span>
                     {recipe.ai_generated && (
                       <span className="rounded-lg bg-brand/80 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
@@ -345,7 +352,7 @@ export function RecipesModule() {
                     )}
                   </div>
                   {/* Favorite */}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(recipe.is_favorite)} onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60">
                     <Heart className={cn('h-4 w-4', recipe.is_favorite && 'fill-red-400 text-red-400')} />
                   </button>
@@ -366,7 +373,7 @@ export function RecipesModule() {
                       <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {totalTime} min</span>
                     )}
                     <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {recipe.servings}</span>
-                    <Badge tone={diff.badge as 'neutral'}>{diff.label}</Badge>
+                    <Badge tone={diff.badge as 'neutral'}>{tr(diff.labelKey)}</Badge>
                     {recipe.times_made > 0 && (
                       <span className="ml-auto text-success">{recipe.times_made}{tr('recipes.made')}</span>
                     )}
@@ -384,9 +391,9 @@ export function RecipesModule() {
           <div className="max-h-[80vh] overflow-y-auto -m-2 p-2">
             {/* Header */}
             <div className="relative mb-5">
-              {viewing.photo_url && (
+              {safeWebLink(viewing.photo_url) && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={viewing.photo_url} alt={viewing.name} className="mb-4 h-48 w-full rounded-2xl object-cover" />
+                <img src={safeWebLink(viewing.photo_url) ?? undefined} alt={viewing.name} className="mb-4 h-48 w-full rounded-2xl object-cover" />
               )}
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -394,7 +401,7 @@ export function RecipesModule() {
                   {viewing.description && <p className="mt-1 text-sm text-muted">{viewing.description}</p>}
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => toggleFavorite(viewing)}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(viewing.is_favorite)} onClick={() => toggleFavorite(viewing)}
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
@@ -414,7 +421,7 @@ export function RecipesModule() {
             <div className="mb-5 flex flex-wrap gap-3">
               {(() => { const cat = categoryMeta(viewing.category); return (
                 <span className="flex items-center gap-1 rounded-lg bg-elevated px-3 py-1.5 text-sm">
-                  {cat.emoji} {cat.label}
+                  {cat.emoji} {tr(cat.labelKey)}
                 </span>
               ); })()}
               {viewing.prep_time_mins && (
@@ -428,7 +435,7 @@ export function RecipesModule() {
                 </span>
               )}
               {viewing.cuisine && <span className="rounded-lg bg-elevated px-3 py-1.5 text-sm">{viewing.cuisine}</span>}
-              {viewing.allergy_flags?.map((f) => <Badge key={f} tone="neutral">{f}</Badge>)}
+              {viewing.allergy_flags?.map((f) => <Badge key={f} tone="neutral">{flagLabel(tr, f)}</Badge>)}
             </div>
 
             {/* Servings adjuster */}
@@ -457,7 +464,7 @@ export function RecipesModule() {
                     disabled={aiBusy !== null}
                     className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium transition hover:border-brand/50 hover:bg-elevated disabled:opacity-50"
                   >
-                    {aiBusy === a.id ? 'Working…' : a.label}
+                    {aiBusy === a.id ? tr('recipesModule.working') : tr(aiActionKey(a.id))}
                   </button>
                 ))}
               </div>
@@ -669,7 +676,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => (
               <select id={id} name="category" defaultValue={recipe?.category ?? 'dinner'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+                {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {tr(c.labelKey)}</option>)}
               </select>
             )}
           </Field>
@@ -677,7 +684,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => (
               <select id={id} name="difficulty" defaultValue={recipe?.difficulty ?? 'medium'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                {DIFFICULTIES.map((d) => <option key={d.id} value={d.id}>{tr(d.labelKey)}</option>)}
               </select>
             )}
           </Field>
@@ -700,7 +707,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => <Input id={id} name="cuisine" defaultValue={recipe?.cuisine ?? ''} placeholder={tr('recipes.italianMexicanAmerican')} />}
           </Field>
           <Field label={tr('recipes.photoUrl')}>
-            {(id) => <Input id={id} name="photo_url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
+            {(id) => <Input id={id} name="photo_url" type="url" defaultValue={recipe?.photo_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 
@@ -735,7 +742,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                   {step.step}
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
-                  placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
+                  placeholder={tr('recipes.stepPlaceholder', { n: step.step })} className="flex-1 min-h-[60px]" />
                 <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
@@ -751,7 +758,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 className={cn('rounded-lg border px-2.5 py-1 text-xs font-medium transition',
                   selectedFlags.includes(f) ? 'border-success/60 bg-success/10 text-success' : 'border-border hover:bg-elevated')}>
                 {selectedFlags.includes(f) && <Check className="mr-1 inline h-3 w-3" />}
-                {f}
+                {flagLabel(tr, f)}
               </button>
             ))}
           </div>
@@ -762,7 +769,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
             {(id) => <Textarea id={id} name="notes" defaultValue={recipe?.notes ?? ''} placeholder={tr('recipesModule.chefSTipsSubstitutions')} className="min-h-[60px]" />}
           </Field>
           <Field label={tr('recipes.sourceUrl')}>
-            {(id) => <Input id={id} name="source_url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
+            {(id) => <Input id={id} name="source_url" type="url" defaultValue={recipe?.source_url ?? ''} placeholder="https://…" />}
           </Field>
         </div>
 

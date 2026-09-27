@@ -1,6 +1,11 @@
 import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
 import { parseBuildRevision } from './lib/build-identity.mjs';
 
+// Next's bundled react-dom client, production and development, stable and
+// experimental: where scripts/react-hydration-replay-fix.cjs applies.
+const REACT_DOM_CLIENT = /[\\/]next[\\/]dist[\\/]compiled[\\/]react-dom(?:-experimental)?[\\/]cjs[\\/]react-dom-client\.(?:production|development)\.js$/;
+const REACT_HYDRATION_REPLAY_FIX = new URL('./scripts/react-hydration-replay-fix.cjs', import.meta.url).pathname;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -32,6 +37,17 @@ const nextConfig = {
   },
   // Pin tracing to this project (a stray lockfile in the home dir confuses inference).
   outputFileTracingRoot: import.meta.dirname,
+  // React #418 on about 0.7% of signed-in loads, on a tree identical on server
+  // and client: react/react#37584 in the React Next 15.5 bundles, where a host
+  // element that suspends mid-hydration is replayed without rewinding the
+  // hydration cursor. The loader backports React 19.3's fix into Next's own
+  // react-dom client, leaves a React that already has it (Next 16's) alone, and
+  // fails the build on a React it does not recognise.
+  // tests/react-hydration-replay-fix.test.ts holds the wiring.
+  webpack(config) {
+    config.module.rules.push({ test: REACT_DOM_CLIENT, use: [{ loader: REACT_HYDRATION_REPLAY_FIX }] });
+    return config;
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },

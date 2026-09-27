@@ -10,7 +10,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
 
-export const metadata: Metadata = { title: 'Child Wallet' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.childWallet') };
+}
 
 export default async function ChildWalletPage({ params }: { params: Promise<{ childId: string }> }) {
   const tr = await getTranslations();

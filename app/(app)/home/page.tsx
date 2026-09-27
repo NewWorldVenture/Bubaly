@@ -57,7 +57,10 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
-export const metadata: Metadata = { title: 'Home' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.home') };
+}
 export const dynamic = 'force-dynamic';
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
@@ -500,7 +503,7 @@ export default async function HomePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-black sm:text-3xl">
-            {roleGreeting(me.role, myFirstName, dayPhase(now))}
+            {roleGreeting(me.role, myFirstName, dayPhase(now, tz), tr)}
             {roleSurface(me.role).tone !== 'kid' && <span aria-hidden> 👋</span>}
           </h1>
           <p className="mt-1 text-sm text-muted">{tr('home.hereAposSWhatAposS')}</p>
@@ -653,7 +656,7 @@ export default async function HomePage() {
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
-      <WidgetBoundary label="time-of-day"><TimeOfDayFocus role={me.role} /></WidgetBoundary>
+      <WidgetBoundary label="time-of-day"><TimeOfDayFocus role={me.role} timezone={tz} /></WidgetBoundary>
 
       {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
           nothing when the horizon is clear. See /dashboard/moments. */}

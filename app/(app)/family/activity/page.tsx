@@ -10,7 +10,10 @@ import { describeTrail, type TrailRow } from '@/lib/activity/trail';
 import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Activity' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardActivityActivityFeed.familyActivity') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyActivityPage() {

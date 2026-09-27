@@ -41,15 +41,16 @@ describe('the lightbox is a dialog, and says so', () => {
     expect(SRC).toMatch(/ref=\{lightboxRef\}/);
   });
 
-  it('announces itself as a dialog with a name, and does not claim aria-modal', () => {
-    // Main's rule, taken at the merge: only the shared Modal declares
-    // aria-modal, and the list of overlays that declare it themselves may only
-    // shrink. The Escape, trap and restore that the attribute promises are the
-    // hook's, above; what is left out is the CLAIM, not the behaviour. So this
-    // asserts the role and the name, and the absence.
+  it('announces itself as a modal dialog with a name, and keeps the promise', () => {
+    // The rule moved from a name to a contract: a component may declare
+    // aria-modal when it takes useDialogBehavior and attaches the ref
+    // (tests/consent-preference-centre-focus.test.ts, hasDialogContract), and
+    // the test above is that contract for this overlay. The Escape, trap and
+    // restore that the attribute promises are the hook's; the attribute is what
+    // tells a screen reader the page behind the photo is out of reach.
     const overlay = SRC.slice(SRC.indexOf('ref={lightboxRef}'), SRC.indexOf('ref={lightboxRef}') + 600);
     expect(overlay).toMatch(/role="dialog"/);
-    expect(overlay).not.toMatch(/aria-modal=/);
+    expect(overlay).toMatch(/aria-modal="true"/);
     expect(overlay).toMatch(/aria-label=\{tr\('photosModule\.photoViewer'\)\}/);
   });
 });

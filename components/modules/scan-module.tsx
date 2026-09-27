@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { activateOnKey } from '@/lib/a11y/activate-on-key';
 
 type ProposedEvent = {
   title: string; starts_at: string; ends_at: string | null; all_day: boolean;
@@ -87,7 +88,7 @@ export function ScanModule() {
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Could not add events.'); return; }
-      success(`Added ${json.created} event${json.created === 1 ? '' : 's'} to your calendar.`);
+      success(json.created === 1 ? t('scan.addedEventToCalendarOne', { count: json.created }) : t('scan.addedEventsToCalendarMany', { count: json.created }));
       setEvents(null); setSelected(new Set()); setPreview(null); setFileName(null);
     } catch {
       toastError(t('scanModule.networkErrorPleaseTryAgain'));

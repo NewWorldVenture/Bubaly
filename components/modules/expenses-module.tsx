@@ -21,6 +21,7 @@ import {
 } from '@/lib/finance/splits';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { categoryLabel } from '@/lib/finance/category-label';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type SplitRow = Tables<'expense_splits'>;
@@ -198,7 +199,7 @@ export function ExpensesModule() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium">{sp.description} <span className="text-muted">· {usd(sp.total_cents)}</span></p>
-                  <p className="text-xs text-muted">{sp.category ?? 'Other'} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
+                  <p className="text-xs text-muted">{categoryLabel(tr, sp.category)} {tr('expenses.paidBy')} {memberName(sp.paid_by)} · {fmtDate(sp.spent_on)}</p>
                 </div>
                 <button onClick={() => removeSplit(sp.id)} disabled={isPending(`remove:${sp.id}`)} className="text-muted transition hover:text-danger disabled:opacity-50" aria-label={tr('expenses.delete')}>
                   {isPending(`remove:${sp.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -231,7 +232,7 @@ export function ExpensesModule() {
               <Field label={tr('expenses.date')}>{(id) => <Input id={id} type="date" value={form.spent_on} onChange={(e) => setForm({ ...form, spent_on: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label={tr('expenses.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+              <Field label={tr('expenses.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}</Select>}</Field>
               <Field label={tr('expenses.paidBy')}>{(id) => <Select id={id} value={form.paid_by} onChange={(e) => setForm({ ...form, paid_by: e.target.value })}><option value="">{tr('expenses.select')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
             </div>
             <Field label={tr('expenses.splitBetweenDefaultEveryone')}>

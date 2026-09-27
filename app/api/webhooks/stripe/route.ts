@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { catalogPlanForPrice } from '@/lib/billing/price-catalog';
+import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
@@ -185,11 +186,8 @@ export async function POST(req: NextRequest) {
         // Ensure billing_customer row has the customer_ref
         const familyId = session.metadata?.family_id;
         if (familyId && session.customer) {
-          const { error: billingCustomerError } = await supabase.from('billing_customers').upsert(
-            { family_id: familyId, provider: 'stripe', customer_ref: String(session.customer) },
-            { onConflict: 'family_id' },
-          );
-          if (billingCustomerError) throw new Error('Billing customer persistence failed');
+          const written = await rememberStripeCustomer(supabase, familyId, String(session.customer));
+          if (!written.ok) throw new Error('Billing customer persistence failed');
         }
         // Close out the tracked checkout so the abandoned-checkout cron skips it.
         // The initial tracking insert is intentionally best-effort because Stripe

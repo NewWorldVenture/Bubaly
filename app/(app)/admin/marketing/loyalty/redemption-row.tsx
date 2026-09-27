@@ -5,7 +5,7 @@ import { Check, X, Loader2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fulfillRedemptionAction, cancelRedemptionAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 export type Redemption = {
@@ -18,7 +18,7 @@ const inputCls = 'h-9 w-full rounded-lg border border-border bg-surface/60 px-3 
 
 export function RedemptionRow({ redemption }: { redemption: Redemption }) {
   const t = useTranslations();
-  const { fmtNumber, fmtDate } = useFormat();
+  const { fmtNumber, fmtDate } = useHydrationSafeFormat();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const r = redemption;

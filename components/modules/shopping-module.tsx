@@ -1,7 +1,7 @@
 'use client';
 
 // Multi-store shopping lists built on existing grocery_lists + grocery_items tables
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useId } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
   ShoppingCart, Pencil, Archive, Loader2, Copy, ExternalLink, PackageCheck,
@@ -27,26 +27,36 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
+import { groceryCategoryLabel } from '@/lib/i18n/grocery-category';
 
 type GroceryList = Tables<'grocery_lists'>;
 type GroceryItem = Tables<'grocery_items'>;
 
+// Store names are brands and stay as they are; the two generic presets are
+// worded in the reader's language when shown and when picked (the pick becomes
+// the list's stored name).
 const STORE_PRESETS = [
-  { name: 'Grocery', icon: '🛒', color: '#7c5dfa', store: null },
+  { name: 'Grocery', nameKey: 'shoppingModule.preset.grocery', icon: '🛒', color: '#7c5dfa', store: null },
   { name: 'Costco', icon: '🏪', color: '#e63c30', store: 'costco' },
   { name: 'Walmart', icon: '🟡', color: '#0071dc', store: 'walmart' },
   { name: 'Target', icon: '🎯', color: '#cc0000', store: 'target' },
   { name: 'Whole Foods', icon: '🌿', color: '#00674b', store: 'whole_foods' },
   { name: 'Amazon Fresh', icon: '📦', color: '#ff9900', store: 'amazon_fresh' },
   { name: 'Trader Joe\'s', icon: '🌺', color: '#d4001a', store: 'trader_joes' },
-  { name: 'Custom', icon: '📝', color: '#6b7280', store: null },
+  { name: 'Custom', nameKey: 'shoppingModule.preset.custom', icon: '📝', color: '#6b7280', store: null },
 ] as const;
 
 const CATEGORIES = ['Produce', 'Dairy & Eggs', 'Meat & Seafood', 'Pantry', 'Beverages', 'Frozen', 'Household', 'Personal Care', 'Baby', 'Pet', 'Other'];
 
+type Tr = (key: string) => string;
+function presetName(t: Tr, p: (typeof STORE_PRESETS)[number]): string {
+  return 'nameKey' in p ? t(p.nameKey) : p.name;
+}
+
 export function ShoppingModule() {
   const t = useTranslations();
+  const plural = usePlural();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -178,7 +188,7 @@ export function ShoppingModule() {
       const result = await clearCheckedGroceriesAction(activeListId);
       if (!result.ok) throw new Error(result.error);
       if (result.removed === 0) return;
-      success(`Cleared ${result.removed} completed item${result.removed === 1 ? '' : 's'}`);
+      success(plural('shoppingModule.clearedCompletedItems', result.removed));
       void refreshItems();
     });
   }
@@ -360,7 +370,7 @@ export function ShoppingModule() {
                     <div key={cat} className="overflow-hidden rounded-2xl border border-border">
                       <button onClick={() => toggleCollapse(cat)}
                         className="flex w-full items-center gap-3 bg-surface/40 px-4 py-2.5 text-left hover:bg-elevated/30 transition">
-                        <span className="text-sm font-semibold">{cat}</span>
+                        <span className="text-sm font-semibold">{groceryCategoryLabel(t, cat)}</span>
                         <span className="text-xs text-muted">{catItems.length} item{catItems.length !== 1 ? 's' : ''}</span>
                         {catChecked > 0 && <Badge tone="success">{catChecked} done</Badge>}
                         <div className="ml-auto">
@@ -412,9 +422,9 @@ export function ShoppingModule() {
 
             {/* Quick add */}
             <form onSubmit={addItem} className="flex items-center gap-2">
-              <select value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
+              <select aria-label={t('fieldName.category')} value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
                 className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {CATEGORIES.map((c) => <option key={c} value={c}>{groceryCategoryLabel(t, c)}</option>)}
               </select>
               <input value={addingText} onChange={(e) => setAddingText(e.target.value)}
                 placeholder={t('shopping.addItem')}
@@ -455,6 +465,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string;
   onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -464,7 +475,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
 
   function selectPreset(p: typeof STORE_PRESETS[number]) {
     setPreset(p);
-    setName(p.name);
+    setName(presetName(t, p));
     setIcon(p.icon);
   }
 
@@ -495,14 +506,14 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title={t('shopping.newShoppingList')}>
       <form onSubmit={create} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</label>
-          <div className="grid grid-cols-4 gap-2">
+          <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-4 gap-2">
             {STORE_PRESETS.map((p) => (
               <button key={p.name} type="button" onClick={() => selectPreset(p)}
                 className={cn('flex flex-col items-center gap-1 rounded-xl border p-2 text-xs transition',
                   preset.name === p.name ? 'border-brand/60 bg-brand/10' : 'border-border hover:bg-elevated')}>
                 <span className="text-2xl">{p.icon}</span>
-                {p.name}
+                {presetName(t, p)}
               </button>
             ))}
           </div>
