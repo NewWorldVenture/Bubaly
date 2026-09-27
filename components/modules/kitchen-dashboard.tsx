@@ -212,7 +212,10 @@ function FoodScoreCard({ score }: { score: FoodScore }) {
         </div>
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted">
-            <TrendingUp className="h-3.5 w-3.5" /> {tr('kitchenDashboard.foodHealth')}
+            {/* In its own shrinkable span: one long word ("ERNÄHRUNGSGESUNDHEIT")
+                in wide-tracked capitals ran 62px out of the card and made the page
+                scroll sideways (B8 page audit, de-DE). */}
+            <TrendingUp className="h-3.5 w-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{tr('kitchenDashboard.foodHealth')}</span>
           </p>
           <p className="mt-1 text-sm font-medium leading-snug">{score.headline}</p>
         </div>

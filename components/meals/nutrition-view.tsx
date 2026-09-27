@@ -17,11 +17,13 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { dailyTotals, groupByMeal, todayKey, MEAL_META, MEALS } from '@/lib/meals/tracker';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Log = Tables<'nutrition_logs'>;
 
 export function NutritionView() {
   const t = useTranslations();
+  const { fmtNumber } = useFormat();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -71,7 +73,7 @@ export function NutritionView() {
 
       {/* Today's totals */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label={t('nutrition.calories')} value={totals.calories.toLocaleString()} icon={Flame} tint="text-amber-400" />
+        <Stat label={t('nutrition.calories')} value={fmtNumber(totals.calories)} icon={Flame} tint="text-amber-400" />
         <Stat label={t('nutrition.protein')} value={`${totals.protein_g}g`} icon={Apple} tint="text-emerald-400" />
         <Stat label={t('nutrition.carbsFat')} value={`${totals.carbs_g} / ${totals.fat_g}g`} icon={Apple} tint="text-blue-400" />
         <Stat label={t('nutrition.water')} value={`${(totals.water_ml / 1000).toFixed(1)}L`} icon={Droplet} tint="text-sky-400" />

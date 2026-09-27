@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { useRouter } from 'next/navigation';
 import { Plug, Loader2, ShieldAlert, CheckCircle2, ExternalLink } from 'lucide-react';
 import { PROVIDERS, PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
@@ -14,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
  *  which env vars exist; the client only sees ready/requires_setup booleans. */
 export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, boolean> }) {
   const t = useTranslations();
+  const { fmtNumber } = useFormat();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busyPlatform, setBusyPlatform] = useState<SocialPlatform | null>(null);
@@ -60,7 +62,10 @@ export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, b
                 <li>Auth: {def.auth}</li>
                 <li>Posting: {def.posting.supported ? 'yes' : 'no'}{def.needsAppReview ? ' · app review required' : ''}</li>
                 <li>Feed: {def.feed.supported ? 'yes' : 'no'} · Analytics: {def.analytics.supported ? 'yes' : 'no'}</li>
-                <li>Char limit: {def.charLimit.toLocaleString()}</li>
+                {/* The reader's locale, on the server and in the browser alike: a bare
+                    toLocaleString() drew "2,200" on the server and "2.200" in a German
+                    browser, and the page failed hydration (React #418; B8 page audit). */}
+                <li>Char limit: {fmtNumber(def.charLimit)}</li>
               </ul>
               {!ready && (
                 <p className="mb-2 inline-flex items-start gap-1 text-[11px] text-warning">

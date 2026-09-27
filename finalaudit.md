@@ -49590,6 +49590,27 @@ locale on both sides; money through `fmtMoney`).
 client component and fails on a bare `toLocaleString()` /
 `toLocaleDateString()` / `toLocaleTimeString()` (red with the connect-grid
 line restored).
+*Dates, after review on #604:* the locale alone was not enough for a date or
+a time. `useFormat()` binds no zone, so the server (UTC) and a browser in
+Berlin or New York still drew different text for one timestamp ("0:30",
+"2:30", or the day before) and hydration failed. The four P-11 date and time
+displays (admin notifications, social sync time, review and redemption dates)
+now use `useHydrationSafeFormat()`: the server render and the browser's
+hydrating render both format in UTC, and the render right after hydration
+switches to the reader's zone (`useSyncExternalStore`, no
+`suppressHydrationWarning`). `tests/a-date-renders-the-same-on-the-server-and-at-hydration.test.ts`
+renders with React's server renderer in a process set to America/New_York:
+the hook draws the UTC text, the plain formatter (the control) the New York
+text; 3 of 5 cases fail with the hook removed.
+*Numbers in Italian, found by re-crawling the fixes:* the connect page still
+threw #418 in `it-IT` alone. CLDR gives Italian (and Spanish, Portuguese) a
+two-digit minimum before grouping, and the runtimes ship different data for
+it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
+`fmtNumber` and `fmtMoney` now pass `useGrouping: 'always'`, so both group
+every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
+(red without it). Re-crawled after the fix: food, planning, kitchen and the
+connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
+390 px; it-IT is re-checked on the next build.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
