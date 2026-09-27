@@ -302,7 +302,13 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
-    expect(audit.nextVersion).toBe('0388');
+    // 0388_a_definer_function_reaches_its_extensions.sql pins
+    // marketplace_create_circle's search_path to `public, extensions`, because
+    // pgcrypto lives in `extensions` and the function raised 42883 on every call
+    // from 0176 on. Ported from the claude/logged-in-pages-supabase-7q6vtf audit
+    // branch, where it was numbered 0318 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0389');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
