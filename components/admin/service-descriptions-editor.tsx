@@ -106,23 +106,27 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
         if (items.length === 0) return null;
         return (
           <section key={group.title} className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted/70">{group.title}</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{group.title}</h2>
             <div className="space-y-2">
               {items.map((it) => {
                 const value = values[it.key] ?? '';
                 const dirty = value.trim() !== (saved[it.key] ?? '').trim();
                 const isOverride = (saved[it.key] ?? '') !== (SERVICE_DESCRIPTIONS[it.key] ?? '');
                 const isBusy = busy === it.key;
+                // The service's name above the textarea is its <label>. The key (an href,
+                // unique on this page) makes the id; there is one editor per page.
+                const fieldId = `service-blurb-${it.key.replace(/[^a-z0-9]+/gi, '-')}`;
                 return (
                   <div key={it.key} className="rounded-xl border border-border bg-surface/40 p-3">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-fg">{it.label}</span>
+                        <label htmlFor={fieldId} className="text-sm font-semibold text-fg">{it.label}</label>
                         {isOverride && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text">{t('serviceDescriptionsEditor.custom')}</span>}
                       </div>
-                      <code className="hidden text-[11px] text-muted/60 sm:block">{it.key}</code>
+                      <code className="hidden text-[11px] text-muted sm:block">{it.key}</code>
                     </div>
                     <textarea
+                      id={fieldId}
                       value={value}
                       onChange={(e) => setValues((v) => ({ ...v, [it.key]: e.target.value }))}
                       rows={2}
@@ -130,7 +134,7 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                       className="w-full resize-y rounded-lg border border-border bg-bg p-2.5 text-sm outline-none focus:border-brand"
                     />
                     <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-muted/60">{value.length}/400</span>
+                      <span className="text-[11px] text-muted">{value.length}/400</span>
                       <div className="flex items-center gap-2">
                         {isOverride && (
                           <button

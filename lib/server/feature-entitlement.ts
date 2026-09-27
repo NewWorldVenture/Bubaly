@@ -50,6 +50,27 @@ export type FeatureEntitlement =
  * Pass `tiers` when checking many families in one pass (a cron loop), so the
  * `app_settings` read happens once rather than per family.
  */
+/**
+ * True when the family does NOT have the feature — which, on a page that
+ * rendered at all, means a super admin is previewing it (requireFeature lets
+ * them through; the feature's own API routes, rightly, do not).
+ *
+ * Such a page must not fire the feature's work on open: the call answers 403
+ * and the preview opens on an error (page audit, 2026-09-27: /dashboard/
+ * autopilot's scan and /dashboard/briefing's generate, each a 403 in the
+ * console of every admin preview). A plan that cannot be read is NOT a
+ * preview: the module goes ahead, and the route answers the read failure
+ * itself.
+ */
+export async function isFeaturePreviewOnly(db: DB, familyId: string, href: string): Promise<boolean> {
+  try {
+    return !(await resolveFeatureEntitlement(db, familyId, href)).allowed;
+  } catch (error) {
+    console.error('[feature-entitlement] preview check could not read the plan', { familyId, href, error });
+    return false;
+  }
+}
+
 export async function resolveFeatureEntitlement(
   db: DB,
   familyId: string,

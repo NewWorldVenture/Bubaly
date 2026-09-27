@@ -8,7 +8,7 @@ import { GraphModule } from '@/components/modules/graph-module';
 import { GraphCompletenessCard } from '@/components/twin/graph-completeness-card';
 import { loadGraphCompleteness } from '@/lib/twin/completeness-server';
 
-export const metadata: Metadata = { title: 'Knowledge Graph | Bubaly' };
+export const metadata: Metadata = { title: 'Knowledge Graph' };
 export const dynamic = 'force-dynamic';
 
 export default async function GraphPage() {

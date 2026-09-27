@@ -58,7 +58,7 @@ export default async function AccountsPage() {
       {/* Honest capability matrix */}
       <Card>
         <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialAccounts.whatEachPlatformSupports')}</h2>
-        <div className="overflow-x-auto">
+        <div role="region" tabIndex={0} aria-label={t('dashboardSocialAccounts.whatEachPlatformSupports')} className="focus-ring overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted">
               <tr>

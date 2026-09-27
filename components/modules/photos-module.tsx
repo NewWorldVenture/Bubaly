@@ -468,7 +468,7 @@ export function PhotosModule() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
-                    <p className="text-xs text-muted">{relativeDate(photo.created_at)}</p>
+                    <p suppressHydrationWarning className="text-xs text-muted">{relativeDate(photo.created_at)}</p>
                   </div>
                   </button>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}

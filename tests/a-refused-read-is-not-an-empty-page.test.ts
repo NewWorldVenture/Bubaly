@@ -316,9 +316,11 @@ const PAGE_BAILS = [
   {
     file: 'app/(app)/dashboard/vacations/[id]/layout.tsx',
     binding: 'tripError',
-    // `notFound()` is a statement that this trip does not exist, and this is a
-    // LAYOUT — a refused read 404s every page under the trip at once.
-    keeps: 'notFound();',
+    // The not-found answer is a statement that this trip does not exist, and
+    // this is a LAYOUT — a refused read would say it of every page under the
+    // trip at once. (Rendered in place rather than thrown, since the page audit:
+    // notFound() inside app/(app)/loading.tsx's stream was React #419.)
+    keeps: 'return <AppNotFound backHref="/dashboard/vacations" />;',
   },
   {
     file: 'app/(app)/missions/new/page.tsx',

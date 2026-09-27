@@ -240,7 +240,7 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
           <section key={group.bucket}>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
               {group.label}
-              <span className="rounded-full bg-elevated px-1.5 text-[11px] font-semibold text-muted/70">{group.items.length}</span>
+              <span className="rounded-full bg-elevated px-1.5 text-[11px] font-semibold text-muted">{group.items.length}</span>
             </h2>
             <div className="grid gap-4 lg:grid-cols-2">
           {group.items.map(({ event, prep }) => {

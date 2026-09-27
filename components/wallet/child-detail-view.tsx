@@ -362,7 +362,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
         <p className="truncate text-sm font-medium">
           {tx.description || txnTypeLabel(tx.type)}
         </p>
-        <p className="flex items-center gap-1 text-[11px] text-muted">
+        <p suppressHydrationWarning className="flex items-center gap-1 text-[11px] text-muted">
           {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {meta.label} · </span>}
           {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
           {isPending && <span className="text-amber-500"> {t('childDetail.pendingApproval')}</span>}

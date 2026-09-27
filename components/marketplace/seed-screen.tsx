@@ -53,7 +53,7 @@ export function MarketplaceSeedScreen() {
       </div>
 
       <div className="flex items-center justify-between gap-2 pb-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted">marketplace_seed.sql</span>
+        <label htmlFor="seed-sql" className="text-xs font-medium uppercase tracking-wide text-muted">marketplace_seed.sql</label>
         <Button onClick={copy} size="sm" className="gap-1.5">
           {copied ? <><Check className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> {t('seedScreen.copySql')}</>}
         </Button>

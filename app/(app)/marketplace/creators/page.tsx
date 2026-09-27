@@ -11,7 +11,7 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Creators · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Creators · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceCreatorsPage() {
@@ -77,7 +77,7 @@ export default async function MarketplaceCreatorsPage() {
       {ranked.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 p-8 text-center text-sm text-muted">
           <Users className="mx-auto mb-2 h-6 w-6" />
-          {t('marketplaceCreators.noStorefrontsYet')} <Link href="/marketplace/store" className="text-brand-text hover:underline">{t('marketplaceCreators.openTheFirstOne')}</Link>.
+          {t('marketplaceCreators.noStorefrontsYet')} <Link href="/marketplace/store" className="text-brand-text underline hover:decoration-2">{t('marketplaceCreators.openTheFirstOne')}</Link>.
         </div>
       ) : (
         <ul className="grid gap-2.5 sm:grid-cols-2">

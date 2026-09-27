@@ -203,7 +203,7 @@ export function MovingWorkspace() {
         <div className="min-w-0 flex-1">
           <p className={cn('truncate text-sm font-medium', b.status === 'unpacked' && 'text-muted')}>{b.label}{b.is_fragile ? ' 🥂' : ''}{b.is_essential ? ' ⭐' : ''}</p>
           <p className="text-xs text-muted">{b.from_room ? `${b.from_room} → ` : ''}{b.to_room ?? 'unassigned'} · {boxStatusLabel(b.status)}{b.packed_by ? ` by ${nameOf(b.packed_by)}` : ''}</p>
-          {b.contents.length > 0 && <p className="mt-1 truncate text-xs text-muted/80">{b.contents.join(', ')}</p>}
+          {b.contents.length > 0 && <p className="mt-1 truncate text-xs text-muted">{b.contents.join(', ')}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {b.status !== 'unpacked' && <Button size="sm" variant="secondary" onClick={() => advanceBox(b)}>{boxStatusLabel(BOX_ORDER[BOX_ORDER.indexOf(b.status) + 1])}</Button>}

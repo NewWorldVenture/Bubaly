@@ -33,7 +33,7 @@ export function StoreForm({ initial }: { initial: StoreSeed | null }) {
         <Building2 className="h-4 w-4 text-brand-text" />
         <h2 className="text-sm font-semibold">{initial ? 'Your store' : 'Open your store'}</h2>
       </div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
         <Field label={t('store.storeName')} required>
           {(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('storeForm.eGBabyGearCo')} required />}
         </Field>

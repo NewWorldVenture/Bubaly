@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { KnowledgeSeedScreen } from '@/components/knowledge/seed-screen';
+import { AppNotFound } from '@/components/app/app-not-found';
 
-export const metadata: Metadata = { title: 'Seed Knowledge Base | Bubaly' };
+export const metadata: Metadata = { title: 'Seed Knowledge Base' };
 
 export default async function KnowledgeSeedPage() {
   await requireUserContext();
-  if (!(await isSuperAdmin())) notFound();
+  if (!(await isSuperAdmin())) return <AppNotFound backHref="/dashboard" />;
   return <KnowledgeSeedScreen />;
 }

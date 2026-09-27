@@ -6,7 +6,7 @@ import { FilesHubModule } from '@/components/modules/files-hub-module';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
-  return { title: `${t('filesHubModule.vaultTitle')} | Bubaly` };
+  return { title: t('filesHubModule.vaultTitle') };
 }
 
 export default async function SecureVaultPage() {

@@ -32,7 +32,7 @@ export default async function FormsPage() {
   for (const s of subs ?? []) countByForm.set(s.form_id, (countByForm.get(s.form_id) ?? 0) + 1);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
         {(forms ?? []).length === 0 ? (
           <EmptyState icon={ClipboardList} title={t('adminMarketingForms.noFormsYet')} description={t('forms.buildALeadCaptureForm')} />

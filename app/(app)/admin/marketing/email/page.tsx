@@ -43,7 +43,7 @@ export default async function EmailPage() {
           : <span><strong>{t('adminMarketingEmail.noEmailProviderConfigured')}</strong> Set <code>RESEND_API_KEY</code> {t('adminMarketingEmail.toEnableSendingYouCanStill')}</span>}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {(emails ?? []).length === 0 ? (
             <EmptyState icon={Mail} title={t('adminMarketingEmail.noEmailCampaignsYet')} description={t('email.draftYourFirstEmailOn')} />
@@ -77,7 +77,7 @@ export default async function EmailPage() {
             <input name="subject" required placeholder={t('adminMarketingEmail.subjectLine')} className={inputCls} />
             <input name="preview_text" placeholder={t('adminMarketingEmail.previewText')} className={inputCls} />
             <input name="from_name" placeholder={t('adminMarketingEmail.fromNameOptional')} className={inputCls} />
-            <select name="segment_id" className={inputCls}>
+            <select name="segment_id" aria-label={t('adminMarketingEmail.audience')} className={inputCls}>
               <option value="">{t('adminMarketingEmail.allCustomers')}</option>
               {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>

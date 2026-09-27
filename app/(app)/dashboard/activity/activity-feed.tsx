@@ -175,7 +175,7 @@ export function ActivityFeed({
                   </p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={24} />}
-                <span className="shrink-0 text-xs text-muted">{relativeTime(item.at)}</span>
+                <span className="shrink-0 text-xs text-muted" suppressHydrationWarning>{relativeTime(item.at)}</span>
               </li>
             );
           })}

@@ -39,7 +39,7 @@ export default async function ContentPage() {
   const { data: posts } = postsResult;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-4">
         <div>
           <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>
@@ -138,8 +138,8 @@ export default async function ContentPage() {
         <h2 className="mb-3 font-semibold">{t('adminMarketingContent.newContentIdea')}</h2>
         <form action={createContentItem} className="space-y-3 text-sm">
           <input name="title" required placeholder={t('adminMarketingContent.titleOrTopic')} className={inputCls} />
-          <select name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
-          <input name="publish_at" type="date" className={inputCls} />
+          <select name="kind" aria-label={t('adminMarketingContent.contentType')} className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
+          <input name="publish_at" type="date" aria-label={t('adminMarketingContent.publishDate')} className={inputCls} />
           <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
           <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</SubmitButton>
         </form>

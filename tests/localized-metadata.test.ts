@@ -60,8 +60,12 @@ describe('request-localized browser titles', () => {
     const messages = getMessages(locale);
     for (const page of pages) {
       const result = await page.generate();
-      expect(result.title).toBe(messages[page.key]);
-      expect(result.title).not.toBe(page.key);
+      // A title that ends in the brand opts out of the root template with
+      // `absolute` (lib/marketing/seo.ts titleWithoutDoubledBrand); its text is
+      // still the reader's own-language string.
+      const title = typeof result.title === 'object' && result.title && 'absolute' in result.title ? result.title.absolute : result.title;
+      expect(title).toBe(messages[page.key]);
+      expect(title).not.toBe(page.key);
       expect(result.robots).toEqual(page.admin ? { index: false } : undefined);
     }
     expect(request.service).not.toHaveBeenCalled();

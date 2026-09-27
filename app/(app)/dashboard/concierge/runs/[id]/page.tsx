@@ -13,7 +13,6 @@
 // pins this).
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -36,6 +35,7 @@ import { RunTimeline, type StepSources } from '@/components/concierge/run-timeli
 import { RunControls, type EditableStep, type FailedStep } from '@/components/concierge/run-controls';
 import { ClarificationCard } from '@/components/concierge/clarification-card';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Bubaly is on it' };
 export const dynamic = 'force-dynamic';
@@ -56,7 +56,7 @@ async function RunUnavailable({ message }: { message: string }) {
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
   const { id } = await params;
-  if (!id) notFound();
+  if (!id) return <AppNotFound backHref="/dashboard/concierge/runs" />;
 
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -65,13 +65,13 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
 
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) {
-    if (access.status === 404) notFound();
+    if (access.status === 404) return <AppNotFound backHref="/dashboard/concierge/runs" />;
     return <RunUnavailable message={access.error} />;
   }
 
   const detail = await loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role });
   if (!detail.ok) return <RunUnavailable message={detail.error} />;
-  if (!detail.data) notFound();
+  if (!detail.data) return <AppNotFound backHref="/dashboard/concierge/runs" />;
 
   const runId = detail.data.run.id;
   const requestId = detail.data.run.request_id;

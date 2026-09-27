@@ -6,7 +6,7 @@ import { MarketplaceMatchesStrip } from '@/components/marketplace/matches-strip'
 import { loadAndSnapshotMatches } from '@/lib/marketplace/matches-server';
 import { KIND_ORDER, type ListingKind, type ListingCategory, CATEGORY_LABELS } from '@/lib/marketplace/listings';
 
-export const metadata: Metadata = { title: 'Browse · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Browse · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 // The full browse/post board (the original marketplace module), driven by the

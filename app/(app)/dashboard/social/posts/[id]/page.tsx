@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getPost } from '@/lib/social/queries';
@@ -12,6 +11,7 @@ import type { SocialPlatform } from '@/lib/social/capabilities';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { formatScheduledTime, scheduleDisplayTimezone, scheduleStatusKey } from '@/lib/social/schedule-time';
 import { safeSocialLink } from '@/lib/social/links';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Post · Social' };
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const ctx = await requireUserContext();
   const { post, variants, targets, results } = await getPost(ctx.active.familyId, id);
-  if (!post) notFound();
+  if (!post) return <AppNotFound backHref="/dashboard/social" />;
   const scheduleMessage = post.scheduled_for ? scheduleStatusKey(post.metadata) : '';
   const postLink = safeSocialLink(post.link);
 

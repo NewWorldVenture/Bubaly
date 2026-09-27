@@ -126,7 +126,7 @@ function ConflictCard({
         <Badge tone="danger">{conflict.overlapLabel}</Badge>
       </div>
 
-      <div className="grid items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
+      <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_1fr]">
         <EventLine e={conflict.a} />
         <div className="hidden justify-center sm:flex"><ArrowRight className="h-4 w-4 text-muted" /></div>
         <EventLine e={conflict.b} />

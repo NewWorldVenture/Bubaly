@@ -16,7 +16,7 @@ import { loadAutomaticCaptureShare } from '@/lib/metric/automatic-capture-server
 import { AutomaticCaptureCard } from '@/components/metrics/automatic-capture-card';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Intelligence Network | Bubaly' };
+export const metadata: Metadata = { title: 'Intelligence Network' };
 export const dynamic = 'force-dynamic';
 
 export default async function IntelligencePage() {
