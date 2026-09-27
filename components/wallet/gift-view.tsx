@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui/states';
 import { QrCode } from '@/components/ui/qr-code';
 import { useToast } from '@/components/ui/toast';
 import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
-import { occasionLabel, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '@/lib/wallet/gift';
+import { occasionLabelKey, parseSuggestedAmounts, giftPath, GIFT_OCCASIONS } from '@/lib/wallet/gift';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGiftLinkAction, approveGiftAction, dismissGiftAction } from '@/app/(app)/wallet/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -115,7 +115,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4">
         <div className="grid h-9 w-9 place-items-center rounded-xl bg-surface text-muted"><Link2 className="h-4 w-4" /></div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{link.childName ?? 'Child'} · {occasionLabel(link.occasion)}</p>
+          <p className="text-sm font-semibold">{link.childName ?? t('gift.child')} · {t(occasionLabelKey(link.occasion))}</p>
           <p className="truncate text-xs text-muted">{giftPath(link.token)}{link.isActive ? '' : ' · inactive'}</p>
         </div>
         <button onClick={() => setShowQr(true)} aria-label={t('gift.showQrCode')}
@@ -130,7 +130,7 @@ function GiftLinkCard({ link }: { link: GiftLinkRow }) {
         <Modal open title={t('gift.scanToGift')} onClose={() => setShowQr(false)}>
           <div className="flex flex-col items-center gap-4">
             <p className="text-center text-sm text-muted">
-              {link.childName ?? 'Child'} · {occasionLabel(link.occasion)}{t('gift.pointAPhoneCameraAtThis')}
+              {link.childName ?? t('gift.child')} · {t(occasionLabelKey(link.occasion))}{t('gift.pointAPhoneCameraAtThis')}
             </p>
             <div className="rounded-2xl bg-white p-4">
               <QrCode value={url} size={220} />
@@ -186,7 +186,7 @@ function CreateLinkModal({ childOptions, onClose }: { childOptions: ChildOpt[]; 
             <Field label={t('gift.occasion')}>{(id) => (
               <select id={id} name="occasion" className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm">
                 <option value="">{t('giftView.none')}</option>
-                {GIFT_OCCASIONS.map((o) => <option key={o} value={o}>{occasionLabel(o)}</option>)}
+                {GIFT_OCCASIONS.map((o) => <option key={o} value={o}>{t(occasionLabelKey(o))}</option>)}
               </select>
             )}</Field>
             <Field label={t('gift.suggestedAmountsUsdCommaSeparated')}>{(id) => <Input id={id} name="suggested" placeholder="25, 50, 100" defaultValue="25, 50, 100" />}</Field>

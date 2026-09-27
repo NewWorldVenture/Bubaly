@@ -49,11 +49,16 @@ type Probe = {
   holdNextEmptyRead: () => void; releaseRead: () => Promise<void>; readHeld: boolean;
   pauseEmptyRemoval: () => void; releaseRemoval: () => void; removalHeld: boolean;
   sdkSignOut: () => Promise<void>;
+  holdNextSessionRead: () => void; releaseSessionRead: () => void; sessionReadHeld: boolean;
+  setReadFailure: (fail: boolean) => void; reconcile: () => Promise<void>;
+  holdNextPositiveReceipt: () => void; releasePositiveReceipt: () => void; positiveReceiptHeld: boolean;
+  realtimeMatchesCookie: () => boolean;
   refreshes: number; events: string[]; errors: string[];
 };
 declare global { interface Window { __storageReconcile: Probe } }
 
 async function install(context: BrowserContext) {
+  let tokenSequence = 0;
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === origin) {
@@ -65,7 +70,7 @@ async function install(context: BrowserContext) {
     if (url.pathname !== '/auth/v1/token' || url.searchParams.get('grant_type') !== 'password') throw new Error(`Unexpected fixture request: ${url.pathname}`);
     const userId = route.request().postDataJSON().email === 'b@example.invalid' ? B : A;
     const expires = Math.floor(Date.now() / 1000) + 3600;
-    const claims = { sub: userId, session_id: userId === A ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222', exp: expires, aud: 'authenticated' };
+    const claims = { sub: userId, session_id: userId === A ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222', exp: expires, aud: 'authenticated', fixture_version: ++tokenSequence };
     const token = [Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'), Buffer.from(JSON.stringify(claims)).toString('base64url'), 'synthetic-signature'].join('.');
     await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify({
       access_token: token, refresh_token: `synthetic-refresh-${userId}`, token_type: 'bearer', expires_in: 3600, expires_at: expires,
@@ -84,7 +89,7 @@ async function load(page: Page, transport: Transport = 'both') {
     if (${JSON.stringify(transport)} === 'broadcast-only') Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('Fixture storage denied'); } });
     const sources = ${JSON.stringify(modules)}, entries = ${JSON.stringify(entries)}, loaded = {};
     const process = { env: { NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(provider)}, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-anon' } };
-    const p = window.__storageReconcile = { refreshes: 0, events: [], errors: [], readHeld: false, removalHeld: false };
+    const p = window.__storageReconcile = { refreshes: 0, events: [], errors: [], readHeld: false, removalHeld: false, sessionReadHeld: false };
     window.addEventListener('unhandledrejection', event => p.errors.push(String(event.reason)));
     const mocks = { react: React, sdk: window.supabase, 'next/navigation': { useRouter: () => router }, '@/lib/native/capacitor': { isNative: () => false } };
     const router = { refresh: () => { p.refreshes += 1; } };
@@ -98,11 +103,18 @@ async function load(page: Page, transport: Transport = 'both') {
     }
     const storage = load(entries['lib/auth/browser-session-storage.ts']);
     const makeStorage = storage.createBrowserSessionStorage;
-    let emptyReads = 0, releaseRemoval;
+    let emptyReads = 0, releaseRemoval, holdSessionRead = false, releaseSessionRead, readFailure = false;
     storage.createBrowserSessionStorage = url => {
       const adapter = makeStorage(url), read = adapter.cookies.getAll;
       adapter.cookies.getAll = async () => {
+        if (readFailure) throw new Error('Synthetic temporary cookie read failure');
         const cookies = read();
+        if (holdSessionRead) {
+          holdSessionRead = false;
+          if (!cookies.some(cookie => /^sb-reconcile-fixture-auth-token(?:\\.\\d+)?$/.test(cookie.name))) throw new Error('Expected a saved session for visibility recovery');
+          p.sessionReadHeld = true;
+          await new Promise(resolve => { releaseSessionRead = resolve; });
+        }
         if (emptyReads > 0 && --emptyReads === 0) {
           if (cookies.some(cookie => /^sb-reconcile-fixture-auth-token(?:\\.\\d+)?$/.test(cookie.name))) throw new Error('Expected empty removal lookup');
           p.removalHeld = true;
@@ -151,6 +163,24 @@ async function load(page: Page, transport: Transport = 'both') {
       };
     };
     p.releaseRead = async () => { releaseRead(); await store.refreshCacheSession(); };
+    let releasePositiveReceipt;
+    p.holdNextPositiveReceipt = () => {
+      const original = client.auth.getSession.bind(client.auth);
+      client.auth.getSession = async () => {
+        client.auth.getSession = original;
+        const result = await original();
+        if (!result.data.session || result.error) throw new Error('Expected a real successful positive SDK read');
+        p.positiveReceiptHeld = true;
+        await new Promise(resolve => { releasePositiveReceipt = resolve; });
+        return result;
+      };
+    };
+    p.releasePositiveReceipt = () => releasePositiveReceipt();
+    p.holdNextSessionRead = () => { holdSessionRead = true; p.sessionReadHeld = false; };
+    p.releaseSessionRead = () => releaseSessionRead();
+    p.setReadFailure = fail => { readFailure = fail; };
+    p.reconcile = () => store.refreshCacheSession({ force: true });
+    p.realtimeMatchesCookie = () => client.realtime.accessTokenValue === storage.captureBrowserSessionSnapshot()?.accessToken;
     p.pauseEmptyRemoval = () => { emptyReads = 2; };
     p.releaseRemoval = () => releaseRemoval();
     p.sdkSignOut = async () => { const { error } = await client.auth.signOut({ scope: 'local' }); if (error) throw error; };
@@ -276,3 +306,83 @@ test('a suppressed stale SDK sign-out refreshes an A server tree to newly saved 
   expect(JSON.parse(Buffer.from(token!.split('.')[1], 'base64url').toString()).sub).toBe(B);
   expect(await page.evaluate(() => window.__storageReconcile.errors)).toEqual([]);
 });
+
+
+for (const decision of ['logout', 'newer B', 'rotate A'] as const) {
+  test(`held SDK visibility recovery respects peer ${decision}`, async ({context,page}) => {
+    await install(context); await load(page, 'storage-only');
+    await page.evaluate(() => window.__storageReconcile.signIn('a'));
+    const second = await context.newPage(); await load(second, 'both');
+    for (const target of [page,second]) {
+      await target.evaluate(() => window.__storageReconcile.mount('a'));
+      await expect.poll(() => target.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(A);
+    }
+    const revision = await second.evaluate(() => window.__storageReconcile.revision());
+    const generation = await second.evaluate(() => window.__storageReconcile.generation());
+    expect(await second.evaluate(() => document.visibilityState)).toBe('visible');
+    await second.evaluate(() => { window.__storageReconcile.holdNextSessionRead(); window.dispatchEvent(new Event('visibilitychange')); });
+    await expect.poll(() => second.evaluate(() => window.__storageReconcile.sessionReadHeld)).toBe(true);
+    if (decision === 'logout') await page.evaluate(() => window.__storageReconcile.clearCookies());
+    else await page.evaluate((user: 'a' | 'b') => window.__storageReconcile.signIn(user), decision === 'newer B' ? 'b' as const : 'a' as const);
+    await page.evaluate(() => window.__storageReconcile.notify());
+    await expect.poll(() => second.evaluate(() => window.__storageReconcile.revision())).toBe(revision + 1);
+    await second.evaluate(() => window.__storageReconcile.releaseSessionRead());
+    if (decision === 'logout') {
+      await expect.poll(() => second.evaluate(() => window.__storageReconcile.snapshot().status)).toBe('signed-out');
+      expect(await second.evaluate(() => window.__storageReconcile.realtimeToken())).toBe('synthetic-public-anon');
+    } else {
+      await expect.poll(() => second.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(decision === 'newer B' ? B : A);
+      await expect.poll(() => second.evaluate(() => window.__storageReconcile.realtimeMatchesCookie())).toBe(true);
+      expect(await second.evaluate(() => window.__storageReconcile.snapshot())).toMatchObject({status:'ready',error:null});
+    }
+    await expect.poll(() => second.evaluate(() => window.__storageReconcile.refreshes)).toBe(decision === 'rotate A' ? 0 : 1);
+    if (decision === 'rotate A') expect(await second.evaluate(() => window.__storageReconcile.generation())).toBe(generation);
+    expect(await second.evaluate(() => window.__storageReconcile.events.filter(event => event === 'SIGNED_OUT'))).toEqual([]);
+    expect(await second.evaluate(() => window.__storageReconcile.errors)).toEqual([]);
+  });
+}
+
+test('a transient actual SDK cookie-read failure preserves A and recovers without signing out', async ({context,page}) => {
+  await install(context); await load(page, 'storage-only');
+  await page.evaluate(async () => {const p=window.__storageReconcile;await p.signIn('a');p.mount('a');});
+  await expect.poll(() => page.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(A);
+  await page.evaluate(async () => {const p=window.__storageReconcile;p.setReadFailure(true);await p.reconcile();});
+  expect(await page.evaluate(() => window.__storageReconcile.snapshot())).toMatchObject({status:'ready',identity:{userId:A},error:expect.any(String)});
+  expect(await page.evaluate(() => window.__storageReconcile.refreshes)).toBe(0);
+  await page.evaluate(async () => {const p=window.__storageReconcile;p.setReadFailure(false);await p.reconcile();});
+  expect(await page.evaluate(() => window.__storageReconcile.snapshot())).toMatchObject({status:'ready',identity:{userId:A},error:null});
+  expect(await page.evaluate(() => window.__storageReconcile.events.filter(event=>event==='SIGNED_OUT'))).toEqual([]);
+  expect(await page.evaluate(() => window.__storageReconcile.realtimeMatchesCookie())).toBe(true);
+});
+
+for (const decision of ['logout', 'newer B', 'rotate A'] as const) {
+  test(`held positive SDK receipt respects peer ${decision} before any notification`, async ({context,page}) => {
+    await install(context); await load(page, 'storage-only');
+    await page.evaluate(() => window.__storageReconcile.signIn('a'));
+    const second = await context.newPage(); await load(second, 'storage-only');
+    for (const target of [page,second]) {
+      await target.evaluate(() => window.__storageReconcile.mount('a'));
+      await expect.poll(() => target.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(A);
+    }
+    const before = await second.evaluate(() => ({revision:window.__storageReconcile.revision(),generation:window.__storageReconcile.generation(),events:[...window.__storageReconcile.events]}));
+    await second.evaluate(() => window.__storageReconcile.holdNextPositiveReceipt());
+    const read = second.evaluate(() => window.__storageReconcile.reconcile());
+    await expect.poll(() => second.evaluate(() => window.__storageReconcile.positiveReceiptHeld)).toBe(true);
+    if (decision === 'logout') await page.evaluate(() => window.__storageReconcile.clearCookies());
+    else await page.evaluate((user: 'a' | 'b') => window.__storageReconcile.signIn(user), decision === 'newer B' ? 'b' as const : 'a' as const);
+    expect(await second.evaluate(() => window.__storageReconcile.revision())).toBe(before.revision);
+    expect(await second.evaluate(() => window.__storageReconcile.events)).toEqual(before.events);
+    await second.evaluate(() => window.__storageReconcile.releasePositiveReceipt()); await read;
+    if (decision === 'logout') {
+      expect(await second.evaluate(() => window.__storageReconcile.snapshot().status)).toBe('signed-out');
+      expect(await second.evaluate(() => window.__storageReconcile.realtimeToken())).toBe('synthetic-public-anon');
+    } else {
+      expect(await second.evaluate(() => window.__storageReconcile.snapshot())).toMatchObject({status:'ready',identity:{userId:decision === 'newer B' ? B : A},error:null});
+      expect(await second.evaluate(() => window.__storageReconcile.realtimeMatchesCookie())).toBe(true);
+    }
+    if (decision === 'rotate A') expect(await second.evaluate(() => window.__storageReconcile.generation())).toBe(before.generation);
+    // A server-tree refresh follows an actual storage/auth notification; this
+    // receipt-only control tests the cache/realtime owner before that signal.
+    expect(await second.evaluate(() => window.__storageReconcile.errors)).toEqual([]);
+  });
+}

@@ -128,7 +128,7 @@ export default async function AdminContentPage({ searchParams }: Params) {
           )}
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-5">
             <div className="grid-stats">
               <StatCard icon={FileText} label={tr('adminContent.totalItems')} value={docs.length} tone="bg-brand/10 text-brand-text" />

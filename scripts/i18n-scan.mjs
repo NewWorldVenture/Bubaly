@@ -47,6 +47,10 @@ export const GATED_SURFACES = {
   // features, the four legal documents, the FAQ, the blog chrome and the footer.
   'marketing-pages': ['app/(marketing)'],
   'marketing-components': ['components/marketing'],
+  // The blog's own components (/blog and every post). Outside both surfaces
+  // above, so the heart button's four labels and the subscribe form's
+  // fallback error stayed English on a translated blog. Audit C1-S9-103.
+  'marketing-blog-components': ['components/blog'],
   // The two pure catalogs the public family-display page renders. Copy parked
   // in a data structure under lib/ is the blind spot this gate exists for.
   'marketing-display-catalogs': ['lib/marketing/certified-devices.ts', 'lib/marketing/display-compare.ts'],

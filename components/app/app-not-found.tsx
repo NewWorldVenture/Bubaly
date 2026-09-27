@@ -8,6 +8,10 @@ import { Button } from '@/components/ui/button';
 // stays put and a missing record (a deleted chore, an old wallet link) reads
 // as "this one thing is gone", not "the app broke". `backHref` points at the
 // section's own home so the primary action is always one meaningful hop.
+//
+// The defaults come from the catalogue. They were English literals, so every
+// missing record under /dashboard — a deleted trip, an old contact link — told
+// a German or Portuguese family "We couldn’t find that". Audit C1-S9-97.
 export async function AppNotFound({
   title,
   description,
