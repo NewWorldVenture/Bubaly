@@ -37,9 +37,6 @@ vi.mock('react', async (original) => ({
     return mocks.slots[i];
   },
   useId: () => 'id',
-  // Modal waits for hydration (useHydrated); this harness models the client
-  // after it, so the store answers its client snapshot.
-  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useContext: () => ({ locale: { code: 'en-US' }, source: 'default', t: (k: string) => k }),
   useEffect: (fn: () => void | (() => void), deps?: readonly unknown[]) => {
     mocks.effects.push({ run: fn as () => undefined | (() => void), deps: deps ?? [] });

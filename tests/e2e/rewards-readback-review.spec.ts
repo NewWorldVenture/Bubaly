@@ -16,7 +16,7 @@ const sources = Object.fromEntries([
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
-  'components/ui/input.tsx', 'components/ui/modal.tsx', 'lib/hooks/use-hydrated.ts',
+  'components/ui/input.tsx', 'components/ui/modal.tsx',
   // rewards-module.tsx asks before a destructive write via useConfirm; the
   // provider reaches the loader with it, so its source belongs here too.
   'components/ui/confirm.tsx', 'components/app/page-header.tsx',

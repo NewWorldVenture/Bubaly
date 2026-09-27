@@ -6,7 +6,6 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useHydrated } from '@/lib/hooks/use-hydrated';
 
 /** Accessible modal dialog: focus-trapped, ESC to close, scroll lock, and focus
  *  restored to the trigger on close. Renders as a bottom sheet on mobile.
@@ -39,13 +38,9 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
-  // A dialog open at first paint (a `?new=1` route) must not render during
-  // hydration: the server had no portal to match. See useHydrated.
-  const hydrated = useHydrated();
-  const shown = open && hydrated;
-  useDialogBehavior(dialogRef, shown, { onClose });
+  useDialogBehavior(dialogRef, open, { onClose });
 
-  if (!shown) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">

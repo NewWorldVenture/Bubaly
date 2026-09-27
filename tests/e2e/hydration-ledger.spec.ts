@@ -16,7 +16,7 @@ const sources = Object.fromEntries([
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
-  'components/ui/input.tsx', 'components/ui/modal.tsx', 'lib/hooks/use-hydrated.ts', 'components/app/page-header.tsx',
+  'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },

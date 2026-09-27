@@ -48477,11 +48477,12 @@ the next bot should start.
 > the top of this file). Four findings here were found and fixed there too,
 > independently. Where both fixes touch the same code, `main`'s is kept:
 > P-03's per-subscription channel is #591's `ownChannel` (a port of #587's
-> C1-S9-94), and this branch's guard now asserts that instead. P-01 (grid
-> columns), P-04 (the vacations dialog) and P-05 (the super-admin preview)
-> were fixed at different layers — #591 at the page, this branch in the
-> shared `Modal`, the grid templates and the endpoint gate — and the two
-> merged cleanly and hold together: the full unit suite on the merged tree
+> C1-S9-94), and this branch's guard now asserts that instead. P-04's shared-`Modal` change is withdrawn: #591
+> had tried the same change and dropped it when an E2E journey timed out,
+> and fixed the vacations dialog at its call site, which this branch now
+> keeps. P-01 (grid columns) and P-05 (the super-admin preview) were fixed
+> at different layers — #591 at the page, this branch in the grid templates
+> and the endpoint gate — and the two merged cleanly and hold together: the full unit suite on the merged tree
 > passes (20,710 tests). #591 also fixed the not-found #419 that this section
 > calls framework behaviour below: a missing record in the app is now
 > answered, not thrown (`tests/a-missing-record-in-the-app-is-answered-not-thrown.test.ts`).
@@ -48530,7 +48531,11 @@ dialog open at first paint mismatched and the whole route re-rendered on
 the client. `Modal` now waits for `useHydrated()` (a `useSyncExternalStore`
 flag: false on the server and during hydration) and hands the same flag to
 `useDialogBehavior`, so the focus trap attaches when the dialog actually
-appears. Commit 0ec8fa6c.
+appears. Commit 0ec8fa6c. **Withdrawn in favour of `main`'s fix.** #591 made
+the same `Modal`-wide change, withdrew it when CI's weekly-meal journey timed
+out on it, and fixed the route at its call site (the "New trip" dialog opens
+after mount). This branch now keeps `main`'s `Modal` untouched (and drops
+`useHydrated`), so the route is fixed once, the way CI accepted.
 
 **P-05 · Low · A super administrator's feature pages called endpoints that
 refused them.** `requireFeature`/`requirePlanLevel` let a super admin
