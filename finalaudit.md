@@ -350,8 +350,8 @@ PR596 preserves Claude's reported 44 public/auth/marketing page re-crawls on e14
 ### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
 
 Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
-read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
-recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #598) and
+recorded as `C1-S9-94`…`C1-S9-111`. Every lane is claimed by another session, so the rows are
 theirs to update; the findings are listed here rather than edited under someone else's claim.
 
 PR598 (`06cef776e94278d4893fe6979fd37911b5b1b0ed`) extends this reported pass through C1-S9-111; its later detailed entries include C1-S9-112–114. The PR587 attribution above remains historical. These are Claude's source-specific local findings; the selected integration has separate acceptance evidence and does not promote any page row here.
@@ -46101,6 +46101,243 @@ Two registers means two answers to "what state is this page in". The second one 
 - The approval count is a plural.
 
 **Status:** FIXED. Scanner findings for `trust-module` drop from 21 to 0.
+
+---
+
+### `[CLAUDE-1][LOW][FRONT-DESK]` C1-S9-115 — the Front Desk's call statuses and classifications were English in every locale
+
+**File/path:** `components/modules/front-desk-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.** On `/dashboard/front-desk`, every call's status (Screened, Voicemail, Forwarded, …) and classification (Important, Robocall, …) was English in every locale. So was "Unknown caller" in the detail view. The stat tiles and "How it works" already rendered through keys, but still carried unused English copies next to them, which the scanner counted as findings.
+
+**Fix.**
+- Statuses and classifications are `labelKey`s.
+- The unused English copies are removed.
+- Both unknown-caller fallbacks use `frontDesk.unknownCaller`.
+- "Spam" is listed as invariant.
+
+**Status:** FIXED. Scanner findings for `front-desk-module` drop from 20 to 0.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SHOPPING/PANTRY]` C1-S9-116 — grocery categories, list presets and pantry stats were English in every locale
+
+**File/path:** `components/modules/shopping-module.tsx`, `components/modules/pantry-module.tsx`, new `lib/i18n/grocery-category.ts`; seven catalogues.
+
+**Problem.**
+- On `/dashboard/shopping`, English showed in every locale:
+  - the category headings on a list (Produce, Dairy & Eggs, …)
+  - the category picker
+  - the "Cleared N completed items" toast
+- The "Grocery" and "Custom" list presets wrote an English list name into the family's data.
+- On `/dashboard/pantry`, the category chips and picker and three of the four stat tiles were English.
+
+**Fix.**
+- Categories stay stored as the English word, since the list groups by it. They are shown through `groceryCategoryLabel()`, which both pages share.
+- The two generic presets are worded when shown and when picked. Store brands stay as they are.
+- The toast is a plural.
+
+**Status:** FIXED.
+- `pantry-module` has no copy findings left. Its remaining findings are the stored category values.
+- `shopping-module`'s remaining findings are the stored categories and the store brand names.
+
+---
+
+### `[CLAUDE-1][MEDIUM][RECIPES]` C1-S9-117 — recipe categories, difficulty, dietary flags and AI remix buttons were English in every locale
+
+**File/path:** `components/modules/recipes-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/recipes` (part of the `C1-S9-101` burn-down), the following were English in every locale:
+- recipe categories and difficulty, on cards, in filters and in the form
+- the dietary flags on a recipe and in the form
+- the ten "AI Remix" buttons (their labels came from `lib/recipes/ai-actions.ts`)
+- the four stat tiles
+
+**Fix.**
+- Categories and difficulty are `labelKey`s.
+- Dietary flags stay stored as the English word and are shown through `flagLabel()`.
+- Remix buttons are worded by action id. The English instruction sent to the model is unchanged.
+
+**Status:** FIXED. Scanner findings for `recipes-module` drop from 19 to 3. The 3 left are stored values: the flag list, and the "Pantry" category a grocery line is filed under.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TODOS]` C1-S9-118 — the task page's priorities, tabs, summary and quick-add were English, and a first task created an English list
+
+**File/path:** `components/modules/todos-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/todos`, the following were English in every locale:
+- the priorities
+- the four tabs
+- the summary donut's legend
+- the Today / Tomorrow / This Week quick-add buttons
+
+Adding a family's first task also created a list named "Tasks" in English, in the family's data.
+
+**Fix.**
+- The labels are catalogue keys.
+- The default list is named in the reader's language when it is created.
+
+**Status:** FIXED. Scanner findings for `todos-module` drop from 16 to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][LOW][FAMILY]` C1-S9-119 — the family page's roles, account badges and shared-information cards were English in every locale
+
+**File/path:** `components/modules/family-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/family`, the following were English in every locale:
+- each member's role (Parent, Kid, …) and account badge (Admin, Kid Account)
+- the role picker
+- the five "Shared information" cards and their counts ("3 contacts", "View")
+
+**Fix.**
+- Roles and badges are catalogue keys.
+- Each card's label and count come from the catalogue, and the count uses the locale's plural rules.
+
+**Status:** FIXED. Scanner findings for `family-module` drop from 16 to 3. All 3 are type-alias fragments.
+
+---
+
+### `[CLAUDE-1][LOW][DOCUMENTS/RELATIONSHIP]` C1-S9-120 — documents filters and actions, and relationship dates and gift statuses, were English in every locale
+
+**File/path:** `components/modules/documents-module.tsx`, `components/modules/relationship-module.tsx`, `tests/documents-import-actions.test.ts`, `tests/i18n-ungated-surface-ratchet.test.ts`; seven catalogues.
+
+**Problem.** The following were English in every locale:
+- On `/dashboard/documents`: the type filter, the sort options, the storage legend and the three quick actions.
+- On `/dashboard/relationship`: the date kinds, the gift statuses and the load-failure fallback.
+
+**Fix.**
+- These labels now come from catalogue keys (`labelKey`).
+- The documents test pins the translated calls for the three actions.
+- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`. After merging main at `e96e745a`, the ceiling is 2432. The extra 13 are main's P-10 change (`711b15c3`), which writes a fixed English label on each AI-request ledger row across 13 route files. That is stored row data, and it stays with that change's owner.
+
+**Status:** FIXED.
+- `documents-module`: scanner findings drop from 15 to 0.
+- `relationship-module`: scanner findings drop from 15 to 3, all type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CONCIERGE/SUBSCRIPTIONS/EXPENSES]` C1-S9-121 — concierge kinds and prompts, subscription labels and usage lines, and expense categories were English in every locale
+
+**File/path:** `components/modules/concierge-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/expenses-module.tsx`, `lib/finance/category-label.ts`, `tests/route-plan-gate.test.ts`; seven catalogues.
+
+**Problem.**
+- **Concierge.** The seven plan kinds, their opening lines, the five inspiration tips and their reply were English in every locale. A saved plan took its kind's English name, or "New Plan", as its title.
+- **Subscriptions.** Categories, cadence and status pickers (shown as raw ids), "/mo" and "/yr", "trial", "next …", the four usage lines and the last-used hint were English in every locale.
+- **Expenses.** Categories were English in every locale.
+
+**Fix.**
+- Every label listed above is now a catalogue key, rendered in the reader's language.
+- Stored values stay as they are. Expense categories go through the shared `categoryLabel()`, which now knows Travel and Household.
+- A saved concierge plan's title is written in the reader's language.
+- `route-plan-gate` now expects main's merged gate (#585) to treat a failed account read as "not a super admin". The family's own 403 stands, and nothing passes.
+- The health goal's stored label stays canonical English. `tests/health-localization.test.ts` pins that on purpose, so it is left unchanged.
+
+**Status:** FIXED.
+- Scanner findings: `concierge-module` 12 → 0.
+- `subscriptions-module` and `expenses-module`: only stored category values remain.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SIGNALS/SOCIAL/VOICE]` C1-S9-122 — family signals, the social feed and voice capture labels were English in every locale; the voice classifier reads only English
+
+**File/path:** `components/modules/family-signals-module.tsx`, `components/modules/social-feed-module.tsx`, `components/modules/voice-module.tsx`, `lib/voice/command-router.ts`; seven catalogues.
+
+**Problem.** English in every locale:
+- `/dashboard/signals`: pattern kinds and stat tiles.
+- `/dashboard/social`: feed tabs, quick filters and "Add {platform}".
+- `/dashboard/voice`:
+  - capture kinds
+  - the confirmation toast ("Added task · 3 items") and its Undo action
+  - history rows, including "Failed"
+
+**Separate finding (OPEN).** `classifyVoiceCommand()` recognises only English phrasing, such as "remind me to", "add … to the shopping list" and "schedule". A command spoken or typed in another language is filed as a note, whatever it asks for.
+
+**Fix.**
+- The labels, toasts and history rows above are now catalogue keys.
+- The voice module words each route itself (`voiceModule.route.*`).
+- `describeRoute()` in `lib/voice/command-router.ts` stays English, because the command bar and its test use it.
+- The four example commands stay English on purpose. Tapping one feeds the classifier, and a translated example would be filed as a note.
+
+**Status:**
+- **FIXED** for the labels. Scanner findings drop to 0 for `family-signals-module` and `social-feed-module`. `voice-module` has 4 left: the deliberate English examples.
+- **OPEN** for the classifier. Making it multilingual means per-locale intent rules or model classification. That is a feature decision for the owner, not a label fix.
+
+---
+
+### `[CLAUDE-1][LOW][RENEWALS/MESSAGES]` C1-S9-123 — renewal categories, message tabs and groups were English, and the family's first conversation was named in English
+
+**File/path:** `components/modules/renewals-module.tsx`, `components/modules/messages-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/renewals` showed English in every locale:
+  - each renewal's category badge and the category picker
+  - the load-failure fallback message
+- `/dashboard/messages` showed English in every locale:
+  - the conversation tabs
+  - the four smart recipient groups
+- The family's first conversation, created automatically, was saved as "Family Chat" in English.
+
+**Fix.**
+- Categories stay stored as their id and are worded through the catalogue.
+- Tabs and groups are `labelKey`s.
+- The first conversation is named in the reader's language.
+
+**Status:** FIXED. Scanner findings: `renewals-module` drops to 0; `messages-module` drops to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][MEDIUM][INSURANCE]` C1-S9-124 — insurance policy types, premium frequencies and the policy detail were English in every locale
+
+**File/path:** `components/modules/insurance-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/insurance` showed its vocabulary in English in every locale:
+- The twelve policy types (Health, Auto, Renters, Umbrella, …) came straight from `lib/insurance/policies.ts` data. They appeared in the list, the gaps line, the renewals line, the form and the detail title ("Auto insurance").
+- So did the four premium frequencies and every "/mo" or "/yr".
+- The detail sheet's eight row labels were English.
+- So was "Whole family".
+
+**Fix.**
+- `typeLabel()` and `perFrequency()` word each stored value through the catalogue.
+- The lib stays as data.
+
+**Status:** FIXED. Scanner findings for `insurance-module` drop from 7 to 0. The lib-sourced labels were a blind spot of the scanner and were found by reading the module.
+
+---
+
+### `[CLAUDE-1][LOW][PASSWORDS/WEEKLY]` C1-S9-125 — password categories and the weekly briefing's load and stress labels were English in every locale
+
+**File/path:** `components/modules/passwords-module.tsx`, `components/modules/weekly-briefing-module.tsx`; seven catalogues.
+
+**Problem.** Two pages showed English in every locale:
+- `/dashboard/passwords`:
+  - the nine category chips, the category picker and each entry's category
+  - the "Actions for …" menu label
+- `/dashboard/weekly`: each day's load (Light, Heavy) and the stress level.
+
+**Fix.** These labels now come from catalogue keys (`labelKey`).
+
+**Status:** FIXED. Scanner findings:
+- `passwords-module`: 6 → 0.
+- `weekly-briefing-module`: 7 → 1, a CSS value.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MEDICAL]` C1-S9-126 — medical and dental records spliced an English provider noun into English sentences in every locale
+
+**File/path:** `components/modules/medical-records-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/medical` and `/dashboard/dental` built their copy from an English noun ("Doctor" or "Dentist") spliced into English templates:
+- "Add Doctor", "Edit Dentist", "Doctor saved", "Could not save dentist"
+- "No doctors yet", "Add your family's dentists and generate …", "Primary doctor"
+- the empty-insurance body
+
+The page title and description, "Whole Family", "Save Changes", "Add Insurance" and both card-upload toasts were English too. None of it could be translated, because no language builds these phrases the English way.
+
+**Fix.** Each kind has whole-sentence catalogue keys (`medicalRecordsModule.{medical,dental}.*`). The module reads them through `k(name)`.
+
+**Status:** FIXED. Scanner findings drop to 2, both type-alias fragments. Most of these were template literals the scanner cannot see.
 
 ---
 

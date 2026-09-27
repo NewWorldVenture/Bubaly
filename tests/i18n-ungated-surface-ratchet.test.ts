@@ -169,7 +169,8 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // 2,650 findings across 593 app/components files with INVARIANT.txt present.
 // Bank the translated public/auth/control copy: tighten by169, do not loosen
 // the gate or compare differently configured scanners.
-const CEILING = 2650;
+// Claude-1's C1-S9-114…126 burn-down on top of that integration: 2,349.
+const CEILING = 2349;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

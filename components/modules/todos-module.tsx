@@ -29,10 +29,10 @@ type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
 
 const PRIORITY_META = {
-  low:    { label: 'Low',    color: 'text-muted',     flag: 'text-muted/50' },
-  medium: { label: 'Medium', color: 'text-blue-400',  flag: 'text-blue-400' },
-  high:   { label: 'High',   color: 'text-amber-400', flag: 'text-amber-400' },
-  urgent: { label: 'Urgent', color: 'text-danger',    flag: 'text-danger' },
+  low:    { labelKey: 'todosModule.priority.low', color: 'text-muted',     flag: 'text-muted/50' },
+  medium: { labelKey: 'todosModule.priority.medium', color: 'text-blue-400',  flag: 'text-blue-400' },
+  high:   { labelKey: 'todosModule.priority.high', color: 'text-amber-400', flag: 'text-amber-400' },
+  urgent: { labelKey: 'todosModule.priority.urgent', color: 'text-danger',    flag: 'text-danger' },
 } as const;
 
 const LIST_COLORS: Record<string, string> = {
@@ -48,10 +48,10 @@ const LIST_ICONS = ['📋', '🏠', '💼', '🛒', '🎯', '📚', '🏋️', '
 
 // Donut segment palette (explicit hex — conic-gradient needs real colors).
 const DONUT = {
-  overdue:   { label: 'Overdue',       hex: '#f43f5e' },
-  today:     { label: 'Due Today',     hex: '#f59e0b' },
-  week:      { label: 'Due This Week', hex: '#6366f1' },
-  completed: { label: 'Completed',     hex: '#22c55e' },
+  overdue:   { labelKey: 'todosModule.donut.overdue', hex: '#f43f5e' },
+  today:     { labelKey: 'todosModule.donut.dueToday', hex: '#f59e0b' },
+  week:      { labelKey: 'todosModule.donut.dueThisWeek', hex: '#6366f1' },
+  completed: { labelKey: 'todosModule.donut.completed', hex: '#22c55e' },
 };
 
 function ymd(d: Date): string {
@@ -204,7 +204,7 @@ export function TodosModule() {
   async function ensureListId(): Promise<string | null> {
     if (lists.length > 0) return lists[0].id;
     const { data, error } = await createClient().from('todo_lists')
-      .insert({ family_id: familyId, name: 'Tasks', icon: '📋', color: 'violet', is_shared: true })
+      .insert({ family_id: familyId, name: tr('todosModule.defaultListName'), icon: '📋', color: 'violet', is_shared: true })
       .select('id').single();
     if (error || !data) { toastError(describeDbError(error)); return null; }
     void refreshLists();
@@ -259,10 +259,10 @@ export function TodosModule() {
   }
 
   const TABS = [
-    { id: 'all' as const, label: 'All Tasks', n: counts.all },
-    { id: 'mine' as const, label: 'My Tasks', n: counts.mine },
-    { id: 'assigned' as const, label: 'Assigned to Me', n: counts.assigned },
-    { id: 'completed' as const, label: 'Completed', n: counts.completed },
+    { id: 'all' as const, label: tr('todosModule.tab.allTasks'), n: counts.all },
+    { id: 'mine' as const, label: tr('todosModule.tab.myTasks'), n: counts.mine },
+    { id: 'assigned' as const, label: tr('todosModule.tab.assignedToMe'), n: counts.assigned },
+    { id: 'completed' as const, label: tr('todosModule.tab.completed'), n: counts.completed },
   ];
 
   function TaskRow({ item }: { item: TodoItem }) {
@@ -412,7 +412,7 @@ export function TodosModule() {
             {([['overdue', summary.overdue], ['today', summary.today], ['week', summary.week], ['completed', summary.completed]] as const).map(([k, v]) => (
               <div key={k} className="flex items-center gap-2 text-xs">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: DONUT[k].hex }} />
-                <span className="flex-1 text-muted">{DONUT[k].label}</span>
+                <span className="flex-1 text-muted">{tr(DONUT[k].labelKey)}</span>
                 <span className="font-semibold">{v}</span>
               </div>
             ))}
@@ -481,10 +481,10 @@ export function TodosModule() {
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void quickAdd('today'); } }}
             placeholder={tr('todos.whatNeedsToBeDone')} disabled={quickBusy} />
           <div className="mt-2 grid grid-cols-4 gap-1.5">
-            {([['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This Week']] as const).map(([w, label]) => (
+            {([['today', 'todosModule.when.today'], ['tomorrow', 'todosModule.when.tomorrow'], ['week', 'todosModule.when.thisWeek']] as const).map(([w, labelKey]) => (
               <button key={w} onClick={() => void quickAdd(w)} disabled={quickBusy}
                 className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface/40 py-2 text-[10px] font-medium text-muted transition hover:border-brand/40 hover:text-brand-text disabled:opacity-50">
-                <CalendarIcon className="h-3.5 w-3.5" /> {label}
+                <CalendarIcon className="h-3.5 w-3.5" /> {tr(labelKey)}
               </button>
             ))}
             <button onClick={openAdd} disabled={quickBusy}
@@ -697,7 +697,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
             {(id) => (
               <select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand">
-                {Object.entries(PRIORITY_META).map(([val, meta]) => <option key={val} value={val}>{meta.label}</option>)}
+                {Object.entries(PRIORITY_META).map(([val, meta]) => <option key={val} value={val}>{tr(meta.labelKey)}</option>)}
               </select>
             )}
           </Field>
