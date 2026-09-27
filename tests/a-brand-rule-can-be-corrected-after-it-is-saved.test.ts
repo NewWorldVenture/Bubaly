@@ -57,6 +57,7 @@ vi.mock('@/lib/i18n/server', async () => {
   const enUS = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
   return {
     getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(enUS, key, params),
+    getLocaleContext: async () => ({ locale: { code: 'en-US' } }),
   };
 });
 vi.mock('@/lib/marketing/admin', () => ({

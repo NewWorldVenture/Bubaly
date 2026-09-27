@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { formatCents } from '@/lib/wallet/ledger';
 import { adminToggleFeatureFlagAction } from '@/app/(app)/admin/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 export type FlagRow = { key: string; enabled: boolean; description: string | null };
 export type AuditRow = {
@@ -28,6 +28,7 @@ const STRIPE_FLAGS = new Set([
 ]);
 
 export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags: FlagRow[]; audit: AuditRow[] }) {
+  const locale = useLocale().code;
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -126,7 +127,7 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{a.detail ?? a.action}</div>
                   <div className="text-[11px] text-muted">
-                    <code>{a.action}</code>{a.entityType ? ` · ${a.entityType}` : ''} · {new Date(a.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    <code>{a.action}</code>{a.entityType ? ` · ${a.entityType}` : ''} · {new Date(a.createdAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
