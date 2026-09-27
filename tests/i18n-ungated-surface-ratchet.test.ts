@@ -262,7 +262,18 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // (main's quoted-or-template toast rule in place of the port's separate toast
 // template rule), counts 2,327: lower than either, because each side had
 // translated strings the other still counted.
-const CEILING = 2327;
+// ── MERGED WITH MAIN THROUGH #606: 2,327 -> 2,339 ──────────────────────────
+//
+// Raised, for one reason, by exactly what that reason adds. Main's P-10 review
+// (711b15c3, #585) changed thirteen withAiRequest call sites to record a FIXED
+// English label ("Generate a briefing", "Find a pro", …) in
+// ai_requests.request_text instead of what the person typed, because every
+// active family member can read that table (0250). Its guard holds every call
+// site to a literal, so these cannot become t() calls. They are record labels,
+// not copy: the one screen that renders request_text for them is the
+// English-only super-admin AI Activity page. The tree stood one under the old
+// ceiling, so thirteen new labels move the count by twelve.
+const CEILING = 2339;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

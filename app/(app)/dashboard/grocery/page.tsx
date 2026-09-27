@@ -7,6 +7,14 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('trustDomain.shopping') };
 }
 
-export default function GroceryPage() {
-  return <ShoppingModule />;
+export default async function GroceryPage() {
+  const t = await getTranslations();
+  // The lists module has no page title of its own (its headings are the list
+  // sidebar and the open list); the route's h1 lives here, for screen readers.
+  return (
+    <>
+      <h1 className="sr-only">{t('grocery.groceries')}</h1>
+      <ShoppingModule />
+    </>
+  );
 }

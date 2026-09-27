@@ -107,7 +107,7 @@ export function UtilitiesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> {t('utilities.utilityTracking')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><Gauge className="h-4 w-4 text-brand-text" /> {t('utilities.utilityTracking')}</h1>
         <div className="flex items-center gap-2">
           {kinds.length > 0 && (
             <Button variant="secondary" onClick={analyze} disabled={analyzing}>

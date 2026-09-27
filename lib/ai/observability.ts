@@ -36,10 +36,13 @@ export type AiRequestSpec = {
   /** Dotted surface name, e.g. `briefing.daily`, `chat.assistant`. Stored on the row. */
   feature: string;
   /**
-   * What the family asked for. Keep it non-sensitive — most surfaces pass a
-   * fixed label ("Analyse a note") precisely so a person's own words never land
-   * here. Truncated to `MAX_AI_REQUEST_TEXT_CHARS` on the way in, so a caller
-   * interpolating unbounded input cannot write an unbounded row.
+   * A fixed label for what was asked ("Analyse a note", "Assistant turn") —
+   * never the person's own words or anything derived from them. The row is
+   * readable by every active member of the family (0250's SELECT policy), so a
+   * message typed to the assistant, a pasted note or a trip destination written
+   * here would be shown to the rest of the household. Every call site passes a
+   * string literal; `tests/an-ai-request-row-never-carries-what-was-typed.test.ts`
+   * holds them to it. Still truncated to `MAX_AI_REQUEST_TEXT_CHARS`.
    */
   text: string;
   kind?: AiRequestKind;

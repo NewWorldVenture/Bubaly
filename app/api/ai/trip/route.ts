@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         // look like "no API key configured" too.
         const parsed = await withAiRequest(
           scopeFromUserContext(ctx, supabase),
-          { feature: 'travel.research', text: `Research a trip to ${input.destination}` },
+          { feature: 'travel.research', text: 'Research a trip' },
           async (obs) => {
             const provider = await resolveProvider();
             const completion = await provider.complete({

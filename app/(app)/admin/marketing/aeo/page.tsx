@@ -54,7 +54,7 @@ export default async function AeoPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingAeo.marketingAeo')}</h1>
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingAeo.marketingAeo')}</h2>
           <p className="mt-1 text-sm text-muted">{t('adminMarketingAeo.answerEngineOptimizationTrackTheQuestions')}</p>
         </div>
         <Link href="/admin/marketing/seo" className="text-sm font-medium text-brand-text hover:underline">SEO →</Link>
@@ -130,7 +130,7 @@ async function AdminAeoReadError() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('aeo.marketingAeo')}</h1>
+        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('aeo.marketingAeo')}</h2>
         <p className="mt-1 text-sm text-muted">{t('aeo.trackCustomerQuestionsAndStructured')}</p>
       </div>
       <ErrorState message={t('aeo.couldNotLoadAeoQuestions')} />

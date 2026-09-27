@@ -27,7 +27,7 @@ async function ReadFailure() {
   const t = await getTranslations();
   return (
     <div className="space-y-5 p-4 sm:p-6">
-      <h1 className="text-xl font-black sm:text-2xl">{t('leadScores.leadScores')}</h1>
+      <h2 className="text-xl font-black sm:text-2xl">{t('leadScores.leadScores')}</h2>
       <ErrorState message={t('leadScores.couldNotLoadLeadScores')} />
       <a href="/admin/marketing/lead-scores" className="text-sm font-medium text-brand-text underline">{t('leadScores.refreshLeadScores')}</a>
     </div>
@@ -89,7 +89,7 @@ export default async function LeadScoresPage() {
     <div className="space-y-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingLeadScores.leadScores')}</h1>
+          <h2 className="text-xl font-black sm:text-2xl">{t('adminMarketingLeadScores.leadScores')}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">{t('leadScores.everyContactScored0100')}</p>
         </div>
         <RecomputeButton />

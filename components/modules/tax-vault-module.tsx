@@ -104,7 +104,7 @@ export function TaxVaultModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('taxVault.taxDocumentVault')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('taxVault.taxDocumentVault')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="tax" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('taxVault.addDocument')}</Button>

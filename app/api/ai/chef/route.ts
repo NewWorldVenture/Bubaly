@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       // so the row can tell the three apart.
       const parsed = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
-        { feature: 'meals.chef', text: request.slice(0, 200) },
+        { feature: 'meals.chef', text: 'Recipe from the AI chef' },
         async (obs) => {
           const completion = await (await resolveProvider()).complete({
             system: buildChefSystem(),

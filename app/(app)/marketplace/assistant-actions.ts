@@ -87,7 +87,7 @@ export async function askMarketAssistantAction(
       // like. The wrapper sits inside the swallow so the row separates them.
       const text = await withAiRequest(
         scopeFromUserContext(ctx, sb),
-        { feature: 'marketplace.assistant', text: q.slice(0, 200) },
+        { feature: 'marketplace.assistant', text: 'Marketplace assistant' },
         async (obs) => {
           const provider = await resolveProvider();
           const messages: AIMessage[] = [

@@ -8,7 +8,7 @@
 // (user_preferences.notification_prefs.sidebarNav) so the rail follows the
 // member across devices, with localStorage as an offline cache.
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Star, ListPlus, ListX, Lock, RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -115,6 +115,8 @@ function useSidebarNav() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [reload, setReload] = useState(0);
+  const networkRetries = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Supabase is authoritative — reconcile once on mount (and on an explicit retry).
   useEffect(() => {
@@ -125,6 +127,7 @@ function useSidebarNav() {
       // (a failed re-read un-confirms whatever an earlier read established,
       // as in Settings) and surface the failure.
       if (error) { setLoadError(true); setLoaded(false); return; }
+      networkRetries.current = 0;
       setLoadError(false);
       if (nav != null) {
         const clean = resolveNavKeys(nav, DEFAULT_SIDEBAR_NAV_KEYS, ALL_SERVICES_KEYS);
@@ -140,13 +143,23 @@ function useSidebarNav() {
       // authoritative, and writable.
       setLoaded(true);
     }).catch((err) => {
+      // A server action the router cancelled (a client redirect landing while
+      // the read was in flight, e.g. /dashboard/vacations/<id> → /overview)
+      // rejects with a network TypeError while this sidebar stays mounted.
+      // That is not a read that failed: try again shortly, twice, before
+      // saying so. Anything else, or a third network failure, is reported.
+      if (active && err instanceof TypeError && networkRetries.current < 2) {
+        networkRetries.current += 1;
+        retryTimer.current = setTimeout(() => setReload((value) => value + 1), 800 * networkRetries.current);
+        return;
+      }
       console.error('[sidebar] preference read failed', err);
       if (active) { setLoadError(true); setLoaded(false); }
     });
-    return () => { active = false; };
+    return () => { active = false; if (retryTimer.current) clearTimeout(retryTimer.current); };
   }, [reload]);
 
-  const retryLoad = useCallback(() => { setLoadError(false); setReload((value) => value + 1); }, []);
+  const retryLoad = useCallback(() => { networkRetries.current = 0; setLoadError(false); setReload((value) => value + 1); }, []);
 
   // Live update when a layout change is broadcast in this tab (Settings editor
   // saving, or the other FreeTierSidebar instance pinning).
