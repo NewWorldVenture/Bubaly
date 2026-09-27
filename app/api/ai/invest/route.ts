@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 503 });
       }
       if (count >= dailyLimit) {
-        return NextResponse.json({ error: `You've reached today's Money Mentor limit (${dailyLimit}/day). Upgrade to Plus for unlimited.` }, { status: 429 });
+        return NextResponse.json({ error: t('invest.mentorDailyLimitReached', { limit: dailyLimit }) }, { status: 429 });
       }
     }
 

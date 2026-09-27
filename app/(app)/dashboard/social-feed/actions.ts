@@ -125,7 +125,7 @@ export async function addByUrlAction(input: { url: string; category?: string; so
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
-    if (!res.ok) return { ok: false, error: `Couldn’t fetch that link (HTTP ${res.status}).` };
+    if (!res.ok) return { ok: false, error: t('socialFeed.couldNotFetchLink', { status: res.status }) };
     const type = res.headers.get('content-type') ?? '';
     if (type && !/text\/html|application\/xhtml|text\/xml|application\/xml/i.test(type)) {
       return { ok: false, error: t('actions.thatLinkIsnTA') };
