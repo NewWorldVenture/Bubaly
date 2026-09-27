@@ -29,6 +29,16 @@ describe('onboarding resumes only your own family (SEC-018)', () => {
     expect(between).toMatch(/if \(!newFamily\)|claimedError/);
   });
 
+  it('the reset action records only a family the user belongs to', () => {
+    // It used to copy the user's own active_family_id — which they can set to
+    // any family — into onboarding_progress.family_id with the service role.
+    const start = action.indexOf('export async function resetOnboardingAction(');
+    const body = action.slice(start, action.indexOf('\nexport ', start + 10));
+    expect(body).toMatch(/from\('family_members'\)\.select\('family_id'\)[\s\S]*?\.eq\('is_active', true\)/);
+    expect(body).toContain('familyId: ownFamilyId,');
+    expect(body).not.toMatch(/familyId: \(prefRow\?\.active_family_id/);
+  });
+
   it('agrees with the calendar path, which always had this check', () => {
     expect(calendar).toMatch(/family\.data\?\.created_by !== scope\.userId\) throw new Error\('Family owner changed'\)/);
   });

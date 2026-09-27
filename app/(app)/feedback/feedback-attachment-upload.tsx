@@ -53,10 +53,10 @@ export function FeedbackAttachmentUpload({
       if (error) { toastError(`Upload failed: ${error.message}`); return; }
       const previousPath = ownedPath ?? feedbackAttachmentPath(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) await removeFeedbackAttachmentPath(sb, previousPath);
-      // The PATH, not a public URL. The bucket is private as of 0325, so
+      // The PATH, not a public URL. The bucket is private as of 0393, so
       // getPublicUrl now returns a string that resolves to nothing — recording
       // one would store a value that looks usable and is not. The admin console
-      // signs whatever is here; rows written before 0325 still hold the old URL
+      // signs whatever is here; rows written before 0393 still hold the old URL
       // and feedbackAttachmentPath reads both.
       setOwnedPath(data.path);
       onChange(data.path);

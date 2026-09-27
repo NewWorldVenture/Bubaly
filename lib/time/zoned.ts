@@ -163,7 +163,7 @@ export function asWallClockIn(instant: Date, timezone: string): Date {
  *
  * An unusable zone falls back to the host's midnight, which is exactly the old
  * behaviour: this is a correction, so it must never be the reason a page stops
- * rendering. `0323` and `isValidTimezone` keep unusable zones out of the
+ * rendering. `0391` and `isValidTimezone` keep unusable zones out of the
  * column in the first place.
  */
 export function startOfLocalDay(instant: Date, timezone: string): Date {

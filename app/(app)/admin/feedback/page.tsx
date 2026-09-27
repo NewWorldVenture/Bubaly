@@ -44,7 +44,7 @@ export default async function AdminFeedbackPage() {
     return <AdminFeedbackReadError />;
   }
 
-  // `feedback-attachments` is private as of 0325, so the stored value — a bare
+  // `feedback-attachments` is private as of 0393, so the stored value — a bare
   // path on new rows, an old public URL on rows written before it — is not
   // something an <img src> can load. This is the only surface that draws these
   // screenshots, so it is the only place that has to sign them.

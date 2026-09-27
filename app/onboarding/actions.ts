@@ -279,22 +279,36 @@ export async function resetOnboardingAction(): Promise<Result> {
   if (prefErr) return onboardingFailure('reset preference update', prefErr, 'Could not reset onboarding.');
 
   // 2. Mark the lifecycle row reset (best-effort, degrades pre-migration).
+  //    `active_family_id` is the user's own preference row, so it names
+  //    whatever family they set it to. Written straight into
+  //    onboarding_progress.family_id by the service role, it walked around the
+  //    column 0398 takes away from clients — the pointer SEC-018 turned on. Only
+  //    a family the user is an active member of is recorded.
+  const preferred = (prefRow?.active_family_id as string | null) ?? null;
+  const { data: membership } = preferred
+    ? await admin.from('family_members').select('family_id')
+      .eq('user_id', auth.user.id).eq('family_id', preferred).eq('is_active', true).maybeSingle()
+    : { data: null };
+  const ownFamilyId = membership?.family_id ?? null;
   await recordOnboardingProgress(admin, {
     userId: auth.user.id,
-    familyId: (prefRow?.active_family_id as string | null) ?? null,
+    familyId: ownFamilyId,
     status: 'reset',
   });
 
   // The service client, not the caller's: this is a row the SERVER authors about
-  // a reset it just performed, and `active_family_id` may be null for a user who
-  // has not joined a household yet. 0300 pins `audit_insert` to
+  // a reset it just performed, and the family may be null for a user who has
+  // not joined a household yet. 0300 pins `audit_insert` to
   // `is_family_member(family_id) and actor_id = auth.uid()` and drops the
   // `family_id is null` branch — this was the one client-side caller that used it,
-  // and `admin` was already in scope two lines above. Every other null-family
-  // audit writer (the admin actions, the benchmarks export) was on the service
-  // role already.
+  // and `admin` was already in scope above. Every other null-family audit writer
+  // (the admin actions, the benchmarks export) was on the service role already.
+  //
+  // The family it names is the VERIFIED one, not `active_family_id`: the service
+  // role writes whatever it is given, so recording the unverified preference
+  // would launder a pointer into the audit trail with no policy to catch it.
   await logAudit(admin, {
-    familyId: (prefRow?.active_family_id as string | null) ?? null, actorId: auth.user.id,
+    familyId: ownFamilyId, actorId: auth.user.id,
     action: 'update', resource: 'onboarding_progress', resourceId: auth.user.id,
     metadata: { onboarding: 'reset' },
   });
@@ -451,7 +465,7 @@ export async function finalizeOnboardingAction(input: {
     // someone else's family there became a parent of it and could read its
     // password vault. prepareCalendarFamily has always refused this ("Family
     // owner changed"); this is the same check, in the path that lacked it, so
-    // it holds the moment this code deploys rather than when 0331 is applied.
+    // it holds the moment this code deploys rather than when 0398 is applied.
     if (!newFamily) {
       const { data: claimed, error: claimedError } = await admin
         .from('families').select('created_by').eq('id', familyId).maybeSingle();
