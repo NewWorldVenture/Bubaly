@@ -78,6 +78,17 @@ const nextConfig = {
         destination: '/marketplace/:path*',
         permanent: true,
       },
+      // Consolidated routes, kept alive for old links and bookmarks. These were
+      // pages that only called redirect(), and a redirect() inside the signed-in
+      // app streams: app/(app)/loading.tsx has already sent the shell, so the
+      // "redirect" was a client-side navigation after the sidebar mounted — its
+      // in-flight fetch was cut off and logged, and the first response was a
+      // 200 (page audit, signed-in sweep, 2026-09-27). Here they are one 308.
+      { source: '/parent', destination: '/dashboard/family-operations', permanent: true },
+      { source: '/admin/tiers', destination: '/admin/tier-features', permanent: true },
+      { source: '/dashboard/family-ai-assistant', destination: '/dashboard/assistant', permanent: true },
+      { source: '/dashboard/family-knowledge-graph', destination: '/dashboard/graph', permanent: true },
+      { source: '/dashboard/family-memory', destination: '/dashboard/memories', permanent: true },
     ];
   },
   async headers() {

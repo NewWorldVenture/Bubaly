@@ -30,7 +30,7 @@ export default async function SocialPage() {
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">
         Plan and schedule posts across platforms. Connect platform APIs to auto-publish; until then, posts are tracked here and published manually — no fake engagement metrics.
       </div>
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           {(posts ?? []).length === 0 ? (
             <EmptyState icon={Share2} title={t('adminMarketingSocial.noPostsPlanned')} description={t('social.draftYourFirstPostOn')} />

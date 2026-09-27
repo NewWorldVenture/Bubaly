@@ -171,7 +171,7 @@ export function WeekendModule() {
 
       {/* search bar */}
       <div className="rounded-2xl border border-border bg-surface/40 p-4">
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
           <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-3">
             <MapPin className="h-4 w-4 shrink-0 text-muted" />
             <Input value={zip} inputMode="numeric" maxLength={5} placeholder={t('weekend.zipCodeEG90210')}
@@ -208,7 +208,7 @@ export function WeekendModule() {
                 ))}
               </ul>
             )}
-            <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
+            <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_2fr_auto_auto]">
               <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder={t('weekend.nameEGCityCalendar')} className="h-9" />
               <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
               <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>

@@ -391,7 +391,7 @@ export function MigrateWizard() {
     <div className="space-y-4">
       <button type="button" onClick={() => { setStep('pick'); setFiles([]); setError(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"><ArrowLeft className="h-4 w-4" /> {tr('migrateWizard.chooseADifferentApp')}</button>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_1.2fr]">
         {/* Instructions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-3">

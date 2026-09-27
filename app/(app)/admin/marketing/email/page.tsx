@@ -43,7 +43,7 @@ export default async function EmailPage() {
           : <span><strong>{t('adminMarketingEmail.noEmailProviderConfigured')}</strong> Set <code>RESEND_API_KEY</code> {t('adminMarketingEmail.toEnableSendingYouCanStill')}</span>}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {(emails ?? []).length === 0 ? (
             <EmptyState icon={Mail} title={t('adminMarketingEmail.noEmailCampaignsYet')} description={t('email.draftYourFirstEmailOn')} />

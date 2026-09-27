@@ -37,7 +37,7 @@ export default async function AdsPage() {
         <Card><p className="text-xs text-muted">{t('adminMarketingAds.totalSpend')}</p><p className="text-2xl font-bold">{fmtMoney(totalSpend)}</p></Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           {(ads ?? []).length === 0 ? (
             <EmptyState icon={Target} title={t('adminMarketingAds.noAdCampaignsYet')} description={t('ads.planYourFirstAdCampaign')} />

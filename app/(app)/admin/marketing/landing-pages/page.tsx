@@ -24,7 +24,7 @@ export default async function LandingPagesPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
         {(pages ?? []).length === 0 ? (
           <EmptyState icon={Layout} title={t('adminMarketingLandingPages.noLandingPagesYet')} description={t('landingPages.draftYourFirstLandingPage')} />

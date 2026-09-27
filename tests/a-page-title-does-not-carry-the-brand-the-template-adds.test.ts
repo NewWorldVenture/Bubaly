@@ -44,6 +44,17 @@ describe('page titles leave the brand to the template', () => {
     expect(doubled).toEqual([]);
   });
 
+  // generateMetadata builds its title at request time, so the literal above
+  // never sees it: `${t('filesHubModule.cloudTitle')} | Bubaly` read "Cloud
+  // Storage | Bubaly · Bubaly" in the signed-in sweep. Any returned `title:`
+  // template or string that ends in the brand is the same defect.
+  it('no generated page title appends the brand either', () => {
+    const doubled = files.flatMap((file) =>
+      [...readFileSync(file, 'utf8').matchAll(/(?<!absolute:\s*)\btitle:\s*(['"`])((?:(?!\1).)*?(?:·|\||—|–|-|:)\s*Bubaly\s*)\1/g)]
+        .map((m) => `${file}: ${m[2]}`));
+    expect(doubled).toEqual([]);
+  });
+
   it('the rule would catch the shapes production shipped', () => {
     for (const title of ['Send a gift · Bubaly', 'Smart Kitchen | Bubaly', 'Deals · Marketplace | Bubaly']) {
       const src = `export const metadata: Metadata = { title: '${title}' };`;
