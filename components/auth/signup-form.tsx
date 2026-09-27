@@ -30,6 +30,11 @@ export function SignupForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  // False until the form has mounted: the entry buttons below are server markup
+  // with no handler before hydration, and their handlers refuse an unmounted
+  // form, so a tap that early was silently lost. Holding them disabled makes the
+  // wait visible instead.
+  const [ready, setReady] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
@@ -53,6 +58,7 @@ export function SignupForm() {
   useLayoutEffect(() => { currentIntent.current = intent; }, [intent]);
   useLayoutEffect(() => {
     mounted.current = true;
+    setReady(true);
     return () => { mounted.current = false; };
   }, []);
   useEffect(() => {
@@ -198,6 +204,7 @@ export function SignupForm() {
         <div className="space-y-3">
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className={authButtonClass}
           >
@@ -205,6 +212,7 @@ export function SignupForm() {
           </button>
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowEmail(true); }}
             className={authButtonClass}
           >
@@ -212,6 +220,7 @@ export function SignupForm() {
           </button>
           <button
             type="button"
+            disabled={!ready}
             onClick={() => { if (mounted.current && phase.current === 'idle') setShowPhone(true); }}
             className="mx-auto block pt-1 text-center text-sm font-medium text-muted underline-offset-4 hover:text-fg hover:underline"
           >
