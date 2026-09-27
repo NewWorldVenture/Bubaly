@@ -620,7 +620,7 @@ export function DocumentsModule() {
                         <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded', meta.tint)}><meta.Icon className={cn('h-2.5 w-2.5', meta.color)} /></span>
                         <p className="truncate text-xs font-medium">{doc.title}</p>
                       </div>
-                      <p className="mt-0.5 text-[11px] text-muted">{timeAgo(doc.created_at)}</p>
+                      <p className="mt-0.5 text-[11px] text-muted" suppressHydrationWarning>{timeAgo(doc.created_at)}</p>
                     </div>
                   </div>
                 );

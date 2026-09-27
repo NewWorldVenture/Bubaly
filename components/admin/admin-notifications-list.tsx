@@ -159,7 +159,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                     <div className="flex items-center gap-2">
                       <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.label}</span>
                       {!n.is_read && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
-                      <span className="ml-auto text-[11px] text-muted/70">{timeAgo(n.created_at)}</span>
+                      <span className="ml-auto text-[11px] text-muted/70" suppressHydrationWarning>{timeAgo(n.created_at)}</span>
                     </div>
                     <p className="mt-0.5 text-sm font-semibold text-fg">{n.title}</p>
                     {n.body && <p className="mt-0.5 whitespace-pre-line text-xs text-muted">{n.body}</p>}

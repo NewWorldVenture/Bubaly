@@ -343,7 +343,7 @@ export function ChoresModule() {
                     <span className="text-2xl">{choreEmoji(a.chore)}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{a.chore?.title ?? 'Chore'}</div>
-                      <div className="text-xs text-muted">{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
+                      <div className="text-xs text-muted" suppressHydrationWarning>{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts</span>
                     {manager && (
@@ -494,7 +494,7 @@ export function ChoresModule() {
                   <Avatar name={m?.display_name ?? '?'} color={m?.color} size={26} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs"><span className="font-medium">{m?.display_name ?? 'Someone'}</span> submitted <span className="font-medium">{a.chore?.title}</span></div>
-                    <div className="text-[10px] text-muted">{timeAgo(a.submitted_at)}</div>
+                    <div className="text-[10px] text-muted" suppressHydrationWarning>{timeAgo(a.submitted_at)}</div>
                   </div>
                   {manager && (
                     <button onClick={() => approve(a)} disabled={busy === a.id}
