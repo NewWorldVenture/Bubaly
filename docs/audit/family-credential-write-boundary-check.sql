@@ -227,13 +227,22 @@ begin
   -- Read the restored state out of the CATALOG rather than trusting the four
   -- statements above: a control that succeeded because RLS was off, or because
   -- some policy here reads `true`, is a control that cannot fail.
+  --
+  -- PERMISSIVE policies only. 0394 adds a RESTRICTIVE step-up guard,
+  -- `session_cleared_step_up()`, which this fixture's child passes — they have
+  -- no verified factor, so the rule does not ask them for one — and so it cannot
+  -- be what refused them. Any OTHER restrictive policy could be, and is counted
+  -- as loose so the control fails rather than guesses.
   select count(*), count(*) filter (where
            coalesce(pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid))
              <> 'is_family_member(family_id)')
     into policy_n, loose
     from pg_policy p join pg_class c on c.oid = p.polrelid
     join pg_namespace ns on ns.oid = c.relnamespace
-   where ns.nspname = 'public' and c.relname = 'family_credentials';
+   where ns.nspname = 'public' and c.relname = 'family_credentials'
+     and (p.polpermissive
+          or coalesce(pg_get_expr(p.polqual, p.polrelid), '') <> 'session_cleared_step_up()'
+          or coalesce(pg_get_expr(p.polwithcheck, p.polrelid), 'session_cleared_step_up()') <> 'session_cleared_step_up()');
   if policy_n <> 4 or loose <> 0 then
     failures := array_append(failures, format(
       'CONTROL FAILED: after restoring 0119 the table carries %s policies of which %s do not read is_family_member(family_id) — the control below would not be measuring the role clause',

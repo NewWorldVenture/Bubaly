@@ -343,7 +343,13 @@ describe('Supabase migration filename safety', () => {
     // 0399_decided_concierge_runs_leave_needs_you.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0332 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0400');
+    // 0400_service_only_functions_are_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0333 before main claimed that number.
+    //
+    // 0401_an_auction_can_close.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0334 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0402');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

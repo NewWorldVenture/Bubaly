@@ -96,12 +96,34 @@ grant usage on schema auth, storage, extensions, public to anon, authenticated, 
 -- database, until 0286 closed it. Setting the defaults up front means a
 -- migration's REVOKE survives, and a missing one is caught.
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- And FUNCTIONS, for the same reason (TEST-012). Supabase grants EXECUTE on
+-- every new function directly to anon and authenticated (pg_default_acl,
+-- objtype f), so a migration's `revoke ... from public` leaves both callers in
+-- place on a real project while it closes the function here. Without this line
+-- the harness was safer than production again: wallet_reserve_card_auth and
+-- marketplace_place_bid_unchecked were callable with the anon key on every real
+-- database (SEC-024) and not callable here, so no probe could see it.
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text, phone text,
   raw_user_meta_data jsonb default '{}', raw_app_meta_data jsonb default '{}', created_at timestamptz default now());
-create or replace function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;
-create or replace function auth.role() returns text language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claim.role', true),''),'authenticated') $f$;
-create or replace function auth.email() returns text language sql stable as $f$ select nullif(current_setting('request.jwt.claim.email', true),'') $f$;
-create or replace function auth.jwt() returns jsonb language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb,'{}'::jsonb) $f$;
+-- Supabase's own definitions, copied from a live project (TEST-012). Each reads
+-- the single claim setting OR the JSON claims PostgREST sets. These used to read
+-- only `request.jwt.claim.<x>`, so a probe that set `request.jwt.claims` — the
+-- way PostgREST and the local stack do it — was nobody here, and its CONTROL
+-- refused to pass. And auth.role() defaulted to 'authenticated', where
+-- Supabase returns NULL for a session with no role claim.
+create or replace function auth.uid() returns uuid language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid $f$;
+create or replace function auth.role() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.role', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'))::text $f$;
+create or replace function auth.email() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.email', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'))::text $f$;
+create or replace function auth.jwt() returns jsonb language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim', true), ''),
+                  nullif(current_setting('request.jwt.claims', true), ''))::jsonb $f$;
 -- Supabase ships `auth.mfa_factors`, and without it a step-up policy cannot even
 -- be CREATED: `create policy … not exists (select 1 from auth.mfa_factors …)`
 -- fails at 42P01, because Postgres resolves the relation at CREATE POLICY time.

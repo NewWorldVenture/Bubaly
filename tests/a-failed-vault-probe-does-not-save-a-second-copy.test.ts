@@ -394,7 +394,8 @@ describe('a failed vault probe does not save a second copy', () => {
     const result = await saveDiscoveredRecipe({ provider: 'themealdb', sourceRecipeId: TERIYAKI });
 
     expect(result.ok, 'a duplicate-key error with no row behind it must be reported').toBe(false);
-    expect(result.ok ? '' : result.error).toContain('duplicate key');
+    // Described, not the database's own "duplicate key …" text (SEC-023).
+    expect(result.ok ? '' : result.error).toBe('That already exists. Try a different value.');
     expect(state.rows).toHaveLength(0);
   });
 });
