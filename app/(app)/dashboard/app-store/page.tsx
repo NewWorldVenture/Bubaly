@@ -12,7 +12,10 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'App Store · Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.appStore') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function AppStorePage({ searchParams }: { searchParams: Promise<{ cat?: string; q?: string }> }) {

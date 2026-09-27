@@ -11,7 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Accounts · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('adminSecurity.accounts')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 function cap(ok: boolean, limitation?: string) {

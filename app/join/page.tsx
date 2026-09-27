@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { Suspense } from 'react';
 import { Logo } from '@/components/brand/logo';
 import { JoinInvite } from '@/components/auth/join-invite';
 import { LoadingBlock } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Join a family', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.joinAFamily'), robots: { index: false } };
+}
 
 export default function JoinPage() {
   return (

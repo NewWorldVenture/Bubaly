@@ -16,7 +16,10 @@ import { isProviderConfigured, getAdapter } from '@/lib/sync/registry';
 import type { SyncProviderEnum } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sync provider' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.syncProvider') };
+}
 export const dynamic = 'force-dynamic';
 
 const VALID: SyncProvider[] = ['google', 'microsoft', 'apple'];

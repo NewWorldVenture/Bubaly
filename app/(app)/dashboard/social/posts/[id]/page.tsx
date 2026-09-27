@@ -13,7 +13,10 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { formatScheduledTime, scheduleDisplayTimezone, scheduleStatusKey } from '@/lib/social/schedule-time';
 import { safeSocialLink } from '@/lib/social/links';
 
-export const metadata: Metadata = { title: 'Post · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('announcements.post')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const TARGET_TONE: Record<string, 'neutral' | 'success' | 'danger' | 'warning' | 'accent'> = {

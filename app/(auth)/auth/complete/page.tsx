@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { headers } from 'next/headers';
 import { CallbackCompletion } from '@/components/auth/callback-completion';
 import { resolveAuthSelection } from '@/lib/billing/review-selection';
@@ -6,7 +7,10 @@ import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-serve
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
 
-export const metadata: Metadata = { title: 'Complete sign in', robots: { index: false, follow: false }, referrer: 'no-referrer' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('authCallback.title'), robots: { index: false, follow: false }, referrer: 'no-referrer' };
+}
 
 export default async function CallbackCompletionPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Start from this request's immutable store before awaiting query admission.

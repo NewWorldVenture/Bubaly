@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { redirect } from 'next/navigation';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -7,7 +8,10 @@ import { isSafeReturnPath, sessionStrength } from '@/lib/auth/mfa';
 import { Logo } from '@/components/brand/logo';
 import { StepUpForm } from '@/components/auth/step-up-form';
 
-export const metadata: Metadata = { title: 'Confirm it’s you', robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.confirmItsYou'), robots: { index: false, follow: false } };
+}
 export const dynamic = 'force-dynamic';
 
 /**

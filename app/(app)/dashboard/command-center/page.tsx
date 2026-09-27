@@ -19,7 +19,10 @@ import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Command Center' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.commandCenter') };
+}
 export const dynamic = 'force-dynamic';
 
 const HOUR = 3600_000;

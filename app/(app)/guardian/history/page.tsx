@@ -8,7 +8,10 @@ import { ErrorState } from '@/components/ui/states';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Communication History · AI Call Guardian · Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('guardianHistory.communicationHistory')} · ${t('navLabel.aiCallGuardian')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage({

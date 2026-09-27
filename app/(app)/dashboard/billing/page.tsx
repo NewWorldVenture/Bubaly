@@ -10,7 +10,10 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { returnPathWith } from '@/lib/auth/mfa';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Finances' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.finances') };
+}
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // This is the money area's front door, so it takes the money area's guard.

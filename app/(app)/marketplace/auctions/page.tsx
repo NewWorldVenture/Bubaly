@@ -12,7 +12,10 @@ import { getFormat } from '@/lib/utils/format-server';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 
-export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('auctions.liveAuctions')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

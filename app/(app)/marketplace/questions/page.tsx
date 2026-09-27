@@ -10,7 +10,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Questions · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('adminMarketingAeo.questions')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 type QRow = QuestionLike & { id: string; question: string; answer: string | null; answered_by: string | null };

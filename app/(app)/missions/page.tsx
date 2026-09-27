@@ -9,7 +9,10 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewCard, type ReviewItem } from './review-card';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Missions' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyMissions') };
+}
 export const dynamic = 'force-dynamic';
 
 const REVIEW_STATUSES = ['pending', 'ai_reviewed', 'needs_improvement', 'parent_review', 'disputed'];

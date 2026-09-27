@@ -10,7 +10,10 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { autopilotTitleFor } from '@/lib/autopilot/engine';
 
-export const metadata: Metadata = { title: 'Calm | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.calm') };
+}
 export const dynamic = 'force-dynamic';
 
 type FoiSuggestion = { id?: string; title?: string; detail?: string; href?: string; impact?: number };

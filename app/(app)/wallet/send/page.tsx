@@ -11,7 +11,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Send Money' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('sendMoney.sendMoney') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SendMoneyPage() {

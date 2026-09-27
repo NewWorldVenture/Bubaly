@@ -12,7 +12,10 @@ import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 import { startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
-export const metadata: Metadata = { title: 'My Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('kids.myBubaly') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {

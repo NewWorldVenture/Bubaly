@@ -4,7 +4,10 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { TaxVaultModule } from '@/components/modules/tax-vault-module';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Tax Vault' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.taxVault') };
+}
 
 export default async function TaxVaultPage() {
   const ctx = await requireFeature('/dashboard/tax-vault');

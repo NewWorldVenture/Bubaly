@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
 import { createServer } from '@/lib/supabase/server';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import type { Tables } from '@/lib/database.types';
 
-export const metadata: Metadata = { title: 'Paperwork Inbox' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('paperwork.paperworkInbox') };
+}
 export const dynamic = 'force-dynamic';
 
 /**

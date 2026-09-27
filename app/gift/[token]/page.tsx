@@ -4,7 +4,10 @@ import { occasionLabel, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
 import { PublicGiftForm } from '@/components/wallet/public-gift-form';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Send a gift · Bubaly', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.sendAGift'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function PublicGiftPage({ params }: { params: Promise<{ token: string }> }) {

@@ -10,7 +10,10 @@ import { PlanGenerator } from './plan-generator';
 import { getTranslations } from '@/lib/i18n/server';
 import { SubmitButton } from '@/components/ui/submit-button';
 
-export const metadata: Metadata = { title: 'New mission' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('missions.newMission') };
+}
 export const dynamic = 'force-dynamic';
 
 const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring';

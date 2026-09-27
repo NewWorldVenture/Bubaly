@@ -259,7 +259,8 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
 
   it('localizes three metadata titles while preserving feature and AAL2 entry gates', async () => {
     for (const [view, metadata, page] of [['cloud', cloudMetadata, CloudPage], ['vault', vaultMetadata, VaultPage], ['shared', sharedMetadata, SharedPage]] as const) {
-      expect(await metadata()).toEqual({ title: `${t(VIEW_META[view].titleKey)} | Bubaly` });
+      // No hand-added brand: the root layout's template appends " · Bubaly" (I18N-004).
+      expect(await metadata()).toEqual({ title: t(VIEW_META[view].titleKey) });
       const element = await page(); expect(element.props.view).toBe(view);
       expect(h.feature).toHaveBeenLastCalledWith('/dashboard/documents');
       expect(h.assurance).toHaveBeenLastCalledWith({ active: { familyId: 'family-1' } }, 'documents', `/dashboard/files/${view}`);

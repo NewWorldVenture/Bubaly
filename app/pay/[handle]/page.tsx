@@ -5,7 +5,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { normalizeHandle } from '@/lib/wallet/pay-handle';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Send a gift · Bubaly', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.sendAGift'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 // Public Pay-ID resolver: /pay/<handle> → the child's newest active gift link.

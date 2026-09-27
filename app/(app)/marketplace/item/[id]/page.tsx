@@ -37,7 +37,10 @@ type ListingRow = Pick<Database['public']['Tables']['marketplace_listings']['Row
   | 'starting_bid_cents' | 'has_reserve' | 'reserve_met' | 'buy_now_cents' | 'current_bid_cents' | 'bid_count'
   | 'highest_bidder_family_id'>;
 
-export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.listing')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {

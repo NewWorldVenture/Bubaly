@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -12,7 +13,10 @@ import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { startOfNextLocalDay } from '@/lib/time/zoned';
 
-export const metadata: Metadata = { title: 'Moments' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.moments') };
+}
 export const dynamic = 'force-dynamic';
 
 const DAY = 86_400_000;

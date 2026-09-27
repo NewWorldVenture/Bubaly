@@ -12,7 +12,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Wallet Invest' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.walletInvest') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {

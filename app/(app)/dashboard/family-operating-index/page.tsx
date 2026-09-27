@@ -21,7 +21,10 @@ import { RelationshipInsights } from '@/components/reasoning/relationship-insigh
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Operating Index' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardFamilyOperatingIndex.familyOperatingIndex') };
+}
 export const dynamic = 'force-dynamic';
 
 const BAND_COPY: Record<Band, { label: string; blurb: string; ring: string; text: string; chip: string }> = {

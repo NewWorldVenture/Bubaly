@@ -11,7 +11,10 @@ import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.dailyBriefing') };
+}
 
 export default async function BriefingPage() {
   const t = await getTranslations();

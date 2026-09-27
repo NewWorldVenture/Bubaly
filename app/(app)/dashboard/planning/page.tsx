@@ -13,7 +13,10 @@ import { getFormat } from '@/lib/utils/format-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
-export const metadata: Metadata = { title: 'Planning & Organization' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardPlanning.planningAmpOrganization') };
+}
 export const dynamic = 'force-dynamic';
 
 const fmtDay = (d: string | null, locale: LocaleCode) =>

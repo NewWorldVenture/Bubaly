@@ -17,7 +17,10 @@ import { ErrorState } from '@/components/ui/states';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Outcomes | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.outcomes') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function OutcomesPage({ searchParams }: { searchParams?: Promise<{ outcome?: string }> }) {

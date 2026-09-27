@@ -3,7 +3,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { SurveyForm } from './survey-form';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Share your feedback · Bubaly', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.shareYourFeedback'), robots: { index: false } };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function PublicSurveyPage({ params }: { params: Promise<{ slug: string }> }) {

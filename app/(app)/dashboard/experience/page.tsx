@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ExperienceScorecardModule } from '@/components/modules/experience-scorecard-module';
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 
-export const metadata: Metadata = { title: 'Experience Scorecard | Bubaly' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.experienceScorecard') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function ExperiencePage() {

@@ -21,7 +21,10 @@ import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as pret
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Family CFO' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyCfo') };
+}
 export const dynamic = 'force-dynamic';
 
 
