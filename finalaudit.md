@@ -46485,6 +46485,26 @@ The emergency tab also showed English in its rows: "Traveler", "Allergies:", "Me
 
 ---
 
+### `[CLAUDE-1][LOW][FOOD]` C1-S9-134 — the Food & Nutrition hub's tab title, page chips, counts and feature panel were English in every locale
+
+**File/path:** `app/(app)/dashboard/food/page.tsx`; seven catalogues.
+
+**Problem.** In every locale, `/dashboard/food` showed these in English:
+- the browser tab title
+- the seven page chips
+- each card's count label ("dinners planned this week")
+- "Planned meal" and "Today"
+- the six-item features panel
+
+**Fix.**
+- The tab title comes from `generateMetadata` with a catalogue key.
+- The page chips reuse the card titles' existing keys.
+- The counts and the features panel are keys.
+
+**Status:** FIXED. Scanner findings for this page drop from 25 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
