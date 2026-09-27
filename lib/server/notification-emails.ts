@@ -114,12 +114,16 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     }
 
     const items = notifs.map((n) => ({ title: n.title, body: n.body, icon: iconForType(n.type) }));
-    const { ok } = await sendReactEmail({
+    const { ok, skipped: notSent } = await sendReactEmail({
       to: meta.email,
       subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · Bubaly`,
       react: React.createElement(NotificationDigestEmail, { name: meta.name, items }),
     });
-    if (ok) {
+    if (notSent) {
+      // No mail provider: nothing was emailed. Leave sent_at null so these go
+      // out once one is configured, instead of stamping them sent unseen.
+      skipped += 1;
+    } else if (ok) {
       sent++;
       resolvedIds.push(...ids);
     } else {

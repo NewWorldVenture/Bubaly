@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const adminEmail = emailByUserId.get(adminMember.user_id);
     if (!adminEmail) { skipped++; return; }
 
-    const { ok } = await sendReactEmail({
+    const { ok, skipped: notSent } = await sendReactEmail({
       to: adminEmail,
       subject: `${family.name} — your week ahead`,
       react: React.createElement(WeeklyDigestEmail, {
@@ -157,7 +157,9 @@ export async function GET(req: NextRequest) {
         compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),
       }),
     });
-    if (ok) sent++;
+    // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
+    if (notSent) skipped++;
+    else if (ok) sent++;
     else failed++;
   };
 

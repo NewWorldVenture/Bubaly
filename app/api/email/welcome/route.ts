@@ -24,12 +24,14 @@ export async function POST(req: NextRequest) {
     if (!email || !name) return NextResponse.json({ error: t('welcome.missingParams') }, { status: 400 });
     if (email.length > 320 || name.length > 120) return NextResponse.json({ error: t('welcome.invalidParams') }, { status: 400 });
 
-    const { ok } = await sendReactEmail({
+    const { ok, skipped } = await sendReactEmail({
       to: email,
       subject: 'Welcome to Bubaly 🎉',
       react: React.createElement(WelcomeEmail, { name }),
     });
     if (!ok) return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 502 });
+    // No mail provider: nothing was sent, so do not answer `sent: true`.
+    if (skipped) return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 503 });
 
     return NextResponse.json({ sent: true });
   } catch (err) {
