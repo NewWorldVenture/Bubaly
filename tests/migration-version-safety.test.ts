@@ -331,7 +331,10 @@ describe('Supabase migration filename safety', () => {
     // 0395_a_chore_proof_belongs_to_whose_chore_it_is.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0327 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0396');
+    // 0396_a_proxy_bid_ceiling_is_secret.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0328 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0397');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

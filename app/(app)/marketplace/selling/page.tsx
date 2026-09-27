@@ -99,8 +99,7 @@ export default async function SellingPage() {
   const signals: (ListingSignals & { photo: string | null; price: number })[] = rows.map((l) => {
     const isAuction = l.sale_format === 'auction';
     const endingSoon = isAuction && auctionStatus({
-      saleFormat: l.sale_format, status: l.status, startingBidCents: 0, currentBidCents: 0, bidCount: l.bid_count ?? 0,
-      reserveCents: null, buyNowCents: null, auctionStartsAt: l.auction_starts_at, auctionEndsAt: l.auction_ends_at,
+      saleFormat: l.sale_format, auctionStartsAt: l.auction_starts_at, auctionEndsAt: l.auction_ends_at,
     }, now) === 'ending_soon';
     return {
       id: l.id, title: l.title, status: l.status, saleFormat: l.sale_format ?? 'fixed',
