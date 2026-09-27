@@ -69,7 +69,7 @@ export function ReviewForm(p: Props) {
 
       <div className="flex justify-center gap-1.5" onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((v) => (
-          <button key={v} type="button" onClick={() => setRating(v)} onMouseEnter={() => setHover(v)} aria-label={`${v} star${v === 1 ? '' : 's'}`}>
+          <button key={v} type="button" onClick={() => setRating(v)} onMouseEnter={() => setHover(v)} aria-label={v === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: v })}>
             <Star className={`h-9 w-9 transition ${(hover || rating) >= v ? 'fill-amber-400 text-amber-400' : 'text-border'}`} />
           </button>
         ))}

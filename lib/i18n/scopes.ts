@@ -140,6 +140,8 @@ export const PUBLIC_LINK_SCOPE = [
   // own layout and page were never walked, so nine keys in the surface that
   // brings a new member into a family were outside its scope.
   'joinInvite',
+  // The star picker on the public review form names each star ("4 stars").
+  'rating',
 ] as const;
 
 /**

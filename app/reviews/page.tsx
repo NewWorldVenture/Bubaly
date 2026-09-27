@@ -43,7 +43,7 @@ export default async function ReviewsWallPage() {
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           {rows.map((r) => (
             <div key={r.id} className="glass-card p-4">
-              <div className="flex items-center gap-1 text-amber-400" aria-label={`${r.rating} stars`}>
+              <div className="flex items-center gap-1 text-amber-400" aria-label={r.rating === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: r.rating })}>
                 {[1, 2, 3, 4, 5].map((v) => <Star key={v} className={`h-4 w-4 ${v <= r.rating ? 'fill-amber-400' : 'text-border'}`} />)}
               </div>
               {r.title && <p className="mt-2 font-semibold">{r.title}</p>}

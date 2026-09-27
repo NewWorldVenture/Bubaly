@@ -75,7 +75,7 @@ export function SegmentedControl({ value, onChange, counts, className }: Segment
             <Icon className="h-4 w-4" aria-hidden />
             {label}
             {count > 0 && (
-              <span className={cn('rounded-full px-1.5 text-[11px] font-bold tabular-nums', active ? 'bg-brand-fg/20 text-brand-fg' : 'bg-brand/15 text-brand-text')} aria-label={`${count} new`}>
+              <span className={cn('rounded-full px-1.5 text-[11px] font-bold tabular-nums', active ? 'bg-brand-fg/20 text-brand-fg' : 'bg-brand/15 text-brand-text')} aria-label={t('assistantWorkspace.newCount', { count })}>
                 {count}
               </span>
             )}

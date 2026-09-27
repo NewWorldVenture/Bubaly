@@ -60,8 +60,8 @@ export function SubscriptionPriceHistoryReview({ context, subscription, onPrefil
 
   const history = canReview ? visible.result?.history : null;
   return (
-    <section aria-label={`Recorded charge history for ${subscription.name}`} className="mt-3 space-y-3 border-t border-border pt-3">
-      <Button type="button" variant="secondary" disabled={!canReview || visible.loading} aria-label={`Review recorded charges for ${subscription.name}`}
+    <section aria-label={t('subscriptions.chargeHistoryFor', { name: subscription.name })} className="mt-3 space-y-3 border-t border-border pt-3">
+      <Button type="button" variant="secondary" disabled={!canReview || visible.loading} aria-label={t('subscriptions.reviewChargesFor', { name: subscription.name })}
         onClick={() => { void load(); }}>{visible.loading ? 'Reading charges...' : visible.result || visible.error ? 'Refresh recorded charges' : 'Review recorded charges'}</Button>
       {!canReview && <p className="text-xs text-muted">{t('subscriptionPriceHistoryReview.aCurrentParentOrAdultMembership')}</p>}
       {visible.loading && <p role="status" className="text-sm text-muted">{t('subscriptionPriceHistoryReview.readingAuthorizedRecordedCharges')}</p>}
@@ -81,7 +81,7 @@ export function SubscriptionPriceHistoryReview({ context, subscription, onPrefil
                 <p className="break-words text-xs text-muted">Account: <code className="break-all">{group.accountId}</code>{t('subscriptionPriceHistoryReview.recordedMember')} <code className="break-all">{group.memberId ?? 'not assigned in source'}</code>.</p>
                 {group.observed && <p className="text-xs text-muted">{t('subscriptionPriceHistoryReview.observedWindow')} {group.observed.from} to {group.observed.to}.</p>}
                 <p className="text-xs text-muted">{t('subscriptionPriceHistoryReview.trackedAmount')} {dollars(subscription.costCents)} / {subscription.cadence}{t('subscriptionPriceHistoryReview.comparisonsAreAvailableOnlyForA')}</p>
-                <ul aria-label={`Recorded charge evidence for ${group.name}`} className="space-y-3">
+                <ul aria-label={t('subscriptions.chargeEvidenceFor', { name: group.name })} className="space-y-3">
                   {group.evidence.map((charge) => {
                     const selected = selectRecordedSubscriptionAmount(history, charge.recordId);
                     const sourceId = `charge-source-${subscription.id}-${charge.recordId}`;

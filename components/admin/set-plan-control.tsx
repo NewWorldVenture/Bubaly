@@ -48,7 +48,7 @@ export function SetPlanControl({ familyId, familyName, currentPlan }: {
 
   return (
     <select
-      aria-label={`Plan for ${familyName}`}
+      aria-label={t('setPlanControl.planFor', { name: familyName })}
       value={value}
       onChange={(e) => change(e.target.value)}
       disabled={pending}

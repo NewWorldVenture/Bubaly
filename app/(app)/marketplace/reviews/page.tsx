@@ -11,9 +11,9 @@ import { getTranslations } from '@/lib/i18n/server';
 export const metadata: Metadata = { title: 'Reviews · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
-function Stars({ n }: { n: number }) {
+function Stars({ n, label }: { n: number; label: string }) {
   return (
-    <span className="inline-flex" aria-label={`${n} of 5 stars`}>
+    <span className="inline-flex" role="img" aria-label={label}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star key={i} className={cn('h-3.5 w-3.5', i <= n ? 'fill-current text-amber-500' : 'text-border')} />
       ))}
@@ -63,7 +63,7 @@ export default async function MarketplaceReviewsPage() {
           {rows.map((r) => (
             <li key={r.id} className="rounded-xl border border-border bg-surface/60 p-3.5">
               <div className="flex items-center gap-2">
-                <Stars n={r.rating} />
+                <Stars n={r.rating} label={t('rating.nOfFive', { n: r.rating })} />
                 <span className="text-xs text-muted">{whoOf(r)} · as {r.role}</span>
               </div>
               {r.comment && <p className="mt-1.5 text-sm text-fg">“{r.comment}”</p>}
