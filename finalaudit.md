@@ -49392,7 +49392,7 @@ because this audit has no production login and must not create data there.
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-17 found and fixed, P-18 open) | 2026-09-27 19:05 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
-| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
+| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (public: 41 pages × 10 locales, production; signed in: 278 family routes × 10 locales, local, 2,780 loads; P-11, P-12 found and fixed) | 2026-09-27 19:30 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
 
@@ -49610,7 +49610,7 @@ it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
 every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
 (red without it). Re-crawled after the fix: food, planning, kitchen and the
 connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
-390 px; it-IT is re-checked on the next build.
+390 px, and it-IT with them on a rebuild of `5155f0b2`.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
@@ -49777,6 +49777,29 @@ Verified on a rebuild of `e52ec95a`: `/favicon.ico` answers 200
 phrase filed `feature | chat.assistant | Assistant chat | completed` in
 `ai_requests` (there had been no feature row before), no `ai_requests` row
 contains the phrase, and the member's own conversation holds it as sent.
+
+### B8 — the signed-in pages in ten locales
+
+All 278 family routes as the Family+ parent, once per locale, 1280 px, on the
+local stack (2,780 loads). `en-GB`, `es-MX` and `es-US` came back clean. The
+rest:
+
+| Locale(s) | Route | What | Now |
+| --- | --- | --- | --- |
+| de-DE, es-ES, fr-CA, fr-FR, it-IT, nl-NL, pt-PT | `/dashboard/social/accounts/connect` | React #418: a bare `toLocaleString()` (and, in Italian, runtimes that disagree on grouping) | **P-11**, fixed; passes in all seven at 1280 and 390 px |
+| de-DE, nl-NL | `/dashboard/food` (+17 / +54 px), `/dashboard/planning` (+39), `/dashboard/kitchen` (+13) | sideways scroll from long words | **P-12**, fixed; passes at both widths |
+| de-DE, nl-NL (and B7 teen, `/wallet/gift`) | `/dashboard/trip-memories`, `/dashboard/medications` | `ChunkLoadError` for chunk `29335` (clsx/tailwind-merge) and the root error page | **watch**: 3 times in ~3,300 loads, only with four pages loading at once beside a second crawl; not reproduced in 35 serial loads nor with that chunk aborted on purpose; the request was aborted (the crawler drops `ERR_ABORTED`), not refused |
+| all | `/resources/benchmarks` | 404 | by design (recorded above) |
+
+### B6a, admin — every `/admin` route clicked through
+
+The interaction pass as the super administrator on all 78 `/admin` routes:
+225 clicks, no click threw, logged an error, failed a request or reached an
+error boundary. Two text flags, neither a defect: `offline.access` on
+`/admin/social/providers` (the OAuth scope, recorded above) and
+`briefing.morning` on `/admin/ai-activity` — the feature key of an
+`ai_requests` row, which that diagnostic page lists by design (rows that exist
+at all only since P-10).
 
 ### Every route (first pass)
 
