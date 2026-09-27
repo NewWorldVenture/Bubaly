@@ -4,6 +4,7 @@ import type { Database } from '@/lib/database.types';
 import { runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 const DAY = 86_400_000;
@@ -134,16 +135,25 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
       }
       summary.emails += actions.filter((a) => a === 'send_email').length;
       const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
-      const { error: runError } = await supabase.from('marketing_automation_runs').update({
+      // Status-guarded, so zero rows means the run was moved on (a reaper marked
+      // it failed) while its steps ran. The steps DID run — the emails went — so
+      // it is still counted as run; what is lost is the record of how it went,
+      // and the ledger now says "failed" for sends that happened. Logged, since
+      // there is no longer a row this path owns to correct. Audit C1-S9-67.
+      const { data: recorded, error: runError } = await supabase.from('marketing_automation_runs').update({
         status: failed ? 'failed' : 'completed',
         metadata: { trigger: flow.trigger, actions } as unknown as Database['public']['Tables']['marketing_automation_runs']['Insert']['metadata'],
-      }).eq('id', runId).eq('status', 'running');
+      }).eq('id', runId).eq('status', 'running').select('id');
       if (runError) throw new Error('Could not record the automation run.');
+      if (wroteNoRows(recorded)) {
+        console.error('[marketing automation] run finished after it was moved on; its outcome was not recorded', { runId, actions });
+      }
       ran++;
       summary.runs++;
       if (failed) summary.failures++;
     }
     if (ran > 0) {
+      // Rows deliberately not checked, as in automation-events. Audit C1-S9-67.
       const { error: updateError } = await supabase.from('marketing_automation_workflows')
         .update({ run_count: (flow.run_count ?? 0) + ran }).eq('id', flow.id);
       if (updateError) throw new Error('Could not update the automation run count.');

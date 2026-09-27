@@ -5,7 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
@@ -42,14 +42,20 @@ export async function assignEmailAction(rawLocal: string): Promise<{ ok: true; l
   const admin = createServiceClient();
   const channel = await getOrCreateChannelResult(admin, g.familyId);
   if (channel.error) return { ok: false, error: describeActionError(channel.error, t('actions.couldNotLoadTheContact')) };
-  const { error } = await admin
+  // This returns `{ ok: true, local }` — it tells the family the address they
+  // now have. An update that matched no row handed them an address that was
+  // never stored, and mail sent to it goes nowhere. The same shape as the
+  // marketplace handoff code in C1-S9-16: a value returned to the user that the
+  // database never accepted. Audit C1-S9-47.
+  const { data: assigned, error } = await admin
     .from('family_contact_channels')
     .update({ email_local: local })
-    .eq('family_id', g.familyId);
+    .eq('family_id', g.familyId).select('family_id');
   if (error) {
     if (error.code === '23505') return { ok: false, error: t('actions.thatAddressIsAlreadyTaken') };
     return { ok: false, error: describeActionError(error, t('actions.couldNotAssignThatAddress')) };
   }
+  if (wroteNoRows(assigned)) return { ok: false, error: t('actions.couldNotAssignThatAddress') };
   revalidatePath('/dashboard/contact-center');
   return { ok: true, local };
 }
@@ -88,12 +94,20 @@ export async function updateConciergeAction(input: {
   // reached the call's TwiML. `normalizeFallbackPhone` also refuses a number
   // without its country code rather than guessing +1 — see its header.
   if (input.forwardTo !== undefined) {
+    // Unlike the greeting beside it, this value is DIALLED — it reaches `<Dial>`
+    // in the voice route and Twilio's `To` in three escalation paths — so a URL,
+    // a TwiML fragment or a note with a date in it is refused rather than made
+    // into a number (C1-S7-05, merged with main's #581 rule). Clearing the
+    // fallback stays possible: an empty value is null, not an error.
     const fallback = normalizeFallbackPhone(input.forwardTo);
     if (!fallback.ok) return { ok: false, error: t('actions.enterTheFallbackNumberIn') };
     patch.forward_to_phone = fallback.value;
   }
-  const { error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId);
+  const { data: patched, error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId).select('family_id');
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheConcierge')) };
+  // Includes call forwarding: a parent who thinks the family line now forwards
+  // to their mobile, and it does not, misses the call this feature exists for.
+  if (wroteNoRows(patched)) return { ok: false, error: t('actions.couldNotUpdateTheConcierge') };
   revalidatePath('/dashboard/contact-center');
   return { ok: true };
 }
@@ -103,12 +117,14 @@ export async function setMessageStatusAction(id: string, status: 'read' | 'archi
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const admin = createServiceClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from('family_inbox_messages')
     .update({ status })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId); // scope to the caller's family
+    .eq('family_id', ctx.active.familyId) // scope to the caller's family
+    .select('id');
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheMessage')) };
+  if (wroteNoRows(updated)) return { ok: false, error: t('actions.couldNotUpdateTheMessage') };
   revalidatePath('/dashboard/contact-center');
   return { ok: true };
 }

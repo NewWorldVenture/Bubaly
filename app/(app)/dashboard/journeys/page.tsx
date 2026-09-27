@@ -35,6 +35,30 @@ export default async function JourneysPage() {
 
   // A failed telemetry read must not masquerade as "no events" — that would tell
   // the operator onboarding traffic is zero when the query actually errored.
+  //
+  // The comment was right and the page did it anyway. `error` WAS consulted, but
+  // only inside the card below, while the three headline tiles rendered
+  // totalStarts / totalCompletions / overallRate — all computed from
+  // `(data ?? [])` — ABOVE it. So a failed read showed an operator "0 journeys
+  // started, 0 completed, 0%" in large type, with the explanation tucked
+  // underneath. Zero traffic and a broken query look identical, and the tiles
+  // are the part anyone actually reads. Audit C4-S4-05.
+  //
+  // Refuse the whole page rather than half of it: there is no honest subset of
+  // this screen to show when the only source it has failed.
+  if (error) {
+    console.error('[journeys] telemetry read failed or truncated', error);
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title={t('dashboardJourneys.journeyAnalytics')}
+          description={t('journeys.realCompletionRatesAndTimes')}
+        />
+        <MiniError text={t('journeys.couldnTLoadJourneyTelemetry')} />
+      </div>
+    );
+  }
+
   const events = (data ?? []) as JourneyEventLike[];
   const rows = summarizeJourneys(events);
   const totalStarts = rows.reduce((a, r) => a + r.starts, 0);

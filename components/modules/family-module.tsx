@@ -471,10 +471,11 @@ export function FamilyModule() {
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
               const sb = createClient();
-              const { data: rows, error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id).select('id');
+              // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+              const { data: removed, error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
-              if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+              if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
@@ -535,7 +536,8 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    const { data: savedRows, error: err } = member
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: saved, error: err } = member
       ? await sb.from('family_members').update(payload).eq('id', member.id).select('id')
       : await sb.from('family_members').insert({
           ...payload, family_id: familyId, is_active: true,
@@ -543,7 +545,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
         }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(member ? 'Member updated' : 'Member added');
     onSaved();
   }

@@ -15,30 +15,30 @@ import { describeActionError } from '@/lib/supabase/errors';
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 const OFFER_REASON: Record<string, string> = {
-  bad_amount: 'Enter an amount above $0.',
+  bad_amount: 'actions.enterAnAmountAbove0',
   message_too_long: 'actions.keepTheNoteUnder500',
-  not_found: 'That listing no longer exists.',
-  not_negotiable: 'This listing doesn’t take offers.',
-  not_available: 'This listing is no longer available.',
-  not_authorized: 'You’re not able to act on this offer.',
-  own_listing: 'You can’t make an offer on your own family’s listing.',
-  at_or_above_ask: 'That’s at or above the asking price — just buy it.',
-  not_your_turn: 'It’s the other side’s turn to respond.',
+  not_found: 'actions.thatListingNoLongerExists',
+  not_negotiable: 'actions.thisListingDoesnTTake',
+  not_available: 'actions.thisListingIsNoLongerAvailable',
+  not_authorized: 'actions.youReNotAbleTo',
+  own_listing: 'actions.youCanTMakeAn',
+  at_or_above_ask: 'actions.thatSAtOrAbove',
+  not_your_turn: 'actions.itSTheOtherSide',
 };
 
 const RESPOND_REASON: Record<string, string> = {
-  not_found: 'That negotiation no longer exists.',
+  not_found: 'actions.thatNegotiationNoLongerExists',
   message_too_long: 'actions.keepTheNoteUnder500',
-  at_or_above_ask: 'That offer is at or above the asking price. Buy it directly instead.',
-  listing_missing: 'The listing no longer exists.',
-  not_open: 'This negotiation has already closed.',
-  not_authorized: 'You’re not part of this negotiation.',
-  not_your_turn: 'It’s the other side’s turn to respond.',
-  buyer_only: 'Only the buyer can withdraw an offer.',
-  seller_only: 'Only the seller can decline an offer.',
-  not_available: 'The listing is no longer available.',
-  bad_amount: 'Enter an amount above $0.',
-  bad_action: 'That action isn’t valid.',
+  at_or_above_ask: 'actions.thatOfferIsAtOr',
+  listing_missing: 'actions.theListingNoLongerExists',
+  not_open: 'actions.thisNegotiationHasAlreadyClosed',
+  not_authorized: 'actions.youReNotPartOf',
+  not_your_turn: 'actions.itSTheOtherSide',
+  buyer_only: 'actions.onlyTheBuyerCanWithdraw',
+  seller_only: 'actions.onlyTheSellerCanDecline',
+  not_available: 'actions.theListingIsNoLonger',
+  bad_amount: 'actions.enterAnAmountAbove0',
+  bad_action: 'actions.thatActionIsnTValid',
 };
 
 function actionFailure(operation: string, message: string, error: unknown): Result {

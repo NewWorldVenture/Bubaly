@@ -149,17 +149,15 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
       success(`Added ${res.added} to your grocery list`, {
         label: 'Undo',
         onClick: () => {
-          void removeMomentGroceryAction({ ids }).then(
-            (r) => {
-              if (!r.ok) toastError(r.error ?? 'Could not undo');
-              else if (!prepFailed && (done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
-            },
-            // A rejection used to leave the Undo looking done. It is not.
-            (err: unknown) => {
-              console.error('[moments] undo failed', err);
-              toastError(err instanceof Error && err.message ? err.message : 'Could not undo');
-            },
-          );
+          void removeMomentGroceryAction({ ids }).then((r) => {
+            if (!r.ok) toastError(r.error ?? 'Could not undo');
+            else if (!prepFailed && (done[event.id] ?? []).includes(item.id)) void toggle(event.id, item.id);
+          }).catch((error: unknown) => {
+            // As in routines: a rejection used to leave "Undo" looking done — a
+            // silent no-op over items still on the list. Audit C1-S9-74.
+            console.error('[moments] undo failed', error);
+            toastError(t('actions.couldNotUndoThatGroceryAdd'));
+          });
         },
       });
     } else {

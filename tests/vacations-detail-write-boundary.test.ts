@@ -22,8 +22,11 @@ describe('trip-packing writes fail visibly', () => {
   for (const fn of ['toggle', 'remove']) {
     it(`${fn} captures the Supabase error and toasts it`, () => {
       const b = body(packing, fn);
-      expect(b, `${fn} must destructure { error }`).toMatch(/const \{ error \} = await/);
-      expect(b, `${fn} must toast on error`).toContain('if (error) toastError(error.message)');
+      // Re-pointed (Audit C1-S9-84): the write now also reads back its row
+      // (`const { data: x, error } =`), and the toast describes the error
+      // instead of showing PostgREST's raw text. Same property: bound, surfaced.
+      expect(b, `${fn} must destructure { error }`).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await/);
+      expect(b, `${fn} must toast on error`).toContain('if (error) toastError(describeDbError(error))');
     });
   }
 });
@@ -31,7 +34,7 @@ describe('trip-packing writes fail visibly', () => {
 describe('trip-overview dismissReco fails visibly', () => {
   it('captures the Supabase error and toasts it', () => {
     const b = body(overview, 'dismissReco');
-    expect(b).toMatch(/const \{ error \} = await/);
-    expect(b).toContain('if (error) toastError(error.message)');
+    expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await/); // re-pointed, Audit C1-S9-84
+    expect(b).toContain('if (error) toastError(describeDbError(error))');
   });
 });

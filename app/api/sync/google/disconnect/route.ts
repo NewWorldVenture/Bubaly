@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
     }
     // This delete IS the disconnect — the row is what keeps the account
     // connected and what every sync reads.
+    // The ERROR is checked and the rows deliberately are not: this is the
+    // service role, so nothing but the row's absence makes it match nothing, and
+    // an account whose row is already gone IS disconnected. Audit C1-S9-62.
     const { error: deleteError } = await admin.from('sync_accounts').delete().eq('id', account.id);
     if (deleteError) {
       console.error('[sync] google disconnect could not delete the account row', deleteError);

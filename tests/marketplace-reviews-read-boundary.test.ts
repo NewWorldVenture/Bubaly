@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 
@@ -17,6 +18,6 @@ describe('marketplace reviews surfaces a failed read (A-14 §3e)', () => {
     expect(page).toContain('if (reviewsError)');
     expect(page).toContain('<ErrorState message=');
     // The error early-return must precede the received/given filter derivation.
-    expect(page.indexOf('if (reviewsError)')).toBeLessThan(page.indexOf('const received ='));
+    expect(at(page, 'if (reviewsError)')).toBeLessThan(at(page, 'const received ='));
   });
 });

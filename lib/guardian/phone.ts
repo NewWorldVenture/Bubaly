@@ -15,3 +15,27 @@ export function formatPhone(phone: string | null | undefined): string {
   }
   return phone;
 }
+
+/**
+ * A number in E.164 (`+` and 8–15 digits), or null when it is not one.
+ *
+ * Used where a stored number is DIALLED rather than displayed. The 10- and
+ * 11-digit NANP assumptions mirror `formatPhone` above rather than inventing a
+ * second convention; anything else must already carry its country code.
+ *
+ * Returning null for junk is the point: `forward_to_phone` was written to the
+ * database with no trim, no cap and no shape, and it ends up inside a `<Dial>`
+ * verb. Audit C1-S7-05.
+ */
+export function toE164(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const trimmed = phone.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  if (trimmed.startsWith('+')) {
+    return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  }
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null;
+}

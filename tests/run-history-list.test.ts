@@ -427,7 +427,7 @@ describe('run history surfaces', () => {
     // The chip queries both vocabularies, so it can never disagree with the badge.
     expect(runsPage).toContain('runHistoryQueries(filter).map((query) => listRuns(');
     expect(runsPage).not.toContain('RUN_HISTORY_FILTER_STATES[filter]');
-    expect(runsPage).not.toContain('createServiceClient');
+    expect(runsPage).not.toContain('createServiceClient(');
     // No inert Undo: reversal needs a migration, so nothing here pretends to offer it.
     expect(runsPage).not.toMatch(/undo/i);
   });

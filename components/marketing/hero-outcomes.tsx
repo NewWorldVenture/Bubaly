@@ -44,7 +44,7 @@ export async function HeroOutcomes() {
           <Link
             key={outcome.href}
             href={outcome.href}
-            className="focus-visible:focus-ring group flex flex-col items-center rounded-xl px-2 py-3 text-center transition hover:bg-white/[0.045]"
+            className="focus-ring group flex flex-col items-center rounded-xl px-2 py-3 text-center transition hover:bg-white/[0.045]"
           >
             <IconOrb icon={outcome.icon} tone={outcome.tone} className="h-14 w-14 transition group-hover:scale-105 [&>svg]:h-6 [&>svg]:w-6" />
             <h3 className="mt-3 text-xs font-semibold">{t(outcome.titleKey)}</h3>
@@ -74,11 +74,11 @@ export async function HeroOutcomes() {
       <div className="mt-10 flex flex-col items-center gap-3 border-t border-white/[0.06] pt-6 text-center sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6">
         <span className="text-sm font-semibold text-white/70">{t('heroOutcomes.moreTitle')}</span>
         {MORE_OUTCOMES.map((more) => (
-          <Link key={more.outcomeId} href={more.href} className="focus-visible:focus-ring inline-flex min-h-11 items-center text-sm text-white/65 underline-offset-4 transition hover:text-white hover:underline">
+          <Link key={more.outcomeId} href={more.href} className="focus-ring inline-flex min-h-11 items-center text-sm text-white/65 underline-offset-4 transition hover:text-white hover:underline">
             {t(more.labelKey)}
           </Link>
         ))}
-        <Link href="/features" className="focus-visible:focus-ring inline-flex min-h-11 items-center text-sm font-semibold text-violet-300 underline-offset-4 transition hover:underline">
+        <Link href="/features" className="focus-ring inline-flex min-h-11 items-center text-sm font-semibold text-violet-300 underline-offset-4 transition hover:underline">
           {t('heroOutcomes.moreLink')} →
         </Link>
       </div>

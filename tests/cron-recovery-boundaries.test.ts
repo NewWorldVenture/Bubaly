@@ -38,6 +38,10 @@ describe('scheduled recovery failure contracts', () => {
     const source = read('lib/server/calendar-feeds.ts');
     expect(source).toContain('Calendar feed event upsert failed');
     expect(source).toContain('Calendar feed status could not be saved');
-    expect(source).toContain("const { error } = await supabase.from('calendar_feeds').update");
+    // Re-pointed under C1-S9-68 from the exact `const { error }`, which went red
+    // when the status write also began asking for its row. The intent: the
+    // status write's result is READ — its error, and now zero rows too.
+    expect(source).toMatch(/const \{[^}]*\berror\b[^}]*\} = await supabase\.from\('calendar_feeds'\)\.update/);
+    expect(source).toContain('if (error || wroteNoRows(data)) {');
   });
 });

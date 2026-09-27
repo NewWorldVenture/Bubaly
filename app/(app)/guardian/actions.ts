@@ -10,7 +10,7 @@ import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { guardianProfilePayload, type GuardianProfileWrite } from '@/lib/guardian/routing-form';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -146,11 +146,13 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+  const { data: deleted, error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
     .delete()
     .eq('id', contactId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian contact', t('guardian.couldNotDeleteTheGuardianContact'), error);
+  if (wroteNoRows(deleted)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianContact') };
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -166,12 +168,25 @@ export async function updateContactTrustAction(
   const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
 
-  const { error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+  // The sharpest write in Guardian. `trust_level` is what the screening
+  // pipeline reads to decide whether an unknown caller is put straight through
+  // to a family member or interrogated first, and `trust_override: true` marks
+  // it as the PARENT'S explicit decision rather than an inferred one. A no-op
+  // reported as success means a caller the parent deliberately distrusted keeps
+  // being treated as trusted — the same shape as the geofence toggle in
+  // C1-S9-46 and App Lock in C1-S9-44: a safety control claiming a state it
+  // does not have. Audit C1-S9-53.
+  const { data: trusted, error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
     .update({ trust_level: trustLevel, trust_override: true })
     .eq('id', contactId)
-    .eq('family_id', familyId);
+    .eq('family_id', familyId)
+    .select('id');
 
   if (error) return actionFailure('update contact trust', t('guardian.couldNotUpdateContactTrust'), error);
+  // Before `logGuardianAudit`, which records the trust change as having
+  // happened — the C1-S9-51 shape: screen, audit log and reality disagreeing,
+  // with two of the three agreeing with each other.
+  if (wroteNoRows(trusted)) return { ok: false, error: t('guardian.couldNotUpdateContactTrust') };
 
   await logGuardianAudit({
     family_id: familyId,
@@ -228,12 +243,17 @@ export async function updateContextAction(
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
-  const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+  const { data: contexted, error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
     .update({ current_context: context })
     .eq('member_id', memberId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('member_id');
 
   if (error) return actionFailure('update the Guardian context', t('guardian.couldNotUpdateTheGuardianContext'), error);
+  // `current_context` ("at school", "asleep") is read by the routing pipeline,
+  // so a silent no-op routes calls against a state the parent thought they had
+  // changed.
+  if (wroteNoRows(contexted)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianContext') };
 
   revalidatePath('/guardian');
   return { ok: true };
@@ -373,11 +393,13 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  const { data: toggled, error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
     .update({ is_active: isActive })
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the Guardian routing rule', t('guardian.couldNotUpdateTheGuardianRouting'), error);
+  if (wroteNoRows(toggled)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -388,11 +410,13 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  const { data: removedRule, error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
     .delete()
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian routing rule', t('guardian.couldNotDeleteTheGuardianRouting'), error);
+  if (wroteNoRows(removedRule)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -452,14 +476,14 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
   // through the service role, scoped to this family, and must touch the row.
   const failed = () => actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), new Error('No escalation acknowledged'));
   const svc = withGuardianTables(createServiceClient());
-  const { data: rows, error } = await svc.from('guardian_escalations')
+  const { data: acked, error } = await svc.from('guardian_escalations')
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
-    .eq('family_id', ctx.active.familyId)
     .is('acknowledged_at', null)
+    .eq('family_id', ctx.active.familyId)
     .select('id');
   if (error) return actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), error);
-  if (!rows?.length) {
+  if (wroteNoRows(acked)) {
     // Zero rows is success only if someone already acknowledged it; the first
     // acknowledgement is kept rather than overwritten.
     const { data: existing, error: readError } = await svc.from('guardian_escalations')

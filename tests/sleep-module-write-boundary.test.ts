@@ -18,7 +18,7 @@ describe('sleep-module writes fail visibly', () => {
     for (const fn of ['deleteLog', 'archiveRoutine']) {
       const [b] = bodies(fn);
       expect(b, fn).toBeTruthy();
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/); // re-pointed, Audit C1-S9-82: a confirmed write binds data too
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });
@@ -26,7 +26,7 @@ describe('sleep-module writes fail visibly', () => {
     const forms = bodies('onSubmit');
     expect(forms).toHaveLength(3);
     for (const b of forms) {
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/); // re-pointed, Audit C1-S9-82: a confirmed write binds data too
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });

@@ -208,7 +208,9 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     }
   }
   // Right-to-be-forgotten: remove contributions for families no longer opted in —
-  // in ONE delete rather than a read + N per-row deletes.
+  // in ONE delete rather than a read + N per-row deletes. Rows deliberately not
+  // checked: the ERROR fails the run below, and zero rows means nobody opted out
+  // since the last one. Audit C1-S9-69.
   const keepIds = optedIn.map((c) => c.family_id);
   let contributionDeleteError;
   if (keepIds.length > 0) {
@@ -240,6 +242,8 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     );
     if (upsertErr) return { ok: false, error: upsertErr.message, contributors: contributions.length, aggregates: 0 };
   }
+  // Rows deliberately not checked: zero is the ordinary "nothing older" run.
+  // Audit C1-S9-69.
   const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
   if (pruneErr) return { ok: false, error: pruneErr.message, contributors: contributions.length, aggregates: aggregates.length };
 

@@ -28,7 +28,7 @@ import {
   applySubstitutions, collectDietaryConstraints, type Substitution,
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
-import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
@@ -926,6 +926,12 @@ export type ShoppingTripResult = {
    * rather than swallowed.
    */
   clearFailed: { name: string; error: string }[];
+  /**
+   * Lines another put-away claimed first (C1-S9-88). That call owns their
+   * pantry increment; this one did not touch them, so they are neither
+   * updated nor failed here.
+   */
+  alreadyClaimed: string[];
   /** Bought lines removed from the list — one per line that reached the pantry. */
   cleared: number;
 };
@@ -980,13 +986,50 @@ export async function recordShoppingTrip(
   const pantryUpdated: string[] = [];
   const pantryFailed: { name: string; error: string }[] = [];
   const clearFailed: { name: string; error: string }[] = [];
+  const alreadyClaimed: string[] = [];
   const clearedNames: string[] = [];
   for (const item of items) {
+    // CLAIM THE LINE BEFORE TOUCHING THE PANTRY (Audit C1-S9-88, closing the
+    // race C1-S9-65 recorded). Two put-aways — two phones, or a double tap —
+    // both read this line as bought; each used to increment the pantry and
+    // only then remove the line, so the family owned two of one purchase.
+    // Un-ticking it only where it is STILL ticked is atomic: of two concurrent
+    // claims, the second re-evaluates `is_checked = true` after the first
+    // commits, matches nothing, and leaves the increment to the first.
+    const { data: claimed, error: claimError } = await scope.db
+      .from('grocery_items')
+      .update({ is_checked: false })
+      .eq('family_id', scope.familyId)
+      .eq('id', item.id)
+      .eq('is_checked', true)
+      .select('id');
+    if (claimError) {
+      console.error('[service:groceries] bought line claim failed', claimError);
+      pantryFailed.push({ name: item.name, error: describeDbError(claimError, 'Could not put this away.') });
+      continue;
+    }
+    if (wroteNoRows(claimed)) {
+      alreadyClaimed.push(item.name);
+      continue;
+    }
+
     const { delta, unit } = parsePurchasedQuantity(item.quantity);
     const result = await pantryAdjust(scope, { name: item.name, delta, unit, createIfMissing: true });
     if (!result.ok) {
-      // Never put away, so the line stays checked and the retry is its first
-      // real attempt.
+      // Never put away: hand the line back, ticked, so the retry is its first
+      // real attempt. If that fails the line shows as unbought — a missed
+      // count the family can see, never a double one.
+      const { data: released, error: releaseError } = await scope.db
+        .from('grocery_items')
+        .update({ is_checked: true })
+        .eq('family_id', scope.familyId)
+        .eq('id', item.id)
+        .select('id');
+      if (releaseError || wroteNoRows(released)) {
+        console.error('[service:groceries] claimed line could not be handed back; it now shows as unbought', {
+          familyId: scope.familyId, itemId: item.id, name: item.name, error: releaseError ?? 'no row',
+        });
+      }
       pantryFailed.push({ name: item.name, error: result.error });
       continue;
     }
@@ -994,11 +1037,21 @@ export async function recordShoppingTrip(
 
     // Immediately, and scoped to this row: whatever happens to the rest of the
     // trip, this quantity is now in the pantry and must not be added twice.
-    const { error: clearError } = await scope.db
+    const { data: cleared, error: clearError } = await scope.db
       .from('grocery_items')
       .delete()
       .eq('family_id', scope.familyId)
-      .eq('id', item.id);
+      .eq('id', item.id)
+      .select('id');
+    // This call claimed the line, so no other put-away can have counted it.
+    // Zero rows here means someone removed the line by hand after the claim:
+    // the pantry has it once, and the list no longer does. Worth a log line,
+    // not a failure. Audit C1-S9-65, C1-S9-88.
+    if (!clearError && wroteNoRows(cleared)) {
+      console.error('[service:groceries] claimed line was removed before its clear; counted once', {
+        familyId: scope.familyId, itemId: item.id, name: item.name,
+      });
+    }
     if (clearError) {
       console.error('[service:groceries] bought line clear failed', clearError);
       clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
@@ -1032,5 +1085,5 @@ export async function recordShoppingTrip(
     });
   }
 
-  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, cleared: clearedNames.length });
+  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, cleared: clearedNames.length });
 }

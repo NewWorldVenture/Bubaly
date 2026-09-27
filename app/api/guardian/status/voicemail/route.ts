@@ -106,6 +106,8 @@ export async function POST(req: NextRequest) {
     };
     await requireGuardianVoicemailLease(supabase, claim.lease, signal);
     // Reconcile a lost update response by reading the same permanent row.
+    // That exact READBACK below is this write's confirmation — stricter than a
+    // row count, which is why it asks no `.select()`. Audit C1-S9-69.
     try {
       await smsStep(signal, current => gFrom('guardian_communications').update(recording)
         .eq('id', commId).eq('family_id', typedComm.family_id).retry(false).abortSignal(current));

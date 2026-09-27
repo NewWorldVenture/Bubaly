@@ -48,6 +48,7 @@ import { notify } from '@/lib/services/notifications';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -287,8 +288,11 @@ export async function runAutopilotScan(
       const existingProfile = profileByMember.get(t.memberId);
       if (existingProfile) {
         const merged = { ...(existingProfile.metadata as Record<string, unknown> ?? {}), autopilot_traits: t };
-        const { error: updateError } = await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
-        if (updateError) console.error('[autopilot] trait update failed', updateError);
+        // Best-effort, as the comment above says; logged on zero rows too.
+        // Audit C1-S9-69.
+        const { data: traitsSaved, error: updateError } = await supabase.from('family_digital_twin_profiles')
+          .update({ metadata: merged as never }).eq('id', existingProfile.id).select('id');
+        if (updateError || wroteNoRows(traitsSaved)) console.error('[autopilot] trait update failed', updateError ?? { profileId: existingProfile.id, error: 'no rows updated' });
       } else {
         const { error: insertError } = await supabase.from('family_digital_twin_profiles').insert({
           family_id: familyId, member_id: t.memberId, metadata: { autopilot_traits: t } as never, created_by: userId,
@@ -390,13 +394,21 @@ export async function runAutopilotScan(
 
     if (suggestionError || !inserted?.id) {
       const cleanupErrors: unknown[] = [];
+      // Side effects THIS scan created, so removing fewer than were created is a
+      // cleanup failure — a reminder or grocery line left behind for a
+      // suggestion that was never saved — and joins the report below.
+      // Audit C1-S9-69.
       if (createdReminderId) {
-        const { error } = await supabase.from('reminders').delete().eq('id', createdReminderId).eq('family_id', familyId);
+        const { data: removedReminder, error } = await supabase.from('reminders').delete().eq('id', createdReminderId).eq('family_id', familyId).select('id');
         if (error) cleanupErrors.push(error);
+        else if (wroteNoRows(removedReminder)) cleanupErrors.push({ reminderId: createdReminderId, error: 'no rows deleted' });
       }
       if (createdGroceryIds.length > 0) {
-        const { error } = await supabase.from('grocery_items').delete().in('id', createdGroceryIds).eq('family_id', familyId);
+        const { data: removedGroceries, error } = await supabase.from('grocery_items').delete().in('id', createdGroceryIds).eq('family_id', familyId).select('id');
         if (error) cleanupErrors.push(error);
+        else if ((removedGroceries?.length ?? 0) !== createdGroceryIds.length) {
+          cleanupErrors.push({ removed: removedGroceries?.length ?? 0, created: createdGroceryIds.length });
+        }
       }
       if (cleanupErrors.length > 0) console.error('[autopilot] side-effect cleanup failed', cleanupErrors);
       throw new Error('Autopilot could not save the suggestion');

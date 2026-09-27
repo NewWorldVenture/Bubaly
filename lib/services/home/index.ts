@@ -17,7 +17,7 @@ import 'server-only';
 import type { Priority, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DEFAULT_CADENCES, TRADES, TRADE_FOR_CATEGORY } from '@/lib/home/maintenance';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
@@ -364,12 +364,21 @@ export async function createServiceRecord(scope: ServiceScope, input: CreateServ
       // Both follow-up writes are best-effort: the record itself is saved, and
       // a stale "last used" date is a smaller wrong than losing the visit.
       if (input.assetId) {
-        const { error: assetError } = await scope.db.from('home_assets').update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId);
-        if (assetError) console.error('[service:home] home_assets last_serviced_on update failed', assetError);
+        // Confirmed for the LOG, as the dashboard's own copy of this write was
+        // under C1-S9-60: an asset id matching nothing is the commonest way it
+        // quietly does nothing. Never raised. Audit C1-S9-65.
+        const { data: assetTouched, error: assetError } = await scope.db.from('home_assets')
+          .update({ last_serviced_on: serviceDate }).eq('id', input.assetId).eq('family_id', scope.familyId).select('id');
+        if (assetError || wroteNoRows(assetTouched)) {
+          console.error('[service:home] home_assets last_serviced_on update failed', assetError ?? { assetId: input.assetId, error: 'no rows updated' });
+        }
       }
       if (input.contractorId) {
-        const { error: contractorError } = await scope.db.from('home_contractors').update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId);
-        if (contractorError) console.error('[service:home] home_contractors last_used_on update failed', contractorError);
+        const { data: contractorTouched, error: contractorError } = await scope.db.from('home_contractors')
+          .update({ last_used_on: serviceDate, updated_by: scope.userId }).eq('id', input.contractorId).eq('family_id', scope.familyId).select('id');
+        if (contractorError || wroteNoRows(contractorTouched)) {
+          console.error('[service:home] home_contractors last_used_on update failed', contractorError ?? { contractorId: input.contractorId, error: 'no rows updated' });
+        }
       }
 
       await recordActivitySafely(scope, { action: 'create', agent: 'home', title: `Logged service: ${data.title}`, detail: data.service_date, href: '/dashboard/home/service' });

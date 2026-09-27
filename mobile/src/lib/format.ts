@@ -66,13 +66,17 @@ export function dueLabel(iso: string | null | undefined, tz: string, now = new D
   if (!iso) return 'No due date';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return 'No due date';
-  const label = dayLabel(date, tz, now);
-  if (date.getTime() < now.getTime() && label !== 'Today') {
+  // "Is this today?" is a calendar question, answered against the day KEY.
+  // Asking it of dayLabel()'s output instead made the word "Today" load-bearing:
+  // once that label is translated, every item due later today starts reading
+  // "Overdue", and no test on this side of the seam would have said so.
+  const isToday = dayKey(date, tz) === dayKey(now, tz);
+  if (date.getTime() < now.getTime() && !isToday) {
     const p = partsFor(date, tz, { month: 'short', day: 'numeric' });
     return `Overdue · ${p ? `${p.month} ${p.day}` : dayKey(date, tz)}`;
   }
-  if (label === 'Today') return `Due today · ${formatTime(iso, tz)}`;
-  return `Due ${label}`;
+  if (isToday) return `Due today · ${formatTime(iso, tz)}`;
+  return `Due ${dayLabel(date, tz, now)}`;
 }
 
 /** Hour-of-day (in `tz`) → greeting. */

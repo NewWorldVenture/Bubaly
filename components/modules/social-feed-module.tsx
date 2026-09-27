@@ -218,13 +218,13 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
                     // Degrade quietly (the link already opened) but never silently:
-                    // a bare `.then()` made an unread item stay unread with no trace.
-                    if (!item.isRead) {
-                      void markReadAction({ id: item.id, read: true }).then(
-                        () => router.refresh(),
-                        (err: unknown) => console.error('[social-feed] mark read failed', err),
-                      );
-                    }
+                    // the refresh shows the server's truth either way, so a refused
+                    // mark-read is a smaller answer — logged, not dropped — and a
+                    // bare `.then()` had let a rejection leave an unread item unread
+                    // with no trace. Audit C1-S9-74.
+                    if (!item.isRead) void markReadAction({ id: item.id, read: true })
+                      .then((res) => { if (!res.ok) console.warn('[social-feed] mark-read refused', res.error); router.refresh(); })
+                      .catch((error: unknown) => console.error('[social-feed] mark read failed', error));
                   }} />
               ))}
             </div>

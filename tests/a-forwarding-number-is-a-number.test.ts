@@ -99,7 +99,14 @@ vi.mock('@/lib/supabase/server', () => ({
     from: () => ({
       update: (patch: Record<string, unknown>) => {
         state.patches.push(patch);
-        return { eq: async () => ({ error: null }) };
+        // The action confirms the write matched a row (`.select('family_id')`,
+        // lib/supabase/errors wroteNoRows); PostgREST answers that with the
+        // affected rows, so the fake does too.
+        return {
+          eq: () => Object.assign(Promise.resolve({ data: null, error: null }), {
+            select: async () => ({ data: [{ family_id: 'fam-1' }], error: null }),
+          }),
+        };
       },
     }),
   }),

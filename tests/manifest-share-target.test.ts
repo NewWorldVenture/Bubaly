@@ -46,7 +46,7 @@ describe('/capture consumes what the share target sends', () => {
 
   it('reads the shared params on the server and prefills the box', () => {
     expect(page).toContain('searchParams');
-    expect(page).toContain('sharedCaptureText');
+    expect(page).toContain('sharedCaptureText(');
     expect(page).toContain('initialText');
   });
 });

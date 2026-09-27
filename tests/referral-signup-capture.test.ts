@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // M39 — a `/signup?ref=CODE` visit ends, after onboarding, as a referrals row
 // with source 'signup_link'. The capture is exercised against the in-memory
 // Supabase (real rows, real filters) with a fake cookie jar standing in for
@@ -148,7 +149,7 @@ describe('signup capture wiring (source)', () => {
     expect(finalize.match(/captureSignupReferral\(/g)).toHaveLength(1);
     expect(finalize).toContain('metadataCode: auth.user.user_metadata?.referral_code');
     // Attribution happens after the family exists and its owner is a member.
-    expect(finalize.indexOf('captureSignupReferral(')).toBeGreaterThan(finalize.indexOf("from('family_members').upsert("));
+    expect(at(finalize, 'captureSignupReferral(')).toBeGreaterThan(at(finalize, "from('family_members').upsert("));
   });
 
   it('every way applying a code can fail reaches the family as translated words', () => {

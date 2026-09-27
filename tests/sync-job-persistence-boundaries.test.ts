@@ -25,7 +25,7 @@ describe('sync job persistence boundaries', () => {
   });
 
   it('does not return a refreshed generic token before encrypted persistence', () => {
-    expect(generic).toContain('getProviderAccessToken');
+    expect(generic).toContain('getProviderAccessToken(');
     expect(tokens).toContain('if (result.error || !result.data) throw');
     expect(tokens).toContain(".select('account_id').maybeSingle()");
   });

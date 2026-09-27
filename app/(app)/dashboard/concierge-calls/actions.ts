@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { buildCallBrief, type CallTaskKind, type CallCategory } from '@/lib/concierge-calls/brief';
 import type { Json } from '@/lib/database.types';
@@ -81,19 +82,38 @@ export async function requestCallAction(input: {
   return { ok: true, data: { id: data.id } };
 }
 
-/** Cancel a pending/queued call request. */
+/**
+ * Cancel a pending/queued call request.
+ *
+ * `.eq('family_id')` and `.select('id')` for the same reason `logCallOutcomeAction`
+ * already had the first: `isManager` reads the role in the ACTIVE family, while
+ * `concierge_calls_update`'s `is_family_member(family_id)` passes for ANY family
+ * the caller belongs to (0173). A user who is a parent here and a child
+ * elsewhere therefore cleared that household's call queue by id alone. And an
+ * UPDATE that matches nothing SUCCEEDS — zero rows, no error — so a stale or
+ * already-decided id was reported as "cancelled" over a call still queued to
+ * dial.
+ */
 export async function cancelCallAction(id: string): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanManage') };
   const supabase = await createServer();
-  const { error } = await supabase.from('concierge_calls')
-    .update({ status: 'cancelled' }).eq('id', id).in('status', ['draft', 'queued', 'action_needed']);
+  const { data: rows, error } = await supabase.from('concierge_calls')
+    .update({ status: 'cancelled' })
+    .eq('id', id).eq('family_id', ctx.active.familyId)
+    .in('status', ['draft', 'queued', 'action_needed']).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };
   return { ok: true };
 }
 
-/** Re-queue a failed / needs-you call (optionally after adding a phone number). */
+/**
+ * Re-queue a failed / needs-you call (optionally after adding a phone number).
+ *
+ * Scoped and verified like the cancel above, and it matters more here: this one
+ * re-arms a real outbound call and may replace the number it dials.
+ */
 export async function requeueCallAction(id: string, phone?: string): Promise<Result> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
@@ -102,9 +122,12 @@ export async function requeueCallAction(id: string, phone?: string): Promise<Res
   const supabase = await createServer();
   const patch: { status: string; callee_phone?: string } = { status: 'queued' };
   if (phone?.trim()) patch.callee_phone = phone.trim();
-  const { error } = await supabase.from('concierge_calls')
-    .update(patch).eq('id', id).in('status', ['draft', 'failed', 'action_needed']);
+  const { data: rows, error } = await supabase.from('concierge_calls')
+    .update(patch)
+    .eq('id', id).eq('family_id', ctx.active.familyId)
+    .in('status', ['draft', 'failed', 'action_needed']).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };
   return { ok: true };
 }
 
@@ -122,10 +145,14 @@ export async function logCallOutcomeAction(id: string, outcome: string): Promise
   const text = (outcome ?? '').trim();
   if (text.length < 2) return { ok: false, error: t('actions.sayWhatHappenedOnThe') };
   const supabase = await createServer();
-  const { error } = await supabase.from('concierge_calls')
+  const { data: rows, error } = await supabase.from('concierge_calls')
     .update({ status: 'completed', outcome: text.slice(0, 2000), completed_at: new Date().toISOString() })
-    .eq('id', id).eq('family_id', ctx.active.familyId).in('status', ['draft', 'queued', 'failed', 'action_needed']);
+    .eq('id', id).eq('family_id', ctx.active.familyId)
+    .in('status', ['draft', 'queued', 'failed', 'action_needed']).select('id');
   if (error) return { ok: false, error: error.message };
+  // No audit row for a write that changed nothing: the outcome the family typed
+  // was not recorded, so saying it was is the lie this check exists to stop.
+  if (wroteNoRows(rows)) return { ok: false, error: t('actions.requestNotFound') };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',
     resource: 'concierge_calls', resourceId: id, metadata: { loggedByHand: true },

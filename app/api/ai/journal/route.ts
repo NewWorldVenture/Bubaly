@@ -7,6 +7,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { buildJournalPrompt, parseJournalPrompt, promptOfTheDay } from '@/lib/journal/prompts';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { describeReadError } from '@/lib/supabase/settle';
 
 // POST /api/ai/journal — returns one personalized reflection prompt for the
 // signed-in member, informed by their recent entries. Falls back to the
@@ -23,13 +24,26 @@ export async function POST() {
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
-    const { data: recent } = await supabase
+    // These five entries are the only thing that makes the prompt personal. A
+    // refused read produced an empty list, which is also what a brand-new
+    // journal produces — so the route fell back to a generic prompt and
+    // labelled it `source: 'ai'`, indistinguishable from one written for this
+    // person. The evergreen fallback already exists for exactly this, and it is
+    // honest about what it is. Audit C1-S9-37.
+    const { data: recent, error: recentError } = await supabase
       .from('journal_entries')
       .select('mood, body')
       .eq('family_id', ctx.active.familyId)
       .eq('member_id', memberId ?? '')
       .order('entry_date', { ascending: false })
       .limit(5);
+
+    if (recentError) {
+      console.error('[ai/journal] recent entry read failed', {
+        familyId: ctx.active.familyId, error: describeReadError(recentError),
+      });
+      return NextResponse.json({ prompt: promptOfTheDay(), source: 'evergreen' });
+    }
 
     const snippets = (recent ?? []).map((r) => ({ mood: r.mood, snippet: (r.body ?? '').slice(0, 160) }));
 

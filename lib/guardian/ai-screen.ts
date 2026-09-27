@@ -3,7 +3,7 @@
 
 import type { MemberProfile } from './pipeline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export type ScreeningTurn = {
   role: 'assistant' | 'caller';
@@ -122,7 +122,7 @@ export async function screeningTurn(params: {
       });
       responseText = resp.content[0].type === 'text' ? resp.content[0].text : '';
     } else if (process.env.OPENAI_API_KEY) {
-      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+      const res = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
         body: JSON.stringify({

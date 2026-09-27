@@ -7,6 +7,7 @@ import { Plus, Plane, Sparkles, MapPin, CalendarDays, Users, Gauge } from 'lucid
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -86,7 +87,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
       description: form.description.trim() || null,
       is_international: form.is_international,
     }).select('id').single();
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(tr('vacationsList.tripCreated'));
     setForm(null);
     router.push(`/dashboard/vacations/${data.id}/overview`);

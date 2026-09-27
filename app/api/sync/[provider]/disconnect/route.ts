@@ -70,6 +70,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
     // everything in this route it is the one write whose failure may not be
     // reported as success: the member's next move after being told access was
     // revoked is to stop thinking about it.
+    // The ERROR is checked and the rows deliberately are not: this is the
+    // service role, so nothing but the row's absence makes it match nothing, and
+    // an account whose row is already gone IS disconnected. Audit C1-S9-62.
     const { error: deleteError } = await admin.from('sync_accounts').delete().eq('id', account.id);
     if (deleteError) {
       console.error('[sync] disconnect could not delete the account row', deleteError);

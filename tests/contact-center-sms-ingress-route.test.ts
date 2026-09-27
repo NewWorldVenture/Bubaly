@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '@/lib/database.types';
+import { at } from './helpers/source-order';
 
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), resolve: vi.fn(), channel: vi.fn(), planner: vi.fn(),
   concierge: vi.fn(), locale: vi.fn(), translations: vi.fn(), urgent: vi.fn() }));
@@ -158,10 +159,10 @@ describe('signed SMS ingress route with installed PostgREST transport', () => {
     expect(ingressRows()).toHaveLength(1); expect(replyRows()).toHaveLength(1);
     expect((replyRows()[0].outputs as Row).phase).toBe('emission_reserved');
     const ingress = clone(ingressRows()[0]);
-    const captureAt = f.state.events.indexOf('POST:ai_tool_calls');
-    expect(captureAt).toBeLessThan(f.state.events.indexOf('GET:families'));
-    expect(captureAt).toBeLessThan(f.state.events.indexOf('concierge'));
-    expect(captureAt).toBeLessThan(f.state.events.indexOf('locale'));
+    const captureAt = at(f.state.events, 'POST:ai_tool_calls');
+    expect(captureAt).toBeLessThan(at(f.state.events, 'GET:families'));
+    expect(captureAt).toBeLessThan(at(f.state.events, 'concierge'));
+    expect(captureAt).toBeLessThan(at(f.state.events, 'locale'));
     expect(f.state.events[0]).toBe('GET:ai_tool_calls');
     resetCalls();
     const replay = await deliver(); expect(replay.status).toBe(200); expect(await replay.text()).not.toContain('<Message');

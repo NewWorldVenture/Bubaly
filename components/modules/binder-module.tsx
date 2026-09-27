@@ -5,7 +5,7 @@ import { FolderLock, Plus, Trash2, Eye, EyeOff, Pencil } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -42,16 +42,18 @@ export function BinderModule() {
     if (!form || !form.label.trim()) return;
     const row = { category: form.category, label: form.label.trim(), value: form.value.trim() || null, note: form.note.trim() || null, is_sensitive: form.is_sensitive };
     const supabase = createClient();
-    const { error } = form.id
-      ? await supabase.from('household_info').update(row).eq('id', form.id)
-      : await supabase.from('household_info').insert({ ...row, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: saved, error } = form.id
+      ? await supabase.from('household_info').update(row).eq('id', form.id).select('id')
+      : await supabase.from('household_info').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(form.id ? 'Updated' : 'Saved'); setForm(null);
   }
   async function remove(id: string) {
     if (!confirm(t('binderModule.deleteThisEntry'))) return;
-    const { error } = await createClient().from('household_info').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('binderModule.deleted'));
+    const { data: removed, error } = await createClient().from('household_info').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('binderModule.deleted'));
   }
   function edit(i: Info) {
     setForm({ id: i.id, category: i.category, label: i.label, value: i.value ?? '', note: i.note ?? '', is_sensitive: i.is_sensitive });

@@ -5,7 +5,7 @@ import { ShieldAlert, ShieldCheck, Plus, Trash2, Check, RotateCcw } from 'lucide
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -77,13 +77,15 @@ export function SecurityModule() {
     success(tr('securityModule.logged')); setForm(null);
   }
   async function toggleResolved(ev: Event) {
-    const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(tr('securityModule.deleteThisEvent'))) return;
-    const { error } = await createClient().from('home_security_events').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(tr('securityModule.deleted'));
+    const { data: removed, error } = await createClient().from('home_security_events').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved')); else success(tr('securityModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

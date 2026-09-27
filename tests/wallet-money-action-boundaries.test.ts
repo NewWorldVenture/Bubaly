@@ -8,7 +8,7 @@ const moneyActions = readFileSync('app/(app)/money/actions.ts', 'utf8');
 describe('wallet and Stripe money action boundaries', () => {
   it('sanitizes unexpected database and provider failures', () => {
     for (const source of [walletActions, moneyActions]) {
-      expect(source).toContain('describeActionError');
+      expect(source).toContain('describeActionError(');
       expect(source).not.toMatch(/return\s+\{\s*ok:\s*false,\s*error:\s*[^\n}]*\.message/);
     }
   });
@@ -21,7 +21,7 @@ describe('wallet and Stripe money action boundaries', () => {
     // one. The local logAuditFailure that used to carry this is now the shared
     // logWalletAudit, which also covers the ten sites that were discarding the
     // error entirely; the invariant is unchanged and the name is not.
-    expect(moneyActions).toContain('logWalletAudit');
+    expect(moneyActions).toContain('logWalletAudit(');
     expect(moneyActions, 'a failed audit row must not fail the action')
       .not.toMatch(/if \(auditError\) return/);
     expect(moneyActions, 'and must not be written longhand again')
@@ -44,7 +44,14 @@ describe('wallet and Stripe money action boundaries', () => {
 
   it('rolls back a held spend when its approval row cannot be created', () => {
     expect(walletMoneyActions).toContain('const { error: approvalError } = await supabase.from(\'parent_approvals\').insert');
-    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval');");
+    // The trailing semicolon was the whole assertion, and C1-S9-53 appended
+    // `.select('id')` after this filter so the statement no longer ends here.
+    // What the test is actually about is that the rollback is PREDICATED on the
+    // hold still being unresolved — that predicate is what stops it cancelling
+    // a debit someone else already approved.
+    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval')");
+    expect(walletMoneyActions).toContain('wroteNoRows(rolledBack)');
+    expect(walletMoneyActions).toContain('a hold may be stranded');
     expect(walletMoneyActions).toContain("return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'))");
   });
 

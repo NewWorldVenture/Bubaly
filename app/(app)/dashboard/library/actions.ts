@@ -12,6 +12,7 @@ import { safeFeedUrl } from '@/lib/library/feed-parse';
 // so anything the nightly cron also needs cannot live in this file.
 import { ingestFeed } from '@/lib/library/ingest';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const PAGE = '/dashboard/library';
 
@@ -60,7 +61,12 @@ export async function subscribeFeedAction(formData: FormData): Promise<LibraryRe
     // The subscription row stays, carrying the reason. A feed that failed once
     // is usually worth retrying, and a row that says why is more use than one
     // that silently disappeared.
-    await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    // Best-effort by design — the comment above says why the row stays — but the
+    // result was discarded entirely, so a failed annotation left a subscription
+    // that says nothing about why it is not updating. Logged, not raised: the
+    // user already has the error in their hand. Audit C1-S9-49.
+    const { error: annotateError } = await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    if (annotateError) console.error('[library] could not record the feed error', { feedId: feed.id, error: annotateError.message });
     return { ok: false, error: result.error };
   }
   return { ok: true, message: `Subscribed. ${result.added} ${result.added === 1 ? 'item' : 'items'} added.` };
@@ -98,7 +104,12 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
   const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);
   if ('error' in result) {
-    await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    // Best-effort by design — the comment above says why the row stays — but the
+    // result was discarded entirely, so a failed annotation left a subscription
+    // that says nothing about why it is not updating. Logged, not raised: the
+    // user already has the error in their hand. Audit C1-S9-49.
+    const { error: annotateError } = await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    if (annotateError) console.error('[library] could not record the feed error', { feedId: feed.id, error: annotateError.message });
     return { ok: false, error: result.error };
   }
   return { ok: true, message: `Refreshed. ${result.added} ${result.added === 1 ? 'item' : 'items'} up to date.` };
@@ -107,10 +118,12 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
 export async function unsubscribeFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
-    .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId);
-  if (error) {
-    console.error('[library] unsubscribe failed', error);
+  const { data: unsubscribed, error } = await supabase
+    .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId).select('id');
+  if (error || wroteNoRows(unsubscribed)) {
+    // "Subscription removed." is returned on success, so a delete that removed
+    // nothing told the family a feed is gone while it keeps ingesting.
+    console.error('[library] unsubscribe failed', error ?? 'no rows deleted');
     return { ok: false, error: 'Could not remove that subscription.' };
   }
   revalidatePath(PAGE);

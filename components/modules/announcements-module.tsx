@@ -5,7 +5,7 @@ import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users } from 'lucide-react
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
@@ -89,14 +89,17 @@ export function AnnouncementsModule() {
 
   async function togglePin(a: Announcement) {
     const supabase = createClient();
-    const { error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error: err } = await supabase.from('family_announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error: err } = await supabase.from('family_announcements').delete().eq('id', id);
+    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
     else success(t('announcementsModule.announcementRemoved'));
   }
 

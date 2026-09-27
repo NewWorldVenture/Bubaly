@@ -31,6 +31,7 @@
 // rather than which calls were issued.
 import { readFileSync, readdirSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 
 type Row = Record<string, unknown>;
 type DbError = { code: string; message: string };
@@ -95,14 +96,19 @@ function fakeClient() {
           db[table].push(row);
           return { data: { id: row.id }, error: null };
         }
+        // An update or delete answers with the rows it touched, as PostgREST does
+        // for the `.select('id')` the audit branch confirms these writes with
+        // (merged in Audit C1-S9-89). Answering `null` modelled the unconfirmed
+        // call, and read to the confirmed one as "matched nothing".
         if (op === 'update') {
-          for (const r of db[table].filter(matches)) Object.assign(r, values);
-          return { data: null, error: null };
+          const hit = db[table].filter(matches);
+          for (const r of hit) Object.assign(r, values);
+          return { data: hit.map((r) => ({ id: r.id })), error: null };
         }
         const gone = db[table].filter(matches);
         db[table] = db[table].filter((r) => !matches(r));
         if (table === 'calendar_events') onCalendarEventsDeleted(gone.map((r) => r.id));
-        return { data: null, error: null };
+        return { data: gone.map((r) => ({ id: r.id })), error: null };
       };
 
       // `.insert(…).select('id')` keeps the insert: only a bare select reads.
@@ -466,7 +472,7 @@ describe('0360: a departure plan takes its head-out reminder with it, by any pat
   it('re-applies over an existing schema without failing', () => {
     expect(sql.indexOf('drop trigger if exists departure_plans_take_their_head_out_event on public.departure_plans'))
       .toBeGreaterThan(-1);
-    expect(sql.indexOf('drop trigger if exists')).toBeLessThan(sql.indexOf('create trigger'));
+    expect(at(sql, 'drop trigger if exists')).toBeLessThan(at(sql, 'create trigger'));
   });
 
   it('changes neither of 00981’s foreign keys', () => {

@@ -62,6 +62,11 @@ function chains(source: string, table: string): { text: string; line: number }[]
  */
 function isBounded(chain: string): boolean {
   if (!/\.select\(/.test(chain)) return true;           // insert / update / delete
+  // A write CONFIRMED with `.select('id')` is still a write: it returns the rows
+  // it changed, not a ledger to total. The C1-S9-53 hold rollback in
+  // app/(app)/wallet/actions.ts is the case that taught this (merge with main,
+  // Audit C1-S9-89).
+  if (/^\.from\([^)]*\)\s*\.(insert|update|upsert|delete)\(/.test(chain)) return true;
   if (/\.(maybeSingle|single)\(/.test(chain)) return true;
   if (/head:\s*true|count:\s*'exact'/.test(chain)) return true;
   if (/\.range\(/.test(chain)) return true;               // paged by readAll/readAllAsQuery

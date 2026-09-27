@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { resolveProvider } from '@/lib/ai/provider';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
@@ -38,11 +38,20 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: t('gift.missingGiftLink') }, { status: 400 });
   const relationship = typeof body.relationship === 'string' ? body.relationship.slice(0, 40).trim() || null : null;
 
-  const { data: link } = await supabase
+  // The twin of C1-S9-31, in the same feature: /pay/<handle> redirects here.
+  // A refused read left `link` null and produced "This gift link is no longer
+  // available" to someone outside the family trying to send money — a dead end
+  // over what may be transient, with nothing suggesting a retry. Unchanged for
+  // a link that is genuinely gone or deactivated. Audit C1-S9-40.
+  const { data: link, error: linkError } = await supabase
     .from('gift_links')
     .select('id, is_active, occasion, child_wallet_id, family_id')
     .eq('token', token)
     .maybeSingle();
+  if (linkError) {
+    console.error('[ai/gift] gift link read failed', { error: describeReadError(linkError) });
+    return NextResponse.json({ error: t('gift.giftDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
   if (!link || !link.is_active) return NextResponse.json({ error: t('gift.thisGiftLinkIsNo') }, { status: 404 });
 
   // Resolve the child's first name + their top active goal (kept minimal).

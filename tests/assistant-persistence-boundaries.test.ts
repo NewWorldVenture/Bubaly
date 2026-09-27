@@ -103,8 +103,10 @@ describe('assistant persistence boundaries', () => {
         };
       }
       if (table === 'family_reminders' && operation === 'insert') return { error: new Error('next reminder failed') };
-      if (table === 'family_reminders' && operation === 'update' && count === 1) return { error: null };
-      if (table === 'family_reminders' && operation === 'update' && count === 2) return { error: null };
+      // Both updates now ask `.select()` (C1-S9-69); a matched update answers
+      // with its row, so the complete and the restore each return one.
+      if (table === 'family_reminders' && operation === 'update' && count === 1) return { data: [{ id: 'reminder-1' }], error: null };
+      if (table === 'family_reminders' && operation === 'update' && count === 2) return { data: [{ id: 'reminder-1' }], error: null };
       return { data: [], error: null };
     });
 

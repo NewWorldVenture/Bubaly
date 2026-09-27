@@ -5,10 +5,11 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import type { Tables } from '@/lib/database.types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import {
   buildContactTimeline, contactHealth,
   type LoggedInteraction, type CommunicationLike,
@@ -47,11 +48,17 @@ export async function deleteInteractionAction(input: { id: string; contactId: st
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('contact_interactions')
-    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // Returning without throwing is what tells the timeline the entry is gone.
+  // Audit C1-S9-60.
+  const { data: deleted, error } = await supabase.from('contact_interactions')
+    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) throw new Error(describeActionError(error, t('actions.couldNotDeleteThatInteraction')));
+  if (wroteNoRows(deleted)) throw new Error(t('actions.couldNotDeleteThatInteraction'));
   revalidatePath(`/dashboard/contacts/${input.contactId}`);
 }
+
+/** Matches the inbox intake's budget — see app/(app)/dashboard/inbox/actions.ts. */
+const AI_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 
 export type ReconnectResult = { ok: true; message: string; tone: string } | { ok: false; error: string };
 
@@ -114,6 +121,17 @@ export async function draftReconnectMessageAction(
     if (error || !Array.isArray(data)) return historyFailure('communications');
     comms = data as CommunicationLike[];
   } catch { return historyFailure(historySource); }
+
+  // Reaches a paid provider, so it carries the same budget as every API route
+  // that does and as the inbox intake. Audit C3-S4-01.
+  //
+  // Placed HERE, after the required reads, deliberately: the inbox intake —
+  // the same request filed as an action — puts it after its loads and directly
+  // before the AI work. Putting it earlier makes the budget preempt this
+  // action's own read-boundary contract, so a failed history read would report
+  // "too many requests" instead of the failure that actually happened.
+  const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
+  if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow') };
 
   const timeline = buildContactTimeline({
     t,

@@ -10,6 +10,7 @@ import { weekDates } from '@/lib/meals/planner';
 import type { NutritionSubject } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,8 +65,16 @@ export async function POST(req: Request) {
 
   // Cache hit -------------------------------------------------------------
   if (!refresh) {
-    const { data: cached } = await supabase.from('meal_nutrition').select('*')
+    // A failed cache read is the one place in this route where continuing is
+    // right: the recomputed answer is correct, it just costs a model call. So
+    // it degrades deliberately rather than silently — logged, not dropped.
+    const { data: cached, error: cacheError } = await supabase.from('meal_nutrition').select('*')
       .eq('family_id', familyId).eq('subject_type', subjectType).eq('subject_id', subjectId).maybeSingle();
+    if (cacheError) {
+      console.warn('[ai/meals/nutrition] cache read failed, recomputing', {
+        familyId, error: describeReadError(cacheError),
+      });
+    }
     if (cached) return NextResponse.json({ nutrition: cached, cached: true });
   }
 
@@ -75,15 +84,28 @@ export async function POST(req: Request) {
   let weekDetails: { label: string; date: string }[] | null = null;
 
   if (subjectType === 'recipe') {
-    const { data: r } = await supabase.from('family_recipes')
+    // A refused read used to reach the 404 and tell the family their recipe
+    // does not exist. 404 is a statement about their data; it has to come from
+    // an answer, not from the absence of one.
+    const { data: r, error: recipeError } = await supabase.from('family_recipes')
       .select('name,servings,ingredients,category,allergy_flags').eq('id', subjectId).eq('family_id', familyId).maybeSingle();
+    if (recipeError) {
+      console.error('[ai/meals/nutrition] recipe read failed', { familyId, error: describeReadError(recipeError) });
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!r) return NextResponse.json({ error: t('nutrition.recipeNotFound') }, { status: 404 });
     servings = r.servings ?? 1;
     userMsg = `Dish: ${r.name} (${r.category}). Servings: ${servings}. Ingredients: ${ingredientLines(r.ingredients)}.\n` +
       `Report nutrition PER SERVING.`;
   } else if (subjectType === 'meal') {
-    const { data: m } = await supabase.from('meals')
+    // Same as the recipe branch above: "not found" must mean the database
+    // answered and had nothing, never that it declined to answer.
+    const { data: m, error: mealError } = await supabase.from('meals')
       .select('name,meal_type,ingredients,notes').eq('id', subjectId).eq('family_id', familyId).maybeSingle();
+    if (mealError) {
+      console.error('[ai/meals/nutrition] meal read failed', { familyId, error: describeReadError(mealError) });
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!m) return NextResponse.json({ error: t('nutrition.mealNotFound') }, { status: 404 });
     servings = 1;
     userMsg = `Dish: ${m.name} (${m.meal_type}). Ingredients: ${ingredientLines(m.ingredients) || 'typical preparation'}.\n` +
@@ -94,17 +116,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: t('nutrition.forAWeekSubjectidMust') }, { status: 400 });
     }
     const dates = weekDates(subjectId);
-    const { data: plans } = await supabase.from('meal_plans')
+    // Both reads dropped their `error`, and the consequences differ. A refused
+    // `meal_plans` read fell through to the 422 below — misleading but safe.
+    // A refused `meals` read did NOT: `nameById` came back empty, every label
+    // became the placeholder `'meal'`, and the prompt went out as twenty-one
+    // lines of "- 2026-09-21 dinner: meal". The model then produced per-day
+    // calorie and macro figures for meals it was never told, and the route
+    // returned them as an estimate of THIS family's week. There is no honest
+    // nutrition answer built on a read that did not happen. Audit C1-S9-37.
+    const plansResult = await supabase.from('meal_plans')
       .select('plan_date,meal_type,meal_id').eq('family_id', familyId)
       .gte('plan_date', dates[0]).lte('plan_date', dates[6]);
-    const mealIds = [...new Set((plans ?? []).map((p) => p.meal_id).filter((x): x is string => !!x))];
-    const { data: mealRows } = mealIds.length
+    if (plansResult.error) {
+      console.error('[ai/meals/nutrition] meal plan read failed', { familyId, error: describeReadError(plansResult.error) });
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
+    const plans = plansResult.data ?? [];
+    const mealIds = [...new Set(plans.map((p) => p.meal_id).filter((x): x is string => !!x))];
+    const mealsResult = mealIds.length
       ? await supabase.from('meals').select('id,name').in('id', mealIds)
-      : { data: [] as { id: string; name: string }[] };
-    const nameById = new Map((mealRows ?? []).map((m) => [m.id, m.name]));
-    const lines = (plans ?? [])
-      .map((p) => ({ label: nameById.get(p.meal_id ?? '') ?? 'meal', date: p.plan_date, meal_type: p.meal_type }))
-      .filter((l) => l.label !== 'meal' || true);
+      : { data: [] as { id: string; name: string }[], error: null };
+    if (mealsResult.error) {
+      console.error('[ai/meals/nutrition] meal name read failed', { familyId, error: describeReadError(mealsResult.error) });
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
+    const nameById = new Map((mealsResult.data ?? []).map((m) => [m.id, m.name]));
+    // The filter here was `(l) => l.label !== 'meal' || true` — unconditionally
+    // true, so it kept everything while reading as though it dropped the
+    // unresolved entries. The written intent is honoured now that it can be:
+    // with both reads failing closed, a label that is still unresolved means the
+    // plan references a meal row that is genuinely gone, and a line the model
+    // cannot identify contributes nothing to a nutrition estimate except
+    // confidence. If that empties the week, the existing 422 is the truthful
+    // answer rather than a fabricated one.
+    const lines = plans.flatMap((p) => {
+      const label = nameById.get(p.meal_id ?? '');
+      return label ? [{ label, date: p.plan_date, meal_type: p.meal_type }] : [];
+    });
     if (lines.length === 0) {
       return NextResponse.json({ error: t('nutrition.noPlannedMealsForThis') }, { status: 422 });
     }

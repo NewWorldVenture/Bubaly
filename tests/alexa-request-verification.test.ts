@@ -430,9 +430,9 @@ describe('the route proves the request before it does anything with it', () => {
   it('signs over the bytes that arrived, not a re-serialisation of them', () => {
     // JSON.parse then JSON.stringify changes whitespace and key order, and the
     // signature would never verify again.
-    expect(route).toContain('readBoundedRequestBytes');
+    expect(route).toContain('readBoundedRequestBytes(');
     expect(route).toContain('rawBody: raw.bytes');
-    expect(route).not.toContain('readBoundedRequestJson');
+    expect(route).not.toContain('readBoundedRequestJson(');
   });
 
   it('answers an unverifiable request with a status and no speech', () => {

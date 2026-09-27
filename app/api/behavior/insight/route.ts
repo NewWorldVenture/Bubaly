@@ -10,6 +10,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 

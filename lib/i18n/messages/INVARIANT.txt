@@ -20,6 +20,10 @@
 # about.
 
 # --- proper nouns, brands, demo-data placeholder names ----------------------
+# The family in the marketing mocks.
+Jackson
+Mike
+The Johnsons
 # Social networks. The share bar names each one beside a translated verb
 # ("Share on {network}"), so the noun itself must stay put.
 Facebook

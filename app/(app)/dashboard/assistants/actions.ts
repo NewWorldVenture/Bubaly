@@ -13,6 +13,7 @@ import { logAudit } from '@/lib/server/audit';
 import { getTranslations } from '@/lib/i18n/server';
 import { issueAssistantToken } from '@/lib/assistant/link-token';
 import { isAdmin } from '@/lib/constants/roles';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const PAGE = '/dashboard/assistants';
 
@@ -95,8 +96,9 @@ export async function revokeAssistantLinkAction(id: string): Promise<AssistantAc
   // deleted in another tab, matched nothing and raised nothing, and the reply
   // below used to say "It stops working immediately" regardless. On a
   // credential, telling a parent a key is dead when it was never touched is
-  // the one success message that must be true.
-  if (!revoked?.length) {
+  // the one success message that must be true — and a key believed revoked is
+  // one nobody goes back to check. Audit C1-S9-60.
+  if (wroteNoRows(revoked)) {
     const t = await getTranslations();
     return { ok: false, error: t('assistants.keyNotFoundNothingRevoked') };
   }

@@ -164,7 +164,10 @@ function marketingStore(seed: { consent: ConsentRow[]; visitors: Visitor[] }) {
                 if (val !== undefined) (target as Record<string, unknown>)[key] = val;
               }
             }
-            return Promise.resolve({ error: null });
+            // The route confirms the update with `.select('id')` (Audit C1-S9-62,
+            // merged in C1-S9-89), so the update answers with the row it changed.
+            const updated = { data: target ? [{ id: target.id }] : [], error: null };
+            return Object.assign(Promise.resolve(updated), { select: () => Promise.resolve(updated) });
           },
           maybeSingle: () => Promise.resolve({
             data: visitors.find((v) => v.anonymous_id === filters.anonymous_id) ?? null, error: null,
