@@ -96,13 +96,13 @@ function CategoryBar({ label, score, icon }: OpsCategory) {
   );
 }
 
-const DOMAIN_META: Record<ConciergeDomain, { emoji: string; label: string; href: string }> = {
-  bill:        { emoji: '💵', label: 'Bill',        href: '/dashboard/billing' },
-  medication:  { emoji: '💊', label: 'Medication',  href: '/dashboard/medications' },
-  maintenance: { emoji: '🔧', label: 'Maintenance', href: '/dashboard/home' },
-  warranty:    { emoji: '🛡️', label: 'Warranty',    href: '/dashboard/home' },
-  trip:        { emoji: '✈️', label: 'Trip',        href: '/dashboard/vacations' },
-  pantry:      { emoji: '🥫', label: 'Pantry',      href: '/dashboard/pantry' },
+const DOMAIN_META: Record<ConciergeDomain, { emoji: string; href: string }> = {
+  bill:        { emoji: '💵', href: '/dashboard/billing' },
+  medication:  { emoji: '💊', href: '/dashboard/medications' },
+  maintenance: { emoji: '🔧', href: '/dashboard/home' },
+  warranty:    { emoji: '🛡️', href: '/dashboard/home' },
+  trip:        { emoji: '✈️', href: '/dashboard/vacations' },
+  pantry:      { emoji: '🥫', href: '/dashboard/pantry' },
 };
 const DIGEST_URGENCY: Record<ConciergeUrgency, { labelKey: string; cls: string; dot: string }> = {
   overdue: { labelKey: 'briefingView.urgencyOverdue',   cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30',     dot: 'bg-rose-400' },
@@ -180,19 +180,17 @@ function NeedsAttention({ digest }: { digest: ConciergeDigest }) {
 type DecisionMeta = {
   icon: React.ComponentType<{ className?: string }>;
   iconBg: string;
-  cta: string;
   ctaKey: string;
-  subtitle: string;
   subtitleKey: string;
 };
 
 const DECISION_META: Record<string, DecisionMeta> = {
-  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'A family member is waiting on your approval.', subtitleKey: 'briefing.decisionSubtitleMoney' },
-  run_awaiting_approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Review', ctaKey: 'briefing.decisionCtaReview', subtitle: 'Bubaly is ready and waiting for the go-ahead.', subtitleKey: 'briefing.decisionSubtitleOk' },
-  run_awaiting_answer: { icon: MessageCircleQuestion, iconBg: 'bg-amber-500/15 text-amber-400', cta: 'Answer', ctaKey: 'briefing.decisionCtaAnswer', subtitle: 'One quick answer and Bubaly can finish this.', subtitleKey: 'briefing.decisionSubtitleAnswer' },
-  recommendation: { icon: Lightbulb, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: 'Bubaly suggests this; accept it and it gets done.', subtitleKey: 'briefing.decisionSubtitleRecommendation' },
+  approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', ctaKey: 'briefing.decisionCtaReview', subtitleKey: 'briefing.decisionSubtitleMoney' },
+  run_awaiting_approval: { icon: ShieldCheck, iconBg: 'bg-amber-500/15 text-amber-400', ctaKey: 'briefing.decisionCtaReview', subtitleKey: 'briefing.decisionSubtitleOk' },
+  run_awaiting_answer: { icon: MessageCircleQuestion, iconBg: 'bg-amber-500/15 text-amber-400', ctaKey: 'briefing.decisionCtaAnswer', subtitleKey: 'briefing.decisionSubtitleAnswer' },
+  recommendation: { icon: Lightbulb, iconBg: 'bg-brand/15 text-brand-text', ctaKey: 'briefing.decisionCtaView', subtitleKey: 'briefing.decisionSubtitleRecommendation' },
 };
-const DEFAULT_DECISION_META: DecisionMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', cta: 'View', ctaKey: 'briefing.decisionCtaView', subtitle: '', subtitleKey: '' };
+const DEFAULT_DECISION_META: DecisionMeta = { icon: Bell, iconBg: 'bg-brand/15 text-brand-text', ctaKey: 'briefing.decisionCtaView', subtitleKey: '' };
 
 /** Cards shown in the brief; the rest are one tap away on Home, which lists them all. */
 const DECISIONS_SHOWN = 6;
