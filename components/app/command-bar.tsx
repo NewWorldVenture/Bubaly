@@ -38,6 +38,7 @@ import { MicButton } from '@/components/voice/mic-button';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
+import { useHydrated } from '@/components/ui/modal';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -189,6 +190,7 @@ export function CommandBar() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBar = useCallback(() => setOpen(false), []);
   useDialogBehavior(dialogRef, open, { onClose: closeBar });
+  const hydrated = useHydrated();
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
@@ -196,7 +198,8 @@ export function CommandBar() {
     else if (e.key === 'Enter') { e.preventDefault(); void run(results[active]); }
   }
 
-  if (!open || typeof document === 'undefined') return null;
+  // useHydrated, not a `typeof document` check — see components/ui/modal.tsx.
+  if (!open || !hydrated) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[95] flex items-start justify-center p-4 pt-[12vh]">

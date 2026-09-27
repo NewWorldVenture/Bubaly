@@ -8,11 +8,15 @@ import { Button } from '@/components/ui/button';
 // stays put and a missing record (a deleted chore, an old wallet link) reads
 // as "this one thing is gone", not "the app broke". `backHref` points at the
 // section's own home so the primary action is always one meaningful hop.
+//
+// The defaults come from the catalogue. They were English literals, so every
+// missing record under /dashboard — a deleted trip, an old contact link — told
+// a German or Portuguese family "We couldn’t find that". Audit C1-S9-97.
 export async function AppNotFound({
-  title = 'We couldn’t find that',
-  description = 'It may have been removed, or the link is out of date. Everything else is right where you left it.',
+  title,
+  description,
   backHref = '/dashboard',
-  backLabel = 'Go to dashboard',
+  backLabel,
 }: {
   title?: string;
   description?: string;
@@ -20,6 +24,9 @@ export async function AppNotFound({
   backLabel?: string;
 }) {
   const t = await getTranslations();
+  title ??= t('appNotFound.title');
+  description ??= t('appNotFound.description');
+  backLabel ??= t('appNotFound.goToDashboard');
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">
