@@ -117,3 +117,8 @@ to it.
 # The sixth network in SOCIAL_PLATFORMS; the other five already read as
 # brands to the scanner and this one does not.
 Instagram
+
+# Message channels in the Communications Hub (inbox-module CHANNELS): the
+# service and the technology are named the same in every language we ship.
+SMS
+WhatsApp
