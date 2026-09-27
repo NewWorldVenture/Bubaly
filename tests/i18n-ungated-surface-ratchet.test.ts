@@ -165,7 +165,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Nothing here is newly-shipped untranslated product copy that main had
 // translated; where the branch touched main's translated surface, main's
 // strings were kept.
-const CEILING = 2819;
+// PR585/598 integration, 2026-09-27: the unchanged current scanner measures
+// 2,650 findings across 593 app/components files with INVARIANT.txt present.
+// Bank the translated public/auth/control copy: tighten by169, do not loosen
+// the gate or compare differently configured scanners.
+const CEILING = 2650;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

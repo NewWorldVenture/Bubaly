@@ -55,7 +55,7 @@ export default async function SocialSettingsPage() {
   const defaultPlatforms = new Set(settings?.default_platforms ?? []);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <h2 className="mb-3 text-sm font-semibold">{t('dashboardSocialSettings.workspaceSettings')}</h2>
         <form action={updateSettingsAction} className="space-y-3">

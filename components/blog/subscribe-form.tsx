@@ -55,11 +55,11 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
         setEmail('');
       } else {
         setState('error');
-        setMessage(data.error ?? 'Something went wrong — try again in a moment.');
+        setMessage(data.error ?? t('subscribe.somethingWentWrongTryAgain'));
       }
     } catch {
       setState('error');
-      setMessage('Something went wrong — try again in a moment.');
+      setMessage(t('subscribe.somethingWentWrongTryAgain'));
     }
   }
 

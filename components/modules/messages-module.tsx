@@ -28,9 +28,9 @@ import {
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { ownChannel } from '@/lib/realtime/own-channel';
 import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
-import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;

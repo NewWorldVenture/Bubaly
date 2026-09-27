@@ -149,7 +149,7 @@ async function fixture(page: Page): Promise<Fixture> {
     db.auth.getSession = async () => ({ data: { session }, error: null });
     db.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
     const mocks = {
-      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: React, 'react-dom': ReactDOM,
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => ({ accessToken: session.access_token }) }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/components/app/app-context': { useApp: app }, '@/lib/supabase/client': { createClient: () => db },
       // Execute real action logic against the same intercepted SDK; framework

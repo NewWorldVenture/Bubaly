@@ -85,7 +85,7 @@ export default async function AdminSettingsPage() {
         <p className="mt-1 text-sm text-muted">{t('adminSettings.liveSystemConfigurationAndConnectedServices')}</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <div className="mb-4 flex items-center gap-2"><Plug className="h-4 w-4 text-brand-text" /><h2 className="font-semibold">{t('adminSettings.connectedServices')}</h2></div>
           <ul className="space-y-2">

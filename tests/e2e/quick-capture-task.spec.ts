@@ -157,7 +157,7 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
     db.auth.getSession = async () => ({ data: { session }, error: null });
     db.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
     const mocks = {
-      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: React, 'react-dom': ReactDOM,
+      '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => ({ accessToken: session.access_token }) }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/supabase/client': { createClient: () => { if (p.throwClient) { p.throwClient = false; throw new Error('Fixture client construction failure'); } return db; } },
       '@capacitor/core': { Capacitor: { isNativePlatform: () => false } },
