@@ -31528,6 +31528,12 @@ The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **defe
 
 The branch's `0338` with its SEC-001 readers (family media private, via signed URLs) is **deferred** for the same reason. Main records the bucket half as the owner's choice between a same-origin media route and signed URLs, and this implements one of them. The SEC-001 entry now points at the ready implementation.
 
+PUSH-003 (retry a partly failed push only to whoever missed it) and EMAIL-002 (count each email event once) are **left to #548**, which carries both findings under the same IDs:
+- `0440_a_device_is_buzzed_once_per_notification` keys receipts per **device**. That is strictly finer than the branch's per-recipient table, since it also re-sends correctly when one of a user's two devices missed.
+- `0441_an_email_event_is_counted_once` is the branch's design, down to the `counter_applied_at` column.
+
+Porting either would put two tables, two functions and two versions of the same dispatcher and webhook code in front of the owner. If #548 does not land, both re-apply from `417c5817` and `c5d8aad6`.
+
 **Found by the port itself** (on main, not on the branch):
 - The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
 - The page-boundary ratchet found two `invest_holdings` pagers ordered by `asset_id` alone.
