@@ -2,36 +2,41 @@
 
 ## Codex integration — 2026-09-27
 
-CURRENT: Reconcile main 06dd3f7e with the saved September 19 worker-cache work.
-Main's CI 36320217255 is complete SUCCESS in all four jobs; exact public build
-06dd3f7e was verified at 15:39:23 UTC on Vercel dpl_8AwmjjnWmYs4nWfCjzg77DFi3QaF.
-Those results cover incoming main, not unpublished merged changes.
-OWNERSHIP: Root coordinates and verifies; auth_current_boundary owns worker
-source/tests; audit_reconcile_sep27 owns this block and the audit-cycle records.
-The other Claude sessions' sections remain preserved below. Open PRs observed:
-591 and 587 public-page audits, 586 logged-in-page port, 585 page audit. Those are
-separate workstreams; no messages were sent or ownership inferred from stale boards.
-INVENTORY: All incoming and original permanent IDs retained. Register B 14,183:
-13,877 NOT STARTED, 297 IN PROGRESS, 4 FIXED+PASS, 4 BLOCKED, 1 FAIL. Three legacy
-nonstandard statuses use IN PROGRESS with original verdicts retained in Notes.
-New SUPPORT-1A08672F87F3 inventories the controlled cache fixture;
-SUPPORT-827E4294FC10 inventories the native-worker fixture (1 discovered case,
-strict types/lint pass; hosted native runtime pending).
-PHONE: 75a1 CI 35471471192 is terminal E2E FAILURE, superseded as a current-state
-claim by main's subsequent repairs and green hosted CI. September 19 statements
-below are timestamped history, including observations made before CI completed.
-SW: Incoming v5 optimizer/write proof retained. Five exact 06dd cache-read checks
-fail as expected: stale/unreviewed bytes, unsafe cache headers/status/type and
-late old-cache recreation. Existing worker record reopened IN PROGRESS.
-Merged v6 passes 85/85 controlled browser checks (72 cache + 13 registration), scoped
-fixture lint passes. Native-worker and new hosted acceptance remain pending.
-SEC-001 stays FAIL for public storage; no production-migration/config change.
-FULL GATES: Initial Windows run was an invalid verification environment
-(Git lookup escaped, POSIX path/glob differences, build-stub/CI env mismatch):
-37 files / 89 assertions failed; 1,571 files / 20,488 assertions passed.
-Not a full-source PASS or product-regression attribution. Canonical private WSL
-Linux verification with Git index, exact Node24 and CI environment is pending.
-NEXT: Finish whole-source gates and native-worker acceptance before release.
+CURRENT: Integrated incoming main7563462e / PR591 into the worker audit. Source
+head e7988141 passed all four jobs in CI36329827922; those are parent gates.
+Combined tree65719886 passes UTC20,701/20,701 across1,621files, build247,
+full strict types and lint with15existingwarnings. Both parents also have their
+own three-zone unit passes; these are not combined-tree three-zone proof.
+CONTROLLED:85/85 in3.8s (72cache+13registration), workerdd571476, fixture9b12ce5a;
+Temp/bubaly-sw-combined-browser-65719886-20260927.log. Focused33/33 separately.
+HOSTED: Original59f03 CI36331147265 Web/DB/MobilePASS; E2E1369/1370, sole
+native-worker fixture failure at iframe after preceding nativev6controls passed.
+FIXTURE: Finalnative507a6cd uses top-level navigation with CDP scripts disabled,
+respecting real anti-framing headers. Supplemental exactv6 native-engine proof
+passes public install/icon and200/fromServiceWorker exact offline HTML. Corrected
+full hosted case remains pending; current source is not claimed deployed.
+DELTA:878a17b verifies5,191files/modes plus only507a6cd native fixture;
+full generated-route types/lint15PASS, discovery1/1 (not runtime).
+Receipt:linux-combined-65719886/final-native-fixture-receipt.json.
+GATES: Failed Windows environment attempt retained. Three preliminary fixture
+header-union type errors corrected; full strict types then PASS. Combined gate
+receipt: Temp/bubaly-sw-reconcile-20260927/linux-combined-65719886/final-gates-receipt.json.
+INVENTORY: All incoming/original IDs and Claude sections preserved. RegisterB
+14,183=13,877NOT STARTED+297IN PROGRESS+4FIXED+PASS+4BLOCKED+1FAIL.
+Worker SUPPORT-98FD1D4C44AD and fixtures SUPPORT-1A08672F87F3 /
+SUPPORT-827E4294FC10 remain IN PROGRESS. Fixture coverage is not another
+completed product workflow. Priorv5 optimizer/write proof remains intact.
+MEDIA: SEC-001FAIL. Q59 observer-gap follow-up is reproduced with actual React,
+SDK and shared peer cookies: readyB renders/fetches synthetic A capability without
+B signing; active-switch control purges. Synthetic provider/image transport only;
+no live private bytes or media-source repair. Independent from the SW repair.
+PRODUCTION: Latest health16:01:24UTC core checksOK, degraded; six missing settings:
+CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET,
+FCM_PRIVATE_KEY, APNS_PRIVATE_KEY. Older four-setting statements are historical.
+NEXT: Publish combined correction, execute corrected hosted case, then verify
+exact deployment before scoped signoff. No production SQL/provider change.
+OWNERSHIP: Root integrates/verifies; auth_current_boundary updates these owned
+checkpoint sections. All other Claude board content below remains unchanged.
 RECORD: docs/final-audit/service-worker-private-cache-cycle.md; finalaudit.md.
 
 > Two sessions ran this board. Both sections are kept.

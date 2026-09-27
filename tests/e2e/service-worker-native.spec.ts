@@ -138,20 +138,18 @@ test('native worker installs the public shell and excludes private caches while 
   expect(await page.evaluate(address => fetch(address).then(response => response.text()), EPISODE)).toBe(AUDIO_MARKER);
   expect((await audioResponse).status()).toBe(200);
 
-  // A real iframe navigation supplies mode=navigate. Its sandbox prevents any
-  // Next/analytics scripts in the actual offline document from executing.
-  const navigation = page.waitForResponse(response => response.url() === origin + PRIVATE_PAGE
-    && response.request().isNavigationRequest() && response.fromServiceWorker());
-  await page.evaluate(address => {
-    const frame = document.createElement('iframe');
-    frame.id = 'private-navigation'; frame.setAttribute('sandbox', ''); frame.src = address;
-    document.body.append(frame);
-  }, PRIVATE_PAGE);
-  const fallback = await navigation;
-  expect(fallback.status()).toBe(200);
-  expect(await fallback.text()).toBe(shell?.body);
-  expect(await fallback.text()).not.toContain(PRIVATE_MARKER);
-  await page.locator('#private-navigation').evaluate(element => element.remove());
+  // Navigate the top-level page: an opaque iframe bypasses the worker, while
+  // a same-origin iframe is correctly refused by the real shell's anti-framing
+  // headers. Disable scripts in this page target so cached Next/analytics code
+  // stays inert; the separate native worker still handles the navigation.
+  const pageSession = await context.newCDPSession(page);
+  await pageSession.send('Emulation.setScriptExecutionDisabled', { value: true });
+  const fallback = await page.goto(origin + PRIVATE_PAGE, { waitUntil: 'domcontentloaded' });
+  expect(fallback).not.toBeNull();
+  expect(fallback!.fromServiceWorker()).toBe(true);
+  expect(fallback!.status()).toBe(200);
+  expect(await fallback!.text()).toBe(shell?.body);
+  expect(await fallback!.text()).not.toContain(PRIVATE_MARKER);
   expect(offlineFailures).toContain('/_next/image');
   expect(blocked).toEqual([]);
   expect(pageErrors).toEqual([]);
@@ -159,6 +157,7 @@ test('native worker installs the public shell and excludes private caches while 
     worker: '/sw.js', cache: CURRENT, nativeActivation: true, installDocuments: ['/', '/offline'],
     onlineFailures, expectedOfflineFailures: offlineFailures, blockedRequests: blocked, pageErrors,
     privateImageRejected: true, privateNavigationUsedPublicOfflineShell: true,
+    scriptsDisabledForFallback: true,
     publicImageFromWorker: true, explicitPublisherDownloadFromWorker: true,
   }) });
 });
