@@ -326,7 +326,17 @@ describe('Supabase migration filename safety', () => {
     // run's metadata. Held by docs/audit/automation-runs-pin-what-a-member-
     // may-queue-check.sql.
     //
-    expect(audit.nextVersion).toBe('0391');
+    // 0391_a_password_alone_does_not_open_the_familys_vault.sql (O-03) gives
+    // the document area's step-up its database counterpart on the four vault
+    // tables written only behind it — family_credentials, household_info,
+    // tax_documents, paperwork_items: RESTRICTIVE guards on
+    // `session_cleared_step_up() or not can_manage_family(family_id)`, the
+    // rule needsStepUp applies (a manager must have cleared the code; anyone
+    // else is left to the table's own policies), with SELECT guarded on the
+    // three secret tables. documents and its bucket stay open. Held by
+    // docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql.
+    //
+    expect(audit.nextVersion).toBe('0392');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

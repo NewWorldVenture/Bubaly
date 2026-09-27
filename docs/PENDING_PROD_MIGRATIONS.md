@@ -2774,3 +2774,53 @@ negative control drops ONLY this trigger and requires the scrub to succeed.
 action against a run whose metadata was scrubbed and against a row born without
 an approval, and asserts nothing is materialised until the vote passes.
 
+### `0391` gives the document vault's step-up a counterpart in the database — unapplied
+
+`0391_a_password_alone_does_not_open_the_familys_vault.sql` (O-03, the
+document half). Eight document pages ask a parent who enrolled two-step
+verification for their code (`requireAal2(ctx, 'documents', …)`), and until
+now that page guard was the whole enforcement: every policy on the tables
+behind them is a membership or role check, so the same parent's password-only
+(aal1) session could read every stored password, alarm code and tax
+document, and change or delete them, over `/rest/v1`.
+
+**What closes it**: reusing 0382's `session_cleared_step_up()` (no new
+helper), RESTRICTIVE insert, update and delete guards on `family_credentials`,
+`household_info`, `tax_documents` and `paperwork_items`, and a RESTRICTIVE
+select guard on the first three (the step-up on passwords, binder and tax is a
+read gate — the point is not to SEE the secret). Every guard is
+`session_cleared_step_up() or not can_manage_family(family_id)`, the rule the
+page applies: only a parent or adult is ever asked for a code, so a child or
+teen who enrolled an authenticator for their own account is left to the
+table's own policies rather than locked out of pages that never offer them a
+code. The update guard carries the clause on both halves. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: the paperwork
+server actions now ask for the code before touching a row (`paperworkScope`,
+mirroring the money actions), send a refused family to the step-up page, and
+confirm that a status change and the "marked as handled" stamp actually
+landed (a filtered update no longer reports success, and a created calendar
+event whose stamp did not land says so instead of inviting a duplicate).
+
+**Deliberately NOT covered**: `public.documents` and the `documents` storage
+bucket, the table the finding is named after. `/dashboard/home` writes and
+deletes documents rows with no step-up, and a dozen surfaces outside the vault
+(the home dashboard's expiring passports, household search, the chat
+assistant, which signs file URLs) read sensitive rows on a password-only
+session, so a guard would either break them silently or lie ("nothing
+expiring"). Closing it needs three owner decisions, recorded in finalaudit's
+O-03 row: whether enrolled managers are asked for the code at sign-in; what
+the home page may do to vaulted documents; and how to guard stored files
+with no documents row.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql`:
+a control that the only thing refusing is the assurance clause; an enrolled
+parent at aal1 reads nothing from the three secret tables and every write on
+the four is refused; the same parent at aal2, and a never-enrolled family,
+read and write; an ENROLLED CHILD at aal1 keeps exactly what the base
+policies allow; the catalogue holds exactly fifteen guards, each carrying the
+role clause, and none on documents; and a negative control that drops the
+guard (or its role half) and requires the refused read to land. The two
+existing credential probes now exclude these guards by what they are
+(restrictive and calling the helper), not by name.
+

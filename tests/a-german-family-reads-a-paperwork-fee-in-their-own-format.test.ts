@@ -64,6 +64,11 @@ vi.mock('@/lib/i18n/server', () => ({
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => h.db, createServiceClient: () => h.db }));
+// The paperwork actions gate on the session's assurance level (0391 / O-03);
+// the in-memory client has no `auth.mfa` to read it from, and an unreadable
+// level fails closed. The words a member reads are the question here, so this
+// session is one that already cleared step-up.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/lib/supabase/auth', () => {
   const ctx = {
     user: { id: 'user-1' },

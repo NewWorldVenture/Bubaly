@@ -18,6 +18,7 @@ import {
   draftPaperworkReplyAction,
 } from '@/app/(app)/dashboard/paperwork/actions';
 import { useToast } from '@/components/ui/toast';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { DocumentCapture } from '@/components/capture/document-capture';
@@ -81,7 +82,9 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       const res = await draftPaperworkReplyAction(itemId);
       setBusyKey(null);
       if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success(t('paperworkModule.aiDraftedAReply')); }
-      else toastError(res.error);
+      // A refusal for the two-step code carries `stepUp`; reportRefusal shows
+      // the sentence and takes the family to the code page, and back here.
+      else reportRefusal(res, toastError);
     });
   };
   const copyDraft = async (text: string) => {
@@ -106,11 +109,15 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   const materialize = (itemId: string, actionIndex: number) => {
     setBusyKey(`${itemId}:${actionIndex}`);
     startTransition(async () => {
-      // These actions return void and THROW on failure. Without a catch the
+      // These actions THROW on a write that errors, and ANSWER `{ ok: false }`
+      // for a write the database filtered or a stamp-back that did not land,
+      // with `stepUp` when the session needs its two-step code first. Without the catch the
       // throw skipped `setBusyKey(null)`, so the button span forever while the
-      // reason — often a translated "only a parent can…" — went nowhere.
+      // reason — often a translated "only a parent can…" — went nowhere; and
+      // without reportRefusal a step-up refusal was a toast with nowhere to go.
       try {
-        await materializePaperworkActionAction({ itemId, actionIndex });
+        const res = await materializePaperworkActionAction({ itemId, actionIndex });
+        if (!res.ok) reportRefusal(res, toastError);
       } catch (err) {
         toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
       } finally {
@@ -123,7 +130,8 @@ export function PaperworkModule({ items }: { items: Item[] }) {
     setBusyKey(itemId);
     startTransition(async () => {
       try {
-        await setPaperworkStatusAction({ itemId, status });
+        const res = await setPaperworkStatusAction({ itemId, status });
+        if (!res.ok) reportRefusal(res, toastError);
       } catch (err) {
         toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
       } finally {
@@ -339,8 +347,13 @@ function Composer({ onDone }: { onDone: () => void }) {
   return (
     <form
       action={(fd) => startTransition(async () => {
-        // A throw here used to leave the form open with nothing said.
-        try { await addPaperworkAction(fd); onDone(); }
+        // A throw here used to leave the form open with nothing said; a
+        // step-up refusal is answered, not thrown, and goes to the code page.
+        try {
+          const res = await addPaperworkAction(fd);
+          if (!res.ok) { reportRefusal(res, toastError); return; }
+          onDone();
+        }
         catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
       })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"

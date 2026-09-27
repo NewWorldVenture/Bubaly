@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { aal2Verdict } from '@/lib/auth/require-aal2';
 import {
   triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
   formatPaperworkAmount, paperworkActionLabel, paperworkSummary, paperworkSummaryFacts, type PaperworkReader,
@@ -13,10 +14,56 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 
 const PATH = '/dashboard/paperwork';
+
+export type PaperworkActionResult =
+  | { ok: true }
+  /** `stepUp` is the /auth/step-up path when the refusal was an assurance one. */
+  | { ok: false; error: string; stepUp?: string };
+
+type PaperworkGate =
+  | { ok: true; ctx: Awaited<ReturnType<typeof requireUserContext>>; supabase: Awaited<ReturnType<typeof createServer>> }
+  | { ok: false; error: string; stepUp: string };
+
+/**
+ * Session + client + the step-up verdict, resolved OUTSIDE any try:
+ * `requireUserContext` redirects by throwing.
+ *
+ * /dashboard/paperwork calls `requireAal2(ctx, 'documents', …)`, and 0391
+ * refuses the same `aal1` write to paperwork_items in the database — for the
+ * same people: a manager (parent/adult) with a verified authenticator, the
+ * rule `needsStepUp` (lib/auth/mfa.ts) applies. This is the action's own half
+ * of that boundary. A server action is an endpoint the page
+ * does not have to render to reach: an `aal1` session (password, no code) that
+ * was bounced off the inbox could still POST the Next-Action for
+ * `setPaperworkStatusAction` and, before this gate, the row changed — the
+ * same shape app/(app)/dashboard/billing/actions.ts `moneyScope` closed for
+ * the money area.
+ *
+ * It answers with the failure union rather than `redirect()`: every caller in
+ * components/modules/paperwork-module.tsx awaits and branches on it, and hands
+ * a refusal to `reportRefusal` (lib/auth/step-up-client.ts), which shows the
+ * sentence and, on `stepUp`, takes the family to the code page and back. A
+ * write that ERRORS still throws, as it always did — that is a different kind
+ * of answer (nothing the family can do but retry) and its callers already
+ * catch. A write the database FILTERED (zero rows, no error) is answered as a
+ * refusal with its own sentence, never as `{ ok: true }`.
+ */
+async function paperworkScope(): Promise<PaperworkGate> {
+  const ctx = await requireUserContext();
+
+  const verdict = await aal2Verdict(ctx, 'documents', PATH);
+  if (verdict.action === 'step_up') {
+    const t = await getTranslations();
+    return { ok: false, error: t('actions.paperworkNeedsYourCodeAgain'), stepUp: verdict.to };
+  }
+
+  const supabase = await createServer();
+  return { ok: true, ctx, supabase };
+}
 
 /**
  * The row a captured piece of paperwork becomes.
@@ -59,14 +106,15 @@ export async function paperworkInsertRow(input: {
 }
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
-export async function addPaperworkAction(formData: FormData): Promise<void> {
+export async function addPaperworkAction(formData: FormData): Promise<PaperworkActionResult> {
   const tr = await getTranslations();
   const text = String(formData.get('text') ?? '').trim();
   const sender = String(formData.get('sender') ?? '').trim() || null;
-  if (!text) return;
+  if (!text) return { ok: true };
 
-  const ctx = await requireUserContext();
-  const supabase = await createServer();
+  const gate = await paperworkScope();
+  if (!gate.ok) return gate;
+  const { ctx, supabase } = gate;
 
   const row = await paperworkInsertRow({
     familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,
@@ -74,6 +122,7 @@ export async function addPaperworkAction(formData: FormData): Promise<void> {
   const { error } = await supabase.from('paperwork_items').insert(row);
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')));
   revalidatePath(PATH);
+  return { ok: true };
 }
 
 type StoredAction = PaperworkAction & { materialized_as: string | null; materialized_id: string | null };
@@ -87,20 +136,21 @@ type StoredAction = PaperworkAction & { materialized_as: string | null; material
 export async function materializePaperworkActionAction(input: {
   itemId: string;
   actionIndex: number;
-}): Promise<void> {
+}): Promise<PaperworkActionResult> {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
-  const supabase = await createServer();
+  const gate = await paperworkScope();
+  if (!gate.ok) return gate;
+  const { ctx, supabase } = gate;
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (!item) return;
+  if (!item) return { ok: true }; // nothing to do — unchanged from the void form
   if (isPaperworkExtractionPartial(item.meta)) throw new Error(tr('paperwork.partialExtractionWarning'));
 
   const actions = (Array.isArray(item.actions) ? item.actions : []) as unknown as StoredAction[];
   const action = actions[input.actionIndex];
-  if (!action || action.materialized_id) return; // unknown or already materialized
+  if (!action || action.materialized_id) return { ok: true }; // unknown or already materialized
 
   const dueOn = action.due_on ?? item.due_on;
   // The event or reminder this creates is a family record the member who tapped
@@ -166,17 +216,35 @@ export async function materializePaperworkActionAction(input: {
     const next = actions.map((a, i) =>
       i === input.actionIndex ? { ...a, materialized_as: materializedAs, materialized_id: materializedId } : a);
     const allDone = next.every((a) => a.materialized_id);
-    // The record was already created above — if this stamp-back fails, log it so a
-    // future tap doesn't silently double-create against an un-stamped item.
-    const { error: stampError } = await supabase.from('paperwork_items')
+    // The record was already created above. The stamp-back is what makes a
+    // second tap a no-op, so it has to be CONFIRMED, not assumed: row-level
+    // security FILTERS an update it refuses (zero rows, no error), and without
+    // `.select('id')` PostgREST answers `data: null` whether a row changed or
+    // not (lib/supabase/errors.ts wroteNoRows). When it did not land the family
+    // is told what DID happen — the event or reminder exists, the slip is not
+    // marked — so the next tap is a decision, not a silent duplicate.
+    const { data: stamped, error: stampError } = await supabase.from('paperwork_items')
       .update({ actions: next as never, status: allDone ? 'done' : 'in_progress' })
-      .eq('id', item.id);
-    if (stampError) console.error('[paperwork] materialization stamp-back failed', { itemId: item.id, error: stampError });
+      .eq('id', item.id)
+      .select('id');
+    if (stampError || wroteNoRows(stamped)) {
+      console.error('[paperwork] materialization stamp-back did not land', {
+        itemId: item.id, materializedAs, materializedId, error: stampError ?? 'no paperwork row was updated',
+      });
+      revalidatePath(PATH);
+      return {
+        ok: false,
+        error: tr(materializedAs === 'calendar_event'
+          ? 'actions.paperworkOnTheCalendarButNotMarked'
+          : 'actions.paperworkReminderSetButNotMarked'),
+      };
+    }
   }
   revalidatePath(PATH);
+  return { ok: true };
 }
 
-type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
+type DraftResult = { ok: true; draft: string } | { ok: false; error: string; stepUp?: string };
 
 /**
  * "AI fills it out for you": draft a short, ready-to-send reply for a piece of
@@ -188,8 +256,9 @@ type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
 export async function draftPaperworkReplyAction(itemId: string): Promise<DraftResult> {
   const tr = await getTranslations();
   if (!itemId) return { ok: false, error: tr('actions.invalidItem') };
-  const ctx = await requireUserContext();
-  const supabase = await createServer();
+  const gate = await paperworkScope();
+  if (!gate.ok) return gate;
+  const { ctx, supabase } = gate;
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')
@@ -242,9 +311,14 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
 
   const meta = { ...(item.meta && typeof item.meta === 'object' ? item.meta as Record<string, unknown> : {}), draft_reply: draft, draft_at: new Date().toISOString() };
   // Persisting the draft is best-effort — it is returned to the caller regardless —
-  // but log a failure so a broken write isn't invisible.
-  const { error: metaError } = await supabase.from('paperwork_items').update({ meta: meta as never }).eq('id', item.id);
-  if (metaError) console.error('[paperwork] draft_reply persist failed', { itemId: item.id, error: metaError });
+  // but log a failure so a broken write isn't invisible. "Failure" includes an
+  // update row-level security FILTERED (zero rows, no error), which only the
+  // returned rows can show.
+  const { data: persisted, error: metaError } = await supabase.from('paperwork_items')
+    .update({ meta: meta as never }).eq('id', item.id).select('id');
+  if (metaError || wroteNoRows(persisted)) {
+    console.error('[paperwork] draft_reply persist failed', { itemId: item.id, error: metaError ?? 'no paperwork row was updated' });
+  }
   revalidatePath(PATH);
   return { ok: true, draft };
 }
@@ -253,13 +327,20 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
 export async function setPaperworkStatusAction(input: {
   itemId: string;
   status: 'needs_action' | 'in_progress' | 'done' | 'archived';
-}): Promise<void> {
+}): Promise<PaperworkActionResult> {
   const tr = await getTranslations();
-  const ctx = await requireUserContext();
-  const supabase = await createServer();
-  const { error } = await supabase.from('paperwork_items')
+  const gate = await paperworkScope();
+  if (!gate.ok) return gate;
+  const { ctx, supabase } = gate;
+  const { data: rows, error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
-    .eq('id', input.itemId).eq('family_id', ctx.active.familyId);
+    .eq('id', input.itemId).eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')));
+  // No error is not the same as saved: row-level security FILTERS an update it
+  // refuses, so the statement matches nothing and succeeds. Ask for the row
+  // back and answer a refusal when none changed (lib/supabase/errors.ts).
+  if (wroteNoRows(rows)) return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
   revalidatePath(PATH);
+  return { ok: true };
 }
