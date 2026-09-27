@@ -29,6 +29,7 @@ import type { Json, NotificationType, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DIGEST_NOTIFICATION_TYPES, type NotificationPriority } from '@/lib/notifications/priority';
 import { describeDbError } from '@/lib/supabase/errors';
+import { createServiceClient } from '@/lib/supabase/server';
 import { getAISettings } from '../ai-settings';
 import { dayKeyInTz, hourInTz, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
@@ -139,6 +140,30 @@ export async function deliveryTimeFor(
     : { sendAt: base.toISOString(), deferred: false };
 }
 
+/**
+ * The client that writes a notification row.
+ *
+ * A notification is not an in-app note: the cron turns every row into a push
+ * and an email from Bubaly's own sender. If a member's session can INSERT one
+ * addressed to someone else, it can also insert one with any title and body it
+ * likes, straight against the API, and it arrives looking exactly like Bubaly.
+ * So member INSERT is limited to rows addressed to the member themselves
+ * (0388), and a notification this service builds for OTHER people is written
+ * by the service role — for a member, or the AI acting in a member's session;
+ * a system scope already carries the service client. `notify()` resolves the
+ * recipients under the caller's own RLS (their family only) and every row
+ * carries `scope.familyId`, so the service client writes nothing the caller
+ * could not already have addressed; it only takes the text out of the
+ * caller's hands.
+ *
+ * The dedupe read goes through the same client: under a member's RLS it could
+ * see only that member's own and family-wide rows, so it missed the copies
+ * already sent to everyone else.
+ */
+function notificationWriter(scope: ServiceScope) {
+  return scope.actorKind === 'system' ? scope.db : createServiceClient();
+}
+
 export async function notify(scope: ServiceScope, input: NotifyInput): Promise<ServiceResult<NotifyResult>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A notification needs a title.', { code: SERVICE_CODES.invalidInput });
@@ -149,7 +174,8 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
   if (userIds.length === 0) return ok({ created: 0, ids: [], duplicates: 0, skippedMemberIds, deferred: 0 });
 
   // ── Duplicate guard ───────────────────────────────────────────────────────
-  let dupeQuery = scope.db
+  const writer = notificationWriter(scope);
+  let dupeQuery = writer
     .from('notifications')
     .select('user_id')
     .eq('family_id', scope.familyId)
@@ -201,7 +227,7 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
     };
   });
 
-  const { data, error } = await scope.db.from('notifications').insert(rows).select('id');
+  const { data, error } = await writer.from('notifications').insert(rows).select('id');
   if (error) {
     console.error('[service:notifications] insert failed', error);
     return fail(describeDbError(error, 'Could not send that notification.'), { code: SERVICE_CODES.db });
