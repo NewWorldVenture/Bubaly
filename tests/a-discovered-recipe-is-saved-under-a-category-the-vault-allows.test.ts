@@ -176,6 +176,7 @@ describe('saving a discovered recipe into the vault', () => {
 
     const result = await saveDiscoveredRecipe({ provider: 'themealdb', sourceRecipeId: '52772' });
     expect(result.ok).toBe(false);
-    expect(result.ok ? '' : result.error).toContain('permission denied');
+    // Described, not the database's own "permission denied …" (SEC-023).
+    expect(result.ok ? '' : result.error).toBe("You don't have permission to do that. Ask a family admin if you think this is a mistake.");
   });
 });
