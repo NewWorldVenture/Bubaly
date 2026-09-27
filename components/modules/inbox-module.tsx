@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -82,7 +82,7 @@ export function InboxModule() {
       // useRealtimeQuery degrades missing-relation errors (e.g. the Communications
       // Hub migration not yet applied) to an empty inbox instead of a crash.
       if (error) return { data: null, error };
-      if (!rows?.length) return { data: [], error: null };
+      if (wroteNoRows(rows)) return { data: [], error: null };
       const contactIds = [...new Set(rows.map(r => r.contact_id).filter(Boolean))] as string[];
       const { data: cts } = contactIds.length
         ? await supabase.from('family_contacts').select('*').in('id', contactIds)
@@ -133,7 +133,7 @@ export function InboxModule() {
       supabase.from('family_communications').update({ status: 'read' })
         .eq('id', comm.id).eq('family_id', familyId).select('id'));
     if (readError) console.error('[inbox] read receipt write failed', { message: readError.message });
-    else if (!readRows || readRows.length === 0) console.error('[inbox] read receipt changed no row', { id: comm.id });
+    else if (wroteNoRows(readRows)) console.error('[inbox] read receipt changed no row', { id: comm.id });
     void refreshComms();
   }
 
@@ -148,7 +148,7 @@ export function InboxModule() {
     // A message that is still in the inbox must not vanish from the list: the
     // row below is what hides it, and a filtered write left it hidden until the
     // next read brought it back with no explanation.
-    if (!rows || rows.length === 0) { toastError(tr('actions.couldNotUpdateThatMessage')); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     if (selected?.id === comm.id) setSelected(null);
     void refreshComms();
   }
@@ -468,7 +468,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
         supabase.from('family_communications').update({ status: 'replied' })
           .eq('id', comm.id).eq('family_id', familyId).select('id'));
       if (statusError) console.error('[inbox] reply status write failed', { message: statusError.message });
-      else if (!statusRows || statusRows.length === 0) console.error('[inbox] reply status changed no row', { id: comm.id });
+      else if (wroteNoRows(statusRows)) console.error('[inbox] reply status changed no row', { id: comm.id });
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }

@@ -79,7 +79,10 @@ type Row = Record<string, unknown>;
  * The handful of tables these routes touch, as the service client sees them:
  * filters narrow, inserts append and honour the unique constraints the
  * migrations declare (a NULL in a key column never clashes, as in Postgres),
- * updates patch, deletes remove.
+ * updates patch, deletes remove. A write that asks for `.select()` gets the
+ * rows it changed back, as PostgREST answers it — this branch's routes confirm
+ * a re-activation by exactly that (Audit C1-S9-62), and a fake that answered
+ * `null` would report every such write as matching nothing.
  */
 function memoryDb(seed: Record<string, Row[]>) {
   const unique: Record<string, string[]> = {
@@ -97,6 +100,7 @@ function memoryDb(seed: Record<string, Row[]>) {
     let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
     let payload: Row = {};
     let counting = false;
+    let returning = false;
     const filters: Array<(r: Row) => boolean> = [];
     const matches = (r: Row) => filters.every((f) => f(r));
 
@@ -112,13 +116,15 @@ function memoryDb(seed: Record<string, Row[]>) {
         return { data: row, error: null };
       }
       if (mode === 'update') {
-        for (const r of rows.filter(matches)) Object.assign(r, payload);
-        return { data: null, error: null };
+        const changed = rows.filter(matches);
+        for (const r of changed) Object.assign(r, payload);
+        return { data: returning ? changed.map((r) => ({ ...r })) : null, error: null };
       }
       if (mode === 'delete') {
+        const removed = rows.filter(matches);
         const keep = rows.filter((r) => !matches(r));
         rows.splice(0, rows.length, ...keep);
-        return { data: null, error: null };
+        return { data: returning ? removed : null, error: null };
       }
       const found = rows.filter(matches);
       return { data: found, count: counting ? found.length : null, error: null };
@@ -129,7 +135,11 @@ function memoryDb(seed: Record<string, Row[]>) {
     };
 
     const chain: Record<string, unknown> = {
-      select: (_cols?: string, opts?: { count?: string }) => { if (opts?.count) counting = true; return chain; },
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counting = true;
+        if (mode !== 'select') returning = true;
+        return chain;
+      },
       insert: (p: Row) => { mode = 'insert'; payload = p; return chain; },
       update: (p: Row) => { mode = 'update'; payload = p; return chain; },
       delete: () => { mode = 'delete'; return chain; },

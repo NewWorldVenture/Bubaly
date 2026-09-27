@@ -52,11 +52,11 @@ export async function DecisionsBand() {
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-3 xs:flex-row xs:justify-center">
-        <Link href="/security#ai-trust" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.025] px-5 text-sm font-semibold text-white transition hover:bg-white/[0.07]">
+        <Link href="/security#ai-trust" className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.025] px-5 text-sm font-semibold text-white transition hover:bg-white/[0.07]">
           <ShieldCheck className="h-4 w-4 text-emerald-400" aria-hidden />
           {t('decisionsBand.readTrustCenter')}
         </Link>
-        <Link href="/ai" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold text-violet-300 transition hover:bg-white/[0.045]">
+        <Link href="/ai" className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold text-violet-300 transition hover:bg-white/[0.045]">
           <Wand2 className="h-4 w-4" aria-hidden />
           {t('decisionsBand.seeItAct')}
         </Link>

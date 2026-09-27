@@ -29,14 +29,9 @@ const TRACKED = new Set([
   'app/(app)/dashboard/app-store/page.tsx',
   'app/(app)/dashboard/auto/licenses/page.tsx',
   'app/(app)/dashboard/auto/vehicles/page.tsx',
-  'app/(app)/dashboard/moments/page.tsx',
   'app/(app)/dashboard/social-feed/page.tsx',
   'app/(app)/dashboard/social/content-studio/page.tsx',
   'app/(app)/feedback/page.tsx',
-  'app/(app)/marketplace/insights/page.tsx',
-  'app/(app)/marketplace/questions/page.tsx',
-  'app/(app)/marketplace/store/page.tsx',
-  'app/api/ai/savings/route.ts',
 ]);
 
 // Any mention of an error is enough to clear the ratchet: this measures "did the

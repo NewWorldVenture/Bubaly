@@ -18,13 +18,7 @@ describe('sleep-module writes fail visibly', () => {
     for (const fn of ['deleteLog', 'archiveRoutine']) {
       const [b] = bodies(fn);
       expect(b, fn).toBeTruthy();
-      // `{ data, error }` counts. A delete on an RLS-gated table has to ask
-      // PostgREST which rows it touched — `.select('id')` — because the policy
-      // FILTERS the write rather than refusing it, so `error` alone cannot tell
-      // "removed" from "not yours to remove". Pinning the exact destructuring
-      // spelling made this fail on a change that strengthened the very thing it
-      // asks about. See tests/a-filtered-delete-is-not-a-deletion.test.ts.
-      expect(b).toMatch(/const \{ (data, )?error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/); // re-pointed, Audit C1-S9-82: a confirmed write binds data too
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });
@@ -32,7 +26,7 @@ describe('sleep-module writes fail visibly', () => {
     const forms = bodies('onSubmit');
     expect(forms).toHaveLength(3);
     for (const b of forms) {
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/); // re-pointed, Audit C1-S9-82: a confirmed write binds data too
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });

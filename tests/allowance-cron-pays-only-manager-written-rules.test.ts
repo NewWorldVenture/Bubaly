@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 // 0298 is the real boundary: allowance_rules is manager-only in the database,
 // proven behaviourally by docs/audit/allowance-rule-write-boundary-check.sql.
@@ -41,15 +42,15 @@ describe('the allowance cron pays only rules a manager wrote', () => {
     // Scoped to the guard itself. A previous test in this repo asserted a
     // string that turned out to live in a header comment; taking the condition
     // out of the loop body means the assertion cannot pass on prose.
-    const start = source.indexOf('if (rule.created_by &&');
+    const start = at(source, 'if (rule.created_by &&');
     expect(start, 'the author guard was not found').toBeGreaterThan(-1);
     const guard = source.slice(start, source.indexOf('\n      }', start) + 8);
     expect(guard).toContain('authorKeys.has(`${rule.family_id}:${rule.created_by}`)');
     expect(guard).toContain('skippedUnauthored++');
     expect(guard).toContain('continue;');
     // The guard sits INSIDE the loop that credits, ahead of the credit.
-    expect(start).toBeGreaterThan(source.indexOf('for (const rule of rules'));
-    expect(start).toBeLessThan(source.indexOf('creditChildWallet(supabase'));
+    expect(start).toBeGreaterThan(at(source, 'for (const rule of rules'));
+    expect(start).toBeLessThan(at(source, 'creditChildWallet(supabase'));
   });
 
   it('reports the skip rather than swallowing it', () => {

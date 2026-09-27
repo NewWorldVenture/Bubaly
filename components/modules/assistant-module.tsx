@@ -24,7 +24,7 @@ import { ResultPane, cardId, type ConversationMessage } from '@/components/assis
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { isManager } from '@/lib/constants/roles';
@@ -256,7 +256,7 @@ export function AssistantModule() {
     if (error) return;
     setConvId(id);
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
-    if (!data || data.length === 0) { setMessages(greeting()); return; }
+    if (wroteNoRows(data)) { setMessages(greeting()); return; }
     setMessages(data.map((m) => {
       const structured = structuredContentFrom(m.structured_content);
       return {
@@ -289,13 +289,14 @@ export function AssistantModule() {
     // removal the policy blocked answered `error: null` and the row was dropped
     // from the list on screen while staying in the table. `family_id` answers a
     // different question from the readback: whose conversation it was.
-    const { data: rows, error } = await createClient().from('ai_conversations').delete()
+    const { data: removed, error } = await createClient().from('ai_conversations').delete()
       .eq('id', id).eq('family_id', family.id).select('id');
-    if (error || !rows || rows.length === 0) {
+    if (error) {
       console.error('[assistant] conversation delete failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
       return;
     }
+    if (wroteNoRows(removed)) { setConversationsError(t('assistantModule.couldNotDeleteThatConversation')); return; }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     if (id === convId) newChat();
   }
@@ -303,13 +304,14 @@ export function AssistantModule() {
   async function renameConversation(id: string, current: string) {
     const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
-    const { data: rows, error } = await createClient().from('ai_conversations')
+    const { data: renamed, error } = await createClient().from('ai_conversations')
       .update({ title: title.slice(0, 80) }).eq('id', id).eq('family_id', family.id).select('id');
-    if (error || !rows || rows.length === 0) {
+    if (error) {
       console.error('[assistant] conversation rename failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
       return;
     }
+    if (wroteNoRows(renamed)) { setConversationsError(t('assistantModule.couldNotRenameThatConversation')); return; }
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }
 

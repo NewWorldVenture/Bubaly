@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    // Auto-dismiss expired pending suggestions first (housekeeping).
+    // Auto-dismiss expired pending suggestions first (housekeeping). Rows
+    // deliberately not checked: zero is the ordinary "nothing expired" tick.
+    // Audit C1-S9-63.
     const { error: dismissError } = await supabase.from('guardian_suggestions')
       .update({ status: 'auto_dismissed' })
       .eq('status', 'pending')

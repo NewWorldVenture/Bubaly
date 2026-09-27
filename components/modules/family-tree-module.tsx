@@ -7,7 +7,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -101,7 +101,8 @@ export function FamilyTreeModule() {
     if (!editNode) return;
     setSaving(true);
     const f = form!;
-    const { error } = await createClient().from('family_tree_nodes').update({
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as updated. Audit C1-S9-85.
+    const { data: edited, error } = await createClient().from('family_tree_nodes').update({
       name: f.name.trim(),
       relationship: f.relationship,
       parent_node_id: f.parent_node_id || null,
@@ -110,17 +111,19 @@ export function FamilyTreeModule() {
       birth_place: f.birth_place.trim() || null,
       bio: f.bio.trim() || null,
       member_id: f.member_id || null,
-    }).eq('id', editNode.id);
+    }).eq('id', editNode.id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(edited)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('familyTreeModule.updated'));
     setEditNode(null); setForm(null);
   }
 
   async function remove(id: string) {
     if (!confirm(t('familyTreeModule.removeThisPersonFromThe'))) return;
-    const { error } = await createClient().from('family_tree_nodes').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('familyTreeModule.removed'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: removed2, error } = await createClient().from('family_tree_nodes').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('familyTreeModule.removed'));
   }
 
   function startEdit(n: Node) {

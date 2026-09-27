@@ -177,7 +177,20 @@ begin
   -- is_family_member(), so widening fm_select could not open anything through
   -- it. Asserting on it would make this migration fail on a policy that is
   -- right, which is how the merge with main found the over-reach.
+  --
+  -- And only a read of the CALLER'S OWN row: the shape this migration removes is
+  -- `family_id in (select family_id from family_members where user_id =
+  -- auth.uid())`, which is a membership decision. main's 0416
+  -- `journal_entries_insert` also reads family_members inline, but to check
+  -- that `member_id` belongs to `family_id` — a row-integrity test that names
+  -- no caller — while `is_family_member()` beside it decides membership with
+  -- its own is_active. Found by the merge with main at 2eb62151.
   where p.polpermissive
+    and position(
+          'auth.uid()' in
+          coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
+          coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
+        ) > 0
     and position(
           'FROM family_members' in
           coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||

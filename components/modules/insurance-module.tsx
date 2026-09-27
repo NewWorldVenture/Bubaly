@@ -6,9 +6,10 @@ import {
   X, ChevronRight, Phone, Wallet, ShieldAlert,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -52,7 +53,11 @@ export function InsuranceModule() {
   const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
   const fmtDate = (d: string) => policyDate(d, locale.code);
 
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // 0416 gives this table the manager-gated writes its twin `insurance_policies`
+  // has always had. The controls follow, the way medications-module.tsx does —
+  // a button that renders and then fails is worse than one never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
 
   const policies = useRealtimeQuery<Policy>({
@@ -70,8 +75,11 @@ export function InsuranceModule() {
 
   async function removePolicy(id: string) {
     if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
-    const { error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('family_insurance_policies').update({ is_active: false })
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setSelected(null);
     success(tr('insuranceModule.policyRemoved'));
   }
@@ -86,7 +94,7 @@ export function InsuranceModule() {
       <PageHeader
         title={tr('insurance.insuranceHub')}
         description={tr('insuranceModule.everyHouseholdPolicyInOne')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly />{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
       />
 
       {policies.data.length > 0 && (
@@ -203,7 +211,7 @@ export function InsuranceModule() {
           policy={selected}
           coversName={memberName(selected.member_id)}
           onClose={() => setSelected(null)}
-          onRemove={() => removePolicy(selected.id)}
+          onRemove={canEdit ? () => removePolicy(selected.id) : null}
         />
       )}
     </div>
@@ -286,7 +294,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
 }
 
 function PolicyDetail({ policy, coversName, onClose, onRemove }: {
-  policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
+  policy: Policy; coversName: string | null; onClose: () => void; onRemove: (() => void) | null;
 }) {
   const tr = useTranslations();
   const locale = useLocale();
@@ -357,7 +365,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
         {policy.notes && <p className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm text-muted">{policy.notes}</p>}
 
         <div className="flex justify-between border-t border-border pt-3">
-          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>
+          {onRemove && <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>}
           <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('insurance.close')}</Button>
         </div>
       </div>

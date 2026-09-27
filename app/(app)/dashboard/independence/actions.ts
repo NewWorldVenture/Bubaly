@@ -5,7 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { LADDER } from '@/lib/independence/progression';
-import { describeActionError } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -54,12 +54,15 @@ export async function achieveMilestoneAction(id: string, evidence?: string): Pro
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanMoveTheLadder') };
   const supabase = await createServer();
-  const { data, error } = await supabase.from('independence_milestones')
+  // `independence-module.tsx` toasts "<child> achieved “<title>” 🎉" on ok and
+  // then calls `router.refresh()`. So an update that matched nothing put a
+  // celebration on screen beside a milestone that stayed in progress — and this
+  // is a recognition feature, where the message IS the product. Audit C1-S9-47.
+  const { data: achieved, error } = await supabase.from('independence_milestones')
     .update({ status: 'achieved', achieved_at: new Date().toISOString(), evidence: evidence?.trim() || null })
-    .eq('id', id).eq('family_id', ctx.active.familyId)
-    .select('id');
+    .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
-  if (!data || data.length === 0) return { ok: false, error: t('actions.onlyAParentCanMoveTheLadder') };
+  if (wroteNoRows(achieved)) return { ok: false, error: t('actions.couldNotUpdateThatMilestone') };
   return { ok: true };
 }
 
@@ -69,10 +72,11 @@ export async function skipMilestoneAction(id: string): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentCanMoveTheLadder') };
   const supabase = await createServer();
-  const { data, error } = await supabase.from('independence_milestones')
-    .update({ status: 'skipped' }).eq('id', id).eq('family_id', ctx.active.familyId)
-    .select('id');
+  // Skipping promises the rung "won't be suggested again" — the module says so
+  // in its toast. A silent no-op means it comes back.
+  const { data: skipped, error } = await supabase.from('independence_milestones')
+    .update({ status: 'skipped' }).eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
-  if (!data || data.length === 0) return { ok: false, error: t('actions.onlyAParentCanMoveTheLadder') };
+  if (wroteNoRows(skipped)) return { ok: false, error: t('actions.couldNotUpdateThatMilestone') };
   return { ok: true };
 }

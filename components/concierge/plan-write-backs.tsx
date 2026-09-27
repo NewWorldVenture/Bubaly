@@ -35,9 +35,12 @@ export function PlanWriteBacks({ planId, plan }: { planId: string; plan: PlanFor
       try {
         const sb = createClient();
         const { data, error } = await sb.from('concierge_plan_actions').select('action_kind').eq('plan_id', planId);
+        // Logged whether or not this view is still mounted (Audit C1-S9-71), and
+        // shown as a load failure while it is.
+        if (error) console.error('[concierge] applied write-backs read failed', error);
         if (!active) return;
         if (error) { setLoadFailed(true); return; }
-        setApplied(new Set((data ?? []).map((r) => r.action_kind as WriteBackKind)));
+        if (active && data) setApplied(new Set(data.map((r) => r.action_kind as WriteBackKind)));
       } catch { /* table not applied yet → no applied state */ }
     })();
     return () => { active = false; };

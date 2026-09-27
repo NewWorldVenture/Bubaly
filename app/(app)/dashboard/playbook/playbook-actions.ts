@@ -16,7 +16,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
-import { describeActionError } from '@/lib/supabase/errors';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -247,9 +247,11 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   // than refusing it, so a dismissal it filtered answered `error: null` and
   // the card came back on the next refresh as though it had never been
   // dismissed.
-  const { data: rows, error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' })
+  // Audit C1-S9-60: the whole point of storing the dismissal is that the
+  // suggestion is not offered again.
+  const { data: dismissed, error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' })
     .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error) };
-  if (!rows?.length) return { ok: false, error: tr('actions.nothingWasChangedRefresh') };
+  if (wroteNoRows(dismissed)) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   return { ok: true };
 }

@@ -184,10 +184,10 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     // refusing it, so a removal a non-manager attempted was reported as done.
     // The `window.location.reload()` below made that especially convincing — the
     // member came back, with no message saying why.
-    const { data: rows, error } = await supabase.from('family_members')
+    const { data: updated, error } = await supabase.from('family_members')
       .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -465,12 +465,12 @@ function EditMemberModal({ member, isSelf, onClose }: {
     // role right after "Member updated". Scoped by the row's own `family_id`
     // rather than a threaded prop — the question is whether this row is still in
     // the family the screen believes it is in.
-    const { data: rows, error } = await createClient().from('family_members')
+    const { data: edited, error } = await createClient().from('family_members')
       .update({ display_name, role, birthday: birthday || null })
       .eq('id', member.id).eq('family_id', member.family_id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
+    if (wroteNoRows(edited)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

@@ -5,7 +5,7 @@
 // never break — production just adds the key.
 import { FROM_EMAIL, emailEnabled } from '@/lib/email';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 function mailboxDomain(address: string): string | null {
   if (/\s/.test(address)) return null;
@@ -49,7 +49,7 @@ export async function sendEmail({ to, subject, html, replyTo, from }: SendArgs):
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
   }
-  const res = await fetchExternal('https://api.resend.com/emails', {
+  const res = await fetchWithDeadline('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
     body: JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo }),

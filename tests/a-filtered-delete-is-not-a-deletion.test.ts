@@ -206,8 +206,6 @@ const KNOWN_UNFIXED: string[] = [
   'components/modules/watchlist-module.tsx update watchlist_votes',
   'app/(app)/dashboard/workload/actions.ts update chore_assignments',
   'app/(app)/marketplace/handoff/actions.ts update marketplace_handoffs',
-  'app/(app)/missions/actions.ts delete chore_submissions',
-  'app/(app)/missions/actions.ts update chore_assignments',
 ]
 
 /** `file verb table`, the shape KNOWN_UNFIXED records. */

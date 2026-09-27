@@ -7,6 +7,7 @@ import {
   isGithubConfigured, createIssue, type GithubIssue,
 } from '@/lib/integrations/github';
 import { issueTitle, issueBody, githubLabels } from '@/lib/feedback/github-map';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -94,13 +95,16 @@ export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promis
     // { ok: true } for a sync that left no trace, and the next run files a
     // SECOND issue for the same idea. The catch below names the issue creation,
     // which does throw; it never covered this write, which does not.
-    const { error } = await admin.from('feedback_ideas').update({
+    // And zero rows is the same lost record: an idea deleted since the read
+    // leaves the issue orphaned at GitHub, which someone has to close.
+    // Audit C1-S9-69.
+    const { data: linked, error } = await admin.from('feedback_ideas').update({
       github_issue_number: issue.number,
       github_issue_url: issue.html_url,
       github_state: issue.state,
       github_synced_at: new Date().toISOString(),
-    }).eq('id', idea.id);
-    if (error) {
+    }).eq('id', idea.id).select('id');
+    if (error || wroteNoRows(linked)) {
       console.error('[feedback-notify] GitHub issue created but the link was not recorded', { ideaId: idea.id, issue: issue.number, error });
       return { ok: false, skipped: false, error: 'The GitHub issue was created but could not be recorded.' };
     }

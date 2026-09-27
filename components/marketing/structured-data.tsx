@@ -62,7 +62,7 @@ export async function SiteStructuredData() {
     '@type': 'SoftwareApplication',
     name: 'Bubaly',
     applicationCategory: 'LifestyleApplication',
-    operatingSystem: t('structuredData.webIosAndroid'),
+    operatingSystem: 'Web, iOS, Android',
     description:
       t('structuredData.anAiNativeFamilyOperating'),
     url: SITE_URL,

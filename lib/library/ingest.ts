@@ -16,6 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { fetchPublicFeed } from '@/lib/server/public-document-fetch';
 import { parseFeed } from '@/lib/library/feed-parse';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Client = SupabaseClient<Database>;
 
@@ -48,14 +49,21 @@ export async function ingestFeed(
   }
   if (!parsed) return { error: FEED_NOT_A_FEED };
 
-  await supabase.from('library_feeds').update({
+  // Its result was discarded whole. "Refresh" runs this on the member's own
+  // client, so RLS can make it match nothing too, and the feed then shows its
+  // old title and a stale "last fetched" over items that did arrive. Logged,
+  // never raised — the items below are the ingest. Audit C1-S9-69.
+  const { data: described, error: describeError } = await supabase.from('library_feeds').update({
     title: parsed.title,
     author: parsed.author,
     description: parsed.description,
     image_url: parsed.imageUrl,
     last_fetched_at: new Date().toISOString(),
     last_error: null,
-  }).eq('id', feedId).eq('family_id', familyId);
+  }).eq('id', feedId).eq('family_id', familyId).select('id');
+  if (describeError || wroteNoRows(described)) {
+    console.error('[library] feed metadata update failed', { feedId, error: describeError ?? 'no rows updated' });
+  }
 
   const rows = parsed.items
     // An entry with nothing to play and nowhere to go is not worth a row.
@@ -93,9 +101,11 @@ export async function ingestFeed(
 export async function recordFeedError(
   supabase: Client, feedId: string, message: string,
 ): Promise<void> {
-  const { error } = await supabase
+  // Logged on zero rows as well. Audit C1-S9-69.
+  const { data, error } = await supabase
     .from('library_feeds')
     .update({ last_error: message, last_fetched_at: new Date().toISOString() })
-    .eq('id', feedId);
-  if (error) console.error('[library] feed error write failed', error);
+    .eq('id', feedId)
+    .select('id');
+  if (error || wroteNoRows(data)) console.error('[library] feed error write failed', error ?? { feedId, error: 'no rows updated' });
 }

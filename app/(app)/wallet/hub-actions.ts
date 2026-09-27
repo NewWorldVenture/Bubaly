@@ -18,7 +18,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import type { AccountType } from '@/lib/database.types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -159,12 +159,19 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
   // Keep the table allowlist explicit and add the active-family predicate to
   // every branch. RLS remains the defense in depth, but a delete action should
   // never depend on policy drift to avoid cross-family targeting.
-  // Every branch reads the row back. The comment above already explains why the
-  // family predicate is on all five ("a delete action should never depend on
-  // policy drift"), and this is the other half of the same thought: 0218/0220
-  // narrow writes on `transactions` and `financial_accounts`, and RLS FILTERS a
-  // delete rather than refusing it — so a removal the policy blocked answered
-  // `error: null` and this action reported `{ ok: true }` over a row still there.
+  // `.select('id')` is what makes the answer knowable. PostgREST returns the
+  // affected rows only when asked (it is `.select()` that appends
+  // `Prefer: return=representation`), so without it `data` is null whether ONE
+  // row was deleted or NONE were — the call site could not tell even in
+  // principle, and this one answered `{ ok: true }` either way.
+  //
+  // Matching nothing is not exotic here. The predicate carries the active
+  // family, so a stale tab, a row another manager removed a moment earlier, an
+  // id belonging to a different family, or an RLS refusal that yields zero rows
+  // rather than an error all land on it. The user was then told their payment
+  // card or transaction was deleted while it was still there, and only a
+  // refresh contradicted it. On `financial_accounts` and `transactions` that is
+  // a household's money records.
   const result = input.table === 'wallet_cards'
     ? await supabase.from('wallet_cards').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
     : input.table === 'wallet_passes'
@@ -174,8 +181,15 @@ export async function deleteWalletRowAction(input: { table: string; id: string }
         : input.table === 'financial_accounts'
           ? await supabase.from('financial_accounts').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id')
           : await supabase.from('transactions').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
-  const { data: rows, error } = result;
+  const { data: deleted, error } = result;
   if (error) return actionFailure('delete the wallet item', t('hubActions.couldNotDeleteTheWalletItem'), error);
-  if (!rows || rows.length === 0) return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
+  if (wroteNoRows(deleted)) {
+    // The same message the user would get from a refused delete, because that
+    // is what this is from where they stand. The DISTINCTION is worth keeping
+    // in the logs, though: an error means the database objected, whereas this
+    // means it did exactly as asked and nothing matched.
+    console.error('[wallet] delete matched no row', { table: input.table, familyId: ctx.active.familyId });
+    return { ok: false, error: t('hubActions.couldNotDeleteTheWalletItem') };
+  }
   return { ok: true };
 }

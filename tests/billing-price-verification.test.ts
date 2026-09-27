@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
   contextState: 'ready' as 'ready' | 'needsFamily' | 'signedOut' | 'unavailable',
   memberships: [{ familyId: 'family-a', role: 'parent' }],
   errors: {} as Record<string, { message: string }>,
-  syncFailure: 'none' as 'none' | 'returned' | 'thrown',
+  // `matchedNone`: the sync write succeeds but matches no row (C1-S9-62).
+  syncFailure: 'none' as 'none' | 'returned' | 'thrown' | 'matchedNone',
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => {
@@ -55,6 +56,7 @@ vi.mock('@/lib/supabase/server', () => {
           select: async () => {
             const { error } = settle();
             // `rows[table]` is this suite's stand-in for "the row exists".
+            if (mocks.syncFailure === 'matchedNone') return { data: [], error };
             return { data: mocks.rows[table] ? [{ id: `${table}-row` }] : [], error };
           },
           then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
@@ -307,7 +309,10 @@ describe('explicit billing review ownership assertions', () => {
     expect((await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }))).status).toBe(503);
     noPaidMutation();
   });
-  it.each(['returned', 'thrown'] as const)('preserves known provider completion after a %s local sync failure', async failure => {
+  // `matchedNone` since C1-S9-62: the sync asks `.select('id')`, and a write that
+  // matched nothing is the same situation as one that failed — Stripe changed,
+  // the local row did not — so it must take the same 503, not answer `ok`.
+  it.each(['returned', 'thrown', 'matchedNone'] as const)('preserves known provider completion after a %s local sync failure', async failure => {
     mocks.syncFailure = failure;
     const response = await changePlan(reviewed({ plan: 'plus_annual', expectedUserId: 'user-a', expectedFamilyId: 'family-a' }));
     expect(response.status).toBe(503);

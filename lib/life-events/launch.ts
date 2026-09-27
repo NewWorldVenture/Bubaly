@@ -30,7 +30,7 @@ import { createMove, planTasks } from '@/lib/services/moving';
 import { createReminder, deleteReminder } from '@/lib/services/reminders';
 import { createTodo, deleteTodo } from '@/lib/services/tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { buildPlanItems, getTemplate, addDays, type MaterializedItem } from './templates';
 
 /** Categories that are somebody's job today — these become to-dos. */
@@ -51,9 +51,27 @@ export const LIFE_EVENT_ROLLBACK_INCOMPLETE = 'life_event_rollback_incomplete';
 type LaunchFailure = Extract<ServiceResult<never>, { ok: false }>;
 
 /** A resolved database error still means the compensating delete failed. */
-async function checkedDelete(query: PromiseLike<{ error: unknown }>): Promise<ServiceResult<void>> {
-  const { error } = await query;
-  return error ? fail(describeDbError(error, 'Could not remove an item created by the playbook.'), { code: SERVICE_CODES.db }) : ok(undefined);
+/**
+ * Run one undo delete and say whether it removed what this launch created.
+ *
+ * Every row on the undo stack was created by THIS launch, so a delete that
+ * removed fewer than `expected` is a failed undo — part of a playbook the family
+ * was told did not start, left behind in their moves or projects — not an
+ * absence. The error alone was checked before. Callers pass `.select('id')` so
+ * the rows come back, visibly at the call site. Audit C1-S9-68.
+ */
+async function checkedDelete(
+  query: PromiseLike<{ data: unknown; error: unknown }>,
+  expected = 1,
+): Promise<ServiceResult<void>> {
+  const { data, error } = await query;
+  if (error) return fail(describeDbError(error, 'Could not remove an item created by the playbook.'), { code: SERVICE_CODES.db });
+  const removed = Array.isArray(data) ? data.length : 0;
+  if (removed !== expected) {
+    console.error('[life-events] undo removed fewer rows than this launch created', { removed, expected });
+    return fail('Could not remove an item created by the playbook.', { code: SERVICE_CODES.db });
+  }
+  return ok(undefined);
 }
 
 /** Where a launched transition is handed off to, and the row it created there. */
@@ -201,7 +219,7 @@ export async function launchLifeEvent(
     const planId = plan.id;
     undo.push({
       what: 'the plan',
-      run: () => checkedDelete(scope.db.from('life_event_plans').delete().eq('id', planId).eq('family_id', scope.familyId)),
+      run: () => checkedDelete(scope.db.from('life_event_plans').delete().eq('id', planId).eq('family_id', scope.familyId).select('id')),
     });
 
     // 2. The handoff, when another module owns this transition.
@@ -225,19 +243,23 @@ export async function launchLifeEvent(
           undo.push({
             what: 'the new move tasks',
             run: () => checkedDelete(scope.db.from('move_tasks').delete()
-              .in('id', taskIds).eq('move_id', linkedHandoff.id).eq('family_id', scope.familyId)),
+              .in('id', taskIds).eq('move_id', linkedHandoff.id).eq('family_id', scope.familyId).select('id'), taskIds.length),
           });
         }
       }
       // The plan says where it is being run. `notes` is an existing column.
-      const { error: noteErr } = await scope.db
+      // The plan was created by this launch a moment ago, so a note that matched
+      // no row is the same failure as an error: the plan would not say where it
+      // is being run. Same rollback. Audit C1-S9-68.
+      const { data: noted, error: noteErr } = await scope.db
         .from('life_event_plans')
         .update({ notes: linkRef(handoffKind, created.data.id) })
         .eq('id', planId)
-        .eq('family_id', scope.familyId);
-      if (noteErr) {
-        console.error('[life-events] could not record the handoff on the plan', noteErr);
-        return rollback({ ok: false, error: describeDbError(noteErr, 'Could not start that playbook.'), code: SERVICE_CODES.db });
+        .eq('family_id', scope.familyId)
+        .select('id');
+      if (noteErr || wroteNoRows(noted)) {
+        console.error('[life-events] could not record the handoff on the plan', noteErr ?? 'no rows updated');
+        return rollback({ ok: false, error: noteErr ? describeDbError(noteErr, 'Could not start that playbook.') : 'Could not start that playbook.', code: SERVICE_CODES.db });
       }
     }
 
@@ -311,12 +333,12 @@ async function deleteHandoff(scope: ServiceScope, handoff: LifeEventHandoff): Pr
   // move down with a playbook that failed for some unrelated reason.
   if (!handoff.created) return ok(undefined);
   if (handoff.kind === 'move') {
-    return checkedDelete(scope.db.from('moves').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
+    return checkedDelete(scope.db.from('moves').delete().eq('id', handoff.id).eq('family_id', scope.familyId).select('id'));
   }
   if (handoff.kind === 'project') {
-    return checkedDelete(scope.db.from('home_projects').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
+    return checkedDelete(scope.db.from('home_projects').delete().eq('id', handoff.id).eq('family_id', scope.familyId).select('id'));
   }
-  return checkedDelete(scope.db.from('vacations').delete().eq('id', handoff.id).eq('family_id', scope.familyId));
+  return checkedDelete(scope.db.from('vacations').delete().eq('id', handoff.id).eq('family_id', scope.familyId).select('id'));
 }
 
 /** Create the row in the module that owns this transition. */

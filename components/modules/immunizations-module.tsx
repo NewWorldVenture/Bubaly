@@ -3,9 +3,10 @@
 import { useMemo, useState } from 'react';
 import { Syringe, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -29,7 +30,11 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // 0414 makes the database refuse a non-manager write on this table. The
+  // controls follow it, the way medications-module.tsx already does — a button
+  // that renders and then fails is worse than one that was never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -87,7 +92,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         ? await supabase.from('immunizations').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
         : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
-      if (!data || data.length === 0) return toastError(t('actions.couldNotSaveThatRecord'));
+      if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
       success(form.id ? t('immunizationsModule.recordUpdated') : t('immunizationsModule.immunizationAdded'));
       setForm(null);
     } finally {
@@ -104,9 +109,9 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
     // that is a live outcome for a child pressing this button, and reporting it
     // as "Deleted" told them their record was gone when it was not.
     const { data, error } = await createClient().from('immunizations').delete()
-      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) { toastError(describeDbError(error)); return; }
-    if (!data) { toastError(t('actions.couldNotDeleteThatRecord')); return; }
+    if (wroteNoRows(data)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('immunizationsModule.deleted'));
   }
 
@@ -129,7 +134,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>
+          {canEdit && <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>}
         </div>
       </div>
 
@@ -171,10 +176,12 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
                     {(s.lot_number || s.notes) && <p className="mt-1 text-sm text-muted">{[s.lot_number ? `Lot ${s.lot_number}` : '', s.notes].filter(Boolean).join(' · ')}</p>}
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
-                  <div className="flex shrink-0 gap-1">
-                    <button aria-label={t('a11y.edit')} onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button aria-label={t('a11y.delete')} onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 gap-1">
+                      <button aria-label={t('a11y.edit')} onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button aria-label={t('a11y.delete')} onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  )}
                 </div>
               </li>
             );

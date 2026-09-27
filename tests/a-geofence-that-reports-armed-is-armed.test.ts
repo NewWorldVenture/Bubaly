@@ -44,7 +44,9 @@ describe('a place write reports what it actually changed', () => {
   it.each(['savePlace', 'deletePlace', 'setGeofenceEnabled'])('%s reads the row back', (name) => {
     const fn = body(name);
     expect(fn, `${name} does not ask which row it wrote`).toContain(".select('id')");
-    expect(fn, `${name} reports success over an empty result`).toContain('changedNothing(rows)');
+    // The shared helper since the merge with main (C1-S9-46): `wroteNoRows`
+    // over whatever this function binds its readback to.
+    expect(fn, `${name} reports success over an empty result`).toMatch(/wroteNoRows\(\w+\)/);
     expect(fn, `${name} does not fail with a message`).toMatch(/return \{ ok: false, error: t\(/);
   });
 
@@ -57,9 +59,12 @@ describe('a place write reports what it actually changed', () => {
     expect(fn, `${name} is not manager-gated`).toMatch(/isManager\(c\.active\.role\)/);
   });
 
-  it('the predicate is the one the trust surface uses, spelled the same way', () => {
-    // Same helper, same shape, so a reader who has seen one recognises the other.
-    expect(source()).toMatch(/function changedNothing\(rows: unknown\[\] \| null\): boolean \{\s*return !rows \|\| rows\.length === 0;/);
+  it('the predicate is the one every other surface uses, spelled the same way', () => {
+    // One helper, so a reader who has seen one recognises the other. The local
+    // `changedNothing` this file had was main's `wroteNoRows` under another name,
+    // and went at the merge with main (2eb62151).
+    expect(source()).toMatch(/import \{[^}]*\bwroteNoRows\b[^}]*\} from '@\/lib\/supabase\/errors'/);
+    expect(source()).not.toContain('function changedNothing(');
   });
 
   it('the error messages are catalogue keys, not English literals', () => {

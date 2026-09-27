@@ -6,6 +6,7 @@ import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermomet
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -475,7 +476,7 @@ export function HealthModule() {
       .update({ status: 'resolved', ended_at: new Date().toISOString() })
       .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
-    if (!data || data.length === 0) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    if (wroteNoRows(data)) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
     success(tr('healthModule.markedResolved'));
   }
 
@@ -485,7 +486,7 @@ export function HealthModule() {
     const { data, error: err } = await sb.from('symptom_logs').delete()
       .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
-    if (!data || data.length === 0) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    if (wroteNoRows(data)) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
     success(tr('healthModule.symptomRemoved'));
   }
 

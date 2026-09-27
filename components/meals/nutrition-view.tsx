@@ -5,6 +5,7 @@ import { Apple, Plus, Trash2, Flame, Droplet } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -42,11 +43,11 @@ export function NutritionView() {
   async function remove(id: string) {
     // RLS filters this delete rather than refusing it, so the silent path was a
     // removal that did not happen and said nothing at all — this function had no
-    // success toast either, which made the no-op completely invisible.
-    const { data: rows, error } = await createClient().from('nutrition_logs').delete()
+    // success toast either, which made the no-op completely invisible. Audit C1-S9-84.
+    const { data: removed, error } = await createClient().from('nutrition_logs').delete()
       .eq('id', id).eq('family_id', familyId).select('id');
-    if (error) { toastError(error.message); return; }
-    if (!rows || rows.length === 0) toastError(t('actions.couldNotDeleteThatRecord'));
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -132,7 +133,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
       water_ml: Math.round(num(v.water_ml)), created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('nutritionView.logged'));
     onClose();
   }

@@ -39,7 +39,7 @@ describe('bounded JSON request bodies', () => {
   it('keeps every audited route behind the shared reader', () => {
     for (const file of routeFiles) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).toContain('readBoundedRequestJson');
+      expect(source, file).toContain('readBoundedRequestJson(');
       expect(source, file).not.toContain('req.json()');
     }
   });

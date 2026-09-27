@@ -19,7 +19,14 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 2_048;
 
 async function loadPostId(svc: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
-  const { data } = await svc.from('blog_posts').select('id').eq('slug', slug).eq('published', true).maybeSingle();
+  const { data, error } = await svc.from('blog_posts').select('id').eq('slug', slug).eq('published', true).maybeSingle();
+  // A refused read returned null, and both callers answer that with a 404 for
+  // a post that is published and present. Nothing here can distinguish them
+  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  if (error) {
+    console.error('[blog] post lookup failed', { slug, error: error.message });
+    return null;
+  }
   return data?.id ?? null;
 }
 
@@ -116,6 +123,9 @@ export async function POST(req: NextRequest) {
   let saved = true;
   if (insertError) {
     if (insertError.code === '23505') {
+      // Rows deliberately not checked: this is the service role, so zero rows
+      // means the save was removed since the insert collided — and "not saved"
+      // is exactly what `saved = false` reports. Audit C1-S9-89.
       const { error: deleteError } = await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
       if (deleteError) {
         console.error('[blog/save] unsave failed', { postId, error: deleteError });

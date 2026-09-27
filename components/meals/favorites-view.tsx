@@ -5,6 +5,7 @@ import { Heart, Plus, Trash2, Star, ExternalLink } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -42,8 +43,9 @@ export function FavoritesView() {
 
   async function remove(id: string) {
     if (!confirm(t('favoritesView.removeThisFavorite'))) return;
-    const { error } = await createClient().from('family_favorites').delete().eq('id', id);
-    if (error) toastError(error.message); else success(t('favoritesView.removed'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: removed2, error } = await createClient().from('family_favorites').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('favoritesView.removed'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -122,7 +124,7 @@ function FavoriteModal({ familyId, userId, memberId, onClose }: { familyId: stri
       ref_url: v.ref_url.trim() || null, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('favoritesView.favoriteAdded'));
     onClose();
   }

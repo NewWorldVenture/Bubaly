@@ -16,7 +16,7 @@ import {
 } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { RETAILERS, buildShoppingText, itemSearchUrl, retailerById } from '@/lib/grocery/retailers';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -185,8 +185,10 @@ export function ShoppingModule() {
 
   function archiveList(id: string) {
     return run(`archive:${id}`, async () => {
-      const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as archived. Audit C1-S9-83.
+      const { data: archived, error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id).select('id');
       if (error) throw error;
+      if (wroteNoRows(archived)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t('shoppingModule.listArchived'));
       setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
       void refreshLists();
@@ -547,8 +549,10 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+      const { data: updated, error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id).select('id');
       if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

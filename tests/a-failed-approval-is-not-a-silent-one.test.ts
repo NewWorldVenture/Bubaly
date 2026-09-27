@@ -49,7 +49,10 @@ const DECIDERS = [
 describe('a failed approval is not a silent one', () => {
   for (const name of DECIDERS) {
     it(`${name} can report a failure at all`, () => {
-      expect(bodyOf(name)).toContain('Promise<{ ok: boolean; error?: string }>');
+      // The property, not one spelling of it: main's MissionActionResult
+      // (`{ ok: true } | { ok: false; error: string }`) says the same thing
+      // and makes the error REQUIRED on failure, which is stronger.
+      expect(bodyOf(name)).toMatch(/Promise<(\{ ok: boolean; error\?: string \}|MissionActionResult)>/);
     });
 
     it(`${name} has no bare return`, () => {
@@ -78,17 +81,18 @@ describe('a failed approval is not a silent one', () => {
 
   it('renders the failure where the parent clicked', () => {
     const card = readFileSync('app/(app)/missions/review-card.tsx', 'utf8');
+    // Both forms go through one helper since main's C1-S9-73; what matters is
+    // that each action's result reaches setError, however it is spelled.
     for (const action of ['approveSubmissionAction', 'rejectSubmissionAction']) {
-      expect(card, `${action}'s result is ignored`).toMatch(
-        new RegExp(`const result = await ${action}\\(fd\\);[\\s\\S]{0,120}setError`),
-      );
+      expect(card, `${action} is not routed through the result-reading helper`).toContain(`review(${action}, fd)`);
     }
+    expect(card).toMatch(/const res = await act\(fd\);[\s\S]{0,60}if \(!res\.ok\) setError\(res\.error\)/);
     expect(card).toContain('role="alert"');
   });
 
   it('renders the failure on the create-mission form', () => {
-    const form = readFileSync('app/(app)/missions/new/mission-form.tsx', 'utf8');
-    expect(form).toContain('const result = await createChoreAction(formData);');
+    const form = readFileSync('app/(app)/missions/new/create-chore-form.tsx', 'utf8');
+    expect(form).toMatch(/const res = await createChoreAction\(fd\);[\s\S]{0,60}if \(!res\.ok\)/);
     expect(form).toContain('setError(');
     expect(form).toContain('role="alert"');
     // And the page hands the form over rather than wiring the action itself.
@@ -100,7 +104,8 @@ describe('a failed approval is not a silent one', () => {
     // plan-generator awaited a void action and added the item unconditionally,
     // so a suggestion refused for want of a manager role still read "Added".
     const generator = readFileSync('app/(app)/missions/new/plan-generator.tsx', 'utf8');
-    const block = generator.slice(generator.indexOf('const result = await createChoreAction(fd);'));
-    expect(block.slice(0, 400)).toMatch(/if\s*\(!result\.ok\)[\s\S]{0,140}return;/);
+    const at = generator.indexOf('await createChoreAction(fd);');
+    expect(at).toBeGreaterThan(-1);
+    expect(generator.slice(at, at + 400)).toMatch(/if\s*\(!res(ult)?\.ok\)[\s\S]{0,140}return;/);
   });
 });

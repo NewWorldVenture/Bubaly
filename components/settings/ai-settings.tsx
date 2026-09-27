@@ -80,26 +80,24 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
 
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the load CALL itself failed; translated at render, so the effect
+  // below keeps its empty dependency list. Audit C1-S9-74.
+  const [loadCallFailed, setLoadCallFailed] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    // `{ ok: false }` was handled; a REJECTION was not, and left the skeleton
-    // on screen forever with nothing said.
-    void loadAISettingsAction().then(
-      (res) => {
-        if (!alive) return;
-        if (res.ok) setSettings(res.settings);
-        else setLoadError(res.error);
-      },
-      (err: unknown) => {
-        console.error('[ai-settings] load failed', err);
-        // '' means "no message of its own": the render below words it, so this
-        // effect does not depend on `t` (which is a fresh function outside a
-        // provider, and would re-run the load on every render).
-        if (alive) setLoadError(err instanceof Error && err.message ? err.message : '');
-      },
-    );
+    // `{ ok: false }` was handled; a REJECTED load (the call itself failing)
+    // set neither state, so the skeleton said "Loading…" forever with nothing
+    // said. Audit C1-S9-74.
+    void loadAISettingsAction().then((res) => {
+      if (!alive) return;
+      if (res.ok) setSettings(res.settings);
+      else setLoadError(res.error);
+    }).catch((error: unknown) => {
+      console.error('[ai-settings] load failed', error);
+      if (alive) setLoadCallFailed(true);
+    });
     return () => { alive = false; };
   }, []);
 
@@ -127,7 +125,9 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     }
   }, [success, toastError, t]);
 
-  if (loadError !== null) return <Card className="p-4 text-sm text-muted">{loadError || t('globalError.somethingWentWrong')}</Card>;
+  if (loadError || loadCallFailed) {
+    return <Card className="p-4 text-sm text-muted">{loadError ?? t('aiActions.couldNotLoadYourBubaly')}</Card>;
+  }
   if (!settings) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">

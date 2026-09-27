@@ -14,7 +14,7 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -230,11 +230,14 @@ export async function POST(req: NextRequest) {
             // no error and the log below never fired. Scoped and read back: the
             // conversation keeps the title "New conversation" forever otherwise,
             // which is the visible half of a write nothing reported.
-            const { data: titleRows, error: titleUpdateError } = await supabase
+            // Confirmed for the LOG: the reply is already streamed and saved, so
+            // this never fails the turn. Audit C1-S9-62.
+            const { data: titled, error: titleUpdateError } = await supabase
               .from('ai_conversations').update(patch)
               .eq('id', conversationId).eq('family_id', familyId).select('id');
-            if (titleUpdateError) console.error('[ai-chat] conversation metadata update failed', titleUpdateError);
-            else if (!titleRows || titleRows.length === 0) console.error('[ai-chat] conversation metadata update changed no row', { conversationId });
+            if (titleUpdateError || wroteNoRows(titled)) {
+              console.error('[ai-chat] conversation metadata update failed', titleUpdateError ?? { conversationId, error: 'no rows updated' });
+            }
           }
         }
         if (persistenceError) {

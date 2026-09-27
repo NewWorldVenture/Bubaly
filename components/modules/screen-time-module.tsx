@@ -7,7 +7,7 @@ import { isManager } from '@/lib/constants/roles';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -94,10 +94,12 @@ export function ScreenTimeModule() {
         device: form.device.trim() || null,
         note: form.note.trim() || null,
       };
-      const { error } = form.id
-        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id)
-        : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId });
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+      const { data: saved, error } = form.id
+        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id).select('id')
+        : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
       success(form.id ? 'Updated' : 'Logged');
       setForm(null);
     } finally {

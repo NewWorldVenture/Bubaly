@@ -77,7 +77,7 @@ export function NotificationsModule() {
     const { data: rows, error } = await settle(supabase.from('notifications')
       .update({ is_read: true }).eq('id', id).eq('family_id', familyId).select('id'));
     if (error) console.error('[notifications] mark-read failed', { message: error.message });
-    else if (!rows || rows.length === 0) console.error('[notifications] mark-read changed no row', { id });
+    else if (wroteNoRows(rows)) console.error('[notifications] mark-read changed no row', { id });
     void refresh();
   }
 
@@ -85,7 +85,8 @@ export function NotificationsModule() {
     setMarkingAll(true);
     const supabase = createClient();
     // Zero rows here is NORMAL — nothing was unread — so this checks the error
-    // only. `notifications` is "own row OR manager", not manager-only.
+    // only, and is left unconfirmed on purpose. `notifications` is "own row OR
+    // manager", not manager-only. Audit C1-S9-82.
     const { error } = await settle(supabase.from('notifications').update({ is_read: true })
       .eq('family_id', familyId).eq('is_read', false));
     if (error) console.error('[notifications] mark-all-read failed', { message: error.message });

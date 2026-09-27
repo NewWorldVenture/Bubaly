@@ -18,7 +18,7 @@ import {
   CONFIRM_REASON, lastConfirmed, lastMoved, locationLabel, locationPath, searchItems,
   type Confirmation, type ItemLike, type LocationLike, type MoveLike, type SearchHit,
 } from '@/lib/inventory/finder';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
@@ -230,10 +230,18 @@ async function writeMove(
   if (kind === 'moved') {
     // A lost item that turns up somewhere is found; every other status stands.
     const patch: Database['public']['Tables']['inventory_items']['Update'] = { location_id: to, status: item.status === 'lost' ? 'in_place' : item.status };
-    const { error } = await scope.db.from('inventory_items').update(patch).eq('family_id', scope.familyId).eq('id', item.id);
+    // The move-history row below is written next, so a move matching no item
+    // recorded "moved to the garage" for something whose location never
+    // changed — the history and the item then disagree, and the item wins every
+    // "where is it?" that follows. Audit C1-S9-65.
+    const { data: moved, error } = await scope.db.from('inventory_items').update(patch).eq('family_id', scope.familyId).eq('id', item.id).select('id');
     if (error) {
       console.error('[service:inventory] item update failed', error);
       return fail(describeDbError(error, 'Could not update where the item is.'), { code: SERVICE_CODES.db });
+    }
+    if (wroteNoRows(moved)) {
+      console.error('[service:inventory] item update matched no row', { familyId: scope.familyId, itemId: item.id });
+      return fail('Could not update where the item is.', { code: SERVICE_CODES.db });
     }
   }
   const { data, error } = await scope.db

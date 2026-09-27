@@ -239,6 +239,8 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   const staleIds = [...new Set(stored.map((r) => r.family_id))].filter((id) => !keep.has(id));
   // A family that withdraws between this read and the delete is pruned by the
   // next run — the old delete had the same window, one statement narrower.
+  // Rows deliberately not checked: the ERROR fails the run below, and
+  // zero rows means nobody opted out since the last one. Audit C1-S9-69.
   const { error: contributionDeleteError } = await writeInChunks(staleIds, (chunk) => sb
     .from('network_contributions').delete().in('family_id', chunk));
   if (contributionDeleteError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
@@ -264,6 +266,8 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     );
     if (upsertErr) return { ok: false, error: describeActionError(upsertErr), contributors: contributions.length, aggregates: 0 };
   }
+  // Rows deliberately not checked: zero is the ordinary "nothing older" run.
+  // Audit C1-S9-69.
   const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
   if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: aggregates.length };
 

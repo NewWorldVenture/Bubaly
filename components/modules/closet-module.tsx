@@ -8,7 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -27,6 +27,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
+import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'wardrobe_items'>;
@@ -125,13 +126,20 @@ export function ClosetModule() {
       occasion, temp_c: tempC, weather: weatherLabelFromTemp(tempC), created_by: userId,
     });
     if (error) { setBusy(false); return toastError(describeDbError(error)); }
-    const results = await Promise.all(itemIds.map((id) => {
-      const current = itemById.get(id);
-      return supabase.from('wardrobe_items').update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id);
-    }));
+    // Each bump is a compare-and-swap on the LIVE count, not `cached + 1`: two
+    // members logging the same item at once each add their wear. Audit C1-S9-90.
+    const store: WearStore = {
+      readWearCount: (id) => supabase.from('wardrobe_items').select('wear_count').eq('id', id).maybeSingle(),
+      writeWearCount: (id, expected, next, wornOn) => supabase.from('wardrobe_items')
+        .update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id'),
+    };
+    const results = await Promise.all(itemIds.map((id) => bumpWearCount(store, id, todayIso())));
     setBusy(false);
-    const failed = results.find((r) => r.error);
-    if (failed?.error) return toastError(describeDbError(failed.error));
+    const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');
+    if (failed) return toastError(describeDbError(failed.error));
+    // A bump that did not land is an item the log names but whose count did
+    // not move. Audit C1-S9-81.
+    if (results.some((r) => !r.ok)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.loggedTodaySOutfit'));
   }
 
@@ -148,27 +156,32 @@ export function ClosetModule() {
   }
 
   async function setItemStatus(item: Item, status: WardrobeStatus) {
-    const { error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
   async function deleteItem(item: Item) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: item.name }), body: t('confirm.cannotBeUndone') }))) return;
-    const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
+    const { data: removed, error } = await createClient().from('wardrobe_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.itemRemoved'));
   }
 
   async function toggleFavorite(outfit: Outfit) {
-    const { error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id);
+    const { data: updated2, error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteOutfit(outfit: Outfit) {
     if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: outfit.name }), body: t('confirm.cannotBeUndone') }))) return;
-    const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
+    const { data: removed2, error } = await createClient().from('outfits').delete().eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.outfitDeleted'));
   }
 
@@ -448,11 +461,12 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id)
-      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved, error } = item
+      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id).select('id')
+      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     onSaved(item ? 'Item updated' : 'Item added');
   }
 

@@ -3,6 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { NO_PROVIDER_OUTCOME } from '@/lib/concierge-calls/brief';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -47,15 +48,20 @@ export async function GET(req: NextRequest) {
   const rows = due ?? [];
   let parked = 0;
   for (const r of rows) {
-    // Guarded on status so a row a person already acted on is not overwritten.
-    const { error: upErr } = await admin.from('concierge_calls')
+    // Guarded on status so a row a person already acted on is not overwritten —
+    // and that guard is exactly what makes zero rows here ordinary. But the
+    // count below was incremented regardless, so `parked` reported calls the
+    // guard had just declined to touch. Counted only when a row moved.
+    // Audit C1-S9-62.
+    const { data: moved, error: upErr } = await admin.from('concierge_calls')
       .update({ status: 'action_needed', outcome: NO_PROVIDER_OUTCOME })
-      .eq('id', r.id).eq('status', 'queued');
+      .eq('id', r.id).eq('status', 'queued')
+      .select('id');
     if (upErr) {
       console.error('[concierge-calls/place] park write failed', upErr);
       continue;
     }
-    parked++;
+    if (!wroteNoRows(moved)) parked++;
   }
   return NextResponse.json({ ok: true, placed: 0, parked, providerReady: false });
 }

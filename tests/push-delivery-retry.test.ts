@@ -10,6 +10,15 @@ const provider = vi.hoisted(() => ({ send: vi.fn(), configure: vi.fn() }));
 const cron = vi.hoisted(() => ({ db: null as unknown }));
 const user = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('web-push', () => ({ default: { setVapidDetails: provider.configure, sendNotification: provider.send } }));
+
+// The web-push send re-resolves the endpoint host before each delivery and
+// fails closed (audit C3-S5-03), and the fixture's endpoints do not resolve.
+// Stubbed open so the subject of this file stays what it says it is; the
+// control itself is asserted in tests/push-endpoint-ssrf-guard.test.ts.
+vi.mock('@/lib/server/push-endpoint', () => ({
+  isDeliverablePushEndpoint: async () => true,
+  __resetPushEndpointCache: () => {},
+}));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => cron.db }));
 vi.mock('@/lib/server/notifications', () => ({ generateFamilyNotifications: vi.fn().mockResolvedValue(0) }));
 vi.mock('@/lib/server/notification-emails', () => ({ deliverNotificationEmails: async () => ({ sent: 0, failed: 0, skipped: 0 }) }));
@@ -24,7 +33,15 @@ const NOW = new Date('2026-09-12T12:00:00Z');
 function fixture() {
   const tables: Record<string, Row[]> = {
     families: [{ id: 'family' }],
-    notifications: [{ id: notificationId(1), family_id: 'family', user_id: 'u1', title: 'Family update', body: 'Body', related_type: null, pushed_at: null, send_at: NOW.toISOString(), created_at: NOW.toISOString() }],
+    notifications: [{ id: notificationId(1), family_id: 'family', user_id: 'u1', title: 'Family update', body: 'Body', related_type: null, pushed_at: null, send_at: NOW.toISOString(),
+      // Real-clock fresh, deliberately NOT the frozen NOW. A totally-failed
+      // delivery is retried only inside PUSH_RETRY_WINDOW_MS (24h), and the
+      // cron entry points under test call dispatchPendingPushes WITHOUT an
+      // injected `now`, so they age this row against the wall clock. Pinning
+      // created_at to a fixed past date made the fixture silently expire as
+      // that date receded, turning "retries a transient failure" into "gives
+      // up", which is a different behaviour than this test is about.
+      created_at: new Date().toISOString() }],
     push_devices: [{ id: 'd1', user_id: 'u1', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/device', p256dh: 'key', auth: 'auth' }],
     family_members: [{ user_id: 'u1', family_id: 'family', role: 'parent', is_active: true }],
     family_ai_settings: [],

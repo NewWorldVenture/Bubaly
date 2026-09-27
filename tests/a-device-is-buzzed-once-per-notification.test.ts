@@ -15,6 +15,13 @@ import { dispatchPendingPushes } from '@/lib/server/push';
 
 const provider = vi.hoisted(() => ({ send: vi.fn(), configure: vi.fn() }));
 vi.mock('web-push', () => ({ default: { setVapidDetails: provider.configure, sendNotification: provider.send } }));
+// main's SSRF guard (C3-S5-03) resolves each endpoint's host before POSTing;
+// these endpoints are synthetic, and the guard has its own tests
+// (push-endpoint-ssrf-guard). Mocked exactly as main's push tests mock it.
+vi.mock('@/lib/server/push-endpoint', () => ({
+  isDeliverablePushEndpoint: async () => true,
+  __resetPushEndpointCache: () => {},
+}));
 
 const NOW = new Date('2026-09-12T12:00:00Z');
 const PHONE = 'https://push.example.test/phone';

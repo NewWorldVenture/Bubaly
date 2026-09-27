@@ -7,7 +7,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -32,11 +32,17 @@ const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 export function BehaviorModule() {
   const tr = useTranslations();
   const { familyId, userId, members, role } = useApp();
-  const { success, error: toastError } = useToast();
-  // The behavior log is what a parent reviews: anyone may log, but only a
-  // manager changes or removes an entry (0377) - a child cannot delete the
-  // hard day they had.
+  // The behavior log is what a parent reviews. 0377 made changing or removing
+  // an entry a manager's write — a child cannot delete the hard day they had.
+  // `member_id` is commented "-- the child" and `logged_by` is the adult who
+  // wrote it, so the person observed is not the author, and these controls keep
+  // logging a manager's on screen too (C1-S8-09). That is the UI half only: the
+  // branch's migration that made INSERT manager-only was dropped on the merge
+  // with main (C1-S9-89), and 0377's rule — anyone in the family may log —
+  // stands in the database; finalaudit.md records it for the owner.
+  const canEdit = isManager(role);
   const canRemove = isManager(role);
+  const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
@@ -101,7 +107,7 @@ export function BehaviorModule() {
         ? await supabase.from('behavior_logs').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
         : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
-      if (!data || data.length === 0) return toastError(tr('actions.couldNotSaveThatRecord'));
+      if (wroteNoRows(data)) return toastError(tr('errors.thatChangeWasNotSaved'));
       success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
       setForm(null);
     } finally {
@@ -117,7 +123,7 @@ export function BehaviorModule() {
     // behaviour note a manager's to erase.
     const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
-    else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (wroteNoRows(data)) toastError(tr('errors.thatChangeWasNotSaved'));
     else success(tr('behaviorModule.deleted'));
   }
 
@@ -154,7 +160,7 @@ export function BehaviorModule() {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
             <Award className="h-4 w-4" /> {tr('behavior.independence')}
           </Link>
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>
+          {canEdit && <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>}
         </div>
       </div>
 

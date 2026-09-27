@@ -9,7 +9,7 @@ import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { guardianProfilePayload, type GuardianProfileWrite } from '@/lib/guardian/routing-form';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import type { Database, GuardianContext } from '@/lib/database.types';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
@@ -145,13 +145,13 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
   // 0318 makes this table manager-written, and RLS FILTERS a delete rather than
   // refusing it — so a stale id answered `error: null` and reported the contact
   // gone. The code gate above already stops a non-manager; this stops a lie.
-  const { data: rows, error } = await supabase.from('guardian_contacts')
+  const { data: deleted, error } = await supabase.from('guardian_contacts')
     .delete()
     .eq('id', contactId)
     .eq('family_id', ctx.active.familyId)
     .select('id');
   if (error) return actionFailure('delete the Guardian contact', t('guardian.couldNotDeleteTheGuardianContact'), error);
-  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianContact') };
+  if (wroteNoRows(deleted)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianContact') };
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -169,14 +169,14 @@ export async function updateContactTrustAction(
   // The audit entry below records the NEW trust level unconditionally, so a
   // filtered write logged a trust change that never happened — on the one field
   // that decides whether a caller rings through. Read back before logging.
-  const { data: rows, error } = await supabase.from('guardian_contacts')
+  const { data: trusted, error } = await supabase.from('guardian_contacts')
     .update({ trust_level: trustLevel, trust_override: true })
     .eq('id', contactId)
     .eq('family_id', familyId)
     .select('id');
 
   if (error) return actionFailure('update contact trust', t('guardian.couldNotUpdateContactTrust'), error);
-  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotUpdateContactTrust') };
+  if (wroteNoRows(trusted)) return { ok: false, error: t('guardian.couldNotUpdateContactTrust') };
 
   await logGuardianAudit({
     family_id: familyId,
@@ -234,12 +234,17 @@ export async function updateContextAction(
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
 
-  const { error } = await supabase.from('guardian_member_profiles')
+  const { data: contexted, error } = await supabase.from('guardian_member_profiles')
     .update({ current_context: context })
     .eq('member_id', memberId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('member_id');
 
   if (error) return actionFailure('update the Guardian context', t('guardian.couldNotUpdateTheGuardianContext'), error);
+  // `current_context` ("at school", "asleep") is read by the routing pipeline,
+  // so a silent no-op routes calls against a state the parent thought they had
+  // changed.
+  if (wroteNoRows(contexted)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianContext') };
 
   revalidatePath('/guardian');
   return { ok: true };
@@ -389,13 +394,13 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
   // mean a row changed — a stale id reported success over nothing at all.
   // Here it decides whether a screening rule is armed, so "enabled" over a rule
   // that never changed is a safety claim the product cannot keep.
-  const { data: rows, error } = await supabase.from('guardian_routing_rules')
+  const { data: toggled, error } = await supabase.from('guardian_routing_rules')
     .update({ is_active: isActive })
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId)
     .select('id');
   if (error) return actionFailure('update the Guardian routing rule', t('guardian.couldNotUpdateTheGuardianRouting'), error);
-  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianRouting') };
+  if (wroteNoRows(toggled)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -407,13 +412,13 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
   const supabase = await createServer();
   // RLS FILTERS this write rather than refusing it, so `error: null` did not
   // mean a row changed — a stale id reported success over nothing at all.
-  const { data: rows, error } = await supabase.from('guardian_routing_rules')
+  const { data: removedRule, error } = await supabase.from('guardian_routing_rules')
     .delete()
     .eq('id', ruleId)
     .eq('family_id', ctx.active.familyId)
     .select('id');
   if (error) return actionFailure('delete the Guardian routing rule', t('guardian.couldNotDeleteTheGuardianRouting'), error);
-  if (!rows || rows.length === 0) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianRouting') };
+  if (wroteNoRows(removedRule)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -475,14 +480,14 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
   // lib/database.types.ts on this branch, so the client is typed as it stands.)
   const failed = () => actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), new Error('No escalation acknowledged'));
   const svc = createServiceClient();
-  const { data: rows, error } = await svc.from('guardian_escalations')
+  const { data: acked, error } = await svc.from('guardian_escalations')
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
-    .eq('family_id', ctx.active.familyId)
     .is('acknowledged_at', null)
+    .eq('family_id', ctx.active.familyId)
     .select('id');
   if (error) return actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), error);
-  if (!rows?.length) {
+  if (wroteNoRows(acked)) {
     // Zero rows is success only if someone already acknowledged it; the first
     // acknowledgement is kept rather than overwritten.
     const { data: existing, error: readError } = await svc.from('guardian_escalations')

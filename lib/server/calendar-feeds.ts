@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
 import { buildFeedRows } from '@/lib/calendar/feeds';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export type FeedSyncResult = { ok: true; imported: number } | { ok: false; error: string };
 
@@ -74,9 +75,13 @@ async function stampFeed(
   feedId: string,
   patch: Record<string, unknown>,
 ): Promise<Error | null> {
-  const { error } = await supabase.from('calendar_feeds').update(patch).eq('id', feedId);
-  if (error) {
-    console.error(`Calendar feed status update failed for ${feedId}:`, error);
+  // `syncFeed` is called from the settings action with the USER's client as
+  // well as from the cron, so RLS can make this match nothing without an error —
+  // and "last synced" then never moves while the sync reports success. Zero rows
+  // is the same unsaved status as an error. Audit C1-S9-68.
+  const { data, error } = await supabase.from('calendar_feeds').update(patch).eq('id', feedId).select('id');
+  if (error || wroteNoRows(data)) {
+    console.error(`Calendar feed status update failed for ${feedId}:`, error ?? 'no rows updated');
     return new Error('Calendar feed status update failed');
   }
   return null;

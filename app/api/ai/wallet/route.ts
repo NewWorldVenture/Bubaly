@@ -81,9 +81,19 @@ export async function POST() {
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);
 
+    // The comment above says it: a quietly truncated read is a WRONG BALANCE.
+    // readAllAsQuery signals that with `data: null` + an error, and this call
+    // site destructured only `data` — so `(txns ?? [])` computed every child's
+    // balance as $0.00 and handed those figures to the model, which then wrote
+    // confident coaching prose about them. Refuse instead: no number is better
+    // than a fabricated one, and this is a child's money. Audit C4-S4-02.
+    if (txnsError) {
+      console.error('[ai/wallet] transaction read failed or truncated', { familyId, error: txnsError });
+      return NextResponse.json({ error: tr('wallet.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
     // Coaching a family on a ledger it could not read tells every child their
-    // balance is zero. Stop instead.
-    const readError = walletsError ?? bucketsError ?? txnsError ?? membersError ?? goalsError;
+    // balance is zero. The other four reads are held to the same standard.
+    const readError = walletsError ?? bucketsError ?? membersError ?? goalsError;
     if (readError) {
       console.error('[ai-wallet] ledger read failed', readError);
       return NextResponse.json({ error: tr('wallet.failedToGenerateCoaching') }, { status: 503 });

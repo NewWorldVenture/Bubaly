@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
@@ -15,13 +16,13 @@ describe('marketplace storefront + negotiations surface a failed read (A-14 §3e
   it('storefront throws on a real store read error and reserves notFound() for a missing store', () => {
     expect(store).toContain('data: store, error: storeError');
     expect(store).toContain('if (storeError) throw new Error(');
-    expect(store.indexOf('if (storeError) throw')).toBeLessThan(store.indexOf('if (!store) notFound();'));
+    expect(at(store, 'if (storeError) throw')).toBeLessThan(at(store, 'if (!store) notFound();'));
   });
 
   it('negotiations inbox returns a retryable ErrorState before the false-empty', () => {
     expect(neg).toContain('error: negError');
     expect(neg).toContain('if (negError)');
     expect(neg).toContain('<ErrorState message=');
-    expect(neg.indexOf('if (negError)')).toBeLessThan(neg.indexOf('No offers going yet'));
+    expect(at(neg, 'if (negError)')).toBeLessThan(at(neg, 'No offers going yet'));
   });
 });

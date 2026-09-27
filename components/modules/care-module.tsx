@@ -6,9 +6,10 @@ import {
   UtensilsCrossed, Pill, Stethoscope, AlertTriangle, StickyNote, Clock, Heart,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -55,7 +56,15 @@ export function CareModule() {
   const locale = useLocale();
   const tr = useTranslations();
   const { fmtTimeAgo } = useFormat();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
+  // C1-S8-09: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
+  // exists so the whole family can log a check-in — but editing and deleting
+  // are the author's, or a manager's for moderation. The card already shows
+  // "by <name>"; these controls agree with it. This is the UI half: the
+  // branch's `a_record_about_you_is_not_yours_to_rewrite` migration that made
+  // the database say the same was dropped on the merge with main (C1-S9-89)
+  // and is recorded in finalaudit.md for the owner to decide.
+  const mayEdit = (e: CareEntry) => e.logged_by === selfMember?.id || isManager(role);
   const { success, error: toastError } = useToast();
 
   const [recipientId, setRecipientId] = useState<string>(members[0]?.id ?? '');
@@ -123,7 +132,7 @@ export function CareModule() {
       : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    if (!data || data.length === 0) { toastError(tr('actions.couldNotSaveThatRecord')); return; }
+    if (wroteNoRows(data)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? tr('careModule.entryUpdated') : tr('careModule.careLogged'));
     setModalOpen(false);
   }
@@ -148,9 +157,9 @@ export function CareModule() {
     // 0430 treats care_log as Rule B — a record of medical fact about someone,
     // which its subject may not erase.
     const { data, error: err } = await sb.from('care_log').delete()
-      .eq('id', e.id).eq('family_id', familyId).select('id').maybeSingle();
+      .eq('id', e.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
-    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
+    if (wroteNoRows(data)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('careModule.entryDeleted'));
   }
 
@@ -266,10 +275,12 @@ export function CareModule() {
                                 {e.note && <div className="text-sm text-fg/80 mt-0.5">{e.note}</div>}
                                 {e.logged_by && <div className="text-xs text-muted mt-0.5">by {memberName(e.logged_by)}</div>}
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
-                                <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                                <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
-                              </div>
+                              {mayEdit(e) && (
+                                <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
+                                  <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                                  <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

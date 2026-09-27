@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 // Three sibling routes file an inbound message, then escalate a genuine urgency
 // to the family's human fallback number with a 🚨 SMS and a notification row.
@@ -73,8 +74,8 @@ describe('an inbound escalation fires once per message, not once per delivery', 
     // 'pending' rather than sending a second text.
     const claim = body.slice(body.indexOf("phase: 'dispatching'"));
     expect(claim).toMatch(/if \(!claimed\) return 'pending';/);
-    expect(claim.indexOf('sendSmsWithReceipt('), 'the send must follow the claim')
-      .toBeGreaterThan(claim.indexOf("if (!claimed) return 'pending';"));
+    expect(at(claim, 'sendSmsWithReceipt('), 'the send must follow the claim')
+      .toBeGreaterThan(at(claim, "if (!claimed) return 'pending';"));
   });
 
   it('the notification row is written once, tracked on the receipt', () => {

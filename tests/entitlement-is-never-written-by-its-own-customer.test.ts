@@ -150,7 +150,7 @@ describe('the row that decides what a family paid for is never written by that f
     // who sees a plan, and nobody would notice.
     const entitlement = readFileSync('lib/server/entitlement.ts', 'utf8');
     expect(entitlement).toContain("supabase.from('subscriptions')");
-    expect(entitlement).not.toContain('createServiceClient');
+    expect(entitlement).not.toContain('createServiceClient(');
   });
 
   it('keeps trial_ends_at and closed_at off the caller session too', () => {
@@ -159,7 +159,7 @@ describe('the row that decides what a family paid for is never written by that f
     // authority, so 0429 pins them with a trigger. Both writers already use the
     // service role; this says so out loud.
     const account = readFileSync('app/(app)/account/actions.ts', 'utf8');
-    expect(account).toContain('createServiceClient');
+    expect(account).toContain('createServiceClient(');
     expect(account).not.toMatch(/createServer\(\)[\s\S]{0,400}closed_at/);
   });
 });

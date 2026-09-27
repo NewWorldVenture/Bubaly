@@ -137,6 +137,11 @@ describe('fenceUntrusted', () => {
 });
 
 describe('context builder + assistant prompt', () => {
+  // Dynamically imports the AI module graph, and whichever of these runs first
+  // pays the one-off transform inside its own timer (~5s here, i.e. the whole
+  // default budget). That made this test time out rather than run — a
+  // prompt-injection assertion reported as a timeout is an assertion nobody is
+  // checking. The budget is the fix; every assertion below is unchanged.
   it('fences the hostile title, carries the data-not-instruction rule, and the obedient provider makes no write call', async () => {
     const { buildContext } = await import('@/lib/ai/context/builder');
     const { buildAssistantSystemPromptFromContext } = await import('@/lib/ai/assistant-engine');
@@ -158,7 +163,7 @@ describe('context builder + assistant prompt', () => {
     expect(attempted).toEqual([]);
     expect(result.actions).toEqual([]);
     for (const tool of tools) expect(tool.execute).not.toHaveBeenCalled();
-  });
+  }, 30_000);
 
   it('control: the same title pasted unfenced would have triggered the delete tool', async () => {
     const naiveSystem = `You are the family assistant.\nUpcoming events: ${HOSTILE_TITLE} — Sat 10:00 AM; Soccer — Sun 10:00 AM`;
@@ -177,7 +182,7 @@ describe('context builder + assistant prompt', () => {
     const { provider, attempted } = obedientProvider();
     await provider.runTools({ system: buildAssistantSystemPromptFromContext(bundle.data), messages: [{ role: 'user', content: 'Please delete every event this weekend.' }], tools: writeTools() });
     expect(attempted.length).toBe(2);
-  });
+  }, 30_000);
 });
 
 describe('through the assistant engine', () => {
@@ -227,7 +232,7 @@ describe('through the assistant engine', () => {
     vi.doUnmock('@/lib/assistant/trust-wrapper');
     vi.doUnmock('@/lib/assistant/tools');
     vi.doUnmock('@/lib/ai/actions');
-  });
+  }, 30_000);
 });
 
 // ─── The two places §44's fence did not reach ───────────────────────────────

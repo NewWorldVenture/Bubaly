@@ -49,9 +49,41 @@ const RAW = /\b(error|message)\s*:\s*([A-Za-z_$][\w$]*)\??\.message\b/g;
 const AN_ERROR_BY_NAME = /err(or)?$/i;
 const AN_ERROR_UNDER_ERROR_KEY = /^(e|err|error)$|err(or)?$/i;
 
+/**
+ * Blank out every `console.*(…)` / `logger.*(…)` call, however many lines it
+ * spans, keeping the newlines so line numbers still point at the source. A log
+ * object written over several lines — `console.error('…', {\n  error:
+ * e?.message,\n })`, main's idiom since C1-S9-53 — is still a log, and a
+ * per-line check cannot see where it started.
+ */
+function withoutLogCalls(src: string): string {
+  const chars = src.split('');
+  const start = /\b(?:console|logger?)\.\w+\(/g;
+  for (let m = start.exec(src); m; m = start.exec(src)) {
+    let depth = 0;
+    let quote: string | null = null;
+    let i = m.index + m[0].length - 1;
+    for (; i < src.length; i++) {
+      const c = src[i];
+      if (quote) {
+        if (c === '\\') { i++; continue; }
+        if (c === quote) quote = null;
+        continue;
+      }
+      if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+      if (c === '(') depth++;
+      else if (c === ')' && --depth === 0) break;
+    }
+    for (let j = m.index; j <= i && j < chars.length; j++) if (chars[j] !== '\n') chars[j] = ' ';
+    start.lastIndex = i + 1;
+  }
+  return chars.join('');
+}
+
 function rawMessageReturns(file: string): string[] {
   const out: string[] = [];
-  readFileSync(`${ROOT}/${file}`, 'utf8').split('\n').forEach((line, i) => {
+  const original = readFileSync(`${ROOT}/${file}`, 'utf8').split('\n');
+  withoutLogCalls(original.join('\n')).split('\n').forEach((line, i) => {
     // Logging is not a response. A server log is the one place the raw string
     // belongs — it is how anyone diagnoses the failure the user was just
     // spared.
@@ -61,7 +93,7 @@ function rawMessageReturns(file: string): string[] {
       const looksLikeAnError = key === 'error'
         ? AN_ERROR_UNDER_ERROR_KEY.test(name)
         : AN_ERROR_BY_NAME.test(name);
-      if (looksLikeAnError) out.push(`${file}:${i + 1}  ${line.trim()}`);
+      if (looksLikeAnError) out.push(`${file}:${i + 1}  ${original[i].trim()}`);
     }
   });
   return out;
@@ -80,6 +112,21 @@ describe('a server module describes a database error rather than repeating it', 
 
   // The rule is worth nothing if it governs an empty set, and this suite has
   // been burned by a pattern that matched no file at all before.
+  it('blanks a multi-line log and still sees a leak right after it', () => {
+    const src = [
+      "  if (e || wroteNoRows(rows)) {",
+      "    console.error('[x] failed', {",
+      "      id, error: e?.message ?? 'no rows updated',",
+      "    });",
+      "  }",
+      "  if (error) return { ok: false, error: error.message };",
+    ].join('\n');
+    const lines = withoutLogCalls(src).split('\n');
+    expect(lines).toHaveLength(6);
+    expect([...lines[2].matchAll(RAW)]).toEqual([]);
+    expect([...lines[5].matchAll(RAW)].map((m) => m[2])).toEqual(['error']);
+  });
+
   it('is actually looking at the server modules', () => {
     const files = serverModules();
     expect(files.length).toBeGreaterThan(200);
