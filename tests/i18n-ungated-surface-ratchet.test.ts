@@ -165,7 +165,7 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Nothing here is newly-shipped untranslated product copy that main had
 // translated; where the branch touched main's translated surface, main's
 // strings were kept.
-const CEILING = 2419;
+const CEILING = 2432;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

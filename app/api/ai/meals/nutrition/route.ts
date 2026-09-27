@@ -171,7 +171,7 @@ export async function POST(req: Request) {
   try {
     parsed = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: 'meals.nutrition', text: `Nutrition for a ${subjectType}` },
+      { feature: 'meals.nutrition', text: 'Nutrition breakdown' },
       async (obs) => {
         const completion = await (await resolveProvider()).complete({
           system: SYSTEM, messages: [{ role: 'user', content: userMsg }], tools: [], maxTokens: 600,

@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   try {
     text = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
-      { feature: 'home.forecast', text: `Maintenance outlook for ${assets.length} assets` },
+      { feature: 'home.forecast', text: 'Maintenance outlook' },
       async (obs) => {
         const completion = await (await resolveProvider()).complete({ system, messages: [{ role: 'user', content: `Home assets:\n${lines}` }], tools: [] });
         obs.used(completion.model ?? 'unknown', completion.usage);

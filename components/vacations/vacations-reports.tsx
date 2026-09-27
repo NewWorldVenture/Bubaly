@@ -63,7 +63,16 @@ export function VacationsReports() {
   if (tripsError || expensesError || budgetsError || scoresError) {
     return <ErrorState message={tr('vacationsReports.couldNotLoadCompleteVacation')} onRetry={refreshAll} />;
   }
-  if (trips.length === 0) return <EmptyState icon={BarChart3} title={tr('vacationsReports.noTripsToReportOnYet')} description={tr('vacationsReports.createAVacationToSee')} />;
+  // The page's heading stays on screen when there is nothing to report yet:
+  // an empty state is not a reason for the route to lose its <h1>.
+  if (trips.length === 0) {
+    return (
+      <div className="space-y-6">
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><BarChart3 className="h-6 w-6 text-brand-text" /> {tr('vacationsReports.vacationReports')}</h1>
+        <EmptyState icon={BarChart3} title={tr('vacationsReports.noTripsToReportOnYet')} description={tr('vacationsReports.createAVacationToSee')} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -57,7 +57,7 @@ export default async function VisitorIntelligencePage() {
     console.error('[visitor-intelligence] analytics read failed', failedMetric.error);
     return (
       <div className="space-y-5 p-4 sm:p-6">
-        <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h1>
+        <h2 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h2>
         <ErrorState message={t('visitorIntelligence.couldNotLoadVisitorIntelligence')} />
         <a href="/admin/marketing/visitor-intelligence" className="text-sm font-medium text-brand-text underline">{t('adminMarketingVisitorIntelligence.refreshVisitorIntelligence')}</a>
       </div>
@@ -96,7 +96,7 @@ export default async function VisitorIntelligencePage() {
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <header>
-        <h1 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h1>
+        <h2 className="text-xl font-black sm:text-2xl">{t('adminMarketingVisitorIntelligence.visitorIntelligence')}</h2>
         <p className="mt-1 max-w-2xl text-sm text-muted">
           The privacy-first acquisition funnel end-to-end — anonymous visitors becoming identified,
           profiled, scored, and engaged. All first-party and consent-gated; no fingerprinting.

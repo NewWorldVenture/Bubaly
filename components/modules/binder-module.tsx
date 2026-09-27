@@ -81,7 +81,7 @@ export function BinderModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('binder.householdBinder')}</h3>
+          <h1 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('binder.householdBinder')}</h1>
           <p className="text-xs text-muted">{t('binder.yourDigitalCommandCenterWiFi')}</p>
         </div>
         <div className="flex items-center gap-2">

@@ -55,7 +55,7 @@ export default async function SeoPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingSeo.marketingSeo')}</h1>
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('adminMarketingSeo.marketingSeo')}</h2>
           <p className="mt-1 text-sm text-muted">{t('adminMarketingSeo.trackSearchIntentKeywordsAndThe')}</p>
         </div>
         <Link href="/admin/marketing/aeo" className="text-sm font-medium text-brand-text hover:underline">AEO →</Link>
@@ -222,7 +222,7 @@ async function AdminSeoReadError() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('seo.marketingSeo')}</h1>
+        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('seo.marketingSeo')}</h2>
         <p className="mt-1 text-sm text-muted">{t('seo.trackSearchIntentAndIndexable')}</p>
       </div>
       <ErrorState message={t('seo.couldNotLoadSeoKeywords')} />

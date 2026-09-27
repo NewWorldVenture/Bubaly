@@ -58,6 +58,7 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
       <>
         <Section className="pt-20">
           <SectionHeading
+            as="h1"
             eyebrow={t('f.formUnavailable')}
             title={title}
             description={t('f.thisFormIsTemporarilyUnavailable')}
@@ -71,7 +72,8 @@ export default async function PublicFormPage({ params }: { params: Promise<{ id:
   return (
     <>
       <Section className="pt-20">
-        <SectionHeading eyebrow={t('f.form')} title={title} description={description} />
+        {/* The form's own title is the page heading: this route has no other h1. */}
+        <SectionHeading as="h1" eyebrow={t('f.form')} title={title} description={description} />
         <div className="mx-auto mt-12 max-w-xl">
           <PublicForm
             formId={form.id}
