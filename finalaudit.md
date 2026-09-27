@@ -49390,7 +49390,7 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-17 found and fixed, P-18 open) | 2026-09-27 19:05 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
@@ -49689,18 +49689,25 @@ automation action." The first action now starts ticked. Tests for P-14 to
 P-17: `tests/a-form-a-page-offers-can-be-submitted.test.ts` (all four red
 with the fixes reverted).
 
-**P-18 · Medium · OPEN · The admin marketing console answers a refusal with
-its error page.** Its actions (`app/(app)/admin/marketing/actions.ts`: ten
-`throw new Error(…)` and `marketingActionFailure`) throw on an ordinary
-refusal — a name or slug already taken ("That already exists"), a value out
-of range, a missing choice — and a plain `<form action>` turns that into the
-section error page with a reference number; in production Next omits the
-message, so the admin is not told what to change. Seen here on
-`/admin/marketing/affiliates` and `/admin/marketing/landing-pages` (a second
-"Audit 1"). P-16 and P-17 remove the three cases a form can prevent; the rest
-needs the actions to return their refusal (`useActionState`, or a redirect
-carrying a catalogue-keyed notice), which touches every marketing form — a
-batch of its own, open for anyone to claim.
+**P-18 · Medium · The admin marketing console answered a refusal with its
+error page — fixed.** Its actions (`app/(app)/admin/marketing/**/actions.ts`,
+through `marketingActionFailure` in 20 files, and fifteen direct `throw`s)
+throw on an ordinary refusal — a name or slug already taken, a date before its
+start, a link that is not a link — and a plain `<form action>` turned that into
+the section error page with a reference number; in production Next omits the
+message, so the admin was not told what to change. Seen on
+`/admin/marketing/affiliates` and `/admin/marketing/landing-pages`. Next keeps
+an error's own `digest` and hands it to the boundary, so a refusal now carries
+one of five fixed codes in it (`lib/actions/refusal.ts`: `duplicate`,
+`invalid`, `notAllowed`, `inUse`, `notSaved`, read from the Postgres error code
+— never free text), and `components/app/section-error.tsx`, the boundary of 28
+sections, says "That wasn’t saved" and the reason in the reader's language
+(seven catalogues) with a "Back to the form" button. Every other error keeps
+the page it had. The sender failures in `push/actions.ts` stay plain errors:
+they are not the admin's input. Verified on a local production build: a
+duplicate affiliate now reads "Something with that name or address already
+exists. Choose another and try again.", and the button returns to the form.
+`tests/a-refused-action-says-what-to-change.test.ts`.
 
 ### Round 2 — the merged tree, after #588 and 339 other commits from main
 

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { parseVideoUrl } from '@/lib/marketing/video';
 import { parseTags } from '@/lib/marketing/assets';
+import { refuseInput } from '@/lib/actions/refusal';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -15,7 +16,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
   const id = s(formData, 'id');
   const title = s(formData, 'title');
-  if (!title) throw new Error('Video title is required.');
+  if (!title) refuseInput('Video title is required.');
 
   // Source is EITHER an uploaded video asset (Asset Library) OR an external URL.
   const assetId = s(formData, 'asset_id');
@@ -37,7 +38,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
       .is('deleted_at', null)
       .maybeSingle();
     if (assetError) marketingActionFailure('load the marketing video asset', assetError);
-    if (!asset) throw new Error('The selected video asset no longer exists.');
+    if (!asset) refuseInput('The selected video asset no longer exists.');
     provider = 'upload';
     storage_path = asset.storage_path;
     source_hash = asset.content_hash ?? createHash('sha256').update(`${provider}:${storage_path}`).digest('hex');
@@ -46,7 +47,7 @@ export async function saveVideoAction(formData: FormData): Promise<void> {
     assetLicense = asset.license;
   } else {
     const parsed = parseVideoUrl(s(formData, 'url'));
-    if (!parsed) throw new Error('Enter a valid YouTube or Vimeo URL, or choose an uploaded video asset.');
+    if (!parsed) refuseInput('Enter a valid YouTube or Vimeo URL, or choose an uploaded video asset.');
     provider = parsed.provider;
     video_id = parsed.videoId;
     url = s(formData, 'url');
