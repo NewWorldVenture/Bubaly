@@ -46389,6 +46389,20 @@ These come from the catalogue now (`declutterModule.kind.*` and `declutterModule
 
 ---
 
+### `[CLAUDE-1][LOW][MOVING]` C1-S9-129 — the move-date recalculation dialog explained each task and its failures in English
+
+**File/path:** `components/modules/move-date-recalculation.tsx`; seven catalogues.
+
+**Problem.** In every locale, the move-date review dialog on `/dashboard/moving` showed English for:
+- each task's reason, such as "Completed task: kept" or "Follows the move date"
+- the two failure messages, including the careful "do not assume it failed" wording
+
+**Fix.** The reasons and both failure messages now come from the catalogue.
+
+**Status:** FIXED. Scanner findings for this file drop from 7 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
