@@ -27,7 +27,7 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -63,9 +63,28 @@ const EFFECT_STYLES: Record<string, string> = {
   deny: 'bg-red-500/15 text-red-400 border-red-500/30',
   require_approval: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
 };
-const EFFECT_LABELS: Record<string, string> = {
-  allow: 'Allow', auto_approve: 'Auto-approve', deny: 'Deny', require_approval: 'Require approval',
-};
+// The engine's DOMAIN_LABELS / CAPABILITY_LABELS are English data; what a
+// reader sees is the catalogue's word for the same value (audit C1-S9-114).
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+const camel = (snake: string) => snake.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+function domainLabel(tr: Tr, domain: string): string {
+  if (domain === 'all') return tr('trustModule.allDomains');
+  return DOMAIN_LABELS[domain] ? tr(`trustDomain.${camel(domain)}`) : domain;
+}
+function capabilityLabel(tr: Tr, capability: string): string {
+  return capability in CAPABILITY_LABELS ? tr(`trustCapability.${capability}`) : capability;
+}
+const EFFECTS = ['allow', 'auto_approve', 'deny', 'require_approval'];
+const effectLabel = (tr: Tr, effect: string) => EFFECTS.includes(effect) ? tr(`trustModule.effect.${camel(effect)}`) : effect;
+const DECISIONS = ['allow', 'auto_approve', 'approved', 'executed', 'deny', 'rejected', 'require_approval', 'emergency_override'];
+const decisionLabel = (tr: Tr, decision: string) => DECISIONS.includes(decision) ? tr(`trustModule.decision.${camel(decision)}`) : decision.replace(/_/g, ' ');
+const EMERGENCY_KINDS = ['medical', 'missing_person', 'severe_weather', 'natural_disaster', 'vehicle_accident', 'general'];
+const emergencyKindLabel = (tr: Tr, kind: string) => EMERGENCY_KINDS.includes(kind) ? tr(`trustModule.emergencyKind.${camel(kind)}`) : kind.replace(/_/g, ' ');
+const APPROVAL_MODELS = ['single', 'two_parent', 'first_available', 'consensus', 'sequential'];
+const approvalModelLabel = (tr: Tr, model: string) => APPROVAL_MODELS.includes(model) ? tr(`trustModule.approvalModel.${camel(model)}`) : model.replace(/_/g, ' ');
+const ROLES = ['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'];
+const roleLabel = (tr: Tr, role: string | null) => role && ROLES.includes(role) ? tr(`trustRole.${role}`) : (role ?? '—');
+
 const DECISION_STYLES: Record<string, string> = {
   allow: 'text-green-400', auto_approve: 'text-green-400', approved: 'text-green-400', executed: 'text-green-400',
   deny: 'text-red-400', rejected: 'text-red-400',
@@ -104,13 +123,13 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
   const activeEmergency = data.emergencies[0] ?? null;
 
   const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }[] = [
-    { key: 'approvals', label: 'Approvals', icon: Inbox, badge: pendingApprovals.length || undefined },
+    { key: 'approvals', label: tr('trustModule.tab.approvals'), icon: Inbox, badge: pendingApprovals.length || undefined },
     { key: 'activity', label: tr('trustActivity.activity'), icon: Activity },
-    { key: 'policies', label: 'Policies', icon: Scale },
-    { key: 'permissions', label: 'Permissions', icon: Users },
-    { key: 'delegations', label: 'Delegations', icon: Share2 },
-    { key: 'emergency', label: 'Emergency', icon: Siren },
-    { key: 'audit', label: 'Audit', icon: ScrollText },
+    { key: 'policies', label: tr('trustModule.tab.policies'), icon: Scale },
+    { key: 'permissions', label: tr('trustModule.tab.permissions'), icon: Users },
+    { key: 'delegations', label: tr('trustModule.tab.delegations'), icon: Share2 },
+    { key: 'emergency', label: tr('trustModule.tab.emergency'), icon: Siren },
+    { key: 'audit', label: tr('trustModule.tab.audit'), icon: ScrollText },
   ];
 
   return (
@@ -126,8 +145,8 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4">
           <Siren className="h-5 w-5 flex-shrink-0 text-rose-400 animate-pulse" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-rose-300">{tr('trust.emergencyModeActive')} {activeEmergency.kind.replace('_', ' ')}</p>
-            <p className="text-xs text-muted">{tr('trust.permissionsAreTemporarilyElevatedFor')} {activeEmergency.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}{tr('trust.everyActionIsLogged')}</p>
+            <p className="text-sm font-bold text-rose-300">{tr('trust.emergencyModeActive')} {emergencyKindLabel(tr, activeEmergency.kind)}</p>
+            <p className="text-xs text-muted">{tr('trust.permissionsAreTemporarilyElevatedFor')} {activeEmergency.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}{tr('trust.everyActionIsLogged')}</p>
           </div>
           {canManage && <EndEmergencyButton id={activeEmergency.id} />}
         </div>
@@ -136,10 +155,10 @@ export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData
       {/* Stat row */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Pending approvals', value: String(pendingApprovals.length), icon: Inbox, color: pendingApprovals.length ? 'text-amber-400' : 'text-muted' },
-          { label: 'Active policies', value: String(data.policies.filter(p => p.enabled).length), icon: Scale, color: 'text-brand-text' },
-          { label: 'Active delegations', value: String(data.delegations.length), icon: Share2, color: 'text-blue-400' },
-          { label: 'Members governed', value: String(data.members.length), icon: Users, color: 'text-violet-400' },
+          { label: tr('trustModule.stat.pendingApprovals'), value: String(pendingApprovals.length), icon: Inbox, color: pendingApprovals.length ? 'text-amber-400' : 'text-muted' },
+          { label: tr('trustModule.stat.activePolicies'), value: String(data.policies.filter(p => p.enabled).length), icon: Scale, color: 'text-brand-text' },
+          { label: tr('trustModule.stat.activeDelegations'), value: String(data.delegations.length), icon: Share2, color: 'text-blue-400' },
+          { label: tr('trustModule.stat.membersGoverned'), value: String(data.members.length), icon: Users, color: 'text-violet-400' },
         ].map(s => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <s.icon className={cn('h-5 w-5', s.color)} />
@@ -206,7 +225,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
         </div>
       )}
       {pending.length === 0 ? (
-        <EmptyCard icon={Check} title={tr('trust.noApprovalsWaiting')} sub="When Bubaly or a family member proposes something that needs sign-off, it shows up here." />
+        <EmptyCard icon={Check} title={tr('trust.noApprovalsWaiting')} sub={tr('trustModule.approvalsEmptySub')} />
       ) : (
         <div className="space-y-2.5">
           {pending.map(a => (
@@ -244,6 +263,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
 // ─── Policies ────────────────────────────────────────────────────────────────
 function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; members: Member[]; canManage: boolean }) {
   const tr = useTranslations();
+  const plural = usePlural();
   const locale = useLocale();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -256,7 +276,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     setBusy(p.id);
     const res = await togglePolicyAction({ id: p.id, enabled: !p.enabled });
     setBusy(null);
-    if (!res.ok) return toastError(res.error ?? 'Could not update');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.update'));
     router.refresh();
   }
   async function remove(p: Policy) {
@@ -264,15 +284,15 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
     setBusy(p.id);
     const res = await deletePolicyAction({ id: p.id });
     setBusy(null);
-    if (!res.ok) return toastError(res.error ?? 'Could not delete');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.delete'));
     success(tr('trustModule.policyDeleted')); router.refresh();
   }
 
   function subjectLabel(p: Policy) {
-    if (p.subject_kind === 'everyone') return 'Everyone';
-    if (p.subject_kind === 'ai') return 'AI agents';
-    if (p.subject_kind === 'role') return `Role: ${p.subject_role}`;
-    return `Member: ${nameById.get(p.subject_member_id ?? '') ?? '—'}`;
+    if (p.subject_kind === 'everyone') return tr('trust.everyone');
+    if (p.subject_kind === 'ai') return tr('trust.aiAgents');
+    if (p.subject_kind === 'role') return tr('trustModule.subjectRole', { role: roleLabel(tr, p.subject_role) });
+    return tr('trustModule.subjectMember', { name: nameById.get(p.subject_member_id ?? '') ?? '—' });
   }
 
   return (
@@ -284,7 +304,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
       )}
       {policies.length === 0 ? (
         <EmptyCard icon={Scale} title={tr('trust.noPoliciesYet')}
-          sub={'Define rules like "Auto-approve appointments under $50" or "Only Mom can approve overnight events." The AI evaluates them before every action.'} />
+          sub={tr('trustModule.policiesEmptySub')} />
       ) : (
         <div className="space-y-2">
           {policies.map(p => (
@@ -293,17 +313,17 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold">{p.name}</p>
-                    <span className={cn('rounded-md border px-1.5 py-0.5 text-[10px] font-semibold', EFFECT_STYLES[p.effect])}>{EFFECT_LABELS[p.effect] ?? p.effect}</span>
+                    <span className={cn('rounded-md border px-1.5 py-0.5 text-[10px] font-semibold', EFFECT_STYLES[p.effect])}>{effectLabel(tr, p.effect)}</span>
                     {isAcceptedPolicy(p.conditions) && (
                       <span className="rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{tr('trustModule.acceptedFromAnAutopilotSuggestion')}</span>
                     )}
                   </div>
                   {p.description && <p className="mt-0.5 text-xs text-muted">{p.description}</p>}
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted">
-                    <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60">{DOMAIN_LABELS[p.domain] ?? p.domain}</span>
+                    <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60">{domainLabel(tr, p.domain)}</span>
                     <span className="rounded bg-surface px-1.5 py-0.5 border border-border/60 capitalize">{p.capability}</span>
                     <span>· {subjectLabel(p)}</span>
-                    {p.effect === 'require_approval' && <span>· {p.required_approvals} approval{p.required_approvals > 1 ? 's' : ''} ({p.approval_model.replace('_', ' ')})</span>}
+                    {p.effect === 'require_approval' && <span>· {plural('trustModule.approvalsNeeded', p.required_approvals, { model: approvalModelLabel(tr, p.approval_model) })}</span>}
                     <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
@@ -312,7 +332,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                 </div>
                 {canManage && (
                   <div className="flex flex-shrink-0 items-center gap-1">
-                    <button onClick={() => toggle(p)} disabled={busy === p.id} title={p.enabled ? 'Disable' : 'Enable'}
+                    <button onClick={() => toggle(p)} disabled={busy === p.id} title={p.enabled ? tr('trustModule.disable') : tr('trustModule.enable')}
                       className={cn('relative h-5 w-9 rounded-full transition', p.enabled ? 'bg-brand' : 'bg-elevated')}>
                       <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all', p.enabled ? 'left-[18px]' : 'left-0.5')} />
                     </button>
@@ -385,12 +405,12 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
       priority: Number(form.get('priority') ?? 100),
     });
     setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not save');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.save'));
     onSaved();
   }
 
   return (
-    <Modal open title={policy ? 'Edit Policy' : 'New Policy'} onClose={onClose}>
+    <Modal open title={policy ? tr('trustModule.editPolicy') : tr('trustModule.newPolicy')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('trust.name')} required>{id => <Input id={id} name="name" autoFocus defaultValue={policy?.name ?? ''} placeholder={tr('trust.autoApproveAppointmentsUnder50')} />}</Field>
         <Field label={tr('trust.description')}>{id => <Input id={id} name="description" defaultValue={policy?.description ?? ''} placeholder={tr('trust.optionalExplainTheIntent')} />}</Field>
@@ -398,13 +418,13 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
           <Field label={tr('trust.domain')}>{id => (
             <Select id={id} name="domain" defaultValue={policy?.domain ?? 'all'}>
               <option value="all">{tr('trust.allDomains')}</option>
-              {TRUST_DOMAINS.map(d => <option key={d} value={d}>{DOMAIN_LABELS[d]}</option>)}
+              {TRUST_DOMAINS.map(d => <option key={d} value={d}>{domainLabel(tr, d)}</option>)}
             </Select>
           )}</Field>
           <Field label={tr('trust.capability')}>{id => (
             <Select id={id} name="capability" defaultValue={policy?.capability ?? 'automate'}>
               <option value="all">{tr('trust.allActions')}</option>
-              {CAPABILITIES.map(cap => <option key={cap} value={cap}>{CAPABILITY_LABELS[cap]}</option>)}
+              {CAPABILITIES.map(cap => <option key={cap} value={cap}>{capabilityLabel(tr, cap)}</option>)}
             </Select>
           )}</Field>
         </div>
@@ -420,7 +440,7 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
           <Field label={tr('trust.effect')}>{id => (
             <Select id={id} name="effect" value={effect} onChange={e => setEffect(e.target.value)}>
               <option value="allow">{tr('trust.allow')}</option>
-              <option value="auto_approve">Auto-approve</option>
+              <option value="auto_approve">{tr('trustModule.effect.autoApprove')}</option>
               <option value="require_approval">{tr('trust.requireApproval')}</option>
               <option value="deny">{tr('trust.deny')}</option>
             </Select>
@@ -429,7 +449,7 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
         {subjectKind === 'role' && (
           <Field label={tr('trust.role')}>{id => (
             <Select id={id} name="subjectRole" defaultValue={policy?.subject_role ?? 'teen'}>
-              {(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'] as TrustRole[]).map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+              {(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest'] as TrustRole[]).map(r => <option key={r} value={r}>{roleLabel(tr, r)}</option>)}
             </Select>
           )}</Field>
         )}
@@ -470,7 +490,7 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
         <Field label={tr('trust.priorityHigherWins')}>{id => <Input id={id} name="priority" type="number" min="0" max="1000" defaultValue={policy?.priority ?? 100} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('trust.cancel')}</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Saving…' : policy ? 'Save Policy' : 'Create Policy'}</Button>
+          <Button type="submit" loading={loading}>{loading ? tr('trustModule.saving') : policy ? tr('trustModule.savePolicy') : tr('trustModule.createPolicy')}</Button>
         </div>
       </form>
     </Modal>
@@ -512,7 +532,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
     setBusy(`${domain}__${cap}`);
     const res = await setPermissionGrantAction({ memberId: selected, domain, capability: cap, effect: next });
     setBusy(null);
-    if (!res.ok) return toastError(res.error ?? 'Could not update');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.update'));
     router.refresh();
   }
 
@@ -534,13 +554,13 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
             <thead>
               <tr className="border-b border-border text-muted">
                 <th className="px-3 py-2.5 text-left font-semibold">{tr('trust.domain')}</th>
-                {KEY_CAPS.map(c => <th key={c} className="px-2 py-2.5 text-center font-semibold">{CAPABILITY_LABELS[c]}</th>)}
+                {KEY_CAPS.map(c => <th key={c} className="px-2 py-2.5 text-center font-semibold">{capabilityLabel(tr, c)}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {KEY_DOMAINS.map(domain => (
                 <tr key={domain}>
-                  <td className="px-3 py-2.5 font-medium">{DOMAIN_LABELS[domain]}</td>
+                  <td className="px-3 py-2.5 font-medium">{domainLabel(tr, domain)}</td>
                   {KEY_CAPS.map(cap => {
                     const explicit = grantMap.get(`${domain}__${cap}`);
                     const def = roleDefault(member.role, domain, cap);
@@ -596,7 +616,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
     setBusy(id);
     const res = await revokeDelegationAction({ id });
     setBusy(null);
-    if (!res.ok) return toastError(res.error ?? 'Could not revoke');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.revoke'));
     success(tr('trustModule.delegationRevoked')); router.refresh();
   }
 
@@ -605,7 +625,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
       {canManage && <div className="flex justify-end"><Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {tr('trust.newDelegation')}</Button></div>}
       {delegations.length === 0 ? (
         <EmptyCard icon={Share2} title={tr('trust.noActiveDelegations')}
-          sub={'Temporarily hand off authority — e.g. "Grandma manages transportation until Friday." Delegations always expire automatically.'} />
+          sub={tr('trustModule.delegationsEmptySub')} />
       ) : (
         <div className="space-y-2">
           {delegations.map(d => (
@@ -614,7 +634,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{nameById.get(d.from_member_id) ?? '—'} → {nameById.get(d.to_member_id) ?? '—'}</p>
                 <p className="text-[11px] text-muted">
-                  {d.domains.length ? d.domains.map(x => DOMAIN_LABELS[x] ?? x).join(', ') : 'All delegable domains'}
+                  {d.domains.length ? d.domains.map(x => domainLabel(tr, x)).join(', ') : tr('trustModule.allDelegableDomains')}
                   {d.reason ? ` · ${d.reason}` : ''}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1 text-[10px] text-amber-400"><Clock className="h-3 w-3" /> {timeLeft(d.expires_at)} {tr('trust.expires')} {fmtWhen(d.expires_at)}</p>
@@ -656,7 +676,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
     setLoading(true);
     const res = await createDelegationAction({ fromMemberId, toMemberId, domains, reason, expiresAt: new Date(expiresAt).toISOString() });
     setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not create');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.create'));
     onSaved();
   }
 
@@ -674,7 +694,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
               <button key={d} type="button" onClick={() => toggleDomain(d)}
                 className={cn('rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
                   domains.includes(d) ? 'border-brand/50 bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                {DOMAIN_LABELS[d]}
+                {domainLabel(tr, d)}
               </button>
             ))}
           </div>
@@ -683,7 +703,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
         <Field label={tr('trust.expires')} required>{id => <Input id={id} name="expiresAt" type="datetime-local" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('trust.cancel')}</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Creating…' : 'Delegate'}</Button>
+          <Button type="submit" loading={loading}>{loading ? tr('trustModule.creating') : tr('trustCapability.delegate')}</Button>
         </div>
       </form>
     </Modal>
@@ -708,7 +728,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     setLoading(true);
     const res = await activateEmergencyAction({ kind, reason: undefined, elevatedDomains: domains });
     setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not activate');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.activate'));
     success(tr('trustModule.emergencyModeActivated')); router.refresh();
   }
   async function end() {
@@ -716,7 +736,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
     setLoading(true);
     const res = await endEmergencyAction({ id: active.id });
     setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not end');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.end'));
     success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
 
@@ -725,8 +745,8 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
       <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
         <Siren className="mx-auto mb-3 h-10 w-10 text-rose-400 animate-pulse" />
         <p className="text-lg font-bold text-rose-300">{tr('trust.emergencyModeIsActive')}</p>
-        <p className="mt-1 text-sm text-muted capitalize">{active.kind.replace('_', ' ')} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
-        <p className="mt-2 text-xs text-muted">Elevated: {active.elevated_domains.map(d => DOMAIN_LABELS[d] ?? d).join(', ')}</p>
+        <p className="mt-1 text-sm text-muted capitalize">{emergencyKindLabel(tr, active.kind)} {tr('trust.since')} {fmtWhen(active.activated_at)}</p>
+        <p className="mt-2 text-xs text-muted">{tr('trustModule.elevated')} {active.elevated_domains.map(d => domainLabel(tr, d)).join(', ')}</p>
         {/* Elevation outranks every other rule, so when it stops is part of what
             is active — not a detail to discover later. */}
         {active.expires_at && <p className="mt-1 text-xs text-muted">{tr('trust.endsOnItsOwn')} {fmtWhen(active.expires_at)}</p>}
@@ -750,7 +770,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
             <div className="mt-4">
               <p className="mb-1.5 text-xs font-semibold">{tr('trust.type')}</p>
               <Select value={kind} onChange={e => setKind(e.target.value)}>
-                {[['medical', 'Medical emergency'], ['missing_person', 'Missing person'], ['severe_weather', 'Severe weather'], ['natural_disaster', 'Natural disaster'], ['vehicle_accident', 'Vehicle accident'], ['general', 'General']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {EMERGENCY_KINDS.map(v => <option key={v} value={v}>{emergencyKindLabel(tr, v)}</option>)}
               </Select>
             </div>
             <div className="mt-3">
@@ -760,7 +780,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
                   <button key={d} type="button" onClick={() => toggleDomain(d)}
                     className={cn('rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
                       domains.includes(d) ? 'border-rose-500/50 bg-rose-500/15 text-rose-300' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-                    {DOMAIN_LABELS[d]}
+                    {domainLabel(tr, d)}
                   </button>
                 ))}
               </div>
@@ -783,7 +803,7 @@ function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Membe
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);
-  if (audit.length === 0) return <EmptyCard icon={ScrollText} title={tr('trust.noActivityYet')} sub="Every trust decision — allow, deny, approval, emergency override — is recorded here with its reasoning." />;
+  if (audit.length === 0) return <EmptyCard icon={ScrollText} title={tr('trust.noActivityYet')} sub={tr('trustModule.auditEmptySub')} />;
   // A decision that cites a policy the family still holds is explained by that
   // policy — for one accepted out of an Autopilot suggestion, by the day the
   // family said yes — rather than by the engine's generic "allowed by a
@@ -800,12 +820,12 @@ function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Membe
     <div className="overflow-hidden rounded-2xl border border-border bg-surface/30 divide-y divide-border/50">
       {audit.map(a => (
         <div key={a.id} className="flex items-start gap-3 px-4 py-3">
-          <span className={cn('mt-0.5 text-[11px] font-bold capitalize flex-shrink-0', DECISION_STYLES[a.decision] ?? 'text-muted')}>{a.decision.replace('_', ' ')}</span>
+          <span className={cn('mt-0.5 text-[11px] font-bold capitalize flex-shrink-0', DECISION_STYLES[a.decision] ?? 'text-muted')}>{decisionLabel(tr, a.decision)}</span>
           <div className="min-w-0 flex-1">
             <p className="text-xs text-fg/90">{reasonFor(a)}</p>
             <p className="mt-0.5 text-[10px] text-muted">
-              {a.actor_kind === 'ai_agent' ? `AI · ${a.actor_id}` : (nameById.get(a.actor_id ?? '') ?? 'Member')}
-              {a.domain ? ` · ${DOMAIN_LABELS[a.domain] ?? a.domain}` : ''}
+              {a.actor_kind === 'ai_agent' ? `AI · ${a.actor_id}` : (nameById.get(a.actor_id ?? '') ?? tr('trust.member'))}
+              {a.domain ? ` · ${domainLabel(tr, a.domain)}` : ''}
               {a.confidence != null ? ` · ${Math.round(a.confidence * 100)}%` : ''}
               {` · ${fmtWhen(a.created_at)}`}
             </p>
@@ -836,7 +856,7 @@ function EndEmergencyButton({ id }: { id: string }) {
     setLoading(true);
     const res = await endEmergencyAction({ id });
     setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not end');
+    if (!res.ok) return toastError(res.error ?? tr('trustModule.couldNot.end'));
     success(tr('trustModule.emergencyModeEnded')); router.refresh();
   }
   return (

@@ -1,4 +1,4 @@
-// B7 kid-login pass (2026-09-27 page audit). /dashboard/family-access opens its
+// P-19, B7 kid-login pass (2026-09-27 page audit). /dashboard/family-access opens its
 // "create a login" form only after "Create login" is pressed, so no page sweep
 // ever rendered it: the submit was a bare check-mark icon with no name, the
 // username and PIN fields had only English placeholders for labels, the reset
