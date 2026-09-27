@@ -38,6 +38,7 @@ const config: Config = {
         success: 'rgb(var(--success) / <alpha-value>)',
         warning: 'rgb(var(--warning) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
+        'danger-fg': 'rgb(var(--danger-fg) / <alpha-value>)',
         info: 'rgb(var(--info) / <alpha-value>)',
       },
       borderRadius: {
