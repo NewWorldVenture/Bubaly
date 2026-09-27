@@ -1,39 +1,104 @@
 # Status board
 
+## Concurrent main integration checkpoint — 2026-09-27
+
+**Production moved independently while PR601 was being prepared.** Main `e96e745aea27802c425031b5685c8c473cabb100` (tree `7fbd8f65047710c001d0e4cddeeeac81f9f408e0`) includes merged PR603 and PR585. At **18:04:31 UTC**, public build-info returned HTTP200 with that exact revision and private/no-store caching. Vercel deployment `6KPdUwZyEnsDumJBUVCGH8eZJD1q` and GitHub Production deployment6695777090 report success at17:58:33/34 UTC. Receipts: `C:/Users/Daniel/AppData/Local/Temp/bubaly-e96-public-build-20260927.json` and `bubaly-e96-production-deployment-20260927.json`. Main [CI36338693100](https://github.com/NewWorldVenture/Bubaly/actions/runs/36338693100) has Database/Mobile PASS, with Web/E2E still running at the recorded observation. Deployment identity is verified; full acceptance is not claimed. Earlier a6 production statements below are dated history.
+
+**The prior auth source completes canonical local verification.** Exact commit `073de6fe25ad0607e091f803f830d805d46b0d76`, tree `6cd5f983711fbd41fa8598117d69684eefeb6ae9`, passes **20,850/20,850 UTC tests across1,638 files** in107.35s, build247, full generated-route types and lint with15 existing warnings. All5,221 raw files/modes remain unchanged through18:02:33 UTC; receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-073de6fe-20260927/summary.json`. The seven subsequent fixture-only changes retain their separate176-case/scoped proof below. These results do not certify the new main reconciliation.
+
+**The new combined PR601 source remains pending its own gates and release.** The merge preserves the current main navigation implementation/test as the baseline, the newly named chores selector and its translations, Claude's eleven added audit lines, and the local session/meal repairs. The principal gate keeps the authenticated caller and explicit503 response on an unavailable account lookup; incoming real-client regression controls are reconciled against that behavior. Claude's350-route desktop crawl on a local a6 build and P-05 correction remain attributed evidence, not independently repeated or newly promoted page closures. Draft PR602 remains separately frozen atbadc5562 with Web/Database/Mobile PASS and hosted E2E still pending. Its local combined candidate is held until this concurrent main integration is settled. No SQL, provider or production settings are changed by this checkpoint.
+
+**The merge-specific checks are now frozen and pass.** The incoming authenticated-client helper and seven real-client controls are retained with the explicit503 unavailable result; five focused files pass78/78, scoped strict types/lint pass, and exact adopted blobs are recorded in `C:/Users/Daniel/AppData/Local/Temp/bubaly-auth-merge-e96-20260927/receipt.json`. Three merged-surface files pass94/94 in1.43s after a single Windows path-separator normalization in `a-signed-in-control-has-a-name.test.ts`; the original93PASS/one non-vacuity-check failure is preserved in `bubaly-e96-merged-surface-checks-20260927.log`, with GREEN in `bubaly-e96-merged-surface-green-20260927.log`. No assertion is removed. These focused results precede combined canonical/hosted acceptance. Production e96 public/native checks also pass at18:06:05–12 UTC: exact build revision and published worker hash, enabled email/phone entry without submitting authentication, protected meals redirect307, nativev6 install/offline200, and zero page/request errors. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-sw-production-e96e745a-20260927.json`. Core health checks pass but remain degraded for the same six unset feature settings; no signed-in/provider workflow is certified.
+
+**Inventory reconciliation adds one previously unregistered existing test.** `SUPPORT-6184F8927CFB` records `tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts` as IN PROGRESS; its source already existed in0be, so this is not a new application/test file. The restored main test is blob `418e10ff3ab1c1af44add11530bd3a1ddb929bdd`; current combined execution remains pending. All14,213 prior IDs and statuses are retained. Register B now has **14,214 items:13,862 NOT STARTED,337 IN PROGRESS,10 FIXED + PASS,four BLOCKED and one FAIL**. Tracked source remains5,221 files. Page totals and0.07% audit signoff are unchanged; the separate Inbox finding and SEC-001/auth/provider/production-migration/device obligations remain open. **PRODUCTION READY: NO.** This checkpoint supersedes only current production identity and the old073 pending-gate wording; all failed runs and prior scope limits remain.
+
+## Fixture integration and original hosted baseline — 2026-09-27
+
+**Original PR601 source37c now has a clean hosted browser result.** Run [36337331828](https://github.com/NewWorldVenture/Bubaly/actions/runs/36337331828) completes E2E at **17:58:11 UTC with 1,777/1,777 PASS in 18.5m**, zero failures or flakes. Actual checkout `29a6b929daf5e0ad1e6886a2dc295c07ff45ef2b` shares tree `643a59cda50d4f55c5a787f5a79ee852d7f62da3` with head `37c8fb19e027e96b88ea37e511c10bfb0c859cd5`. Overall CI remains **FAILURE** because Web's four source-contract checks failed; those guards were subsequently reconciled and verified in e3. Database and Mobile passed. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr601-ci36337331828-terminal-20260927.json`. This later clean browser run preserves, rather than replaces, PR600's failed meal attempts and PR595/596 flaky histories. It precedes the Dismiss and session-ownership changes and does not certify them.
+
+**Seven controlled React fixtures now present a coherent session boundary.** Each already returned a synthetic signed-in SDK session but permanently threw when current cookie ownership was read. The new ownership guard correctly made those fixtures unavailable. The adopted repair changes exactly that one expression per existing fixture to return the same session's access token; all assertions, mutation/readback controls and family/role switches remain intact. The seven suites pass **176/176 in 19.2s**, scoped strict types/lint pass, and the existing fixture graph guard passes **37/37**. Independent control passes with matching cookies and deliberately fails at the actual ownership guard with a mismatched token. No application source changes are introduced by this fixture correction; the private verification maps 2,120 application paths without drift. Receipts under `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/`: `fixture-adoption-receipt.json`, `fixtures-validation.json`, `fixture-candidates-source.json`, `fixtures-green-176.log` and `fixture-boundary-old.log`. Independent receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-fixture-independent-20260927/review-receipt.json`.
+
+**Related scopes remain distinct.** The actual-SDK adjacent suites pass **146/146 in 13.9s** (`adjacent-green-146.log`), and the unchanged auth-lifecycle fixture passes **14/14 in 2.7s** (`lifecycle-green.log`) in the same evidence directory. These are separately scoped from the 176 controlled React cases and do not constitute a live provider journey. The adopted session repair remains module6a0d0d0a with its retained 17-case browser and 64-unit proof below. Full canonical verification of source073 is still pending at this checkpoint; the seven fixture edits have their scoped checks, and final hosted acceptance/deployment remain pending. Prior e3 full gates are historical source-specific evidence. Verified production remains a6dcd18e; separate draft602 still awaits hosted E2E. The Inbox selection findings remain an unrepaired separate follow-up.
+
+All seven exercised SUPPORT rows were still NOT STARTED and now move to **IN PROGRESS**: SUPPORT-02FD32F09502, SUPPORT-C407CC9796A8, SUPPORT-678300F81E6F, SUPPORT-C33E1A58D1C6, SUPPORT-C1CEE5335C18, SUPPORT-4B19503B0067 and SUPPORT-155C44B711F8. These inventory test coverage, not seven completed product workflows. All **14,213 permanent IDs** remain; totals are **13,862 NOT STARTED, 336 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. No new file or ID is introduced. Prior evidence, Claude's page claims, page totals and 0.07% audit signoff are preserved. **PRODUCTION READY: NO.** This checkpoint supersedes the original37 pending-E2E wording below; other evidence retains its stated source and execution limits.
+
+## Session ownership repair adopted locally — 2026-09-27
+
+**The reproduced stale-session race is repaired locally; final integrated gates and hosted acceptance are pending.** The four adopted paths are mapped in `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/adoption-receipt.json`. Production module `lib/auth/cache-session.ts` is blob `6a0d0d0aa225e7fad96c948c244d6d974a08e713`; the retained browser fixture is `4843068f3ec36f6d76b9405d6116180cde54843e`. Positive SDK events are compared with current cookie tokens before advancing the revision or notifying auth listeners. Positive getSession receipts now receive the same current-cookie ownership check and bounded reread as empty receipts. Reconciliation stays outside the SDK callback's lock. Normal token rotation preserves the same session/cache generation; temporary read errors retain the established login while reporting the error.
+
+**The original-source regression is six desired RED / eleven PASS; the final candidate passes 17/17 in 6.0s.** The six failures cover stale visibility-recovery events and held positive receipts, each across peer logout, account B adoption and same-session A token rotation. The final rotation assertions require an actually changed access token and unchanged cache generation. Focused cache-session, SessionKeeper and media-gap units pass **64/64 across three files in 327ms**; scoped strict types and lint pass. A broader browser run passed **43/43 in 6.5s before the final rotation assertion refinement**, overlapping the 17 session cases plus four persistence/restart and 22 logout guards; these counts are not additive. Evidence under `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/`: `candidate-old-source-17-red.log`, `candidate-final-green-17.log`, `unit-final-green-64.log`, `regression-green-43.log`, `candidate-source.json` and `actual-module-graph.json`. Independent review found no source blocker and verified all eight application modules in the browser collector match current source except the intended cache-session overlay (`independent-source-graph-review.json`). Real SDK/React/cookies with synthetic provider responses establish this bounded race; the exact PR600 flake schedule and production-provider behavior remain unproved.
+
+**No auth record closes here.** LIBRARY-478BBDEF113D and SUPPORT-F03CAA80721B remain IN PROGRESS. The exact e3 canonical PASS and both meal-fixture checks below remain valid for their stated earlier source scopes, but do not certify this newly adopted auth change. PR600's failed meal gate and retried session case remain preserved; original37c hosted E2E still awaits a result at this checkpoint. Current verified production remains a6dcd18e. Separate draft PR602 now has hosted Web PASS at 17:52:11 UTC (20,752 tests in each of three zones, build 246/types/lint), alongside Database/Mobile PASS; E2E remains pending. It is neither merged nor deployed. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr602-ci36337749165-web-108671753911-20260927.log`.
+
+**A separate Inbox selection finding remains open under existing COMPONENT-DCBBCE75C88B.** Actual InboxModule blob `5028af42895964aea8b2092bae788e93dd1ea873` matches the private test and source54bc. In one household, selecting message B retains a reply typed for A; adding A's first reminder leaves B's first action disabled as Added without a B write. A held draft response for A also populates selected B after a witnessed response settlement and two actual animation frames. All **three desired assertions are RED** in `C:/Users/Daniel/AppData/Local/Temp/bubaly-inbox-state-red-v4-20260927.log`. The earlier v3 third case passed before React settlement and is explicitly excluded as acceptance. This uses controlled query/action transport, not a database/provider workflow. [Coordination with Claude](https://github.com/NewWorldVenture/Bubaly/pull/598#issuecomment-5858303635) keeps the finding in a separate follow-up; no Inbox repair is included in this auth batch.
+
+All 14,213 permanent inventory IDs and statuses remain: **13,869 NOT STARTED, 329 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. No new fixture file or inventory ID is introduced. Claude's page claims, all failed checkpoints, current page totals and audit signoff of 0.07% remain unchanged. **PRODUCTION READY: NO.** The following checkpoints retain their earlier source-specific pending/adoption wording; this checkpoint supersedes only the current adoption and hosted602 Web status.
+
+## Meal notification and session reconciliation checkpoint — 2026-09-27
+
+This checkpoint supersedes the pending local-gate wording below. Earlier failed runs, dated counts and Claude's attributed findings remain preserved. Evidence paths in this checkpoint are relative to **C:/Users/Daniel/AppData/Local/Temp/**, not a repository Temp directory.
+
+**The base integration passes its canonical local gates.** Exact commit `e3f244ab58b3bb57ac485e790c44c17dd258a308`, tree `e58d108f60660f55f6e15f2e190dda2fd1e620b6`, passes **20,848/20,848 UTC tests across 1,638 files**, build 247, generated-route strict types and lint with 15 existing warnings. All 5,221 raw files/modes are unchanged at the final 17:47:17 UTC check; receipt: `bubaly-ci-e3f244ab-20260927/summary.json`. These gates precede the two meal-fixture edits and this documentation checkpoint. The fixture delta has its own scoped verification below; no new full-source run is implied.
+
+**The mobile meal obstruction is reproduced locally.** With the actual MealsModule, Modal, ToastProvider and application CSS at 390×844, the center of “Create a meal” hits the “Meal saved.” status. A normal click waits for expiry and succeeds; deliberately moving the pointer onto the toast pauses its real 4,200ms timer, and the click then fails with repeated status-element pointer interception. The preserved RED is `bubaly-meal-toast-hover-red-20260927.log`; the unhovered control is `bubaly-meal-toast-settled-20260927.log`. Visible Dismiss clears the obstruction: the repeated root control passes **3/3** in 24.4s, and an independent durable-shaped dataset passes **2/2** in 18.6s, retaining Monday dinner/lunch while replacing Tuesday. Receipts: `bubaly-meal-toast-dismiss-green-20260927.log` and `bubaly-meal-toast-independent-20260927/receipt.json`. Controlled server-action/provider transport and the installed React renderer establish this interaction mechanism; they do not establish the exact pointer schedule that caused hosted PR600's timeout.
+
+**The meal test now acknowledges the visible notification.** The durable workflow clicks its actual Dismiss control after a confirmed meal save, preserving its database/readback assertions and 120s limit. The existing planner fixture adds optional real ToastProvider coverage and two interaction controls while preserving all previous cases; **44/44 pass in 35.2s**, with scoped strict types and zero-warning lint. Fixture blob: `b913664f25003b9261a1bbeb3c9bc474af0b957c`; receipt: `bubaly-meal-toast-independent-20260927/retained-receipt.json`. Independent strict types also pass both final meal specs, including durable blob `8b2f2e58a482f64fd56910540c25d323ef42a29a`; receipt: `bubaly-meal-spec-types-20260927/receipt.json`. No product toast layering, dismissal timing or hover/focus behavior changes. The actual durable provider journey awaits hosted execution; these controlled tests do not substitute for it. No permanent fixture file or inventory ID is added.
+
+**Hosted failures and pending work remain open.** PR600 run [36335871720](https://github.com/NewWorldVenture/Bubaly/actions/runs/36335871720) remains **1,773 passed + one failed + one flaky / 1,775**: both meal attempts timed out, and the storage-only/both session case passed only on retry. Original PR601 source37c run [36337331828](https://github.com/NewWorldVenture/Bubaly/actions/runs/36337331828) still awaits its E2E result at this checkpoint; its Web job failed the four source contracts subsequently reconciled in e3, while Database/Mobile passed. Its phase diagnostics and any eventual result certify that original source, not the later Dismiss edit. Verified production remains main a6dcd18e under the earlier anonymous public/native receipts.
+
+**A separate actual-SDK session race is still under investigation in TEMP.** Holding an A cookie read during visibility recovery, then removing cookies, adopting B or rotating A in a peer, can let the old SIGNED_IN(A) receipt advance the cache-session revision and discard the queued fresh read. The original-source controls are **11 PASS / three desired RED** in 22.5s: stale A after logout, stale A over B and an old realtime token after same-session rotation. Evidence: `bubaly-session-reconcile-investigation-20260927/candidate-old-source-14-red.log` and `held-visibility-red.log` in that directory. This uses actual SDK/modules with synthetic provider responses; the exact hosted flake schedule and production behavior are not proved. No repair or closure is claimed. Existing LIBRARY-478BBDEF113D and SUPPORT-F03CAA80721B move from NOT STARTED to IN PROGRESS; the support row tracks regression coverage rather than an additional product defect.
+
+**Framework PR602 remains a separate draft.** Head `badc5562e17f3696765597f7b6a3f5d4bef7d106`, tree `e2999d007f6cc2484cdae018ba2fd0ace952f58c`, upgrades Next to 16.3.6 while retaining React 18 packages and the existing lint policy. The unmodified compiled-renderer immediate-replay probe produces React #418 on old Next in 10/10 trials and none on the candidate in 10/10, with synchronous/delayed controls passing; its retained current-renderer browser suite passes 3/3. That mechanism proof is not a live authenticated route crawl or a closure of Claude's eight OWNER findings. Exact candidate local gates pass 20,752 units, build 246, generated types, lint with 15 warnings and production audit with zero vulnerabilities; the additional development-inclusive audit still reports seven vulnerabilities. Receipts: `bubaly-next-renderer-replay-20260927/receipt.json` and `bubaly-ci-frameworke299-20260927/summary.json`. Hosted run36337749165 has Database/Mobile PASS and Web/E2E pending at this checkpoint. It is not merged or deployed and requires complete hosted acceptance before integration.
+
+Register B now has **14,213 items: 13,869 NOT STARTED, 329 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. Exactly two existing status rows changed; every permanent ID and existing closure remains. Audit signoff remains 0.07%. The page board remains 44 CLEAN, 345 FIXED LIVE/re-crawl pending, one OPEN and eight Claude OWNER; no page/workflow is promoted here. Later PR585 headceb97afac and PR598 head4816ea66f8260017615832ee5991218d516dcc46 remain outside this integration; the older bd71 deferral below is historical. Broader SEC-001, production migration, auth and physical-device obligations remain open. **PRODUCTION READY: NO.**
+
+## Retained checkpoint before the meal/session follow-up
+
+The following checkpoints retain their original evidence and earlier pending/count wording; the checkpoint above governs the current state.
+
 ## Codex integration — 2026-09-27
 
-PARSER MERGED: PR599 -> main e70be8306571430169e69496c634cda97c069dc3
-at17:00:41UTC, exact reviewed e3dcf4203 treec6f3cd6b.
-FINAL LOCAL: b2a82067 UTC20,735/1,623files, build247, full strict types,
-lint15existingwarnings PASS; 5,194paths/modes checked before and after.
-Targeted parser46/46 and actual media browser11/11PASS; old-parser RED retained.
-LIVE: exact e70 public revision/worker-hash probe PASS17:05:26–32UTC;
-Vercel dpl_rKx8CoDq5su4ZJw5iJCFhbLysGmb and GH6695169383 SUCCESS.
-Email/phone hydration, meals307, nativev6 install/offline200/corehealth PASS;
-zero errors/failedrequests/suppressedwrites. Same full507 native wrapper1/1PASS7.0s.
-PR595 Web passed/E2E pending; PR599 hosted and combined integration PENDING.
-WORKER CLOSED: corrected850 CI36332783206 all4SUCCESS/E2E1764/1764;
-exact deployed e14/576 native acceptance PASS. Three worker rows stay FIXED+PASS.
-MEDIA/SEC-001: broader privacy/provider scope stays FAIL; three media test rowsIP.
-No live private-provider image journey or Storage RLS-bypass claim.
-PAGE INTEGRATION: preserve596's44 reported CLEAN routes and597's8 OWNER
-hydration findings. Claude's819/273-load experiment is attributed, not independently
-rerun here; page CLEAN is surface verification, not completed workflow acceptance.
-Combined source verification PENDING. No dependency/framework patch.
-PENDING PR REVIEWS:585 raw feature-ledger prompt persistence source concern;
-598 initial-open Modal effects fail actual SSR/browser control, minimal candidate passes.
-Root comments5857889463/5857903464; neither pending PR is shipped in e70.
-INVENTORY:14,187=13,877NOTSTARTED+298INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
-New SUPPORT-2D36C3920F6A catalogue regression testIP; all14,186 prior IDs/statuses kept.
-HEALTH: verified e70 coreOK/degraded; same six missing feature settings:
+LIVE: main a6dcd18e (PR600,17:17:56UTC) exact public acceptance PASS17:25:42–48UTC;
+native wrapper1/1PASS4.9s. No auth submission or private-provider image journey.
+HOSTED a6 FAILED:600 CI36335871720 Web20752each3zones/1624files,build247/types/lint,
+DB/Mobile PASS; E2E1773passed+1failed+1flaky/1775,15.0m.
+Weekly-meal durable timed out120s twice; original await masked by cleanup failure.
+Both snapshots stop at reopened Tuesday saved picker; Meal saved toast remains.
+Session-storage-reconcile storage-only/both first failed, automatic retry PASS.
+37c phase breadcrumbs are diagnostics, not a demonstrated repair. New601 gates pending.
+Four integration guard repairs110/110PASS; localization ceiling tightened2819→2650.
+Public/native acceptance above remains narrower valid proof; no full600PASS claim.
+Receipt:Temp/bubaly-5b-ci36335871720-terminal-20260927.json.
+MEDIA COVERAGE CLOSED:599 CI36335077710 all4SUCCESS, clean1775/1775 E2E12.8m;
+Web20735 each3zones/1623files,build247/types/lintPASS. Same tested/reviewed/e70tree.
+Three media fixture rows now FIXED+PASS; prior three worker closures remain.
+SEC-001 staysFAIL for broader bucket/privacy/provider scope.
+HISTORICAL FLAKES:595=1770pass+1flaky;596=1769pass+2flaky (both1771total).
+Weekly meal timeout retries passed; cleanup stack is not a root cause.
+596 actual /sleep React#418 retry passed; route OPEN/UI-ROUTE-0238 IN PROGRESS.
+PAGE BOARD:44CLEAN+345FIXED LIVE/recrawl pending+1OPEN+8ClaudeOWNER=398.
+CLEAN is surface verification; Claude experiments remain attributed.
+LOCAL COMBINED585/598: P10 fixed labels preserve provider/conversation input,
+22/22 targetedPASS and original-label6/22RED;38 actual AST callsites fixed.
+Authenticated-principal gate and initial-open Modal repairs adopted locally.
+Focused230/230units17files;44/44browser (2modal+31display+11media) PASS.
+Main-key-preserving catalogue merge adds218/locale; register393pages/398rowsPASS.
+Failure-only weekly-meal diagnostics retained. Full canonical/hosted/release PENDING.
+Later585ceb97afac/598bd71dbcaf changes deferred to next batch; open PRs not all closed.
+Shared sidebar/command-bar source remains a6; proposed changes deferred.
+Framework upgrade remains a separate branch; not shipped with this checkpoint.
+INVENTORY:14213=13871NOTSTARTED+327INPROGRESS+10FIXEDPASS+4BLOCKED+1FAIL.
+All14187 prior IDs retained;26 new source/test/tool recordsIP. Completion0.07%.
+HEALTH: exact a6 coreOK/degraded; six missing feature settings:
 CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
 GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
-RECEIPTS: Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json;
-Temp/bubaly-encoded-browser-retained-receipt-20260927.json;
-Temp/bubaly-pr585-pr598-integration-map-current-20260927.json;
-Temp/bubaly-sw-production-e70be830-20260927.json;
-Temp/bubaly-native-production-e70be830-20260927.log.
-PRODUCTION READY:NO. Auth/migration/physical-device obligations remain open.
+RECEIPTS: Temp/bubaly-e3-ci36335077710-terminal-20260927.json;
+Temp/bubaly-sw-production-a6dcd18e-20260927.json;
+Temp/bubaly-native-production-a6dcd18e-20260927.log;
+Temp/bubaly-pr585-p10-review-20260927/receipt.json;
+Temp/bubaly-585-598-focused-unit-final-20260927.log;
+Temp/bubaly-585-598-focused-browser-20260927.log.
+PRODUCTION READY:NO. Auth/migration/device obligations remain open.
 
 > Two sessions ran this board. Both sections are kept.
 

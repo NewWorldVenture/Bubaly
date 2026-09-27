@@ -36,6 +36,7 @@ const state = vi.hoisted(() => ({
   db: null as unknown,
   activeFamilyId: 'family-plus',
   failSubscriptionsRead: false,
+  superAdmin: false,
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -44,6 +45,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({
+  isSuperAdmin: async () => state.superAdmin,
   requireUserContext: async () => ({
     user: { id: 'user-1', email: 'parent@example.com' },
     memberships: [],
@@ -109,6 +111,7 @@ function withFailingSubscriptions(db: ReturnType<typeof createInMemorySupabase<D
 beforeEach(() => {
   scan.run.mockClear();
   state.failSubscriptionsRead = false;
+  state.superAdmin = false;
   state.activeFamilyId = PLUS;
   vi.stubEnv('CRON_SECRET', 'cron-secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -186,6 +189,26 @@ describe('the on-demand Autopilot scan runs only for entitled families', () => {
     expect(response.status).toBe(200);
     expect(scannedFamilies()).toEqual([PLUS]);
     expect(scannedZones()).toEqual(['America/Los_Angeles']);
+  });
+
+  it('lets a super administrator preview it past their plan, as the page does (C1-S9-98)', async () => {
+    // requireFeature lets a super admin onto /dashboard/autopilot whatever
+    // their family pays for. The scan behind it refused them, and the screen
+    // then showed "100% the day runs smoothly" over a scan that never ran.
+    state.activeFamilyId = FREE;
+    state.superAdmin = true;
+
+    const response = await onDemand();
+
+    expect(response.status).toBe(200);
+    expect(scannedFamilies()).toEqual([FREE]);
+  });
+
+  it('keeps the nightly cron on each family\'s real plan — no preview there', async () => {
+    state.superAdmin = true;
+    await cron(cronRequest() as never);
+    expect(scannedFamilies()).toEqual([PLUS]);
+    expect(fs.readFileSync(path.join(process.cwd(), 'app/api/cron/autopilot-scan/route.ts'), 'utf8')).not.toContain('isSuperAdmin');
   });
 
   it('answers 503 — not 403 — when the plan cannot be read', async () => {

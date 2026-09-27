@@ -175,3 +175,46 @@ describe('Autopilot action controls', () => {
     expect(state.resolve).not.toHaveBeenCalled(); expect(state.success).not.toHaveBeenCalled(); expect(state.error).toHaveBeenCalledWith('Manager required');
   });
 });
+
+// Audit C1-S9-98 — found by the page audit crawl, signed in: the scan answered
+// 403 and the screen still said "100% probability the day runs smoothly",
+// "0" risk alerts and "All clear". A scan that never ran left no open
+// suggestions, and the forecast read that absence as good news.
+describe('Autopilot forecasts only from a scan that ran (C1-S9-98)', () => {
+  const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
+  const say = (key: string) => translate(getMessages(state.locale), key);
+
+  it.each([
+    ['refused', { ok: false, status: 403, json: async () => ({ error: 'Autopilot scan failed', needLevel: 2 }) }],
+    ['failed', { ok: false, status: 500, json: async () => ({ error: 'Autopilot scan failed' }) }],
+  ])('shows no forecast and no all-clear when the scan is %s', async (_why, response) => {
+    state.data = [];
+    state.fetch.mockResolvedValue(response);
+    render(); await settle();
+    const shown = text(render());
+    expect(shown).not.toContain('100%');
+    expect(shown).not.toContain(say('autopilot.allClear'));
+    expect(shown).not.toContain(say('autopilot.probabilityTheDayRunsSmoothly'));
+    expect(shown).toContain(say('autopilotModule.noForecastScanDidNotRun'));
+    expect(shown).toContain(say('autopilotModule.nothingCheckedYet'));
+    expect(state.error).toHaveBeenCalled();
+  });
+
+  it('says nothing about today while the first scan is still running', () => {
+    state.data = [];
+    state.fetch.mockReturnValue(new Promise(() => {}));
+    const shown = text(render());
+    expect(shown).not.toContain('100%');
+    expect(shown).not.toContain(say('autopilot.allClear'));
+    expect(shown).toContain(say('autopilotModule.scanningYourFamily'));
+  });
+
+  it('gives the forecast and the all-clear once a scan has run and found nothing', async () => {
+    state.data = [];
+    render(); await settle();
+    const shown = text(render());
+    expect(shown).toContain('100%');
+    expect(shown).toContain(say('autopilot.probabilityTheDayRunsSmoothly'));
+    expect(shown).toContain(say('autopilot.allClear'));
+  });
+});

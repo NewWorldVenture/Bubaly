@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { firstName } from '@/lib/utils/format';
-import { Calendar, ChevronRight, MoreHorizontal, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
+import { Calendar, ChevronRight, Trash2, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -22,7 +24,10 @@ type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
 type GameResultRow = Tables<'game_results'>;
 
-const TABS = ['Overview', 'Teams', 'Schedule', 'Standings', 'Messages', 'Resources'] as const;
+// Each tab shows its own sections; Overview shows them all. The tabs used to
+// change only their own highlight, and Messages and Resources had nothing
+// behind them at all. Audit C1-S9-105.
+const TABS = ['sportsModule.overview', 'sportsModule.teams', 'sportsModule.schedule', 'sportsModule.standings'] as const;
 type Tab = (typeof TABS)[number];
 const EVENT_TYPES = ['game', 'practice', 'tournament', 'scrimmage', 'meeting', 'tryout', 'camp', 'other'];
 const SPORT_EMOJIS: Record<string, string> = { Soccer: '⚽', Basketball: '🏀', Baseball: '⚾', Softball: '🥎', Football: '🏈', Tennis: '🎾', Swimming: '🏊', Track: '🏃', Volleyball: '🏐', Gymnastics: '🤸', Hockey: '🏒', Lacrosse: '🥍', Wrestling: '🤼', Golf: '⛳', default: '🏆' };
@@ -33,7 +38,7 @@ export function SportsModule() {
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [tab, setTab] = useState<Tab>('sportsModule.overview');
 
   // --- Modal state ---
   const [eventOpen, setEventOpen] = useState(false);
@@ -157,8 +162,50 @@ export function SportsModule() {
   // --- Loading / Error ---
   const loading = eventsLoading || teamsLoading || gamesLoading;
   const error = eventsError || teamsError || gamesError;
+
+  // The row's "more options" button had no handler and no menu. What a family
+  // does with a listed event is remove it, so the row carries that, confirmed
+  // first and read back after. Audit C1-S9-105.
+  const askConfirm = useConfirm();
+  async function removeEvent(id: string, title: string) {
+    if (!(await askConfirm({ title: tr('sportsModule.deleteEventTitle', { title }), confirmLabel: tr('sportsModule.delete') }))) return;
+    const { data: removed, error: err } = await createClient().from('sports_events').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
+    success(tr('sportsModule.eventDeleted'));
+    void refreshEvents();
+  }
+
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
+
+  const show = (t: Tab) => tab === 'sportsModule.overview' || tab === t;
+  const standingsCard = (
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.teamStandings')}</h2><button onClick={() => setTab('sportsModule.standings')} className="text-xs font-semibold text-brand-text">{tr('sports.viewAllRarr')}</button></div>
+          {standings.length === 0 ? (
+            <p className="text-sm text-muted">{tr('sports.noStandingsDataYetLogGame')}</p>
+          ) : (
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[320px] text-xs">
+              <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">{tr('sports.team')}</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
+              <tbody className="divide-y divide-border">
+                {standings.map((s, i) => (
+                  <tr key={s.teamId} className="font-medium">
+                    <td className="py-2 text-muted">{i + 1}</td>
+                    <td className="py-2">{s.teamName}</td>
+                    <td className="py-2 text-right">{s.wins}</td>
+                    <td className="py-2 text-right">{s.losses}</td>
+                    <td className="py-2 text-right">{s.ties}</td>
+                    <td className="py-2 text-right text-muted">{s.pct.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          )}
+        </div>
+  );
 
   return (
     <div className="module-with-sidebar">
@@ -173,31 +220,34 @@ export function SportsModule() {
         <div className="flex items-center justify-between border-b border-border">
           <div className="tab-bar">
             {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>
+              <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{tr(t)}</button>
             ))}
           </div>
         </div>
 
         {/* Stats grid */}
-        <div className="grid-stats gap-3">
+        {tab === 'sportsModule.overview' && <div className="grid-stats gap-3">
           {[
-            { icon: Trophy, label: 'Active Sports', value: activeSports.length, sub: 'This season', bg: 'bg-violet-600/20 text-violet-300' },
-            { icon: Calendar, label: 'Upcoming Events', value: upcoming.length, sub: 'Next 14 days', bg: 'bg-blue-600/20 text-blue-300' },
-            { icon: Zap, label: 'Games This Month', value: gamesThisMonth.length, sub: 'Across all sports', bg: 'bg-emerald-600/20 text-emerald-300' },
-            { icon: Users, label: 'Active Teams', value: activeTeams.length, sub: 'This season', bg: 'bg-orange-600/20 text-orange-300' },
+            { icon: Trophy, label: tr('sports.statActiveSports'), value: activeSports.length, sub: tr('sports.statThisSeason'), bg: 'bg-violet-600/20 text-violet-300' },
+            { icon: Calendar, label: tr('sports.upcomingEvents'), value: upcoming.length, sub: tr('familySports.next14Days'), bg: 'bg-blue-600/20 text-blue-300' },
+            { icon: Zap, label: tr('sports.statGamesThisMonth'), value: gamesThisMonth.length, sub: tr('sports.statAcrossAllSports'), bg: 'bg-emerald-600/20 text-emerald-300' },
+            { icon: Users, label: tr('sports.statActiveTeams'), value: activeTeams.length, sub: tr('sports.statThisSeason'), bg: 'bg-orange-600/20 text-orange-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="stat-card">
+            // Stacked, as the icon's mb-3 intends: `.stat-card` alone is a ROW,
+            // which put four blocks side by side and pushed the last past a
+            // phone's edge. Audit C1-S9-99.
+            <div key={label} className="stat-card min-w-0 flex-col items-start gap-0">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
               <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>
           ))}
-        </div>
+        </div>}
 
         {/* Upcoming Events table */}
-        <div className="rounded-2xl border border-border bg-surface/40">
+        {show('sportsModule.schedule') && <div className="rounded-2xl border border-border bg-surface/40">
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">{tr('sports.upcomingEvents')}</h2>
-            <button onClick={() => setTab('Schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setTab('sportsModule.schedule')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           {upcoming.length === 0 ? (
             <div className="px-5 pb-5">
@@ -241,7 +291,7 @@ export function SportsModule() {
                           <td className="px-4 py-3.5">
                             <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', isGame ? 'bg-violet-500/15 text-violet-300 border border-violet-500/25' : 'bg-blue-500/15 text-blue-300 border border-blue-500/25')}>{e.event_type}</span>
                           </td>
-                          <td className="px-4 py-3.5"><button aria-label={tr('sports.moreOptions')} className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                          <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('sportsModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                         </tr>
                       );
                     })}
@@ -249,16 +299,18 @@ export function SportsModule() {
                 </table>
               </div>
               <div className="border-t border-border p-4 text-center">
-                <button onClick={() => setTab('Schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
+                <button onClick={() => setTab('sportsModule.schedule')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('sports.viewFullSchedule')} <ChevronRight className="h-3.5 w-3.5" /></button>
               </div>
             </>
           )}
-        </div>
+        </div>}
+
+        {tab === 'sportsModule.standings' && standingsCard}
 
         {/* Two-column: My Teams + Recent Results */}
         <div className="grid gap-5 lg:grid-cols-2">
           {/* My Teams */}
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          {show('sportsModule.teams') && <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{tr('sports.myTeams')}</h2>
               <Button variant="ghost" size="sm" onClick={() => setTeamOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addTeam')}</Button>
@@ -287,10 +339,10 @@ export function SportsModule() {
                 })}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Recent Results */}
-          <div className="rounded-2xl border border-border bg-surface/40 p-5">
+          {show('sportsModule.standings') && <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{tr('sports.recentResults')}</h2>
               <Button variant="ghost" size="sm" onClick={() => setGameOpen(true)}><Plus className="h-3.5 w-3.5" /> {tr('sports.addResult')}</Button>
@@ -319,7 +371,7 @@ export function SportsModule() {
                 })}
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -327,7 +379,7 @@ export function SportsModule() {
       <aside className="module-sidebar hidden lg:flex lg:flex-col gap-5">
         {/* Upcoming Games */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.upcomingGames')}</h2><button onClick={() => setTab('Schedule')} className="text-xs font-semibold text-brand-text">{tr('sports.viewScheduleRarr')}</button></div>
+          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.upcomingGames')}</h2><button onClick={() => setTab('sportsModule.schedule')} className="text-xs font-semibold text-brand-text">{tr('sports.viewScheduleRarr')}</button></div>
           {upcomingGames.length === 0 ? (
             <p className="text-sm text-muted">{tr('sports.noUpcomingGamesScheduled')}</p>
           ) : (
@@ -347,41 +399,17 @@ export function SportsModule() {
           )}
         </div>
 
-        {/* Team Standings */}
-        <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.teamStandings')}</h2><button onClick={() => setTab('Standings')} className="text-xs font-semibold text-brand-text">{tr('sports.viewAllRarr')}</button></div>
-          {standings.length === 0 ? (
-            <p className="text-sm text-muted">{tr('sports.noStandingsDataYetLogGame')}</p>
-          ) : (
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[320px] text-xs">
-              <thead><tr className="text-muted"><th className="pb-2 text-left">#</th><th className="pb-2 text-left">{tr('sports.team')}</th><th className="pb-2 text-right">W</th><th className="pb-2 text-right">L</th><th className="pb-2 text-right">T</th><th className="pb-2 text-right">PCT</th></tr></thead>
-              <tbody className="divide-y divide-border">
-                {standings.map((s, i) => (
-                  <tr key={s.teamId} className="font-medium">
-                    <td className="py-2 text-muted">{i + 1}</td>
-                    <td className="py-2">{s.teamName}</td>
-                    <td className="py-2 text-right">{s.wins}</td>
-                    <td className="py-2 text-right">{s.losses}</td>
-                    <td className="py-2 text-right">{s.ties}</td>
-                    <td className="py-2 text-right text-muted">{s.pct.toFixed(3)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          )}
-        </div>
+        {tab !== 'sportsModule.standings' && standingsCard}
 
         {/* Quick Actions */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{tr('sports.quickActions')}</h2></div>
           <div className="space-y-2">
             {[
-              { label: 'Add a game or event', action: () => setEventOpen(true) },
-              { label: 'Add a team', action: () => setTeamOpen(true) },
-              { label: 'Log game result', action: () => setGameOpen(true) },
-              { label: 'View full schedule', action: () => setTab('Schedule') },
+              { label: tr('sportsModule.addAGameOrEvent'), action: () => setEventOpen(true) },
+              { label: tr('sportsModule.addATeam'), action: () => setTeamOpen(true) },
+              { label: tr('sportsModule.logGameResult'), action: () => setGameOpen(true) },
+              { label: tr('sportsModule.viewFullSchedule'), action: () => setTab('sportsModule.schedule') },
             ].map(({ label, action }) => (
               <button key={label} onClick={action} className="flex w-full items-center justify-between rounded-xl border border-border px-4 py-2.5 text-sm hover:border-border">
                 {label} <ChevronRight className="h-3.5 w-3.5 text-muted/60" />
@@ -401,7 +429,8 @@ export function SportsModule() {
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
           <h3 className="font-bold">{tr('sports.aiSportsCoach')}</h3>
           <p className="mt-2 text-xs leading-5 text-muted">{tr('sports.getTrainingTipsScheduleHelpAnd')}</p>
-          <Button className="mt-4 w-full">{tr('sports.askAi')}</Button>
+          {/* This button did nothing. It opens the sports insight, as the header's icon does. Audit C1-S9-105. */}
+          <AiInsight kind="sports" label={tr('sports.askAi')} variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
 

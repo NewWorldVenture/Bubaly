@@ -75,11 +75,23 @@ test.use({ trace: 'off', screenshot: 'off', video: 'off', locale: 'en-US' });
 const dinner = (page: Page, day: 'Monday' | 'Tuesday') => page.getByRole('button', { name: new RegExp(`^Dinner for ${day}`) });
 const dialog = (page: Page) => page.getByRole('dialog');
 
+async function acknowledgeMealSaved(page: Page) {
+  // The real mobile notification can cover the next picker's Create a meal
+  // control. Hover pauses its accessible dismissal timer, so the next click
+  // can remain blocked. Acknowledge the visible success through
+  // its actual Dismiss control before continuing; never force a covered click.
+  const saved = page.getByRole('status').filter({ hasText: 'Meal saved.' });
+  await expect(saved).toBeVisible();
+  await saved.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(saved).toHaveCount(0);
+}
+
 async function pickSaved(page: Page, day: 'Monday' | 'Tuesday', name: string) {
   await dinner(page, day).click();
   await dialog(page).getByRole('button', { name: new RegExp(name) }).click();
   await dialog(page).getByRole('button', { name: 'Save meal', exact: true }).click();
   await expect(dialog(page)).toHaveCount(0);
+  await acknowledgeMealSaved(page);
   await expect(dinner(page, day)).toContainText(name);
 }
 
@@ -109,20 +121,26 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
     const origin = requireLocalOrigin(baseURL);
     const { account, admin, mealId, recipeId, lunchId, monday, tuesday } = mealFixture;
     const context = await browser.newContext({ locale: 'en-US', timezoneId: 'UTC', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    let phase = 'opening the sign-in page';
+    let workflowFailed = false;
+    let workflowFailure: unknown;
     try {
       const page = await context.newPage();
       await page.goto(`${origin}/login?redirect=/dashboard/meals`, { waitUntil: 'domcontentloaded' });
+      phase = 'filling the sign-in form';
       try {
         await page.locator('input[name="email"]').fill(account.email);
         await page.locator('input[name="password"]').fill(account.password);
       } catch { throw new Error('Weekly meal E2E could not fill its sign-in form.'); }
       // Real password form, Next action, GoTrue verification and browser
       // adoption. No intercepted transport, injected cookies or mocked actions.
+      phase = 'signing in through the real password form';
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       await expect(page).toHaveURL(`${origin}/dashboard/meals`, { timeout: 60_000 });
       expect(readSession(await context.cookies(), authCookieName(provider)).user.id === account.userId, 'The browser must belong to the owned meal fixture').toBe(true);
       await expect(page.getByRole('heading', { name: 'Plan the week’s dinners', exact: true })).toBeVisible();
 
+      phase = 'planning Monday from a saved recipe';
       await pickSaved(page, 'Monday', 'Fixture bean soup');
       const recipePlan = (await readPlans(mealFixture)).find(row => row.plan_date === monday && row.meal_type === 'dinner');
       expect(!!recipePlan?.meal_id, 'Recipe selection must persist a concrete meal ID').toBe(true);
@@ -138,9 +156,11 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
         .eq('created_by', account.userId).eq('id', recipeId).single();
       expect(!!originalRecipe.data && !originalRecipe.error, 'Planning must preserve the saved recipe').toBe(true);
 
+      phase = 'planning Tuesday from a saved meal';
       await pickSaved(page, 'Tuesday', 'Fixture roasted carrots');
       const oldTuesday = (await readPlans(mealFixture)).find(row => row.plan_date === tuesday && row.meal_type === 'dinner');
       expect(oldTuesday?.meal_id).toBe(mealId);
+      phase = 'replacing Tuesday with a custom meal';
       await dinner(page, 'Tuesday').click();
       await dialog(page).getByRole('button', { name: 'Create a meal', exact: true }).click();
       await dialog(page).getByRole('textbox', { name: /^Meal name/ }).fill('Fixture herbed beans');
@@ -152,8 +172,10 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       await dialog(page).getByRole('textbox', { name: 'Unit 2', exact: true }).fill('handful');
       await dialog(page).getByRole('button', { name: 'Save meal', exact: true }).click();
       await expect(dialog(page)).toHaveCount(0);
+      await acknowledgeMealSaved(page);
       await expect(dinner(page, 'Tuesday')).toContainText('Fixture herbed beans');
 
+      phase = 'checking the persisted custom meal';
       const plans = await readPlans(mealFixture);
       const tuesdayPlans = plans.filter(row => row.plan_date === tuesday && row.meal_type === 'dinner');
       expect(tuesdayPlans).toHaveLength(1);
@@ -164,11 +186,13 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       expect(!customMeal.error, 'The custom meal must be readable').toBe(true);
       expect(customMeal.data?.ingredients).toEqual([{ name: 'beans', qty: '1', unit: 'cup' }, { name: 'basil', qty: null, unit: 'handful' }]);
 
+      phase = 'reloading the planned week';
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(dinner(page, 'Monday')).toContainText('Fixture bean soup');
       await expect(dinner(page, 'Tuesday')).toContainText('Fixture herbed beans');
       await expect(page.getByRole('checkbox', { name: 'Skip ingredients already in pantry', exact: true })).not.toBeChecked();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'The real phone planner must fit its viewport').toBe(true);
+      phase = 'generating and reading the grocery list';
       await page.getByRole('button', { name: 'Add this week to the list', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Grocery List', exact: true })).toBeVisible();
       await expect(page.getByText('1 cup + 1 cup', { exact: true }).first()).toBeVisible();
@@ -180,14 +204,18 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       ]));
       // A repeated request leaves existing list amounts intact and creates no
       // extra rows; it must not silently double the week's quantities.
+      phase = 'checking duplicate grocery prevention';
       await page.getByRole('button', { name: 'Add this week to the list', exact: true }).click();
       await expect(page.getByRole('listitem').filter({ hasText: /^Already on the list: 4\.$/ })).toBeVisible();
       expect(await readGroceries(mealFixture)).toEqual(groceries);
 
+      phase = 'returning to the meal planner';
       await page.goto(`${origin}/dashboard/meals`, { waitUntil: 'domcontentloaded' });
+      phase = 'removing Monday and verifying persistence';
       await page.getByRole('button', { name: /^Remove meal: Dinner, Monday/ }).click();
       await expect(dinner(page, 'Monday')).toContainText('Choose a meal');
       await expect.poll(async () => (await readPlans(mealFixture)).some(row => row.id === recipePlan.id)).toBe(false);
+      phase = 'reloading after the selected plan was removed';
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(dinner(page, 'Monday')).toContainText('Choose a meal');
       await expect(dinner(page, 'Tuesday')).toContainText('Fixture herbed beans');
@@ -196,10 +224,23 @@ test.describe('weekly meal planner against disposable GoTrue and PostgREST', () 
       const retainedMeal = await admin.from('meals').select('id').eq('family_id', account.familyId)
         .eq('created_by', account.userId).eq('id', mealId).single();
       expect(!!retainedMeal.data && !retainedMeal.error, 'Replacing/removing plans must preserve other library meals').toBe(true);
+    } catch (error) {
+      workflowFailed = true;
+      workflowFailure = error;
+      // Static phase labels give useful failure evidence without recording
+      // credentials, cookies, private request bodies or page snapshots.
+      console.error(`[weekly-meal-e2e] Failed during: ${phase}`);
+      throw error;
     } finally {
       // Close the custom pages/context before Playwright can attach an error
       // snapshot of a credential-bearing form. No storageState is ever written.
-      await closeWithoutSnapshot(context);
+      try { await closeWithoutSnapshot(context); }
+      catch (error) {
+        console.error(`[weekly-meal-e2e] Browser cleanup failed; last phase: ${phase}`);
+        // A cleanup failure must not replace the original workflow error.
+        if (workflowFailed) throw workflowFailure;
+        throw error;
+      }
     }
   });
 });

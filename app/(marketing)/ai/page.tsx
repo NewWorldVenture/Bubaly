@@ -209,7 +209,7 @@ export default async function AIPage() {
 
       <CTASection
         title={t('ai.meetTheAssistantThatActually')}
-        subtitle="Set up your family in minutes and let Bubaly handle the logistics — free for 5 days, no credit card."
+        subtitle={t('ai.ctaSetUpFreeFor5Days')}
       />
       <MarketingAeoSection path="/ai" name={t('ai.bubalyAi')} description={t('ai.anAssistantThatTakesReal')} />
     </>

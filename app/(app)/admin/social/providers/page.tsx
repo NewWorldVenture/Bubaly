@@ -63,7 +63,7 @@ export default async function AdminProvidersPage() {
                 <span>App review: {d.needsAppReview ? 'required' : 'no'}</span>
                 <span>DB enabled: {enabled.get(p) === false ? 'no' : 'yes'}</span>
               </div>
-              <p className="mt-2 text-[11px] text-muted">Scopes: {d.requiredScopes.join(', ')}</p>
+              <p className="mt-2 text-[11px] text-muted">Scopes: <code className="break-all">{d.requiredScopes.join(', ')}</code></p>
               <p className="text-[11px] text-muted">Env: {d.credentialEnv.join(', ')}</p>
             </Card>
           );

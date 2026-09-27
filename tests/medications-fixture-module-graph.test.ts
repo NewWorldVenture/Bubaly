@@ -41,7 +41,7 @@ const SELF_MAINTAINING = [
   'browser-session-storage.spec.ts', 'callback-completion-ui.spec.ts', 'family-media-session-ownership.spec.ts',
   'kid-login-boundaries.spec.ts',
   'kid-login-readiness.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
-  'oauth-initiation.spec.ts', 'password-login-boundaries.spec.ts', 'password-session-ownership.spec.ts',
+  'modal-hydration.spec.ts', 'oauth-initiation.spec.ts', 'password-login-boundaries.spec.ts', 'password-session-ownership.spec.ts',
   'session-storage-reconcile.spec.ts', 'signup-boundaries.spec.ts', 'weekly-meal-planner.spec.ts',
 ];
 
