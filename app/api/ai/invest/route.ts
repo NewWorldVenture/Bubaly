@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         // Paged: this total is the portfolio value the model is told about.
         readAllAsQuery<{ asset_id: string; shares: number; avg_cost_cents: number }>(
           (from, to) => supabase.from('invest_holdings').select('asset_id, shares, avg_cost_cents')
-            .eq('family_id', familyId).eq('child_wallet_id', body.childWalletId!).order('asset_id').range(from, to),
+            .eq('family_id', familyId).eq('child_wallet_id', body.childWalletId!).order('asset_id').order('id').range(from, to),
         ),
         supabase.from('invest_assets').select('id, price_cents'),
       ]);

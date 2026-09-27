@@ -67,9 +67,14 @@ export async function readBenchmarkAggregates(sb: DB): Promise<AggregatesRead> {
     .select('scope, cohort_key, metric, value, count, cohort_size, computed_at')
     .eq('scope', 'benchmarks')
     .gte('cohort_size', K_ANONYMITY_FLOOR)
+    // The unique key here is (scope, cohort_key, metric, value), so these three
+    // columns can tie. readAll pages this read, and a tie split across a page
+    // boundary duplicates one aggregate and drops another — in figures that get
+    // published.
     .order('cohort_size', { ascending: false })
     .order('cohort_key')
     .order('metric')
+    .order('id')
     .range(from, to), { max: 2000 });
   if (error) {
     console.error('[benchmarks] aggregate read failed', error);
