@@ -24,12 +24,17 @@ export async function POST(req: NextRequest) {
     if (!email || !name) return NextResponse.json({ error: t('welcome.missingParams') }, { status: 400 });
     if (email.length > 320 || name.length > 120) return NextResponse.json({ error: t('welcome.invalidParams') }, { status: 400 });
 
-    const { ok } = await sendReactEmail({
+    const { ok, skipped } = await sendReactEmail({
       to: email,
       subject: 'Welcome to Bubaly 🎉',
       react: React.createElement(WelcomeEmail, { name }),
     });
     if (!ok) return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 502 });
+    // No mail provider configured: nothing was sent, so this does not say it was.
+    if (skipped) {
+      console.error('[welcome] no mail provider is configured: the welcome email was not sent');
+      return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 503 });
+    }
 
     return NextResponse.json({ sent: true });
   } catch (err) {

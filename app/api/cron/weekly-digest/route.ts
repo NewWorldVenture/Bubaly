@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let failed = 0;
+  let notEmailed = 0;
   // A family nobody could be emailed for is neither a send nor a send failure,
   // and reporting it as neither is how this route answered 200 while most of
   // the customer base got nothing. It is NOT a failed run, though — there is
@@ -142,7 +143,11 @@ export async function GET(req: NextRequest) {
     const adminEmail = emailByUserId.get(adminMember.user_id);
     if (!adminEmail) { skipped++; return; }
 
-    const { ok } = await sendReactEmail({
+    // `skipped` from the sender means no mail provider is configured: it
+    // answers ok and sends nothing. That is not a delivery, and counting it as
+    // one had this run report families emailed that were not. It is not a
+    // failure either (nothing here can be retried), so it gets its own count.
+    const { ok, skipped: noProvider } = await sendReactEmail({
       to: adminEmail,
       subject: `${family.name} — your week ahead`,
       react: React.createElement(WeeklyDigestEmail, {
@@ -157,7 +162,8 @@ export async function GET(req: NextRequest) {
         compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),
       }),
     });
-    if (ok) sent++;
+    if (ok && noProvider) notEmailed++;
+    else if (ok) sent++;
     else failed++;
   };
 
@@ -176,7 +182,7 @@ export async function GET(req: NextRequest) {
   // reported but does not make the run a failure.
   const ok = failed === 0 && unserved === 0;
   return NextResponse.json(
-    { sent, failed, skipped, ...(unserved > 0 ? { unserved } : {}) },
+    { sent, failed, skipped, ...(notEmailed > 0 ? { notEmailed } : {}), ...(unserved > 0 ? { unserved } : {}) },
     { status: ok ? 200 : 502 },
   );
 }

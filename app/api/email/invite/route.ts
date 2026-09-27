@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     const inviterName = ctx.active.member.display_name;
     const familyName = ctx.active.family.name;
 
-    const { ok } = await sendReactEmail({
+    const { ok, skipped } = await sendReactEmail({
       to: invite.email,
       subject: `${inviterName} invited you to join ${familyName} on Bubaly`,
       react: React.createElement(InviteEmail, {
@@ -76,6 +76,14 @@ export async function POST(req: NextRequest) {
       }),
     });
     if (!ok) return NextResponse.json({ error: t('invite.failedToSendInvite') }, { status: 502 });
+    // No mail provider configured: the sender answers ok and sends nothing. The
+    // invite form shows "Invite sent" on any 2xx, so answering `sent: true` here
+    // told a parent an email had gone that never did. The invite row exists
+    // either way; the form's not-emailed path is the true one.
+    if (skipped) {
+      console.error('[invite] no mail provider is configured: the invite was not emailed');
+      return NextResponse.json({ error: t('invite.failedToSendInvite') }, { status: 503 });
+    }
 
     return NextResponse.json({ sent: true });
   } catch (err) {

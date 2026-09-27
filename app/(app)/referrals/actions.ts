@@ -79,7 +79,7 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
 
   const inviterName = ctx.active.member.display_name;
   const familyName = ctx.active.family.name;
-  const { ok } = await sendReactEmail({
+  const { ok, skipped } = await sendReactEmail({
     to: email,
     subject: `${inviterName} sent you their Bubaly referral code`,
     react: React.createElement(ReferralEmail, {
@@ -92,7 +92,10 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
       rewardLabel: config.rewardLabel,
     }),
   });
-  if (!ok) {
+  // `skipped` is no mail provider configured: nothing was sent, so the invite
+  // record (and the daily limit it counts toward) is rolled back as for a
+  // failed send.
+  if (!ok || skipped) {
     await rollbackReferralEmailInvite(service, { rowId: record.rowId, created: record.created, sentAt });
     return { ok: false, reason: t('referralActions.couldNotSendEmail') };
   }
