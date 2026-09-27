@@ -46357,6 +46357,172 @@ The page title and description, "Whole Family", "Save Changes", "Add Insurance" 
 
 ---
 
+### `[CLAUDE-1][LOW][SETTINGS/MONEY/CALM/CALENDAR/VOTING]` C1-S9-127 — five more modules showed labels in English in every locale
+
+**File/path:** `components/modules/{settings,money-timeline,calm,calendar,voting}-module.tsx`; seven catalogues.
+
+**Problem.** These labels were English in every locale:
+- the money timeline's severity chips (Urgent, Watch, Note)
+- the Calm source labels
+- the calendar's "Show" toggles, "(Me)", the "Family" calendar row and the end-before-start error
+- the voting categories on each poll and in the picker
+
+Settings and the money timeline also carried unused English copies next to keys they already rendered.
+
+**Fix.**
+- These labels now come from catalogue keys.
+- Voting categories stay stored as their id.
+- The unused English copies are removed.
+
+**Status:** FIXED. Scanner findings for all five modules drop to 0, apart from voting's type-alias fragments.
+
+---
+
+### `[CLAUDE-1][LOW][FIND-TIME/DECLUTTER/DINING]` C1-S9-128 — find-a-time durations and windows, declutter zone health and dining stats were English in every locale
+
+**File/path:** `components/modules/find-time-modal.tsx`, `components/modules/declutter-module.tsx`, `components/modules/dining-module.tsx`; seven catalogues.
+
+**Problem.** These labels were English in every locale:
+- the calendar's "Find a time" dialog: durations ("1 hour") and search windows ("Next 2 weeks")
+- the declutter zone health chip ("Due for a reset")
+- the four dining stat tiles
+
+**Fix.** Each label now comes from a catalogue key.
+
+**Status:** FIXED.
+
+**Follow-up (same pass).** More of `/dashboard/declutter` is now translated:
+- the zone kinds in the zone picker
+- the five clutter-score labels
+- "Worst spot: …" and "Add the spots that get messy"
+
+These come from the catalogue now (`declutterModule.kind.*` and `declutterModule.score.*`).
+
+**Closed by `C1-S9-130`.** The lib's summary sentence and mission templates are now worded in the module. See below.
+
+---
+
+### `[CLAUDE-1][LOW][MOVING]` C1-S9-129 — the move-date recalculation dialog explained each task and its failures in English
+
+**File/path:** `components/modules/move-date-recalculation.tsx`; seven catalogues.
+
+**Problem.** In every locale, the move-date review dialog on `/dashboard/moving` showed English for:
+- each task's reason, such as "Completed task: kept" or "Follows the move date"
+- the two failure messages, including the careful "do not assume it failed" wording
+
+**Fix.** The reasons and both failure messages now come from the catalogue.
+
+**Status:** FIXED. Scanner findings for this file drop from 7 to 0.
+
+---
+
+### `[CLAUDE-1][MEDIUM][DECLUTTER]` C1-S9-130 — a picked declutter template wrote its English title into the family's mission; the home summary was English
+
+**File/path:** `components/modules/declutter-module.tsx`; seven catalogues.
+
+**Problem.** `lib/declutter/missions.ts` holds its 27 mission templates in English, and every place that used them passed that English straight through:
+- the zone card's quick-add chips
+- the mission form's suggestions
+- the weekly plan list
+- the "plan my week" write
+
+As a result, a family in any locale got English mission titles saved to its data. Separately, the summary sentence ("3 zones due · avg clutter 3.2/5", "Home is in great shape") and a zone's "Goal:" line were English in every locale.
+
+**Fix.**
+- `templateTitle()` words a built-in template by its zone kind and index (`declutterModule.template.<kind>.t<i>`). This happens both when a template is shown and when it is written, so the saved mission is in the picker's language. A title the family typed stays as they typed it.
+- The summary is worded in the module from the lib's counts, using the locale's plural rules.
+- The lib keeps its English as canonical data, which its unit tests pin.
+
+**Status:** FIXED. Checked with 28 test files (470 tests), `tsc` and `eslint`.
+
+---
+
+### `[CLAUDE-1][LOW][JOURNAL/MEALS/PAPERWORK/PLANNING/PROFILE/SECURITY/KITCHEN]` C1-S9-131 — seven more modules showed labels in English in every locale
+
+**File/path:** `components/modules/{journal,meals,paperwork,planning,profile,security}-module.tsx`, `components/modules/kitchen-dashboard.tsx`; seven catalogues.
+
+**Problem.** These modules showed English in every locale:
+- journal moods
+- meals tabs
+- paperwork filters
+- planning: urgency chips and the "N prep plans ready" and failure toasts
+- the profile and security stat tiles
+- the kitchen chef's four suggested asks, which a tap sends as the reader's own message
+
+The planning toast also read "undefined prep plans ready" when the action returned no count.
+
+**Fix.**
+- These labels and toasts now come from catalogue keys, and the counts use plural forms.
+- A missing count reads as nothing on the horizon.
+
+**Status:** FIXED. Scanner findings for all seven files drop to 0, excluding type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][DASHBOARD]` C1-S9-132 — the family dashboard greeted by the server's clock and suggested in English
+
+**File/path:** `components/dashboard/family-dashboard.tsx`; seven catalogues.
+
+**Problem.**
+- The greeting on `/dashboard` used the host's hour, and the host runs in UTC. A family in California therefore read "Good evening" at 11 am.
+- In every locale, the following were English:
+  - the greeting
+  - all six suggestion sentences ("You have 3 open tasks to wrap up.") and their buttons
+  - the six stat-card links
+  - the five AI tool cards
+  - the progress legend
+  - the suggestions intro
+
+**Fix.**
+- The greeting uses the family's time zone and a catalogue key.
+- Suggestions use `getPlurals()` counted forms.
+- Every other string listed above is a key.
+
+**Status:** FIXED. Scanner findings for this file drop from 25 to 0.
+
+**Superseded on merge (main `1180c77d`, #586).** Main's own port fixed the same dashboard: its greeting uses `phaseGreeting(dayPhase(…, family timezone))`, and its suggestions use `familyDashboard.*One/Many` keys. Main's version is kept and this branch's duplicate keys are dropped. The same applies to the overlapping lines in declutter, planning and the food tab title. The declutter summary sentence and planning's failure toast were still English on main, so they keep this branch's wording.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TRIPS]` C1-S9-133 — every trip tab's forms were English in every locale, including the emergency tab
+
+**File/path:** `components/vacations/shared.tsx`, new `components/vacations/trip-labels.ts`, `components/vacations/trip-emergency.tsx`, `components/vacations/trip-family.tsx`; seven catalogues.
+
+**Problem.** Each tab of a trip (`/dashboard/vacations/[id]`) declares its form as English `FieldDef` data: travel, lodging, activities, budget, documents, family and emergency. The shared `TripCrudSection` rendered that data as-is. In every locale this left English on:
+- every field label, select option and add button
+- the "field is required" toast
+- the dialog title, assembled as "Edit {section}" and "Add {section}"
+
+The emergency tab also showed English in its rows: "Traveler", "Allergies:", "Meds:" and the raw contact category id.
+
+**Fix.**
+- `TripCrudSection` now words every label, option, add button and required field through `tripLabel()`. It looks up a map of each form's 83 labels (`tripLabel.*`). A label missing from the map still reads as its English, never as a raw key.
+- The dialog titles and the emergency rows now come from the catalogue.
+
+**Status:** FIXED across all seven tabs. Checked with 60 test files (1,350 tests), `tsc` and `eslint`.
+
+---
+
+### `[CLAUDE-1][LOW][FOOD]` C1-S9-134 — the Food & Nutrition hub's tab title, page chips, counts and feature panel were English in every locale
+
+**File/path:** `app/(app)/dashboard/food/page.tsx`; seven catalogues.
+
+**Problem.** In every locale, `/dashboard/food` showed these in English:
+- the browser tab title
+- the seven page chips
+- each card's count label ("dinners planned this week")
+- "Planned meal" and "Today"
+- the six-item features panel
+
+**Fix.**
+- The tab title comes from `generateMetadata` with a catalogue key.
+- The page chips reuse the card titles' existing keys.
+- The counts and the features panel are keys.
+
+**Status:** FIXED. Scanner findings for this page drop from 25 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

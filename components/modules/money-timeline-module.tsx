@@ -20,10 +20,10 @@ type KeyedInsight = TimelineInsight & { key: string };
 /** dedupe key -> 'active' | 'acknowledged' | 'dismissed'. */
 type StatusMap = Record<string, string>;
 
-const SEV: Record<InsightSeverity, { ring: string; chip: string; icon: string; label: string }> = {
-  urgent: { ring: 'border-rose-400/40 bg-rose-500/[0.07]', chip: 'bg-rose-500/15 text-rose-300', icon: 'text-rose-400', label: 'Urgent' },
-  watch:  { ring: 'border-amber-400/40 bg-amber-500/[0.06]', chip: 'bg-amber-500/15 text-amber-300', icon: 'text-amber-400', label: 'Watch' },
-  info:   { ring: 'border-border bg-surface', chip: 'bg-brand/15 text-brand-text', icon: 'text-brand-text', label: 'Note' },
+const SEV: Record<InsightSeverity, { ring: string; chip: string; icon: string; labelKey: string }> = {
+  urgent: { ring: 'border-rose-400/40 bg-rose-500/[0.07]', chip: 'bg-rose-500/15 text-rose-300', icon: 'text-rose-400', labelKey: 'moneyTimelineModule.severity.urgent' },
+  watch:  { ring: 'border-amber-400/40 bg-amber-500/[0.06]', chip: 'bg-amber-500/15 text-amber-300', icon: 'text-amber-400', labelKey: 'moneyTimelineModule.severity.watch' },
+  info:   { ring: 'border-border bg-surface', chip: 'bg-brand/15 text-brand-text', icon: 'text-brand-text', labelKey: 'moneyTimelineModule.severity.note' },
 };
 
 /** Dot colour per money-moment kind: bills amber, recurring brand, goals
@@ -36,11 +36,11 @@ const MOMENT_DOT: Record<MomentKind, string> = {
   scenario: 'bg-violet-400',
 };
 
-const PLAN_SOURCE_LABEL: Record<PlanSource, { label: string; labelKey: string }> = {
-  subscription: { label: 'Subscription', labelKey: 'moneyTimelineModule.subscription' },
-  vacation: { label: 'Trip', labelKey: 'moneyTimelineModule.trip' },
-  move: { label: 'Move', labelKey: 'moneyTimelineModule.move' },
-  project: { label: 'Project', labelKey: 'moneyTimelineModule.project' },
+const PLAN_SOURCE_LABEL: Record<PlanSource, { labelKey: string }> = {
+  subscription: { labelKey: 'moneyTimelineModule.subscription' },
+  vacation: { labelKey: 'moneyTimelineModule.trip' },
+  move: { labelKey: 'moneyTimelineModule.move' },
+  project: { labelKey: 'moneyTimelineModule.project' },
 };
 
 const KIND_ICON: Record<string, typeof Sparkles> = {
@@ -243,7 +243,7 @@ export function MoneyTimelineModule({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-bold text-fg">{i.title}</h3>
                       <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', sev.chip)}>
-                        {sev.label}
+                        {t(sev.labelKey)}
                       </span>
                       {acknowledged && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400"><Check className="h-3 w-3" /> {t('moneyTimeline.noted')}</span>}
                     </div>

@@ -17,11 +17,13 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 const SOURCE_ICON: Record<CalmSource, typeof Bot> = {
   agent: Bot, autopilot: Sun, operating_index: Gauge, approval: Inbox, reminder: Bell, graph: Network,
 };
-const SOURCE_LABEL: Record<CalmSource, string> = {
-  agent: 'Assistant', autopilot: 'Autopilot', operating_index: 'Operating Index', approval: 'Approval', reminder: 'Reminder', graph: 'Relationships',
+const SOURCE_KEY: Record<CalmSource, string> = {
+  agent: 'calmModule.source.agent', autopilot: 'calmModule.source.autopilot', operating_index: 'calmModule.source.operatingIndex',
+  approval: 'calmModule.source.approval', reminder: 'calmModule.source.reminder', graph: 'calmModule.source.graph',
 };
 
 function Row({ item, urgent }: { item: CalmItem; urgent?: boolean }) {
+  const t = useTranslations();
   const Icon = SOURCE_ICON[item.source];
   const inner = (
     <div className={cn('group flex items-center gap-3 rounded-xl border p-3 transition',
@@ -33,7 +35,7 @@ function Row({ item, urgent }: { item: CalmItem; urgent?: boolean }) {
         <p className="text-sm font-medium text-fg">{item.title}</p>
         {item.detail && <p className="truncate text-xs text-muted">{item.detail}</p>}
       </div>
-      <span className="hidden shrink-0 text-[10px] uppercase tracking-wide text-muted sm:block">{SOURCE_LABEL[item.source]}</span>
+      <span className="hidden shrink-0 text-[10px] uppercase tracking-wide text-muted sm:block">{t(SOURCE_KEY[item.source])}</span>
       {item.href && <ArrowRight className="h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100" />}
     </div>
   );

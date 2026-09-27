@@ -9,6 +9,7 @@ import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, type FieldDef } from './shared';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { tripLabel } from '@/components/vacations/trip-labels';
 
 type Contact = Tables<'vacation_emergency_contacts'>;
 type Medical = Tables<'vacation_medical_information'>;
@@ -84,13 +85,13 @@ function EmergencySummary({ vacationId }: { vacationId: string }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('tripEmergency.medical')}</p>
           <ul className="mt-1 space-y-1 text-sm">
             {medical.map((m) => {
-              const who = m.member_id ? memberMap.get(m.member_id)?.display_name : 'Traveler';
+              const who = m.member_id ? memberMap.get(m.member_id)?.display_name : t('tripEmergency.traveler');
               return (
                 <li key={m.id}>
                   <span className="font-medium">{who}</span>
                   {m.blood_type ? ` · ${m.blood_type}` : ''}
-                  {m.allergies ? ` · Allergies: ${m.allergies}` : ''}
-                  {m.medications ? ` · Meds: ${m.medications}` : ''}
+                  {m.allergies ? ` · ${t('tripEmergency.allergiesLine', { value: m.allergies })}` : ''}
+                  {m.medications ? ` · ${t('tripEmergency.medsLine', { value: m.medications })}` : ''}
                 </li>
               );
             })}
@@ -111,7 +112,7 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
         fields={contactFields} emptyText={t('tripEmergency.noEmergencyContacts')} addLabel="Add contact"
         renderRow={(c) => (
           <div>
-            <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">· {c.category}</span> : null}</p>
+            <p className="font-semibold">{c.name}{c.category ? <span className="ml-1 text-xs font-normal text-muted">· {tripLabel(t, contactFields[1].options?.find((o) => o.value === c.category)?.label ?? c.category)}</span> : null}</p>
             <p className="mt-0.5 text-xs text-muted">{[c.relationship, c.phone, c.email, c.address].filter(Boolean).join(' · ')}</p>
           </div>
         )}
@@ -120,11 +121,11 @@ export function TripEmergency({ vacationId }: { vacationId: string }) {
         table="vacation_medical_information" vacationId={vacationId} title={t('tripEmergency.medicalInformation')} icon={HeartPulse}
         fields={medicalFields} emptyText={t('tripEmergency.noMedicalInfo')} addLabel="Add medical info"
         renderRow={(m, members) => {
-          const who = m.member_id ? members.get(m.member_id)?.display_name : 'Traveler';
+          const who = m.member_id ? members.get(m.member_id)?.display_name : t('tripEmergency.traveler');
           return (
             <div>
               <p className="font-semibold">{who}{m.blood_type ? <span className="ml-1 text-xs font-normal text-muted">· {m.blood_type}</span> : null}</p>
-              <p className="mt-0.5 text-xs text-muted">{[m.allergies && `Allergies: ${m.allergies}`, m.conditions && `Conditions: ${m.conditions}`, m.medications && `Meds: ${m.medications}`, m.insurance_provider].filter(Boolean).join(' · ')}</p>
+              <p className="mt-0.5 text-xs text-muted">{[m.allergies && t('tripEmergency.allergiesLine', { value: m.allergies }), m.conditions && t('tripEmergency.conditionsLine', { value: m.conditions }), m.medications && t('tripEmergency.medsLine', { value: m.medications }), m.insurance_provider].filter(Boolean).join(' · ')}</p>
             </div>
           );
         }}

@@ -50,9 +50,9 @@ const CATEGORY_DOT: Record<string, string> = {
 
 // "Show" toggles mirror the image's birthday / school / holiday switches.
 const SHOW_TOGGLES = [
-  { key: 'birthday', label: 'Birthdays', emoji: '🎁' },
-  { key: 'school', label: 'School Events', emoji: '🏫' },
-  { key: 'holiday', label: 'Holidays', emoji: '🎉' },
+  { key: 'birthday', labelKey: 'calendarModule.show.birthdays', emoji: '🎁' },
+  { key: 'school', labelKey: 'calendarModule.show.schoolEvents', emoji: '🏫' },
+  { key: 'holiday', labelKey: 'calendarModule.show.holidays', emoji: '🎉' },
 ] as const;
 
 // Sentinel "calendar" for events with no assignee (shared / whole-family).
@@ -498,8 +498,8 @@ export function CalendarModule() {
 
   // "Calendars" list: every member + a synthetic whole-family entry.
   const calendarRows = [
-    ...members.map((m) => ({ key: m.id, label: m.user_id === userId ? `${m.display_name} (Me)` : m.display_name, color: m.color })),
-    { key: FAMILY_KEY, label: 'Family', color: null as string | null },
+    ...members.map((m) => ({ key: m.id, label: m.user_id === userId ? tr('calendarModule.nameMe', { name: m.display_name }) : m.display_name, color: m.color })),
+    { key: FAMILY_KEY, label: tr('calendarModule.family'), color: null as string | null },
   ];
 
   return (
@@ -925,7 +925,7 @@ export function CalendarModule() {
                 <label key={t.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 transition hover:bg-elevated">
                   <input type="checkbox" checked={visible} onChange={() => toggleCategory(t.key)}
                     className="h-4 w-4 shrink-0 accent-brand" />
-                  <span className="flex-1 text-xs">{t.label}</span>
+                  <span className="flex-1 text-xs">{tr(t.labelKey)}</span>
                   <span aria-hidden>{t.emoji}</span>
                 </label>
               );
@@ -996,7 +996,7 @@ function NewEventModal({ existing, onClose, onSaved }: {
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
     // End must be after start when both are provided.
     if (parsed.data.ends_at && new Date(parsed.data.ends_at) <= new Date(parsed.data.starts_at)) {
-      setErrors({ ends_at: 'End time must be after the start time.' });
+      setErrors({ ends_at: tr('calendarModule.endAfterStart') });
       return;
     }
     setErrors({});
