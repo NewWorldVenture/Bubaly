@@ -57,7 +57,16 @@ export async function POST(req: NextRequest) {
       { error: t('cancel.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
+    // No Stripe secret key: billing is unavailable (503), not a failure of
+    // this request (500). Nothing has changed anywhere yet.
+    let stripe: ReturnType<typeof getStripe>;
+    try {
+      stripe = getStripe();
+    } catch (error) {
+      console.error('[billing-cancel] Stripe is not configured', error);
+      return NextResponse.json({ error: t('cancel.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+    }
+    await stripe.subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
 
     // Stripe has already changed by here. A sync matching no rows left the local
     // row saying the opposite of what the family just chose — "cancels at period

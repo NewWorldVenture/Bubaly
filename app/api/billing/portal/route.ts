@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
-    const stripe = getStripe();
 
     const { data, error: billingCustomerError } = await supabase
       .from('billing_customers')
@@ -36,6 +35,17 @@ export async function POST(req: NextRequest) {
       { error: t('portal.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+
+    // With no Stripe secret key there is no portal to open: billing is
+    // unavailable (503), as when the billing record cannot be read, not a
+    // failure of this request (500).
+    let stripe: ReturnType<typeof getStripe>;
+    try {
+      stripe = getStripe();
+    } catch (error) {
+      console.error('[billing-portal] Stripe is not configured', error);
+      return NextResponse.json({ error: t('portal.billingAccountStatusIsTemporarily') }, { status: 503 });
+    }
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';

@@ -24,8 +24,6 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
-    const stripeSettings = await getStripeSettings();
-    const stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
 
     const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
     if (!body.ok) {
@@ -44,6 +42,20 @@ export async function POST(req: NextRequest) {
       { error: t('checkout.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
+
+    // Stripe is reached only for a request that could become a checkout. A
+    // deployment with no secret key cannot take payment at all: billing is
+    // unavailable, the 503 an unverifiable price already answers, and not a
+    // failure of this request. Built first, the missing key made every call a
+    // 500, a malformed body included.
+    const stripeSettings = await getStripeSettings();
+    let stripe: ReturnType<typeof stripeFromKey>;
+    try {
+      stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
+    } catch (error) {
+      console.error('[billing-checkout] Stripe is not configured', error);
+      return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
+    }
 
     if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
       console.error('[billing-checkout] Configured Stripe price is unavailable or does not match the plan');

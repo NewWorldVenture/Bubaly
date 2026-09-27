@@ -14,7 +14,17 @@ export async function GET(req: NextRequest) {
   await requireUserContext(); // must be signed in; identity comes from the session
 
   const state = randomBytes(32).toString('base64url');
-  const res = NextResponse.redirect(getGoogleOAuthUrl(state, req.nextUrl.origin));
+  let consentUrl: string;
+  try {
+    consentUrl = getGoogleOAuthUrl(state, req.nextUrl.origin);
+  } catch (error) {
+    // Not configured here (GOOGLE_CLIENT_ID unset). Hand the person back to the
+    // calendar the way the callback hands back every failure, rather than a
+    // blank 500, and name the missing variable in the log.
+    console.error(`Google Calendar connect: ${error instanceof Error ? error.message : String(error)}`);
+    return NextResponse.redirect(new URL('/dashboard/calendar?gcal=error', req.nextUrl.origin));
+  }
+  const res = NextResponse.redirect(consentUrl);
   res.cookies.set('gcal_oauth_state', state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

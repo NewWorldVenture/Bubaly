@@ -86,7 +86,15 @@ export async function POST(req: NextRequest) {
       { error: t('changePlan.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    const stripe = getStripe();
+    // No Stripe secret key: billing is unavailable (503), not a failure of
+    // this request (500).
+    let stripe: ReturnType<typeof getStripe>;
+    try {
+      stripe = getStripe();
+    } catch (error) {
+      console.error('[billing-change-plan] Stripe is not configured', error);
+      return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
+    }
 
     if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
       console.error('[billing-change-plan] Configured Stripe price is unavailable or does not match the plan');
