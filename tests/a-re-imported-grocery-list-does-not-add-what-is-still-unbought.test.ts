@@ -21,12 +21,11 @@
 //     set reads as "you have none of this yet", which is exactly how the whole
 //     file gets imported twice.
 //
-// The other half of the row is copy, and it is pinned here too: tasks and notes
-// are still NOT de-duplicated — `chores` has no done-ness column to key "same
-// chore, still open" against, and `lib/services/notes/index.ts` declines a key
-// on purpose — so the review step has to SAY that in every populated locale
-// rather than show a count, and the partial-failure sentence must stop promising
-// the grocery duplication this change removes.
+// The other half of the row is copy, and it is pinned here too: the grocery
+// scope sentence is translated in every populated locale, and the
+// partial-failure sentence must stop promising the grocery duplication this
+// change removes. (Tasks and notes are now de-duplicated as well; that is
+// tests/a-re-import-adds-no-task-or-note-twice.test.ts.)
 //
 // No timezone surface here: an `ImportedItem` is `{ name, extra }` and carries
 // no instant, which is the finding that killed the "key tasks on the due date"
@@ -210,16 +209,14 @@ describe('the commit re-decides it', () => {
     expect(db.table('grocery_items')).toHaveLength(0);
   });
 
-  it('still adds a task and a note twice, which is why the review step has to say so', async () => {
-    // Not an oversight and not a gap left open by this change: `chores` has no
-    // done-ness column of its own (it lives on `chore_assignments.status`), and
-    // lib/services/notes/index.ts declines a key on purpose — "two identical
-    // notes are two rows, which is the honest outcome". Pinned so that a silent
-    // "same name, so dropped" cannot arrive without someone choosing a scope.
+  it('re-decides tasks and notes too, so a second commit of the same file adds neither', async () => {
+    // The guard that used to sit here pinned the opposite. Tasks and notes are
+    // now keyed on the whole imported row — see the header of
+    // lib/migrate/resolve.ts and tests/a-re-import-adds-no-task-or-note-twice.
     await commitImport({ source: 'cozi', tasks: [{ name: 'Take the bins out' }], notes: [{ name: 'Wifi code' }] });
     await commitImport({ source: 'cozi', tasks: [{ name: 'Take the bins out' }], notes: [{ name: 'Wifi code' }] });
-    expect(db.table('chores')).toHaveLength(2);
-    expect(db.table('notes')).toHaveLength(2);
+    expect(db.table('chores')).toHaveLength(1);
+    expect(db.table('notes')).toHaveLength(1);
   });
 });
 
@@ -231,12 +228,10 @@ const POPULATED = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'
 const catalogue = (locale: string) =>
   JSON.parse(fs.readFileSync(path.join(MESSAGES, `${locale}.json`), 'utf8')) as Record<string, string>;
 
-describe('the review step says which kinds are added as they are', () => {
-  it.each(POPULATED)('%s translates all three sentences the review step now renders', (locale) => {
+describe('the review step says what it compared grocery against', () => {
+  it.each(POPULATED)('%s translates the sentences the grocery half renders', (locale) => {
     const messages = catalogue(locale);
     for (const key of [
-      'migrateWizard.reviewTasksAddedAsIs',
-      'migrateWizard.reviewNotesAddedAsIs',
       'migrateWizard.reviewGroceryStillToBuy',
       'migrateActions.couldNotCheckYourShoppingListForDuplicates',
     ]) {
@@ -250,22 +245,15 @@ describe('the review step says which kinds are added as they are', () => {
 
   it('stops telling the family a failed import would duplicate their groceries', () => {
     // The failure path and the write path have to agree: grocery items are now
-    // de-duplicated on a second run, so this sentence may only name tasks and
-    // notes. It named all three before, and it was right to.
+    // de-duplicated on a second run, so this sentence may not promise their
+    // duplication.
     const sentence = catalogue('en-US')['migrateActions.theImportStoppedPartWayThrough'];
-    expect(sentence).toContain('add the tasks and notes a second time');
     expect(sentence).not.toContain('grocery items and notes a second time');
   });
 
   it('renders every one of those sentences through t(), rather than leaving one hardcoded', () => {
     const wizard = fs.readFileSync(path.join(process.cwd(), 'components/migrate/migrate-wizard.tsx'), 'utf8');
-    for (const key of [
-      'migrateWizard.reviewTasksAddedAsIs',
-      'migrateWizard.reviewNotesAddedAsIs',
-      'migrateWizard.reviewGroceryStillToBuy',
-    ]) {
-      expect(wizard).toContain(`tr('${key}'`);
-    }
+    expect(wizard).toContain(`tr('migrateWizard.reviewGroceryStillToBuy'`);
     expect(wizard).not.toContain('reviewGroceryAndNotes');
   });
 });

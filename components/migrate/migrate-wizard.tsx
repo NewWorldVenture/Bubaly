@@ -110,7 +110,7 @@ export function MigrateWizard() {
     if (override === undefined) return proposed;
     return override === '' ? null : override;
   };
-  const skipped = (kind: 'event' | 'contact' | 'grocery', index: number, duplicate: boolean) => {
+  const skipped = (kind: 'event' | 'task' | 'contact' | 'grocery' | 'note', index: number, duplicate: boolean) => {
     const override = skips[`${kind}:${index}`];
     return override === undefined ? duplicate : override;
   };
@@ -124,6 +124,7 @@ export function MigrateWizard() {
         events: preview.events,
         tasks: preview.tasks,
         grocery: preview.grocery,
+        notes: preview.notes,
         contacts: preview.contacts,
       });
       if (!res.ok) { setError(res.error); return; }
@@ -147,14 +148,19 @@ export function MigrateWizard() {
           memberId: memberFor('event', i, plan.events[i]?.memberId ?? null),
           skip: skipped('event', i, plan.events[i]?.duplicate ?? false),
         })),
-        tasks: preview.tasks.map((t, i) => ({ ...t, memberId: memberFor('task', i, plan.tasks[i]?.memberId ?? null) })),
+        tasks: preview.tasks.map((t, i) => ({
+          ...t,
+          memberId: memberFor('task', i, plan.tasks[i]?.memberId ?? null),
+          skip: skipped('task', i, plan.tasks[i]?.duplicate ?? false),
+        })),
         grocery: preview.grocery.map((g, i) => ({
           ...g,
           skip: skipped('grocery', i, plan.grocery[i]?.duplicate ?? false),
         })),
-        // Notes carry no skip because nothing proposes one: they are not
-        // de-duplicated, by the decision recorded in lib/services/notes.
-        notes: preview.notes,
+        notes: preview.notes.map((n, i) => ({
+          ...n,
+          skip: skipped('note', i, plan.notes[i]?.duplicate ?? false),
+        })),
         contacts: preview.contacts.map((c, i) => ({
           ...c,
           memberId: memberFor('contact', i, plan.contacts[i]?.memberId ?? null),
@@ -249,9 +255,12 @@ export function MigrateWizard() {
   // ── Step: review (entity resolution before anything is written) ──
   if (step === 'review' && plan) {
     const included = preview.events.filter((_, i) => !skipped('event', i, plan.events[i]?.duplicate ?? false)).length
-      + preview.tasks.length + preview.notes.length
+      + preview.tasks.filter((_, i) => !skipped('task', i, plan.tasks[i]?.duplicate ?? false)).length
+      + preview.notes.filter((_, i) => !skipped('note', i, plan.notes[i]?.duplicate ?? false)).length
       + preview.grocery.filter((_, i) => !skipped('grocery', i, plan.grocery[i]?.duplicate ?? false)).length
       + preview.contacts.filter((_, i) => !skipped('contact', i, plan.contacts[i]?.duplicate ?? false)).length;
+    const duplicates = plan.duplicateEvents + plan.duplicateTasks + plan.duplicateContacts
+      + plan.duplicateGrocery + plan.duplicateNotes;
     return (
       <div className="space-y-4">
         <button type="button" onClick={() => { setStep('upload'); setError(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
@@ -261,9 +270,9 @@ export function MigrateWizard() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <h2 className="text-base font-bold">{tr('migrateWizard.reviewHeading')}</h2>
           <p className="mt-1 text-sm text-muted">{tr('migrateWizard.reviewIntro')}</p>
-          {(plan.duplicateEvents + plan.duplicateContacts + plan.duplicateGrocery) > 0 && (
+          {duplicates > 0 && (
             <p className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
-              <Copy className="h-3.5 w-3.5 shrink-0" /> {tr('migrateWizard.reviewDuplicatesFound', { count: plan.duplicateEvents + plan.duplicateContacts + plan.duplicateGrocery })}
+              <Copy className="h-3.5 w-3.5 shrink-0" /> {tr('migrateWizard.reviewDuplicatesFound', { count: duplicates })}
             </p>
           )}
         </div>
@@ -328,20 +337,25 @@ export function MigrateWizard() {
           <section className="rounded-2xl border border-border bg-surface/40 p-4">
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><CheckSquare className="h-4 w-4 text-brand-text" /> {tr(TARGET_LABELS.tasks.labelKey)} · {preview.tasks.length}</h3>
             <ul className="max-h-64 space-y-1.5 overflow-y-auto">
-              {preview.tasks.slice(0, REVIEW_LIMIT).map((t, i) => (
-                <li key={`${t.name}-${i}`} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs">
-                  <span className="min-w-0 flex-1 truncate font-medium">{t.name}</span>
-                  {memberSelect('task', i, plan.tasks[i]?.memberId ?? null)}
-                </li>
-              ))}
+              {preview.tasks.slice(0, REVIEW_LIMIT).map((t, i) => {
+                const row = plan.tasks[i];
+                const isSkipped = skipped('task', i, row?.duplicate ?? false);
+                return (
+                  <li key={`${t.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                    <span className="min-w-0 flex-1 truncate font-medium">{t.name}</span>
+                    {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
+                    {memberSelect('task', i, row?.memberId ?? null)}
+                    <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted">
+                      <input type="checkbox" checked={isSkipped} onChange={(ev) => setSkips((s) => ({ ...s, [`task:${i}`]: ev.target.checked }))} />
+                      {tr('migrateWizard.reviewSkip')}
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
             {preview.tasks.length > REVIEW_LIMIT && (
               <p className="mt-2 text-[11px] text-muted">{tr('migrateWizard.reviewShowingFirst', { count: REVIEW_LIMIT })}</p>
             )}
-            {/* Said here rather than discovered on the second import: `chores`
-                has no done-ness of its own to key "the same chore, still open"
-                against, so nothing proposes a skip for a task. */}
-            <p className="mt-2 text-[11px] text-muted">{tr('migrateWizard.reviewTasksAddedAsIs')}</p>
           </section>
         )}
 
@@ -376,7 +390,28 @@ export function MigrateWizard() {
         )}
 
         {preview.notes.length > 0 && (
-          <p className="text-xs text-muted">{tr('migrateWizard.reviewNotesAddedAsIs', { count: preview.notes.length })}</p>
+          <section className="rounded-2xl border border-border bg-surface/40 p-4">
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><StickyNote className="h-4 w-4 text-brand-text" /> {tr(TARGET_LABELS.notes.labelKey)} · {preview.notes.length}</h3>
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto">
+              {preview.notes.slice(0, REVIEW_LIMIT).map((n, i) => {
+                const row = plan.notes[i];
+                const isSkipped = skipped('note', i, row?.duplicate ?? false);
+                return (
+                  <li key={`${n.name}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
+                    <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
+                    {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
+                    <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted">
+                      <input type="checkbox" checked={isSkipped} onChange={(ev) => setSkips((s) => ({ ...s, [`note:${i}`]: ev.target.checked }))} />
+                      {tr('migrateWizard.reviewSkip')}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            {preview.notes.length > REVIEW_LIMIT && (
+              <p className="mt-2 text-[11px] text-muted">{tr('migrateWizard.reviewShowingFirst', { count: REVIEW_LIMIT })}</p>
+            )}
+          </section>
         )}
 
         <button type="button" disabled={pending || included === 0} onClick={runImport} className="btn-cta w-full justify-center">

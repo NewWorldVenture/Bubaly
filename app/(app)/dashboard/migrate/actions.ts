@@ -1,10 +1,9 @@
 'use server';
 // Commits a parsed competitor export into the signed-in user's family.
 // Family-scoped + RLS-bound (createServer), only inserts whitelisted fields,
-// de-duplicates calendar events, contacts and grocery items, and records the
-// import in audit_logs. Tasks and notes are NOT de-duplicated — see the list of
-// which kinds are and why in lib/migrate/resolve.ts — and the review step says
-// so rather than leaving the family to find out on the second import.
+// de-duplicates every kind it writes (events, tasks, grocery items, notes and
+// contacts — the identity each is keyed on is listed in lib/migrate/resolve.ts),
+// and records the import in audit_logs.
 //
 // M29: the import is now a THREE-step flow — parse in the browser, resolve
 // against the family's own rows on the server (`prepareImport`), then commit
@@ -22,8 +21,8 @@ import { normalizeName } from '@/lib/groceries/normalize-name';
 import { normalizeEmail, normalizePhone } from '@/lib/migrate/parse';
 import { logAudit } from '@/lib/server/audit';
 import {
-  eventKey, resolveImportedItems,
-  type ExistingContact, type ExistingGroceryItem, type ExistingMember, type ResolutionPlan,
+  eventKey, itemKey, resolveImportedItems,
+  type ExistingContact, type ExistingGroceryItem, type ExistingItem, type ExistingMember, type ResolutionPlan,
 } from '@/lib/migrate/resolve';
 import { readAll } from '@/lib/supabase/read-all';
 
@@ -136,6 +135,41 @@ async function loadImportGrocery(
 }
 
 /**
+ * The family's chores, as the (name, extra) pairs an import writes them from —
+ * the duplicate set for tasks. A chore is a definition, so every row counts,
+ * whatever its assignments' status. A read that errors is `{ ok: false }`, never
+ * an empty set, for the reason `loadImportGrocery` gives.
+ */
+async function loadExistingTasks(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+): Promise<{ ok: true; rows: ExistingItem[] } | { ok: false }> {
+  const { rows, error } = await readAll((from, to) => supabase
+    .from('chores').select('title, description')
+    .eq('family_id', familyId).order('id').range(from, to), { max: 5000 });
+  if (error) {
+    console.error('[migrate] existing chores read failed', error);
+    return { ok: false };
+  }
+  return { ok: true, rows: (rows ?? []).map((r) => ({ name: r.title, extra: r.description })) };
+}
+
+/** The family's notes, as (title, body) — the duplicate set for notes. */
+async function loadExistingNotes(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+): Promise<{ ok: true; rows: ExistingItem[] } | { ok: false }> {
+  const { rows, error } = await readAll((from, to) => supabase
+    .from('notes').select('title, body')
+    .eq('family_id', familyId).order('id').range(from, to), { max: 5000 });
+  if (error) {
+    console.error('[migrate] existing notes read failed', error);
+    return { ok: false };
+  }
+  return { ok: true, rows: (rows ?? []).map((r) => ({ name: r.title, extra: r.body })) };
+}
+
+/**
  * Resolve a parsed export against what the family already has: who each item
  * looks like it belongs to, and what is already here. Nothing is written.
  */
@@ -151,6 +185,8 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
   const events = cap(payload.events);
   const contacts = cap(payload.contacts);
   const grocery = cap(payload.grocery);
+  const tasks = cap(payload.tasks);
+  const notes = cap(payload.notes);
 
   let existingEvents: { title: string; startsAt: string }[] = [];
   if (events.length) {
@@ -190,11 +226,26 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
     existingGrocery = res.open;
   }
 
+  let existingTasks: ExistingItem[] = [];
+  if (tasks.length) {
+    const res = await loadExistingTasks(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourChoresForDuplicates'), retryable: true };
+    existingTasks = res.rows;
+  }
+
+  let existingNotes: ExistingItem[] = [];
+  if (notes.length) {
+    const res = await loadExistingNotes(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourNotesForDuplicates'), retryable: true };
+    existingNotes = res.rows;
+  }
+
   const plan = resolveImportedItems({
     members: memberRes.members,
     events,
-    tasks: cap(payload.tasks),
+    tasks,
     grocery,
+    notes,
     contacts: contacts.map((c) => ({
       name: c.name,
       emails: c.emails ?? [],
@@ -205,6 +256,8 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
     existingEvents,
     existingContacts,
     existingGrocery,
+    existingTasks,
+    existingNotes,
   });
   return { ok: true, plan, members: memberRes.members };
 }
@@ -224,9 +277,9 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   // text — "relation … does not exist", a constraint name — in English whatever
   // the family's locale, and it says nothing about the half of the import that
   // did land. The counts do, and they are what the family needs before deciding
-  // whether to run the file again: events, contacts and grocery items are
-  // de-duplicated on a second pass, tasks and notes are not. Not `retryable`: a
-  // retry button here would offer exactly that duplication.
+  // whether to run the file again: every kind is de-duplicated on a second
+  // pass, so running it again adds only what is missing. Still not `retryable`:
+  // the family should read what landed before choosing to run it again.
   const partialFailure = (label: string, error: { message: string }): ImportResult => {
     console.error(`[migrate] ${label} write failed`, error);
     return { ok: false, error: t('migrateActions.theImportStoppedPartWayThrough', counts) };
@@ -275,22 +328,34 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     }
   }
 
-  // ── Tasks → chores (+ an assignment for each reviewed owner) ──
-  const tasks = included(payload.tasks);
-  if (tasks.length) {
-    const rows = tasks.map((t2) => ({ family_id: familyId, title: t2.name.slice(0, 200), description: t2.extra ?? null, created_by: userId }));
-    const { data: created, error } = await supabase.from('chores').insert(rows).select('id');
-    if (error) return partialFailure('chores', error);
-    counts.tasks = created?.length ?? rows.length;
-    const assignments = (created ?? []).flatMap((row, i) => {
-      const member = memberOf(tasks[i]?.memberId);
-      if (!member) return [];
-      assigned++;
-      return [{ family_id: familyId, chore_id: row.id, member_id: member }];
+  // ── Tasks → chores (+ an assignment for each reviewed owner), de-duped by
+  //    title + details ──
+  const taskInput = included(payload.tasks);
+  if (taskInput.length) {
+    // Re-decided here, as for every other kind — see the grocery block below.
+    const res = await loadExistingTasks(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourChoresForDuplicates'), retryable: true };
+    const seen = new Set(res.rows.map((r) => itemKey(r.name, r.extra)));
+    const tasks = taskInput.filter((t2) => {
+      const key = itemKey(t2.name, t2.extra);
+      if (seen.has(key)) { skipped++; return false; }
+      seen.add(key); return true;
     });
-    if (assignments.length) {
-      const { error: assignErr } = await supabase.from('chore_assignments').insert(assignments);
-      if (assignErr) return partialFailure('chore assignments', assignErr);
+    if (tasks.length) {
+      const rows = tasks.map((t2) => ({ family_id: familyId, title: t2.name.slice(0, 200), description: t2.extra ?? null, created_by: userId }));
+      const { data: created, error } = await supabase.from('chores').insert(rows).select('id');
+      if (error) return partialFailure('chores', error);
+      counts.tasks = created?.length ?? rows.length;
+      const assignments = (created ?? []).flatMap((row, i) => {
+        const member = memberOf(tasks[i]?.memberId);
+        if (!member) return [];
+        assigned++;
+        return [{ family_id: familyId, chore_id: row.id, member_id: member }];
+      });
+      if (assignments.length) {
+        const { error: assignErr } = await supabase.from('chore_assignments').insert(assignments);
+        if (assignErr) return partialFailure('chore assignments', assignErr);
+      }
     }
   }
 
@@ -329,13 +394,23 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     }
   }
 
-  // ── Notes → notes ──
-  const notes = included(payload.notes);
-  if (notes.length) {
-    const rows = notes.map((n) => ({ family_id: familyId, title: n.name.slice(0, 200), body: n.extra ?? '', created_by: userId }));
-    const { error, count } = await supabase.from('notes').insert(rows, { count: 'exact' });
-    if (error) return partialFailure('notes', error);
-    counts.notes = count ?? rows.length;
+  // ── Notes → notes (de-duped by title + body) ──
+  const noteInput = included(payload.notes);
+  if (noteInput.length) {
+    const res = await loadExistingNotes(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourNotesForDuplicates'), retryable: true };
+    const seen = new Set(res.rows.map((r) => itemKey(r.name, r.extra)));
+    const notes = noteInput.filter((n) => {
+      const key = itemKey(n.name, n.extra);
+      if (seen.has(key)) { skipped++; return false; }
+      seen.add(key); return true;
+    });
+    if (notes.length) {
+      const rows = notes.map((n) => ({ family_id: familyId, title: n.name.slice(0, 200), body: n.extra ?? '', created_by: userId }));
+      const { error, count } = await supabase.from('notes').insert(rows, { count: 'exact' });
+      if (error) return partialFailure('notes', error);
+      counts.notes = count ?? rows.length;
+    }
   }
 
   // ── Contacts → family_contacts (de-duped by email/phone, then by name) ──

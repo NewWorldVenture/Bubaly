@@ -16,9 +16,7 @@
 // server action reads the same functions to build the rows, and both are tested
 // without a database.
 //
-// WHICH KINDS ARE DE-DUPLICATED, and why it is not all five. A kind is
-// de-duplicated here only where something in the repo has already decided what
-// its identity is:
+// HOW EACH KIND IS DE-DUPLICATED — all five are, each on the identity it has:
 //
 //   * events    — title + start instant (`eventKey`).
 //   * contacts  — normalised email/phone, falling back to an exact name.
@@ -26,17 +24,24 @@
 //                 import writes to. Not a new rule: it is the one
 //                 `lib/services/groceries/index.ts addItems` already applies to
 //                 a typed add, borrowed verbatim so the two cannot disagree.
-//   * tasks     — NOT de-duplicated. `chores` has no done-ness column at all
-//                 (it lives on `chore_assignments.status`), so "the same chore,
-//                 still open" is a join and a scope nobody has chosen yet.
-//   * notes     — NOT de-duplicated, by decision recorded in
-//                 `lib/services/notes/index.ts`: "two identical notes are two
-//                 rows, which is the honest outcome."
+//   * tasks and — the WHOLE imported row (`itemKey(name, extra)`: title and
+//     notes       details) against every `chores` / `notes` row in the family.
 //
-// The two that are not de-duplicated are SAID SO in the review step rather than
-// shown as a bare count, because a keyless list legitimately repeats — a family
-// really does take the bins out more than once — and a silent "same name, so
-// dropped" would fail closed against what they meant.
+// Tasks and notes carry no natural key, and a keyless list legitimately
+// repeats, which is why the key is the whole row and not the name. It does not
+// guess at that repetition, it only recognises the row an import itself wrote:
+//
+//   * A `chores` row is a chore's DEFINITION. Doing it again is a new
+//     `chore_assignments` row (and `recurrence`), never a second chore, so
+//     "the bins go out every week" is one row however often it is done, and
+//     done-ness (`chore_assignments.status`) has no part in its identity.
+//   * A note matches only when its title AND its whole body match. Two notes
+//     that say exactly the same thing are the second copy of an export, not a
+//     second thought. A typed note (`lib/services/notes`) is untouched:
+//     writing the same reminder twice by hand still writes it twice.
+//
+// Every kind is proposed in the review (badge + Skip box) AND re-decided by
+// the commit, so a stale review or a direct call cannot write the second copy.
 //
 // Deliberately conservative. A proposal that is wrong costs the reviewer a
 // click; a proposal that is confidently wrong and auto-applied costs them trust.
@@ -64,6 +69,11 @@ export type ExistingContact = { name: string; email: string | null; phone: strin
  * why passing a checked item here would be a bug rather than extra safety.
  */
 export type ExistingGroceryItem = { name: string };
+/**
+ * A `chores` (title, description) or `notes` (title, body) row already in the
+ * family, in the shape the importer writes it from: `name` + `extra`.
+ */
+export type ExistingItem = { name: string | null; extra: string | null };
 
 export type MemberProposal = { memberId: string | null; memberName: string | null };
 
@@ -78,6 +88,14 @@ export type ResolvedEvent = MemberProposal & {
 export type ResolvedTask = MemberProposal & {
   index: number;
   name: string;
+  duplicate: boolean;
+};
+
+/** No `MemberProposal`, for the grocery reason: `notes` has no member column. */
+export type ResolvedNote = {
+  index: number;
+  name: string;
+  duplicate: boolean;
 };
 
 export type ResolvedContact = MemberProposal & {
@@ -101,11 +119,14 @@ export type ResolutionPlan = {
   events: ResolvedEvent[];
   tasks: ResolvedTask[];
   grocery: ResolvedGroceryItem[];
+  notes: ResolvedNote[];
   contacts: ResolvedContact[];
   /** Counts the review step shows without re-walking the lists. */
   duplicateEvents: number;
+  duplicateTasks: number;
   duplicateContacts: number;
   duplicateGrocery: number;
+  duplicateNotes: number;
   assignedEvents: number;
   assignedTasks: number;
   assignedContacts: number;
@@ -188,6 +209,31 @@ export function eventKey(title: string, startsAt: string): string {
   return `${title.trim().toLowerCase()}|${stamp}`;
 }
 
+/**
+ * The identity of an imported task or note: its name and its details, in the
+ * form the commit stores them (the name is cut to 200 characters on insert, so
+ * it is cut here too, or a long title would never match its own earlier copy).
+ * Case and runs of whitespace are not differences; wording is.
+ */
+export function itemKey(name: string | null | undefined, extra: string | null | undefined): string {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  return `${norm((name ?? '').slice(0, 200))}|${norm(extra ?? '')}`;
+}
+
+/**
+ * Flag each item whose `itemKey` is already held, or appeared earlier in the
+ * same file — the shape `events` and `grocery` use, shared by tasks and notes.
+ */
+function flagItems(items: ImportedItem[], existing: ExistingItem[]): boolean[] {
+  const seen = new Set(existing.map((e) => itemKey(e.name, e.extra)));
+  return items.map((item) => {
+    const key = itemKey(item.name, item.extra);
+    const duplicate = seen.has(key);
+    seen.add(key);
+    return duplicate;
+  });
+}
+
 /** Identity keys an existing contact row occupies. */
 function existingContactKeys(row: ExistingContact): string[] {
   return contactKeys({
@@ -201,8 +247,11 @@ export type ResolveInput = {
   events?: ImportedEvent[];
   tasks?: ImportedItem[];
   grocery?: ImportedItem[];
+  notes?: ImportedItem[];
   contacts?: ImportedContact[];
   existingEvents?: ExistingEvent[];
+  existingTasks?: ExistingItem[];
+  existingNotes?: ExistingItem[];
   existingContacts?: ExistingContact[];
   /** Items still to buy on the list the import writes to — nothing else. */
   existingGrocery?: ExistingGroceryItem[];
@@ -238,10 +287,19 @@ export function resolveImportedItems(input: ResolveInput): ResolutionPlan {
     };
   });
 
+  const taskDuplicates = flagItems(input.tasks ?? [], input.existingTasks ?? []);
   const tasks: ResolvedTask[] = (input.tasks ?? []).map((t, index) => {
     const match = matchMember(`${t.name} ${t.extra ?? ''}`, members);
-    return { index, name: t.name, memberId: match?.id ?? null, memberName: match?.displayName ?? null };
+    return {
+      index, name: t.name, duplicate: taskDuplicates[index],
+      memberId: match?.id ?? null, memberName: match?.displayName ?? null,
+    };
   });
+
+  const noteDuplicates = flagItems(input.notes ?? [], input.existingNotes ?? []);
+  const notes: ResolvedNote[] = (input.notes ?? []).map((n, index) => (
+    { index, name: n.name, duplicate: noteDuplicates[index] }
+  ));
 
   // Grocery items have no key of their own — the only identity an
   // `ImportedItem` carries is its free-text name — so the rule is BORROWED
@@ -286,10 +344,13 @@ export function resolveImportedItems(input: ResolveInput): ResolutionPlan {
     events,
     tasks,
     grocery,
+    notes,
     contacts,
     duplicateEvents: events.filter((e) => e.duplicate).length,
+    duplicateTasks: tasks.filter((t) => t.duplicate).length,
     duplicateContacts: contacts.filter((c) => c.duplicate).length,
     duplicateGrocery: grocery.filter((g) => g.duplicate).length,
+    duplicateNotes: notes.filter((n) => n.duplicate).length,
     assignedEvents: events.filter((e) => e.memberId).length,
     assignedTasks: tasks.filter((t) => t.memberId).length,
     assignedContacts: contacts.filter((c) => c.memberId).length,
