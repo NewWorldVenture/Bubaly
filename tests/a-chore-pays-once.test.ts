@@ -178,14 +178,14 @@ describe('one child\'s XP is not a last-writer-wins value', () => {
   it('does its arithmetic in the locked RPC, not on this side of the wire', async () => {
     const writes: string[] = [];
     const spy = { ...client, from: (name: string) => { if (name === 'kid_progress') writes.push(name); return table(name); } };
-    await rewards.applyCompletionRewards(spy as never, { familyId: FAMILY, memberId: 'kid-1', difficulty: 'medium', qualityScore: 90 });
+    await rewards.applyCompletionRewards(spy as never, { familyId: FAMILY, memberId: 'kid-1', difficulty: 'medium', qualityScore: 90, tz: 'UTC', now: new Date() });
     expect(writes, 'applyCompletionRewards touched kid_progress directly instead of through 0341').toEqual([]);
     expect(xp()).toBe(40);
   });
 
   it('adds every one of four concurrent awards', async () => {
     await Promise.all([1, 2, 3, 4].map(() => rewards.applyCompletionRewards(client as never, {
-      familyId: FAMILY, memberId: 'kid-1', difficulty: 'medium', qualityScore: 90,
+      familyId: FAMILY, memberId: 'kid-1', difficulty: 'medium', qualityScore: 90, tz: 'UTC', now: new Date(),
     })));
     expect(xp()).toBe(20 + 4 * 20);
   });
@@ -193,7 +193,7 @@ describe('one child\'s XP is not a last-writer-wins value', () => {
   it('creates the progress row once when two first awards race for it', async () => {
     db.tables.set('kid_progress', []);
     await Promise.all([1, 2].map(() => rewards.applyCompletionRewards(client as never, {
-      familyId: FAMILY, memberId: 'kid-1', difficulty: 'easy', qualityScore: 90,
+      familyId: FAMILY, memberId: 'kid-1', difficulty: 'easy', qualityScore: 90, tz: 'UTC', now: new Date(),
     })));
     expect(db.tables.get('kid_progress')).toHaveLength(1);
     expect(xp()).toBe(20);
