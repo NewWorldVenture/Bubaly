@@ -1,5 +1,50 @@
 # Status board
 
+## Codex integration — 2026-09-27
+
+CURRENT: Worker PR592 published as main e14b12e899fe62cf5a3993cfbe92121aab0a41f9
+at16:19:13UTC; tree52e0d1e equals candidate850cc4. Corrected CI36332783206 pending.
+PRODUCTION: Vercel dpl_57FH8FY8JZsuTFEo68uwkWJ7A34h SUCCESS16:22:37UTC;
+GitHub deployment6694707719 SUCCESS16:22:38UTC. Exact public acceptance PASS
+16:23:30–35UTC; full native production wrapper1/1PASS4.3s on final507a6cd.
+Real worker/install/icon and synthetic private-cache/offline/library controls,
+then scripts-disabled top-level navigation; before/after revision/hash guards.
+No auth/provider writes/private production bytes. Receipts:
+Temp/bubaly-sw-production-e14b12e8-20260927.json;
+Temp/bubaly-native-production-e14b12e8-retained-receipt-20260927.json.
+LOCAL WORKER: Combined657 UTC20,701/1,621, build247, types/lint15PASS;
+85/85controlled in3.8s (72cache+13registration), focused33 separate.
+Final fixture-only delta878a17b verifies5,191files/modes, types/lint15PASS,
+discovery1/1 (not runtime). Parents' three-zone gates remain parent-scoped.
+HISTORY: Original59 CI36331147265 E2E1369/1370 failed only native iframe;
+Web/DB/MobilePASS. Sandbox and anti-framing fixture failures preserved.
+Invalid Windows full run and repaired preliminary type failures retained.
+INVENTORY: All14,183 prior IDs retained, plus three media-test records:
+SUPPORT-302F04E15861, SUPPORT-BC0F2BFDBFD6 and SUPPORT-4CE6A54076E4,
+all IN PROGRESS.
+RegisterB14,186=13,877NOT STARTED+300IN PROGRESS+4FIXED+PASS+4BLOCKED+1FAIL.
+Three worker/support rows remain IN PROGRESS pending corrected hosted CI;
+fixture coverage does not count as additional completed product workflows.
+MEDIA: SEC-001FAIL. Local owner-scoped cache/inflight repair adopted aftere14,
+NOT DEPLOYED. Matching prototype33/33 and actual React/SDK browser2+2PASS;
+full integrated gates pending. Actual observer-gap RED preserved; only synthetic
+provider/image transport, no live bucket authorization/private bytes.
+HEALTH: e14 core checksOK, degraded with six missing settings:CRON_SECRET,
+CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET,
+FCM_PRIVATE_KEY, APNS_PRIVATE_KEY. Earlier four-setting history retained.
+FOLLOW-UP: Permanent actual React/SDK suite7/7PASS2.6s, types/lintPASS;
+collector registration37/37PASS. e14mainCI36332799249 cancelled by docs-onlyf03;
+PR850CI36332783206 still pending. Initial media full run20,721PASS/1FAIL
+caught display importgraph; repaired display25/25PASS, corrected fullgatespending.
+HYDRATION: Actual FamilyMediaImg SSR→hydrate valid-cookie warning reproduced;
+hydration-aware hooka7822890 passes valid/absent/external controls and immediate
+cached SPA image. Retained fixturee169fe97 has4ownership+3hydration cases;
+final complete source fullgates/hosted/deployment pending.
+NEXT: Corrected hosted result for scoped worker closure; independently verify
+local media follow-up before its release. No production SQL/provider change.
+OWNERSHIP: Root integrates/verifies; auth_current_boundary owns this checkpoint.
+RECORD: docs/final-audit/service-worker-private-cache-cycle.md; finalaudit.md.
+
 > Two sessions ran this board. Both sections are kept.
 
 ---
@@ -2330,3 +2375,31 @@ LAST-UPDATE: 2026-09-20
 CURRENT: the owner asked for #548 to merge to main; GitHub refused (base moved: #556 landed). main merged into the branch: 95 conflicting files, resolved as main's readback + wroteNoRows() spelling with this branch's family scope + describeActionError(). No migration renumbering (main 0406–0418 < this PR's 0426–0443); next free 0444. 0426's assertion narrowed to auth.uid() membership reads (main's 0416 journal insert policy is a row-integrity check, not membership). Five tables main narrowed now in the gated list with scoped writes; social_account_tokens left it (0406: service-role only).
 VERIFIED: tsc clean · lint 0 (15/15, budget 17→15) · vitest 20,407/20,410 (3 = container Node 22) · replay 423/423 · probes 150/150 twice. RECORD: finalaudit.md Q73.
 OPEN: audit/claude-2.md, claude-3.md, claude-4.md conflict (append-only on both sides) — left for the owner under the concurrency protocol; the merge commit waits on that decision.
+
+## Historical local observation retained during reconciliation
+
+The following is the September 19 checkpoint as written then. Current status is above.
+
+### Retained local checkpoint — 2026-09-19
+
+CURRENT: SEC-001 worker private-image cache repair IN PROGRESS.
+BASELINE: main75a1f3c6, tree2f4cb2f980b1a92c4313d3af4ea7fe514630a648.
+VERIFIED: dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW, GitHubProduction6546108247.
+Public build/auth/phone readiness pass at21:51 UTC; no auth action or SMS dispatch.
+PHONE CI:75a1 run35471471192 remains active; disposable phone acceptance pending.
+Prior2a5 E2E1,293/1,296: three phone cases fail before code entry; repaired
+signout and six callbacks pass by complete enabled-matrix inference.
+The CI-only provider/hook repair is published; product config/SQL unchanged.
+SW RED: Actual worker handlers/Chromium CacheStorage/production logout preserve
+synthetic A private,no-store image and deliver it to B offline after logout.
+No native worker registration, real optimizer or private production content.
+REPAIR: Implementation and exact regression evidence pending; no cache/privacy PASS.
+SUPPORT-98FD1D4C44AD remains IN PROGRESS; SEC-001 remains FAIL.
+INVENTORY: All14,038 IDs/statuses retained.13,842 NOT STARTED,192 IN PROGRESS,
+1 FIXED+PASS,3 FAIL (0.01%). AUTH-001/002/003 remain open; narrowSEC-005 closed.
+NEXT: Complete bounded worker-cache repair, verify and record exact source gates.
+Separate physical-device, production SMS, private-bucket and database obligations remain open.
+RECORD: docs/final-audit/service-worker-private-cache-cycle.md.
+PHONE HISTORY: docs/final-audit/auth-phone-ownership-cycle.md.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:53:24.045Z

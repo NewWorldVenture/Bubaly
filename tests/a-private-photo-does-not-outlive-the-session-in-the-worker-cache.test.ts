@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 type Handler = (event: FetchEventLike) => void;
 type FetchEventLike = { request: RequestLike; respondWith: (r: Promise<ResponseLike>) => void };
 type RequestLike = { url: string; method: string; mode: string; destination: string };
-type ResponseLike = { ok: boolean; headers: { get: (k: string) => string | null }; clone: () => ResponseLike; body: string };
+type ResponseLike = { ok: boolean; status: number; headers: Headers; clone: () => ResponseLike; body: string };
 
 /** A Cache Storage stand-in that records what the worker chose to persist. */
 function makeCaches() {
@@ -36,7 +36,10 @@ function makeCaches() {
     open: async (name: string) => {
       if (!stores.has(name)) stores.set(name, new Map());
       const store = stores.get(name) as Map<string, ResponseLike>;
-      return { put: async (req: RequestLike, res: ResponseLike) => { store.set(req.url, res); } };
+      return {
+        put: async (req: RequestLike, res: ResponseLike) => { store.set(req.url, res); },
+        match: async (req: RequestLike) => store.get(req.url),
+      };
     },
     match: async (req: RequestLike | string) => {
       const key = typeof req === 'string' ? req : req.url;
@@ -49,11 +52,13 @@ function makeCaches() {
   return api;
 }
 
-function response(body: string, cacheControl: string | null): ResponseLike {
+function response(body: string, cacheControl: string | null, contentType = 'image/png'): ResponseLike {
+  const headers = new Headers({ 'content-type': contentType });
+  if (cacheControl) headers.set('cache-control', cacheControl);
   const res: ResponseLike = {
-    ok: true,
+    ok: true, status: 200,
     body,
-    headers: { get: (k: string) => (k.toLowerCase() === 'cache-control' ? cacheControl : null) },
+    headers,
     clone: () => res,
   };
   return res;
@@ -82,7 +87,7 @@ function loadWorker() {
   const pending = new Map<string, ResponseLike>();
 
   const source = readFileSync('public/sw.js', 'utf8');
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+  // eslint-disable-next-line no-new-func
   const run = new Function('self', 'caches', 'fetch', 'URL', 'Request', `${source}\n`);
   run(scope, cacheApi, fetchImpl, URL, class {});
 
@@ -92,7 +97,10 @@ function loadWorker() {
     if (!handler) throw new Error('the worker registered no fetch handler');
     let settled: Promise<ResponseLike> | undefined;
     handler({ request, respondWith: (r) => { settled = r; } });
-    if (settled) served = await settled;
+    // A listener that declines respondWith leaves the browser's normal fetch
+    // running. Exercise that network response too, rather than treating an
+    // undefined answer as proof that the next account receives the right body.
+    served = settled ? await settled : await fetchImpl(request);
     // let the fire-and-forget caches.open(...).put(...) settle
     await new Promise((r) => setTimeout(r, 0));
     return served;
@@ -132,17 +140,12 @@ describe('a private photo does not outlive the session in the worker cache', () 
     worker.pending.set(url, response('B-denied', 'private, no-store'));
     const second = await worker.dispatch(imageRequest(url));
 
-    // Two answers reach the network, and both are right. Main's worker fetches
-    // /_next/image itself and declines to store it (B gets 'B-denied'); the
-    // audit branch's worker does not intercept /_next/image at all (sw.js v5),
-    // so `dispatch` sees no respondWith and the BROWSER fetches it. What must
-    // never happen is A's bytes coming back from Cache Storage.
-    if (second === undefined) expect(stored()).not.toContain(url);
-    else expect(second.body).toBe('B-denied');
+    // An explicit worker fetch and a browser pass-through both reach the
+    // network. Neither may return A's cached bytes to B.
+    expect(second.body).toBe('B-denied');
+    expect(stored()).not.toContain(url);
     expect(second?.body).not.toBe('A-private-bytes');
-    // Main's worker fetched both itself; a pass-through worker fetched neither
-    // (the browser did), which is the same two network requests.
-    expect(worker.fetches.filter((u) => u === url)).toHaveLength(second === undefined ? 0 : 2);
+    expect(worker.fetches.filter((u) => u === url)).toHaveLength(2);
   });
 
   it('does not persist optimized family media even when the optimizer calls it public', async () => {
@@ -162,7 +165,7 @@ describe('a private photo does not outlive the session in the worker cache', () 
     // are public, immutable and exactly what offline support needs. A guard that
     // passed by caching nothing would be worthless.
     const css = 'https://bubaly.test/_next/static/css/app.css';
-    worker.pending.set(css, response('body{}', 'public, max-age=31536000, immutable'));
+    worker.pending.set(css, response('body{}', 'public, max-age=31536000, immutable', 'text/css'));
     await worker.dispatch({ url: css, method: 'GET', mode: 'no-cors', destination: 'style' });
 
     const logo = 'https://bubaly.test/icons/icon-192.png';
@@ -177,7 +180,7 @@ describe('a private photo does not outlive the session in the worker cache', () 
     // The other half of not-blind: caching must still WORK, or the first two
     // cases would pass on a worker that had simply stopped functioning.
     const css = 'https://bubaly.test/_next/static/css/app.css';
-    worker.pending.set(css, response('body{}', 'public, max-age=31536000, immutable'));
+    worker.pending.set(css, response('body{}', 'public, max-age=31536000, immutable', 'text/css'));
     await worker.dispatch({ url: css, method: 'GET', mode: 'no-cors', destination: 'style' });
     await worker.dispatch({ url: css, method: 'GET', mode: 'no-cors', destination: 'style' });
 
@@ -187,7 +190,7 @@ describe('a private photo does not outlive the session in the worker cache', () 
   it('keeps refusing any asset a response declares private', async () => {
     // The header rule is general, not a special case for images.
     const url = 'https://bubaly.test/_next/static/chunks/private.js';
-    worker.pending.set(url, response('secret', 'private'));
+    worker.pending.set(url, response('secret', 'private', 'application/javascript'));
     await worker.dispatch({ url, method: 'GET', mode: 'no-cors', destination: 'script' });
     expect(stored()).not.toContain(url);
   });

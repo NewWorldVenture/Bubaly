@@ -11,6 +11,34 @@ import type { Tile } from '../../lib/display/tiles';
 // controlled; no live account, database, provider or display device is touched.
 const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.production.min.js'), 'utf8');
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.production.min.js'), 'utf8');
+const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
+// The signed-media hook reads the real browser cookie owner. Keep that import
+// graph executable even though this layout fixture has no photos or session.
+const ownerModules: Record<string, { source: string; imports: Record<string, string> }> = {};
+function collectOwner(filename: string): string {
+  const id = path.resolve(filename);
+  if (ownerModules[id]) return id;
+  const raw = fs.readFileSync(id, 'utf8');
+  const source = /\.ts$/.test(id) ? ts.transpileModule(raw, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+  }).outputText : raw;
+  const item = ownerModules[id] = { source, imports: {} as Record<string, string> };
+  for (const match of source.matchAll(/require\(["']([^"']+)["']\)/g)) {
+    const name = match[1];
+    if (name === '@supabase/supabase-js') { item.imports[name] = 'sdk'; continue; }
+    let target: string;
+    if (name.startsWith('@/')) target = path.resolve(name.slice(2)) + '.ts';
+    else if (name.startsWith('.') && /\.ts$/.test(id)) target = path.resolve(path.dirname(id), name) + '.ts';
+    else target = require.resolve(name, { paths: [path.dirname(id)] });
+    item.imports[name] = collectOwner(target);
+  }
+  return id;
+}
+const ownerEntries = Object.fromEntries([
+  ['@/lib/auth/browser-session-storage', 'lib/auth/browser-session-storage.ts'],
+  ['@/lib/auth/session', 'lib/auth/session.ts'],
+  ['@/shared/auth/refresh-fetch', 'shared/auth/refresh-fetch.ts'],
+].map(([id, file]) => [id, collectOwner(file)]));
 const sources = Object.fromEntries([
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
   'lib/i18n/locales.ts',
@@ -61,10 +89,22 @@ test.beforeEach(async ({ page }) => {
   await page.setContent('<!doctype html><html><body><main id="root"></main></body></html>');
   await page.addScriptTag({ content: react });
   await page.addScriptTag({ content: reactDom });
+  await page.addScriptTag({ content: sdk });
   await page.addScriptTag({ content: `(() => {
     const React = window.React, ReactDOM = window.ReactDOM;
     const h = React.createElement, modules = {};
     const sources = ${JSON.stringify(sources)};
+    const ownerSources = ${JSON.stringify(ownerModules)}, owners = {};
+    const ownerEntries = ${JSON.stringify(ownerEntries)};
+    const process = { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://display-fixture.supabase.co' } };
+    function loadOwner(id) {
+      if (id === 'sdk') return window.supabase;
+      if (owners[id]) return owners[id].exports;
+      const item = ownerSources[id]; if (!item) throw new Error('Unexpected cookie-owner module ' + id);
+      const module = owners[id] = { exports: {} };
+      new Function('require', 'module', 'exports', 'process', item.source)(name => loadOwner(item.imports[name]), module, module.exports, process);
+      return module.exports;
+    }
     const pending = [];
     const p = { writes: [], stored: {}, notices: [], localeCode: 'en-US' };
     const empty = () => null;
@@ -118,6 +158,7 @@ test.beforeEach(async ({ page }) => {
         if (id === './setup-card') return load('components/display/setup-card.tsx');
         if (id === '@/components/ui/widget-boundary') return load('components/ui/widget-boundary.tsx');
         if (id === '@/lib/storage/use-family-media') return load('lib/storage/use-family-media.ts');
+        if (Object.prototype.hasOwnProperty.call(ownerEntries, id)) return loadOwner(ownerEntries[id]);
         if (id === './family-media-ref') return load('lib/storage/family-media-ref.ts');
         if (id === '@/lib/offline/cache') return load('lib/offline/cache.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];

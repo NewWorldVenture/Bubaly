@@ -60,7 +60,9 @@ function boot(network: (req: Request) => Response) {
     Object.defineProperty(request, 'mode', { value: 'no-cors' });
     let responded: Promise<Response> | undefined;
     listeners.fetch({ request, respondWith: (p: Promise<Response>) => { responded = p; } });
-    const res = responded ? await responded : undefined;
+    // A listener that declines respondWith leaves the browser's normal fetch
+    // running; test those network bytes rather than requiring one SW spelling.
+    const res = responded ? await responded : network(request);
     // Let the fire-and-forget `caches.open(...).then(put)` settle before asserting.
     await new Promise((r) => setTimeout(r, 0));
     await Promise.all(pending);
@@ -75,7 +77,11 @@ function boot(network: (req: Request) => Response) {
   return { get, activate, stored, storedUrls };
 }
 
-const image = (cc?: string) => () => new Response('bytes', { status: 200, headers: cc ? { 'Cache-Control': cc } : {} });
+const image = (cc?: string) => (request: Request) => {
+  const headers = new Headers({ 'content-type': request.url.endsWith('.js') ? 'application/javascript' : 'image/png' });
+  if (cc) headers.set('cache-control', cc);
+  return new Response('bytes', { status: 200, headers });
+};
 
 describe('a private image does not outlive the session that fetched it', () => {
   let sw: ReturnType<typeof boot>;
@@ -86,11 +92,8 @@ describe('a private image does not outlive the session that fetched it', () => {
     // excluded by path.
     sw = boot(image('public, max-age=60, must-revalidate'));
     const res = await sw.get('/_next/image?url=https%3A%2F%2Fx.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Ffamily-media%2Fa.jpg&w=640&q=75', 'image');
-    // The worker answers it from the network — `respondWith(fetch(request))`,
-    // the shape main's tests/a-private-image-does-not-outlive-logout pins — and
-    // writes it to no cache. (This once asserted the worker DECLINED the
-    // request; to the browser that is the same network round trip, and the
-    // property, nothing stored, is unchanged.)
+    // Direct worker fetch and browser pass-through both deliver the network
+    // response without retaining private bytes in Cache Storage.
     expect(res).toBeDefined();
     expect(sw.storedUrls().some((u) => u.includes('/_next/image'))).toBe(false);
   });
@@ -116,19 +119,23 @@ describe('a private image does not outlive the session that fetched it', () => {
   it('does not mistake a directive that merely CONTAINS the word for the directive', async () => {
     // `private` must match as a directive, not as a substring of some other token.
     sw = boot(image('public, max-age=600, x-privateish=1'));
-    await sw.get('/icons/logo.png', 'image');
-    expect(sw.storedUrls()).toContain(`${ORIGIN}/icons/logo.png`);
+    // Use a checked-in public asset: an invented image path is not public just
+    // because its name ends in .png or its response says public.
+    await sw.get('/icons/icon-192.png', 'image');
+    expect(sw.storedUrls()).toContain(`${ORIGIN}/icons/icon-192.png`);
   });
 
-  it('purges what v4 stored when the new worker activates', async () => {
+  it('purges what v4 and v5 stored when the new worker activates', async () => {
     // Existing devices already hold private images in `bubaly-v4`. The version
     // bump is what removes them: the activate sweep deletes every cache that is
     // not the current one or the family's downloaded-episode cache.
     sw = boot(image());
     sw.stored.set('bubaly-v4', new Map([[`${ORIGIN}/_next/image?url=private`, new Response('old bytes')]]));
+    sw.stored.set('bubaly-v5', new Map([[`${ORIGIN}/private.png`, new Response('old bytes')]]));
     sw.stored.set('bubaly-library-v1', new Map([[`${ORIGIN}/library/media/ep1`, new Response('episode')]]));
     await sw.activate();
     expect(sw.stored.has('bubaly-v4')).toBe(false);
+    expect(sw.stored.has('bubaly-v5')).toBe(false);
     expect(sw.stored.has('bubaly-library-v1')).toBe(true);
   });
 
