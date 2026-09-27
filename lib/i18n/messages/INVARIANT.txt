@@ -122,3 +122,6 @@ Instagram
 # service and the technology are named the same in every language we ship.
 SMS
 WhatsApp
+# A call classification in the Front Desk (front-desk-module CLASS_CONFIG);
+# the loanword is what every language we ship uses.
+Spam

@@ -45938,6 +45938,22 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][LOW][FRONT-DESK]` C1-S9-115 — the Front Desk's call statuses and classifications were English in every locale
+
+**File/path:** `components/modules/front-desk-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.** On `/dashboard/front-desk`, every call's status (Screened, Voicemail, Forwarded, …) and classification (Important, Robocall, …) was English in every locale. So was "Unknown caller" in the detail view. The stat tiles and "How it works" already rendered through keys, but still carried unused English copies next to them, which the scanner counted as findings.
+
+**Fix.**
+- Statuses and classifications are `labelKey`s.
+- The unused English copies are removed.
+- Both unknown-caller fallbacks use `frontDesk.unknownCaller`.
+- "Spam" is listed as invariant.
+
+**Status:** FIXED. Scanner findings for `front-desk-module` drop from 20 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
