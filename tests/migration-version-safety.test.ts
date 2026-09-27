@@ -401,7 +401,17 @@ describe('Supabase migration filename safety', () => {
     // an SVG or HTML upload is no longer a page hosted on the project's own
     // Supabase domain (F-E03's cheap half, which the LB-009 deferral was never
     // meant to cover).
-    expect(audit.nextVersion).toBe('0419');
+    //
+    // 0419_a_departed_parent_keeps_no_assistant_key.sql (SRV-001 l12) retires
+    // the assistant keys of a parent who leaves the family: an AFTER UPDATE
+    // (is_active, role, user_id, family_id) OR DELETE trigger on family_members
+    // stamps revoked_at on the old (family, user) pair's live keys whenever
+    // that pair no longer has an active parent row, SECURITY DEFINER because
+    // 0343 refuses the remover (possibly an adult) writes on assistant_links,
+    // plus a backfill for keys already orphaned. The application half,
+    // resolveAssistantLink requiring an active parent owner, holds without it.
+    // Held by docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql.
+    expect(audit.nextVersion).toBe('0420');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

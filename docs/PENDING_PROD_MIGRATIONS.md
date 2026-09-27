@@ -3058,3 +3058,43 @@ guard (or its role half) and requires the refused read to land. The two
 existing credential probes now exclude these guards by what they are
 (restrictive and calling the helper), not by name.
 
+
+### `0419` retires the assistant keys of a parent who leaves the family — unapplied
+
+`0419_a_departed_parent_keeps_no_assistant_key.sql` (SRV-001 l12). An
+assistant key (`assistant_links`) is a standing bearer grant over the
+household: Siri or Alexa, holding its secret, has `/api/assistant` read the
+family's calendar, open tasks and lists aloud and, with the `capture` scope,
+file events, notes, groceries and to-dos. Only a parent can mint one (0343),
+and the key carries that parent's user_id. Removing a member only sets
+`family_members.is_active = false`, and demoting one only changes `role`;
+neither touched the key, and the resolver matched on the token hash and
+`revoked_at` alone. So a co-parent removed from the household kept a working
+key until someone found it on `/dashboard/assistants` (which does not say whose
+key each one is) and pressed Revoke.
+
+**What closes it**: an AFTER UPDATE (`is_active`, `role`, `user_id`,
+`family_id`) OR DELETE trigger on `family_members`. Whenever the old
+(family, user) pair no longer has an active parent row, it stamps
+`revoked_at` on that pair's live keys in that family. SECURITY DEFINER with a
+pinned search_path, because an adult may remove a parent (0211) but is refused
+writes on `assistant_links` by 0343; EXECUTE revoked from the API roles. A
+one-time backfill retires the keys already orphaned the same way; it touches
+only `revoked_at`, and only on keys whose owner is not an active parent of the
+key's family. Replay-safe.
+
+**Ships on its own.** The application half is live on merge:
+`resolveAssistantLink` resolves a key only while its owner is an active parent
+of its family, and a failed membership read refuses. So production is closed
+before this is applied; the migration retires the keys rather than only
+refusing them.
+
+**Evidence.** `docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql`:
+a parent removed by another parent (with that parent's own JWT), a parent
+demoted, and a parent's row deleted each lose their live key; the remover's
+own key, the removed parent's key in another household, an already-retired
+key's stamp, a child's removal and an unchanged re-save are untouched; the
+catalogue carries the trigger for UPDATE and DELETE and a definer function
+the API roles cannot execute; and a negative control that drops only the
+trigger leaves the removed parent's key live. Measured red with the migration
+absent and with a trigger function that does nothing.
