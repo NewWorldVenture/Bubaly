@@ -273,7 +273,18 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // not copy: the one screen that renders request_text for them is the
 // English-only super-admin AI Activity page. The tree stood one under the old
 // ceiling, so thirteen new labels move the count by twelve.
-const CEILING = 2339;
+//
+// PR585/598 integration, 2026-09-27: the unchanged current scanner measures
+// 2,650 findings across 593 app/components files with INVARIANT.txt present.
+// Bank the translated public/auth/control copy: tighten by169, do not loosen
+// the gate or compare differently configured scanners.
+//
+// ── MERGED WITH MAIN THROUGH #601: -> 2,208 ────────────────────────────────
+//
+// Both lines above measured their own tree. This tree holds main's translated
+// public, auth and control copy AND the port's page titles and labels, and the
+// one scanner counts 2,208 across it. Banked as the ceiling.
+const CEILING = 2208;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

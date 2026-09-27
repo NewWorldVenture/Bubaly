@@ -93,11 +93,35 @@ function ensureConnection() {
     const client = createClient();
     const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reconcilingEvent: false };
     connection = current;
+    const reconcileCurrentCookies = () => {
+      if (current.reconcilingEvent) return;
+      current.reconcilingEvent = true;
+      void Promise.resolve().then(() => {
+        if (connection !== current) return;
+        notifySessionStorageChanged({ broadcast: false });
+        return refreshCacheSession();
+      }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
+        .finally(() => { current.reconcilingEvent = false; });
+    };
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (connection !== current) return;
       // SDK INITIAL_SESSION can finish an old storage read after SIGNED_IN or
       // a newer explicit read. It cannot revive that older owner/session.
       if (event === 'INITIAL_SESSION' && current.initialSuperseded) return;
+      if (session) {
+        let matchesCurrentCookies = false;
+        try {
+          const saved = captureBrowserSessionSnapshot();
+          matchesCurrentCookies = saved?.accessToken === session.access_token;
+        } catch { /* A failed cookie read cannot establish this event's owner. */ }
+        if (!matchesCurrentCookies) {
+          // Visibility recovery and cross-tab SDK events can carry a session
+          // read before a newer login or logout. Do not let that stale event
+          // supersede a pending current-cookie read or reach the server tree.
+          reconcileCurrentCookies();
+          return;
+        }
+      }
       if (event !== 'INITIAL_SESSION' || session !== null) current.initialSuperseded = true;
       if (event !== 'INITIAL_SESSION' || session !== null) current.revision += 1;
       if (event === 'SIGNED_OUT') {
@@ -109,15 +133,7 @@ function ensureConnection() {
           // adapter did not remove B's cookies. Do not forward that event.
           // One queued read per outstanding reconciliation avoids recursion
           // when an SDK callback runs while its session lock is still held.
-          if (!current.reconcilingEvent) {
-            current.reconcilingEvent = true;
-            void Promise.resolve().then(() => {
-              if (connection !== current) return;
-              notifySessionStorageChanged({ broadcast: false });
-              return refreshCacheSession();
-            }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
-              .finally(() => { current.reconcilingEvent = false; });
-          }
+          reconcileCurrentCookies();
           return;
         }
       }
@@ -186,15 +202,16 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
   const read = ++current.read;
   pendingStartedAt = Date.now();
   const work = Promise.resolve().then(async () => {
-    // A cookie write in another tab can precede its SDK broadcast. A null
-    // receipt therefore needs a fresh absence check before it retires cache.
+    // Cookie changes in another tab can precede its SDK broadcast. Bind both
+    // positive and empty receipts to current cookies before accepting them.
     // Retry that race once, outside an SDK event callback or session lock.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { data, error } = await current.client.auth.getSession();
       if (connection !== current || revision !== current.revision || read !== current.read) return;
       current.initialSuperseded = true;
       if (error) { unavailable(); return; }
-      if (!data.session && captureBrowserSessionSnapshot() !== null) {
+      const saved = captureBrowserSessionSnapshot();
+      if (data.session ? saved?.accessToken !== data.session.access_token : saved !== null) {
         if (attempt === 0) continue;
         // Conflicting evidence is stronger than an ordinary network outage:
         // retain the known identity without authorizing its cached UI to act.

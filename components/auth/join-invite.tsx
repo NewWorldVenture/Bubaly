@@ -31,7 +31,7 @@ export function JoinInvite() {
     if (fired.current) return;
     fired.current = true;
     if (!token) {
-      setState({ phase: 'error', message: 'This invite link is missing its token.' });
+      setState({ phase: 'error', message: t('joinInvite.missingToken') });
       return;
     }
     const supabase = createClient();
@@ -58,7 +58,7 @@ export function JoinInvite() {
         router.refresh();
       }, 1400);
     })();
-  }, [token, router]);
+  }, [token, router, t]);
 
   if (state.phase === 'loading' || state.phase === 'accepting') {
     return <div className="glass-card p-8"><LoadingBlock label={t('joinInvite.joiningYourFamily')} /></div>;

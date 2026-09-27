@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Execute the real async route and query parser; only its client UI is a seam.
 vi.mock('@/components/auth/callback-completion', () => ({ CallbackCompletion: () => null }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
+// The tab title is translated (C1-S9-100), so the page's metadata is generated.
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };

@@ -52,7 +52,7 @@ export function ReviewForm(p: Props) {
             {p.publicLinks.map((l) => (
               <a key={l.url} href={safeWebLink(l.url) ?? undefined} target="_blank" rel="noreferrer"
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-semibold text-brand-fg">
-                Review us on {l.label} <ExternalLink className="h-4 w-4" />
+                {l.label} <ExternalLink className="h-4 w-4" />
               </a>
             ))}
           </div>
@@ -70,7 +70,7 @@ export function ReviewForm(p: Props) {
 
       <div className="flex justify-center gap-1.5" onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((v) => (
-          <button key={v} type="button" onClick={() => setRating(v)} onMouseEnter={() => setHover(v)} aria-label={v === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: v })}>
+          <button key={v} type="button" onClick={() => setRating(v)} onMouseEnter={() => setHover(v)} aria-label={v === 1 ? t('reviewsNewReviewForm.oneStar') : t('reviewsNewReviewForm.nStars', { count: v })}>
             <Star className={`h-9 w-9 transition ${(hover || rating) >= v ? 'fill-amber-400 text-amber-400' : 'text-border'}`} />
           </button>
         ))}

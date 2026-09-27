@@ -5,6 +5,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { normalizeHandle } from '@/lib/wallet/pay-handle';
 import { getTranslations } from '@/lib/i18n/server';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('pageTitle.sendAGift'), robots: { index: false } };

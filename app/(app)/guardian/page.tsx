@@ -123,15 +123,15 @@ export default async function GuardianPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15">
           <Shield className="h-5 w-5 text-brand-text" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold leading-tight">{t('guardian.aiCallGuardian')}</h1>
           <p className="text-sm text-muted">{t('guardian.smartProtectionForEveryCallText')}</p>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <a href="/guardian/contacts" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.contacts')}</a>
           <a href="/guardian/rules" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.rules')}</a>
           <a href="/guardian/settings" className="rounded-xl border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition">{t('guardian.settings')}</a>

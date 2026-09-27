@@ -4,6 +4,8 @@ import { Suspense } from 'react';
 import { RecoveryForm } from '@/components/auth/recovery-form';
 import { LoadingBlock } from '@/components/ui/states';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('pageTitle.passwordRecovery'), robots: { index: false, follow: false } };

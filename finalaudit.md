@@ -1,5 +1,81 @@
 # Final Production Audit
 
+## Concurrent main integration checkpoint — 2026-09-27
+
+**Production moved independently while PR601 was being prepared.** Main `e96e745aea27802c425031b5685c8c473cabb100` (tree `7fbd8f65047710c001d0e4cddeeeac81f9f408e0`) includes merged PR603 and PR585. At **18:04:31 UTC**, public build-info returned HTTP200 with that exact revision and private/no-store caching. Vercel deployment `6KPdUwZyEnsDumJBUVCGH8eZJD1q` and GitHub Production deployment6695777090 report success at17:58:33/34 UTC. Receipts: `C:/Users/Daniel/AppData/Local/Temp/bubaly-e96-public-build-20260927.json` and `bubaly-e96-production-deployment-20260927.json`. Main [CI36338693100](https://github.com/NewWorldVenture/Bubaly/actions/runs/36338693100) has Database/Mobile PASS, with Web/E2E still running at the recorded observation. Deployment identity is verified; full acceptance is not claimed. Earlier a6 production statements below are dated history.
+
+**The prior auth source completes canonical local verification.** Exact commit `073de6fe25ad0607e091f803f830d805d46b0d76`, tree `6cd5f983711fbd41fa8598117d69684eefeb6ae9`, passes **20,850/20,850 UTC tests across1,638 files** in107.35s, build247, full generated-route types and lint with15 existing warnings. All5,221 raw files/modes remain unchanged through18:02:33 UTC; receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-ci-073de6fe-20260927/summary.json`. The seven subsequent fixture-only changes retain their separate176-case/scoped proof below. These results do not certify the new main reconciliation.
+
+**The new combined PR601 source remains pending its own gates and release.** The merge preserves the current main navigation implementation/test as the baseline, the newly named chores selector and its translations, Claude's eleven added audit lines, and the local session/meal repairs. The principal gate keeps the authenticated caller and explicit503 response on an unavailable account lookup; incoming real-client regression controls are reconciled against that behavior. Claude's350-route desktop crawl on a local a6 build and P-05 correction remain attributed evidence, not independently repeated or newly promoted page closures. Draft PR602 remains separately frozen atbadc5562 with Web/Database/Mobile PASS and hosted E2E still pending. Its local combined candidate is held until this concurrent main integration is settled. No SQL, provider or production settings are changed by this checkpoint.
+
+**The merge-specific checks are now frozen and pass.** The incoming authenticated-client helper and seven real-client controls are retained with the explicit503 unavailable result; five focused files pass78/78, scoped strict types/lint pass, and exact adopted blobs are recorded in `C:/Users/Daniel/AppData/Local/Temp/bubaly-auth-merge-e96-20260927/receipt.json`. Three merged-surface files pass94/94 in1.43s after a single Windows path-separator normalization in `a-signed-in-control-has-a-name.test.ts`; the original93PASS/one non-vacuity-check failure is preserved in `bubaly-e96-merged-surface-checks-20260927.log`, with GREEN in `bubaly-e96-merged-surface-green-20260927.log`. No assertion is removed. These focused results precede combined canonical/hosted acceptance. Production e96 public/native checks also pass at18:06:05–12 UTC: exact build revision and published worker hash, enabled email/phone entry without submitting authentication, protected meals redirect307, nativev6 install/offline200, and zero page/request errors. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-sw-production-e96e745a-20260927.json`. Core health checks pass but remain degraded for the same six unset feature settings; no signed-in/provider workflow is certified.
+
+**Inventory reconciliation adds one previously unregistered existing test.** `SUPPORT-6184F8927CFB` records `tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts` as IN PROGRESS; its source already existed in0be, so this is not a new application/test file. The restored main test is blob `418e10ff3ab1c1af44add11530bd3a1ddb929bdd`; current combined execution remains pending. All14,213 prior IDs and statuses are retained. Register B now has **14,214 items:13,862 NOT STARTED,337 IN PROGRESS,10 FIXED + PASS,four BLOCKED and one FAIL**. Tracked source remains5,221 files. Page totals and0.07% audit signoff are unchanged; the separate Inbox finding and SEC-001/auth/provider/production-migration/device obligations remain open. **PRODUCTION READY: NO.** This checkpoint supersedes only current production identity and the old073 pending-gate wording; all failed runs and prior scope limits remain.
+
+## Fixture integration and original hosted baseline — 2026-09-27
+
+**Original PR601 source37c now has a clean hosted browser result.** Run [36337331828](https://github.com/NewWorldVenture/Bubaly/actions/runs/36337331828) completes E2E at **17:58:11 UTC with 1,777/1,777 PASS in 18.5m**, zero failures or flakes. Actual checkout `29a6b929daf5e0ad1e6886a2dc295c07ff45ef2b` shares tree `643a59cda50d4f55c5a787f5a79ee852d7f62da3` with head `37c8fb19e027e96b88ea37e511c10bfb0c859cd5`. Overall CI remains **FAILURE** because Web's four source-contract checks failed; those guards were subsequently reconciled and verified in e3. Database and Mobile passed. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr601-ci36337331828-terminal-20260927.json`. This later clean browser run preserves, rather than replaces, PR600's failed meal attempts and PR595/596 flaky histories. It precedes the Dismiss and session-ownership changes and does not certify them.
+
+**Seven controlled React fixtures now present a coherent session boundary.** Each already returned a synthetic signed-in SDK session but permanently threw when current cookie ownership was read. The new ownership guard correctly made those fixtures unavailable. The adopted repair changes exactly that one expression per existing fixture to return the same session's access token; all assertions, mutation/readback controls and family/role switches remain intact. The seven suites pass **176/176 in 19.2s**, scoped strict types/lint pass, and the existing fixture graph guard passes **37/37**. Independent control passes with matching cookies and deliberately fails at the actual ownership guard with a mismatched token. No application source changes are introduced by this fixture correction; the private verification maps 2,120 application paths without drift. Receipts under `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/`: `fixture-adoption-receipt.json`, `fixtures-validation.json`, `fixture-candidates-source.json`, `fixtures-green-176.log` and `fixture-boundary-old.log`. Independent receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-fixture-independent-20260927/review-receipt.json`.
+
+**Related scopes remain distinct.** The actual-SDK adjacent suites pass **146/146 in 13.9s** (`adjacent-green-146.log`), and the unchanged auth-lifecycle fixture passes **14/14 in 2.7s** (`lifecycle-green.log`) in the same evidence directory. These are separately scoped from the 176 controlled React cases and do not constitute a live provider journey. The adopted session repair remains module6a0d0d0a with its retained 17-case browser and 64-unit proof below. Full canonical verification of source073 is still pending at this checkpoint; the seven fixture edits have their scoped checks, and final hosted acceptance/deployment remain pending. Prior e3 full gates are historical source-specific evidence. Verified production remains a6dcd18e; separate draft602 still awaits hosted E2E. The Inbox selection findings remain an unrepaired separate follow-up.
+
+All seven exercised SUPPORT rows were still NOT STARTED and now move to **IN PROGRESS**: SUPPORT-02FD32F09502, SUPPORT-C407CC9796A8, SUPPORT-678300F81E6F, SUPPORT-C33E1A58D1C6, SUPPORT-C1CEE5335C18, SUPPORT-4B19503B0067 and SUPPORT-155C44B711F8. These inventory test coverage, not seven completed product workflows. All **14,213 permanent IDs** remain; totals are **13,862 NOT STARTED, 336 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. No new file or ID is introduced. Prior evidence, Claude's page claims, page totals and 0.07% audit signoff are preserved. **PRODUCTION READY: NO.** This checkpoint supersedes the original37 pending-E2E wording below; other evidence retains its stated source and execution limits.
+
+## Session ownership repair adopted locally — 2026-09-27
+
+**The reproduced stale-session race is repaired locally; final integrated gates and hosted acceptance are pending.** The four adopted paths are mapped in `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/adoption-receipt.json`. Production module `lib/auth/cache-session.ts` is blob `6a0d0d0aa225e7fad96c948c244d6d974a08e713`; the retained browser fixture is `4843068f3ec36f6d76b9405d6116180cde54843e`. Positive SDK events are compared with current cookie tokens before advancing the revision or notifying auth listeners. Positive getSession receipts now receive the same current-cookie ownership check and bounded reread as empty receipts. Reconciliation stays outside the SDK callback's lock. Normal token rotation preserves the same session/cache generation; temporary read errors retain the established login while reporting the error.
+
+**The original-source regression is six desired RED / eleven PASS; the final candidate passes 17/17 in 6.0s.** The six failures cover stale visibility-recovery events and held positive receipts, each across peer logout, account B adoption and same-session A token rotation. The final rotation assertions require an actually changed access token and unchanged cache generation. Focused cache-session, SessionKeeper and media-gap units pass **64/64 across three files in 327ms**; scoped strict types and lint pass. A broader browser run passed **43/43 in 6.5s before the final rotation assertion refinement**, overlapping the 17 session cases plus four persistence/restart and 22 logout guards; these counts are not additive. Evidence under `C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/`: `candidate-old-source-17-red.log`, `candidate-final-green-17.log`, `unit-final-green-64.log`, `regression-green-43.log`, `candidate-source.json` and `actual-module-graph.json`. Independent review found no source blocker and verified all eight application modules in the browser collector match current source except the intended cache-session overlay (`independent-source-graph-review.json`). Real SDK/React/cookies with synthetic provider responses establish this bounded race; the exact PR600 flake schedule and production-provider behavior remain unproved.
+
+**No auth record closes here.** LIBRARY-478BBDEF113D and SUPPORT-F03CAA80721B remain IN PROGRESS. The exact e3 canonical PASS and both meal-fixture checks below remain valid for their stated earlier source scopes, but do not certify this newly adopted auth change. PR600's failed meal gate and retried session case remain preserved; original37c hosted E2E still awaits a result at this checkpoint. Current verified production remains a6dcd18e. Separate draft PR602 now has hosted Web PASS at 17:52:11 UTC (20,752 tests in each of three zones, build 246/types/lint), alongside Database/Mobile PASS; E2E remains pending. It is neither merged nor deployed. Receipt: `C:/Users/Daniel/AppData/Local/Temp/bubaly-pr602-ci36337749165-web-108671753911-20260927.log`.
+
+**A separate Inbox selection finding remains open under existing COMPONENT-DCBBCE75C88B.** Actual InboxModule blob `5028af42895964aea8b2092bae788e93dd1ea873` matches the private test and source54bc. In one household, selecting message B retains a reply typed for A; adding A's first reminder leaves B's first action disabled as Added without a B write. A held draft response for A also populates selected B after a witnessed response settlement and two actual animation frames. All **three desired assertions are RED** in `C:/Users/Daniel/AppData/Local/Temp/bubaly-inbox-state-red-v4-20260927.log`. The earlier v3 third case passed before React settlement and is explicitly excluded as acceptance. This uses controlled query/action transport, not a database/provider workflow. [Coordination with Claude](https://github.com/NewWorldVenture/Bubaly/pull/598#issuecomment-5858303635) keeps the finding in a separate follow-up; no Inbox repair is included in this auth batch.
+
+All 14,213 permanent inventory IDs and statuses remain: **13,869 NOT STARTED, 329 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. No new fixture file or inventory ID is introduced. Claude's page claims, all failed checkpoints, current page totals and audit signoff of 0.07% remain unchanged. **PRODUCTION READY: NO.** The following checkpoints retain their earlier source-specific pending/adoption wording; this checkpoint supersedes only the current adoption and hosted602 Web status.
+
+## Meal notification and session reconciliation checkpoint — 2026-09-27
+
+This checkpoint supersedes the pending local-gate wording below. Earlier failed runs, dated counts and Claude's attributed findings remain preserved. Evidence paths in this checkpoint are relative to **C:/Users/Daniel/AppData/Local/Temp/**, not a repository Temp directory.
+
+**The base integration passes its canonical local gates.** Exact commit `e3f244ab58b3bb57ac485e790c44c17dd258a308`, tree `e58d108f60660f55f6e15f2e190dda2fd1e620b6`, passes **20,848/20,848 UTC tests across 1,638 files**, build 247, generated-route strict types and lint with 15 existing warnings. All 5,221 raw files/modes are unchanged at the final 17:47:17 UTC check; receipt: `bubaly-ci-e3f244ab-20260927/summary.json`. These gates precede the two meal-fixture edits and this documentation checkpoint. The fixture delta has its own scoped verification below; no new full-source run is implied.
+
+**The mobile meal obstruction is reproduced locally.** With the actual MealsModule, Modal, ToastProvider and application CSS at 390×844, the center of “Create a meal” hits the “Meal saved.” status. A normal click waits for expiry and succeeds; deliberately moving the pointer onto the toast pauses its real 4,200ms timer, and the click then fails with repeated status-element pointer interception. The preserved RED is `bubaly-meal-toast-hover-red-20260927.log`; the unhovered control is `bubaly-meal-toast-settled-20260927.log`. Visible Dismiss clears the obstruction: the repeated root control passes **3/3** in 24.4s, and an independent durable-shaped dataset passes **2/2** in 18.6s, retaining Monday dinner/lunch while replacing Tuesday. Receipts: `bubaly-meal-toast-dismiss-green-20260927.log` and `bubaly-meal-toast-independent-20260927/receipt.json`. Controlled server-action/provider transport and the installed React renderer establish this interaction mechanism; they do not establish the exact pointer schedule that caused hosted PR600's timeout.
+
+**The meal test now acknowledges the visible notification.** The durable workflow clicks its actual Dismiss control after a confirmed meal save, preserving its database/readback assertions and 120s limit. The existing planner fixture adds optional real ToastProvider coverage and two interaction controls while preserving all previous cases; **44/44 pass in 35.2s**, with scoped strict types and zero-warning lint. Fixture blob: `b913664f25003b9261a1bbeb3c9bc474af0b957c`; receipt: `bubaly-meal-toast-independent-20260927/retained-receipt.json`. Independent strict types also pass both final meal specs, including durable blob `8b2f2e58a482f64fd56910540c25d323ef42a29a`; receipt: `bubaly-meal-spec-types-20260927/receipt.json`. No product toast layering, dismissal timing or hover/focus behavior changes. The actual durable provider journey awaits hosted execution; these controlled tests do not substitute for it. No permanent fixture file or inventory ID is added.
+
+**Hosted failures and pending work remain open.** PR600 run [36335871720](https://github.com/NewWorldVenture/Bubaly/actions/runs/36335871720) remains **1,773 passed + one failed + one flaky / 1,775**: both meal attempts timed out, and the storage-only/both session case passed only on retry. Original PR601 source37c run [36337331828](https://github.com/NewWorldVenture/Bubaly/actions/runs/36337331828) still awaits its E2E result at this checkpoint; its Web job failed the four source contracts subsequently reconciled in e3, while Database/Mobile passed. Its phase diagnostics and any eventual result certify that original source, not the later Dismiss edit. Verified production remains main a6dcd18e under the earlier anonymous public/native receipts.
+
+**A separate actual-SDK session race is still under investigation in TEMP.** Holding an A cookie read during visibility recovery, then removing cookies, adopting B or rotating A in a peer, can let the old SIGNED_IN(A) receipt advance the cache-session revision and discard the queued fresh read. The original-source controls are **11 PASS / three desired RED** in 22.5s: stale A after logout, stale A over B and an old realtime token after same-session rotation. Evidence: `bubaly-session-reconcile-investigation-20260927/candidate-old-source-14-red.log` and `held-visibility-red.log` in that directory. This uses actual SDK/modules with synthetic provider responses; the exact hosted flake schedule and production behavior are not proved. No repair or closure is claimed. Existing LIBRARY-478BBDEF113D and SUPPORT-F03CAA80721B move from NOT STARTED to IN PROGRESS; the support row tracks regression coverage rather than an additional product defect.
+
+**Framework PR602 remains a separate draft.** Head `badc5562e17f3696765597f7b6a3f5d4bef7d106`, tree `e2999d007f6cc2484cdae018ba2fd0ace952f58c`, upgrades Next to 16.3.6 while retaining React 18 packages and the existing lint policy. The unmodified compiled-renderer immediate-replay probe produces React #418 on old Next in 10/10 trials and none on the candidate in 10/10, with synchronous/delayed controls passing; its retained current-renderer browser suite passes 3/3. That mechanism proof is not a live authenticated route crawl or a closure of Claude's eight OWNER findings. Exact candidate local gates pass 20,752 units, build 246, generated types, lint with 15 warnings and production audit with zero vulnerabilities; the additional development-inclusive audit still reports seven vulnerabilities. Receipts: `bubaly-next-renderer-replay-20260927/receipt.json` and `bubaly-ci-frameworke299-20260927/summary.json`. Hosted run36337749165 has Database/Mobile PASS and Web/E2E pending at this checkpoint. It is not merged or deployed and requires complete hosted acceptance before integration.
+
+Register B now has **14,213 items: 13,869 NOT STARTED, 329 IN PROGRESS, 10 FIXED + PASS, four BLOCKED and one FAIL**. Exactly two existing status rows changed; every permanent ID and existing closure remains. Audit signoff remains 0.07%. The page board remains 44 CLEAN, 345 FIXED LIVE/re-crawl pending, one OPEN and eight Claude OWNER; no page/workflow is promoted here. Later PR585 headceb97afac and PR598 head4816ea66f8260017615832ee5991218d516dcc46 remain outside this integration; the older bd71 deferral below is historical. Broader SEC-001, production migration, auth and physical-device obligations remain open. **PRODUCTION READY: NO.**
+
+## Retained checkpoint before the meal/session follow-up
+
+The following checkpoints retain their original evidence and earlier pending/count wording; the checkpoint above governs the current state.
+
+## Current page-fix integration and verified media coverage — 2026-09-27
+
+**Superseding hosted qualification: PR600/a6 failed its full browser gate.** CI36335871720 tested412e28d6, source5b30663c and published a6 share treebc7c9b5. Web passes20,752 tests in each of three zones across1,624files, build247/types/lint; Database and Mobile pass. E2E finishes **1,773 passed + one failed + one flaky /1,775 in15.0m**. The weekly-meal durable workflow exceeds120s on both attempts; both retained snapshots show Monday/Tuesday saved and the reopened Tuesday picker before custom entry, with a “Meal saved.” toast still present. The cleanup/context-close error masks the original await, so the precise stalled operation and cause are not yet proven. Session-storage-reconcile's storage-only/both case initially returned ready instead of signed-out within5s, then passed its automatic retry. Receipt: `Temp/bubaly-5b-ci36335871720-terminal-20260927.json`; artifacts: `Temp/bubaly-pr600-e2e-evidence-20260927`. The passing anonymous a6 public/native probes remain valid within their narrower scope; they do not override this failed hosted gate. PR60137c weekly-meal phase breadcrumbs are diagnostics only, not a demonstrated fix. Four integration contract guards now match the retained translated labels/hydrated Modal boundary, and the i18n ceiling tightens2819→2650 after an unchanged-scanner593-file measurement; focused110/110 across four files pass. New combined full/hosted verification remains pending. No inventory/status total or production-readiness claim changes here.
+
+**Current production is verified main a6dcd18e.** PR600 merged at17:17:56UTC as `a6dcd18e4309cdd02204aa874bd1c1aaff8fa61a`, matching reviewed5b treebc7c9b5. Anonymous public acceptance at17:25:42–48UTC passes exact build revision, unchanged worker hash, hydrated email/phone controls without submission, protected meals307, nativev6 install/offline200 and core health; zero page errors, failed requests or suppressed writes. The same full native wrapper passes1/1 in4.9s. Receipts: `Temp/bubaly-sw-production-a6dcd18e-20260927.json` and `Temp/bubaly-native-production-a6dcd18e-20260927.log`. This is deployed revision/worker proof, not an authenticated private-provider image journey.
+
+**Three media regression records now close as FIXED + PASS.** PR599 CI[36335077710](https://github.com/NewWorldVenture/Bubaly/actions/runs/36335077710) completes all four jobs: clean1,775/1,775 E2E in12.8m; Web20,735 in each of three zones across1,623files, build247, strict types and lint. Tested564cc64f, reviewed e3dcf4203 and published e70 share treec6f3cd6b. Terminal receipt: `Temp/bubaly-e3-ci36335077710-terminal-20260927.json`. Together with the retained original REDs, local full gates, current-hook11/11 browser proof and exact deployed acceptance, this closes SUPPORT-302F04E15861, SUPPORT-BC0F2BFDBFD6 and SUPPORT-4CE6A54076E4 as coverage obligations. These are not three additional product workflows. **SEC-001 remains FAIL** for its broader bucket/privacy/provider scope; no Storage RLS bypass or private production-byte proof is claimed.
+
+**Earlier flakes remain recorded.** PR595 all four jobs succeeded, with1,770 passed plus one flaky weekly-meal case (1,771 total,19.3m); its initial120s timeout passed the automatic retry. PR596 CI36334661999 succeeded with1,769 passed plus two flaky cases (1,771 total,14.5m): weekly-meal timeout and actual React#418 on `/dashboard/sleep`, both retry PASS. A cleanup/context-close stack alone does not establish the meal root cause. The sleep route is now OPEN and UI-ROUTE-0238 IN PROGRESS, while its older surface checks and all eight Claude OWNER findings remain preserved. Page totals are44 CLEAN,345 FIXED LIVE/re-crawl pending, one OPEN and eight OWNER. CLEAN records route/surface checks, not a complete workflow. The separate framework candidate and its synthetic renderer proof do not establish the cause of every observed page failure.
+
+**Combined585/598 repairs are local; complete acceptance is pending.** Incoming Claude page/localization/control fixes and claims are preserved. The collaborative P10 caller-label repair passes22/22 focused checks; restoring only old caller labels makes6/22 fail. An independent AST check finds all38 actual withAiRequest callsites use fixed labels, while actual JSON/SSE tests retain original provider prompts/conversations. Receipt: `Temp/bubaly-pr585-p10-review-20260927/{receipt,actual-call-ast}.json`. The locally adopted role helper accepts the route's authenticated client, and the gate retains598 outage503 semantics; actual GET/role-helper/SDK tests exercise mixed bearer/cookie principals and normal controls. Modal now uses shown=open&&hydrated for both effects and rendering; initially-open and later-open actual browser controls pass. These repairs are not attributed to live a6.
+
+The combined focused units pass230/230 across17files in3.02s, and browser checks pass44/44 in7.0s (Modal2, display31, media11). Windows audit-script/test portability corrections and the393-page/398-row register check pass. Receipts: `Temp/bubaly-585-598-focused-unit-final-20260927.log`, `Temp/bubaly-585-598-focused-browser-20260927.log` and `Temp/bubaly-585-598-private-source-20260927.json`. Catalogue three-way reconciliation preserves every main key and adds218 keys per locale, retaining Portuguese geocerca (`Temp/bubaly-598-catalog-three-way-20260927.json`). Weekly-meal failure-only phase diagnostics preserve the original error. Canonical full-source gates, hosted CI and deployment of this combined integration remain pending. Later heads585ceb97afac (additional principal-test work) and598bd71dbcaf (inbox/reminders localization) are deferred to the next reconciliation; this batch does not close every open PR. Shared sidebar/command-bar source stays exactly at a6 under the existing navigation constraint; proposed navigation changes remain deferred. The framework upgrade is a separate branch and is not included here.
+
+Register B has **14,213 items:13,871 NOT STARTED,327 IN PROGRESS,10 FIXED + PASS,four BLOCKED and one FAIL**. All14,187 prior IDs remain;26 newly integrated source/test/tool paths are IN PROGRESS. Five repaired source rows and the sleep observation move to IN PROGRESS; only the three specified media coverage rows close. Audit-signoff completion is0.07%, not a product-development estimate. Current a6 health is coreOK/degraded with six missing feature settings: CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY and APNS_PRIVATE_KEY. Production migration, auth and physical-device obligations remain open. **PRODUCTION READY: NO.**
+
+## Retained pre-integration checkpoints
+
+The dated statements below preserve earlier pending states, failed attempts and source-specific evidence; the current checkpoint above supersedes their current-state wording.
+
 ## Current parser release and page-audit integration — 2026-09-27
 
 **Parser repair merged and verified live.** PR599 merged at 17:00:41 UTC as main `e70be8306571430169e69496c634cda97c069dc3`, tree `c6f3cd6b`, identical to reviewed head `e3dcf42031ffbb04669d9129139d5ddfc47f8180`. Its canonical local source `b2a8206733cc5b62b398082e4f2585f45dda69a3` passes **20,735/20,735 UTC tests across 1,623 files**, build 247, generated-route strict types and lint with 15 existing warnings. All 5,194 paths/modes were checked before and after; the source mapping differs from the reviewed release only in the five audit documents. Receipt: `Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json`. These local full-source gates are distinct from hosted CI and deployment. Exact e70 public acceptance is now verified below; PR595/599 terminal hosted evidence remains pending. The previous verified main576 receipts remain historical proof of that revision.
@@ -74,7 +150,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > **Two independent audits are recorded in this file and NEITHER subsumes the
 > other.** Session A (this register, 841 items, `C#-S#-##` findings) is a
 > source-and-migration audit run without production credentials. Session B
-> (Register B, 14,187 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
+> (Register B, 14,214 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
 > 921 IDs from A, 684 from B, 1,602 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
@@ -222,6 +298,30 @@ out through this sandbox's proxy answered 200 on a retry). Rendering and contras
 posts is the parallel session's work (#588, #590).
 
 PR596 preserves Claude's reported 44 public/auth/marketing page re-crawls on e14, including the script scope and retry caveats; these are route/surface checks, not full workflow acceptance. PR597 preserves eight intermittent hydration findings as OWNER, with its instrumented 7-of-819 baseline and 0-of-273 experiment attributed to Claude. The replay mechanism is source-plausible, but this integration did not independently rerun those counts or patch framework dependencies. Intermittent failures remain recorded even where separate page crawls were clean.
+
+### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
+
+Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
+recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+theirs to update; the findings are listed here rather than edited under someone else's claim.
+
+| Route(s) | Lane | Finding → fix |
+|---|---|---|
+| `/dashboard/calendar` | C | second realtime reader of one table threw; shared channel → `C1-S9-94` (ported to main as `854d8dd7`) |
+| `/dashboard/autopilot`, `/dashboard/briefing` | C | "100% / All clear" shown over a refused scan; a refusal's reason replaced by generic English → `C1-S9-98` (composes with main's preview-only open: an explicit Re-scan now works for a super admin, and an unscanned preview says so) |
+| `/admin/admins`, `/admin/support-tickets` | B | Invite Admin, New Ticket, Export and "Assign agent" had no handler → `C1-S9-105`; the Settings tab showed "Require 2FA" and "session timeout" ON, neither enforced → `C1-S9-106` (owner decision recorded) |
+| `/admin/users`, `/admin/content`, `/admin/marketing/content`, `/admin/settings`, `/admin/feedback` | B | overflow at 390 px (implicit grid column; a wrapping notice; an inline truncate) → `C1-S9-99` |
+| `/dashboard/sports`, `/dashboard/school` | E | overflow at 390 px and English stat tiles → `C1-S9-99`; dead "Ask AI", dead row menus, sports tabs that switched nothing, English tab/day/due labels → `C1-S9-105` |
+| `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`, `/dashboard/recipes`, `/dashboard/social/settings` | C/D/E | overflow at 390 px → `C1-S9-99` (`PageHeader` now wraps a module's action row) |
+| `/guardian`, `/display`, `/marketplace/community` | F | overflow at 390 px → `C1-S9-99` |
+| `/dashboard/vacations/new` | C | dialog open on arrival failed hydration → `C1-S9-96` (Modal waits for hydration; main opens the dialog after mount — both hold) |
+| every in-app not-found | — | English in every locale → `C1-S9-97` (main's `199a94b5` did the same; merged) |
+| `/wallet/**`, parent gift screen | F | occasion labels English → `C1-S9-104` |
+| `/login`, `/signup`, `/kid-login`, `/auth/recovery`, `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/pay/[handle]`, `/reviews`, `/s/[slug]` | A | browser-tab title English in every locale → `C1-S9-100`; `/join`'s missing-token error English → `C1-S9-100` |
+| `/reviews/new` | A | "Review us on …" buttons and star labels English → `C1-S9-100` |
+| `/gift/[token]` | A | tab title, occasion label and "a child"/"a family" English → `C1-S9-100`, `C1-S9-104` (composes with main's dead-link card) |
+| `/blog`, `/blog/[slug]` | A | "copy link" copied the host, not the canonical URL → `C1-S9-95`; save button's labels and subscribe failure English → `C1-S9-103` |
 
 ### Every page
 
@@ -485,7 +585,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/dashboard/settings` | PAGE-238 UI-ROUTE-0235 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/setup` | PAGE-239 UI-ROUTE-0236 | E | → /login | intermittent #418 | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the second sweep, clean in the first — intermittent, cause not found yet; the CI sweep will name it if it recurs | 🔒 OWNER |
 | `/dashboard/signups` | PAGE-240 UI-ROUTE-0237 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/dashboard/sleep` | PAGE-241 UI-ROUTE-0238 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
+| `/dashboard/sleep` | PAGE-241 UI-ROUTE-0238 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; independent CI36334661999: signed-in /sleep React#418, automatic retry PASS; cause unproven | 🔴 OPEN — independent CI596 React#418; retry passed |
 | `/dashboard/social` | PAGE-253 UI-ROUTE-0250 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/social-feed` | PAGE-242 UI-ROUTE-0239 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/social/accounts` | PAGE-244 UI-ROUTE-0241 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -651,24 +751,24 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 *Different scheme and granularity from the block above; see Register B below.*
 
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27T18:29:00Z (PORT-001: main, through #606, merged into #586). Before that: 2026-09-27 (e70 parser live/public+native acceptance and local full gates pass; hosted/page-integration gates pending)
+- Last Updated: 2026-09-27T18:41:00Z (PORT-001: main, through #601, merged into #586). Before that: 2026-09-27 (a6 production verified;599 hosted clean1775; media coverage closed;585/598 combined full gates pending)
 - Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-10, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
-- Total Audit Items: 14187 — all 14,186 reconciled IDs retained, plus catalogue-test SUPPORT-2D36C3920F6A. The existing media-test SUPPORT-302F04E15861 / SUPPORT-BC0F2BFDBFD6 / SUPPORT-4CE6A54076E4 records remain IN PROGRESS. The prior reconciliation retained all 14,180 incoming IDs, restored COMPONENT-0337E00DA6ED and added both worker fixture IDs; no record was removed.
-- Not Started: 13877
-- In Progress: 298
+- Total Audit Items: 14213 — all14,187 prior IDs retained plus26 integrated source/test/tool paths. Three media regression records close on exact599 hosted/deployed proof; broader SEC-001 remainsFAIL.
+- Not Started: 13862
+- In Progress: 337
 - Passed: 0
-- Fixed + Passed: 7 (AUTHZ-002, AUTHZ-003, AUTHZ-005, SEC-005, SUPPORT-98FD1D4C44AD, SUPPORT-1A08672F87F3, SUPPORT-827E4294FC10). The worker read/write boundary and both regression fixtures now have corrected hosted and exact deployed acceptance; their earlier failed checkpoints remain recorded.
+- Fixed + Passed: 10 (AUTHZ-002, AUTHZ-003, AUTHZ-005, SEC-005; three worker and three media coverage records). Exact scoped hosted/deployment evidence and all earlier failed checkpoints are retained; no additional product workflows are implied.
 - Status normalization: MAIN-F-C07, MAIN-F-C09 and MAIN-F-C10 now use IN PROGRESS, matching their pending integrated retests. Their original CLOSED / MITIGATED / MOSTLY MITIGATED verdicts remain verbatim in their Notes and evidence.
 - Blocked: 4
 - Failed: 1 (SEC-001). Repository fixes and replayed-policy checks for AUTHZ-003 and AUTHZ-005 remain recorded as FIXED + PASS with their explicit production-migration limitation. No deployed-policy verification is inferred.
-- Overall Completion: **0.05%** (7 recorded closures / 14,187 rows). Four production-credential rows retain BLOCKED status, but receive no completion credit here until their required full-investigation evidence is reconciled. This is an audit-signoff measure, not a product-development percentage.
+- Overall Completion: **0.07%** (10 recorded closures / 14,213 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
 
 > **On these counts, plainly.** *Total Audit Items* is the Codex cycle's
 > enumeration of the whole target space — every route, table, policy, component
 > and flow it intends to reach — not a count of work anyone has done. *Overall
-> Completion: 0.05%* is therefore a statement about that denominator and says
+> Completion: 0.07%* is therefore a statement about that denominator and says
 > almost nothing about the state of the product: the same tree passes 351/351
 > migration replays, 64/64 RLS boundary probes — with a runner that now counts a
 > skipped probe as a skip rather than a pass — and every CI job, the E2E suite
@@ -976,6 +1076,15 @@ head 92340315):
   this pass could NOT reach — authenticated journeys, live providers, deployed
   database policy, and a browser audit of the deployed site — is stated as such
   in each section rather than left to look verified.
+
+## Page Audit Register — see "Page Audit — every page on www.bubaly.com"
+
+The per-page register is the **Every page** table in *Page Audit — every page on
+www.bubaly.com* (lanes A–F, claim protocol there). A second register kept by
+Claude-1 in `docs/audit/pages/` was retired on 2026-09-27 so the site has one
+answer per page (`C1-S9-107`); its findings are in that table and in the
+`C1-S9-93`…`C1-S9-106` entries. `node scripts/page-audit-register.mjs` checks
+that every `page.tsx` has exactly one row there.
 
 ## Status Legend
 - ⬜ NOT STARTED
@@ -2652,7 +2761,7 @@ not read the same on this page.*
 | UI-ROUTE-0235 | UI | /dashboard/settings | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0236 | UI | /dashboard/setup | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0237 | UI | /dashboard/signups | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0238 | UI | /dashboard/sleep | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0238 | UI | /dashboard/sleep | 🔄 IN PROGRESS | Medium | Pending | None | Pending | Independent PR596 CI36334661999 recorded actual React#418 on /dashboard/sleep at every-page-signed-in.spec.ts137; automatic retry passed. This remains an OPEN runtime observation, distinct from eight Claude OWNER routes; no proven shared cause or repair. Framework candidate is separate and unshipped. |
 | UI-ROUTE-0239 | UI | /dashboard/social-feed | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0240 | UI | /dashboard/social/accounts/connect | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0241 | UI | /dashboard/social/accounts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3542,7 +3651,7 @@ not read the same on this page.*
 | COMPONENT-35C7499C08E4 | COMPONENT | components/ui/partial-read-banner.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-358DE3CE51FC | COMPONENT | components/ui/otp-input.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8B4C0C14B72F | CONTROL | input at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DA7D449CE911 | COMPONENT | components/ui/modal.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DA7D449CE911 | COMPONENT | components/ui/modal.tsx | 🔄 IN PROGRESS | Medium | Pending | None | Pending | Actual initially-open SSR/hydration reproduction loses focus/trap/Escape/scroll effects; later-open control passes. Adopted shown=open&&hydrated for hook and rendered portal; both retained actual-browser controls pass within44/44. Full combined gates pending. |
 | CONTROL-B490DF5B47B7 | CONTROL | div at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B30EAF9E077A | CONTROL | button at line 104 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-C2F62FB0CB5E | COMPONENT | components/ui/input.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4352,7 +4461,7 @@ not read the same on this page.*
 | COMPONENT-022AA709A0F6 | COMPONENT | components/analytics/thirty-minute-summary.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-372218C5495C | COMPONENT | components/analytics/activation-beacon.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-01395221D70E | COMPONENT | components/app/icons/all-services-icon.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-B7223D20600D | COMPONENT | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-B7223D20600D | COMPONENT | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | CONTROL-37141CDAC209 | CONTROL | Modal at line 212 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F89B6AD574D4 | CONTROL | button at line 218 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9C63831D8C88 | CONTROL | button at line 225 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4367,7 +4476,7 @@ not read the same on this page.*
 | CONTROL-0038209CF754 | CONTROL | AllServicesModal at line 431 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-F2E9C28A56D7 | COMPONENT | components/app/display-comfort.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FF52E27D6224 | CONTROL | button at line 60 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-093F84B7919A | COMPONENT | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-093F84B7919A | COMPONENT | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | CONTROL-10E0D346A43D | CONTROL | div at line 195 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-07ECE0524409 | CONTROL | div at line 196 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-69D6C60F8A7F | CONTROL | input at line 205 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -6615,7 +6724,7 @@ not read the same on this page.*
 | CONTROL-7D76FD76BF2E | CONTROL | Link at line 204 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-A0A4E9A10E1B | COMPONENT | components/admin/super-admin-toggle.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F0B5EDC71B35 | CONTROL | button at line 49 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. |
+| COMPONENT-DCBBCE75C88B | COMPONENT | components/modules/inbox-module.tsx | 🔄 IN PROGRESS | Medium | tests/a-filtered-delete-is-not-a-deletion.test.ts (list measured from pg_policies by docs/audit/gated-write-tables-check.sql) — 92-table list replaced the hand-written 19; KNOWN_UNFIXED now empty | family_communications archive hid a still-present message; read/replied receipts logged nothing on a filtered write. Added .eq('family_id', …) + .select('id'); refuses on an empty result | Guard calibrated (marketplace remove); probes 54/54 twice; full suite green | Browser workflow not yet exercised. See finalaudit.md Q53. Additional bounded selection-state finding 2026-09-27: actual module5028af42895964aea8b2092bae788e93dd1ea873 preserves A typed reply in selected B, carries A first-action Added/disabled state to B without a B write, and applies a late A draft to B after witnessed settlement. Three desired RED in C:/Users/Daniel/AppData/Local/Temp/bubaly-inbox-state-red-v4-20260927.log. The v3 third case lacked React settlement and its PASS is excluded. Controlled query/action transport only; separate follow-up coordinated at https://github.com/NewWorldVenture/Bubaly/pull/598#issuecomment-5858303635. No Inbox repair, database/provider proof or status closure is claimed. |
 | CONTROL-7E5DE59B415E | CONTROL | ErrorState at line 143 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-26E283453007 | CONTROL | Link at line 165 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-DDAB1FAFF956 | CONTROL | button at line 169 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9976,8 +10085,8 @@ not read the same on this page.*
 | NAV-020558D6F17E | NAV | components/admin/admin-shell.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-C6ED2A08959B | NAV | components/app/android-back-handler.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-964DB28121C0 | NAV | components/app/app-shell.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| NAV-093F84B7919A | NAV | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| NAV-B7223D20600D | NAV | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| NAV-093F84B7919A | NAV | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
+| NAV-B7223D20600D | NAV | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | NAV-49FBD7A8773D | NAV | components/app/nav-shared.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-7161F322C749 | NAV | components/app/page-header.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-D23B16B54832 | NAV | components/app/sidebar-account.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11962,7 +12071,7 @@ not read the same on this page.*
 | LIBRARY-21A3E2A5EA8B | LIBRARY | lib/ai/family-settings.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1F68BB3C881F | LIBRARY | lib/ai/insights.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-942F73D13D40 | LIBRARY | lib/ai/models.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-3059BA1B2D06 | LIBRARY | lib/ai/observability.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-3059BA1B2D06 | LIBRARY | lib/ai/observability.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Feature request text is a non-sensitive fixed label. Independent AST reads38 actual withAiRequest calls in e52 and finds fixed literal/translation keys throughout. JSON/SSE tests preserve original provider prompt/conversation and exclude typed text from ledger;22/22PASS with6 desired old-label failures. Full combined gates pending. |
 | LIBRARY-D8D63D724C8A | LIBRARY | lib/ai/planner/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1680A4B78C99 | LIBRARY | lib/ai/planner/prompts.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-DBAA1ED4DD65 | LIBRARY | lib/ai/planner/purchase-advice.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12003,7 +12112,7 @@ not read the same on this page.*
 | LIBRARY-AF8B4AD9F792 | LIBRARY | lib/ai/runs/history.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-90AFDF8B9163 | LIBRARY | lib/ai/runs/intake.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-94047634BAF6 | LIBRARY | lib/ai/runs/states.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-3E7235F73734 | LIBRARY | lib/ai/runs/store.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-3E7235F73734 | LIBRARY | lib/ai/runs/store.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Incoming585 service-backed feature ledger exposed a raw request-text persistence risk under family-readable SELECT policy. Adopted Claude711b15c3 fixed caller labels, preserving concierge and original provider/conversation content. Independent22/22 focusedPASS; old-label source makes6/22 fail. No executed private disclosure claim; full combined gates pending. |
 | LIBRARY-09CABD29FE6C | LIBRARY | lib/ai/runs/verify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E96A16B28418 | LIBRARY | lib/ai/safety/untrusted.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-BECB53B99364 | LIBRARY | lib/ai/schema-to-json.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12549,7 +12658,7 @@ not read the same on this page.*
 | LIBRARY-A6243E0F741C | LIBRARY | lib/stripe/treasury.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D1B2BB4C2762 | LIBRARY | lib/stripe/webhook.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-A1F48E30688A | LIBRARY | lib/stripe.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-8A99E8D3C1AA | LIBRARY | lib/supabase/auth.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-8A99E8D3C1AA | LIBRARY | lib/supabase/auth.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Actual AI GET/installed SDK reproduces bearerB plus adminCookieA inheriting the wrong role and adminBearer without cookies being denied. Optional authenticatedClient now binds role lookup to the verified route client; default cookie-only callers preserved. Focused principal tests pass; full combined gates pending. No cross-family RLS or model-spend claim. |
 | LIBRARY-4490BB78F96E | LIBRARY | lib/supabase/bearer.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-854EA21AB06D | LIBRARY | lib/supabase/chunked-in.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E7335A071B71 | LIBRARY | lib/supabase/client.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -15789,7 +15898,7 @@ not read the same on this page.*
 | SUPPORT-92C6D10C1C14 | SUPPORT | tests/e2e/display-clock.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-D55E4DE468A1 | SUPPORT | tests/e2e/display-ownership.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-91613E855CC0 | SUPPORT | tests/e2e/native-bootstrap.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
-| SUPPORT-02FD32F09502 | SUPPORT | tests/e2e/realtime-query.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
+| SUPPORT-02FD32F09502 | SUPPORT | tests/e2e/realtime-query.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob f7c038c53a8d04a18d108f8dfa21b095d89e5ebc. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-E3A46979E223 | SUPPORT | tests/e2e/register-sw.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SUPPORT-18628D564A36 | SUPPORT | tests/helpers/push-dispatch-db.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | SERVICE-A2DE8140849F | SERVICE | notificationId | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
@@ -15806,7 +15915,7 @@ not read the same on this page.*
 | DEPLOY-29B86C9FE9E8 | DEPLOY | app/api/sync/[provider]/status/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental source discovery; see discovery/incremental-inventory.json for inspection commit and SHA-256. Workflow verification pending. |
 | PUSH-005 | PUSH | Complete marketing push audience and suppression pagination | 🔄 IN PROGRESS | High | docs/final-audit/push-audience-cycle.md; tests/marketing-push-audience-execution.test.ts | Stable keyset pages traverse devices and suppressions, with deduplicated profile-ID chunks and smaller-response-cap-safe empty terminators. All reads complete before delivery. Missing/malformed profile data, page failures and explicit global row/request limits fail the campaign before any send; verified null email preserves phone-only accounts. | 11 related suites / 164 tests PASS, including 30 new actual-action execution cases; scoped strict types and lint PASS. Original 1,000-row truncation defects reproduced before repair.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | No SQL changes or live provider sends. Source work begins after this finding is recorded. |
 | DATA-003 | DATA | Finance read failures and pending data must not appear as verified empty balances | 🔄 IN PROGRESS | High | docs/final-audit/finance-read-state-cycle.md; tests/e2e/finance-read-states.spec.ts | Four finance views now consume error/loading/stale signals. Existing ErrorState exposes failures and retry; summaries and empty states wait for verified reads. Budget retry refreshes both required queries; payment search survives retry. | 14 actual React/Chromium checks PASS after reproducing all 14 original failures; five related suites / 115 tests PASS; scoped lint PASS.  Combined application source b80e55bf8ebe46b695e412a1104ed45430e1bac9: full 1,140-file / 12,782-test Vitest suite PASS (77.56s), strict TypeScript PASS, 144 Chromium component checks PASS (12.4s), production build PASS, unchanged four baseline lint warnings, query/i18n gates PASS. Generated route types match the strict-check input. Final startup probe: home 2089ms, feature navigation 1631ms, no page errors. Evidence: docs/final-audit/partition-verification-checkpoint.md. | Household financial records only; no Stripe/pricing changes, no SQL or live money actions. |
-| LIBRARY-478BBDEF113D | LIBRARY | lib/auth/cache-session.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
+| LIBRARY-478BBDEF113D | LIBRARY | lib/auth/cache-session.ts | 🔄 IN PROGRESS | High | Actual installed SDK and cache-session module with held visibility-recovery cookie read; synthetic peer logout/account switch/token rotation. C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/candidate-old-source-14-red.log; held-visibility-red.log. | No authoritative repair adopted at this checkpoint; bounded TEMP candidate investigation continues. | Original source: 11 PASS / three desired RED in 22.5s. Stale SIGNED_IN(A) advances the revision and can discard a queued fresh read after logout, B adoption or A rotation. | Existing permanent ID retained; source discovery after 9d238e0c. Status corrected to IN PROGRESS on 2026-09-27 because the real module was exercised. No exact hosted-cause, production-provider or completed-auth-workflow claim. Superseding local checkpoint 2026-09-27: module6a0d0d0a adopted after independent review; current-cookie guards precede positive event revision/listeners and validate positive receipts with one retry. Original17-case suite11PASS/6desiredRED; final17/17 browser,64/64 focused units, strict types/lint PASS. The earlier no-adoption wording is historical. New integrated canonical/hosted/deployed acceptance remains pending; status stays IN PROGRESS. |
 | SERVICE-0AD17213A84C | SERVICE | cacheSessionIdentity | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-498FF9278C86 | SERVICE | getCacheSessionSnapshot | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SERVICE-224D78698802 | SERVICE | getServerCacheSessionSnapshot | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
@@ -15851,7 +15960,7 @@ not read the same on this page.*
 | SERVICE-C339939E5A82 | SERVICE | readXAuthorization | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | SERVICE-DDD8BB404BA6 | SERVICE | xJsonRequest | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | SERVICE-DC2E51DF76FF | SERVICE | finishXAuthorization | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-C1CEE5335C18 | SUPPORT | tests/e2e/rewards-ledger.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-C1CEE5335C18 | SUPPORT | tests/e2e/rewards-ledger.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob 84d06162fe2300eaa2e8cd2f5a3e67d348959d06. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-361FF3F5A5FC | SUPPORT | tests/e2e/social-publish-consumers.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-32BB54E81E06 | SUPPORT | tests/social-access-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-D4B90940187E | SUPPORT | tests/social-publish-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -15882,15 +15991,15 @@ not read the same on this page.*
 | SUPPORT-A2BC9AB7B5A4 | SUPPORT | tests/contact-center-urgent-durability-repro.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-B520451DF6B4 | SUPPORT | tests/contact-center-urgent-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-5EE147EA7E77 | SUPPORT | tests/contact-center-urgent-review.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-678300F81E6F | SUPPORT | tests/e2e/medications-ledger.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-678300F81E6F | SUPPORT | tests/e2e/medications-ledger.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob 181b7fc504834c517e7ac1029daa133c74ce0803. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-26C664F22A02 | SUPPORT | tests/marketing-push-consumer-review.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-56CD7E1068E1 | SUPPORT | tests/marketing-push-outcome-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | TEST-003 | TEST | Inbound multipart request fixture and cancellation accuracy | 🔄 IN PROGRESS | High | Node24 isolated whole-multipart-overbudget case:assertionPASS plus1unhandled ERR_INVALID_STATE/exit1; combined-attachment-byte-limit case separatelypasses. Bundled outboundFormData encoder enqueues after legitimate body cancellation because it only checks errored, notclosed, stream state. | Pre-serialized multipart bytes in controlled inboundstream fixture; explicit cancellation/readbound assertions; actualchunkedloopbackHTTP→Next adapter→emailhandler returns413. | 30focused adapter/body/attachment tests PASS and final1151-file/13003-test suite PASS with zero unhandled errors on Node24. Production limits/cancellation unchanged. | Recorded before fixture change; no providerwrites or productionsecretuse. |
 | SUPPORT-EFB08CD59ADE | SUPPORT | tests/authenticated-fixture-ownership.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-C407CC9796A8 | SUPPORT | tests/e2e/hydration-ledger.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-C33E1A58D1C6 | SUPPORT | tests/e2e/medications-readback-review.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-C407CC9796A8 | SUPPORT | tests/e2e/hydration-ledger.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob 97f16bc3b171cab51c3fefa583229570ebceb0e1. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
+| SUPPORT-C33E1A58D1C6 | SUPPORT | tests/e2e/medications-readback-review.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob a69af9b7347693bf45ca4c9dcee48799413d347e. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-56DED49B64AF | SUPPORT | tests/e2e/query-refresh-confirmation.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-4B19503B0067 | SUPPORT | tests/e2e/rewards-readback-review.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-4B19503B0067 | SUPPORT | tests/e2e/rewards-readback-review.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob 741774a927da261e8f30b36cb617bbec4880d6c3. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-0EA725FB383D | SUPPORT | tests/stream-cancellation-runtime.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/care-delivery-inventory.json. Full workflow verification remains separate. |
 | SOCIAL-003 | SOCIAL | Scheduled social publishing through verified background execution | 🔄 IN PROGRESS | High | 4actualmodule characterization cases show scheduledaction persists5recordfamilies without registeredworker; genericautomationcron doesnotdispatchposts; manualretry publishesbeforeduedate and leaves schedule/calendar scheduled; offsetfree09:00 interpretedUTC despiteNewYorkworkspace and pasttimesaccepted. Characterization is notworkflowPASS. | Explicit timezone/future/DST and complete X payload validation precede writes. Strict initial/schedule/calendar/cleanup receipts preserve ambiguous result identity. Studio retires stale callbacks, preserves current draft and settles changed-owner/account results into review. Private server-written snapshot/revision claims authorize bounded background dispatch with current actor/approval/account/token checks, per-target durable outcomes, known-rate-limit retries and held uncertainty; calendar/post/schedule projections reconcile. Existing5minute dispatcher and dailyVercel fallback registered. | 75independent action cases,37actual page-render checks,23Studio Chromium cases and58actualSDK/private-worker testsPASS. Scheduler+manual+X171focusedPASS;93cron/scheduler follow-upPASS. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | No liveposts or migrationchanges. KnownAUTHZ003 databasepolicygap remains a productionblocker. |
 | DATA-007 | DATA | Quick Capture current-owner task creation and Undo | 🔄 IN PROGRESS | High | 16 actual component/AppProvider/ToastProvider/cache/SDK characterization cases:4healthy controls,10defect scenarios,2behavioral characterizations;45related unit checks pass. Ordinary Ctrl+Enter bypass of disabledSave produces2POSTs. No attribution to priorCItoastflake. | QuickCapture, CaptureShell and VoiceModule now use synchronous submission guards and current owner/form/lifetime checks. Required list reads, creates and exact mutation/Undo identities are checked. Each SDK request has a15second AbortError deadline and a contained race for noncooperative transport; uncertain mutations hold review rather than blind retry. Confirmed voice capture feedback does not await optional history. | 62helper cases and related5file108test run PASS;39QuickCapture/CaptureShell and9voice Chromium checks PASS. Root combined83capture/social Chromium checks PASS16.3s;10file320focused tests including catalogue/time/action/render/capture PASS. Whole-project types and full lintPASS with4baseline warnings. Pinned910cd271:1156files/13254unit tests PASS128.09s withzero unhandled errors;336Chromium PASS53.0s;246page production build,final strict types,lint/query/i18n PASS under isolatedNode24.21.0. Build/browser/startup runtime-identicalf6e17ef; sole follow-up changes2cronfixtures+evidence. Home2076ms/navigation1647ms/nopageerrors;5responsecancellations/0internalstreamerrors. Exactlogs/provenance/limitations in capture-scheduling-checkpoint.md. | Permanentrefs COMPONENT-97EAFCA06075,CONTROL-C7BEF2FB673A,LIBRARY-3010D3A2884E,DB-TBL-418/419. Explicit Undo of previously created IDs after owner switch and nullable optional roster are behavioral characterizations, not proven defects; preserve their current policy. No shared navigation changes. · 2026-09-26 (Q66 note): the cross-client default-list race was re-read in source — lib/services/tasks ensureTodoList and lib/services/groceries ensureDefaultList create a list only when the family has NO un-archived one, with a lookup-then-insert and no constraint, so two first captures at once can create two lists. A duplicate list, not lost data; closing it needs a serialising RPC (families may legitimately hold many lists, so a unique index is the wrong tool). Filed, not fixed. · 2026-09-26 (Q69): FIXED for every server-side writer by 0443 (a per-family advisory lock around get-or-create, SECURITY INVOKER), proved by a two-session race probe whose lock-less control makes 2 lists where 0443 makes 1. Still open for lib/capture/save.ts (quick capture and voice), whose deadline machinery two E2E harnesses pin request by request — filed as its own change. |
@@ -15931,7 +16040,7 @@ not read the same on this page.*
 | SERVICE-FA32603E25E6 | SERVICE | publishScheduledPostNow | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SERVICE-46160F1C4DE1 | SERVICE | runScheduledPublishDrain | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-123B68636B20 | SUPPORT | tests/capture-save-boundaries.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-155C44B711F8 | SUPPORT | tests/e2e/quick-capture-task.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-155C44B711F8 | SUPPORT | tests/e2e/quick-capture-task.spec.ts | 🔄 IN PROGRESS | Unassessed | C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/fixture-adoption-receipt.json; fixtures-validation.json. | Existing controlled cookie snapshot now agrees with the same synthetic SDK session; exactly one mock expression changes. All test assertions are retained. | Member of the seven-fixture 176/176 PASS in19.2s; scoped strict types/lint and37/37 graph guard PASS. Independent coherent-token controlPASS/mismatched-token desiredRED preserves the real ownership gate. | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. Current2026-09-27: exercised coverage is IN PROGRESS, not a completed product workflow. Fixture blob 57fe62224e7653512a07d3fbbe78519cfb99c038. No application change, new fixture file, database/provider proof or hosted/deployed closure is claimed. |
 | SUPPORT-FDA788F89F4F | SUPPORT | tests/e2e/social-scheduling-ui.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-6E1BFE4B860C | SUPPORT | tests/e2e/voice-capture-boundaries.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
 | ENV-C246324A9568 | ENV | CAPTURE_VOICE_BASELINE | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/capture-scheduling-inventory.json. Full workflow verification remains separate. |
@@ -16015,7 +16124,7 @@ not read the same on this page.*
 | SUPPORT-62D65DC36B18 | SUPPORT | tests/browser-signout.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E149D86B1AAB | SUPPORT | tests/e2e/browser-signout-flow.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-48E0D8C18CAB | SUPPORT | tests/e2e/logout-refresh-storage.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
-| SUPPORT-F03CAA80721B | SUPPORT | tests/e2e/session-storage-reconcile.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
+| SUPPORT-F03CAA80721B | SUPPORT | tests/e2e/session-storage-reconcile.spec.ts | 🔄 IN PROGRESS | High | Existing PR600 storage-only/both case failed its first attempt and passed its retry. TEMP extensions execute actual SDK/module stale-receipt schedules with synthetic provider responses; C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/candidate-old-source-14-red.log. | Coverage investigation only; no permanent fixture repair adopted at this checkpoint. | Eleven original-source controls PASS; three desired stale-receipt cases RED. The hosted symptom matches a possible race, but its exact schedule is not proved. | Existing canonical-path identity retained from discovery/auth-signout-inventory.json. This is regression coverage for the session boundary, not an additional product defect or a completed user workflow. Hosted and production acceptance remain open. Superseding local coverage checkpoint 2026-09-27: retained fixture4843068f adopted with six real-SDK held-event/receipt regressions and transient/rotation controls. Original11PASS/6desiredRED; final17/17PASS6.0s, broader43/43 before final rotation assertion refinement (overlapping scopes),64/64 focused units, types/lint PASS. C:/Users/Daniel/AppData/Local/Temp/bubaly-session-reconcile-investigation-20260927/adoption-receipt.json. Earlier pending-adoption wording is historical; integrated/hosted/production acceptance remains open. |
 | SUPPORT-D209E0931FF9 | SUPPORT | tests/e2e/signout-form-boundaries.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-903D92BD2413 | SUPPORT | tests/session-revocation.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-33BFBFE6C632 | SUPPORT | tests/session-storage-change.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-signout-inventory.json. Full workflow verification remains separate. |
@@ -16478,7 +16587,7 @@ not read the same on this page.*
 | LIBRARY-F20B6F450427 | LIBRARY | lib/server/feature-entitlement.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-D0ECED67194D | LIBRARY | lib/server/list-all-auth-users.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-64F69170410E | LIBRARY | lib/server/public-media-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
-| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). Route gate now passes its authenticated db to isSuperAdmin and retains598 outage503 semantics. Synthetic actual GET/role-helper/SDK desired mixed-principal RED and repaired controls retained. Full combined gates pending. |
 | LIBRARY-FDF0D5E2DE2D | LIBRARY | lib/server/secret-equals.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-7AD57457138A | LIBRARY | lib/services/activity/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-73C1D11D203C | LIBRARY | lib/services/ai-settings/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
@@ -16599,12 +16708,39 @@ not read the same on this page.*
 | SUPPORT-1A08672F87F3 | SUPPORT | tests/e2e/service-worker-cache.spec.ts | 🛠 FIXED + PASS | Critical | 72/72 controlled cache cases within combined85/85 (72+13) pass with real Chromium CacheStorage, current logout and actual worker handlers; final fixture9b12ce5a5df67d9fb0da26dee9ed3149c859bde6. | Regression fixture covers shared cache reads and writes, activation, public shell and separately owned publisher downloads. | Combined65719886:85/85 in3.8s, Temp/bubaly-sw-combined-browser-65719886-20260927.log; full strict types/lint pass after preliminary header-union errors were corrected. Native correction hosted acceptance remains pending. | Added2026-09-27 using the SHA-256 canonical-path convention. This row inventories regression coverage, not another completed product workflow. Remains IN PROGRESS; see docs/final-audit/service-worker-private-cache-cycle.md. e14 production native wrapper1/1 in4.3s and exact public revision/worker checks PASS16:23UTC; corrected hosted CI36332783206 pending, so this row remains IN PROGRESS. Current closure2026-09-27: corrected850 CI36332783206 all4SUCCESS, E2E1764/1764 at16:47:07UTC; candidate/tested/e14 share tree52e0d1e. Exact e14 public/native wrapper1/1 deployedPASS independently confirmed. Earlier pending/failure statements in this row are retained historical checkpoints; this scoped worker/coverage record is now FIXED+PASS. No bucket/privacy or extra product-workflow closure. |
 | SUPPORT-827E4294FC10 | SUPPORT | tests/e2e/service-worker-native.spec.ts | 🛠 FIXED + PASS | Critical | Original hosted native case on59f03f0f2 reached its nativev6 controls then failed at iframe navigation; E2E1369/1370 in run36331147265. Corrected fixture507a6cd109def62f6053ff1ebd82f8a701b9ca7d uses a final top-level navigation with page-target CDP scripts disabled. | Real hosted Next worker/public resources and synthetic private-cache controls. Final top-level navigation respects unchanged DENY/frame-ancestors headers; no iframe, account or provider action. | Supplemental native Chromium supplied exactv6 workerSHAe9b19ada5f708e880d56b7902f223d704e8b04662af8db3ae9265c33c9feeb5b once; real public install/icon and final200/fromServiceWorker exact offline body pass. Temp/bubaly-sw-native-v6-top-level-20260927.json. Corrected complete hosted case remains pending; no fullcase/deployment PASS. Final delta878a17b full generated-route types/lint15 and discovery1/1 PASS (not runtime); final-native-fixture-receipt.json. | Added2026-09-27 using the SHA-256 canonical-path convention. Fixture coverage is separate from product-workflow completion. IN PROGRESS; exact source/proof limitations in worker cycle. e14 production native wrapper1/1 in4.3s and exact public revision/worker checks PASS16:23UTC; corrected hosted CI36332783206 pending, so this row remains IN PROGRESS. Current closure2026-09-27: corrected850 CI36332783206 all4SUCCESS, E2E1764/1764 at16:47:07UTC; candidate/tested/e14 share tree52e0d1e. Exact e14 public/native wrapper1/1 deployedPASS independently confirmed. Earlier pending/failure statements in this row are retained historical checkpoints; this scoped worker/coverage record is now FIXED+PASS. No bucket/privacy or extra product-workflow closure. |
 
-| SUPPORT-302F04E15861 | SUPPORT | tests/family-media-owner-boundary.test.ts | 🔄 IN PROGRESS | Critical | 19 owner/inflight cases included in isolated local33/33; actual cookie parsing, rotation, logout/new-session boundaries and both A/B settlement orders. | New regression coverage for existing SEC-001/Q59 and media-helper IDs; no new product finding. | Matching prototype types/lint pass; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Local follow-up after deployed e14; not production authorization proof. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
-| SUPPORT-BC0F2BFDBFD6 | SUPPORT | tests/media-session-gap.test.ts | 🔄 IN PROGRESS | Critical | Actual cache-session/media modules: original observer-gap desired RED, active-switch control; both pass with local ownership repair inside33/33. | Retains the Q59 observer-gap regression and active-switch control. | Supplemental actual React/SDK browser2+2 passes against matching one-module overlay; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Coverage for SEC-001, not another finding or completed workflow; e14 does not deploy this repair. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
+| SUPPORT-302F04E15861 | SUPPORT | tests/family-media-owner-boundary.test.ts | 🛠 FIXED + PASS | Critical | 19 owner/inflight cases included in isolated local33/33; actual cookie parsing, rotation, logout/new-session boundaries and both A/B settlement orders. | New regression coverage for existing SEC-001/Q59 and media-helper IDs; no new product finding. | Matching prototype types/lint pass; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Local follow-up after deployed e14; not production authorization proof. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
+| SUPPORT-BC0F2BFDBFD6 | SUPPORT | tests/media-session-gap.test.ts | 🛠 FIXED + PASS | Critical | Actual cache-session/media modules: original observer-gap desired RED, active-switch control; both pass with local ownership repair inside33/33. | Retains the Q59 observer-gap regression and active-switch control. | Supplemental actual React/SDK browser2+2 passes against matching one-module overlay; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Coverage for SEC-001, not another finding or completed workflow; e14 does not deploy this repair. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
 
-| SUPPORT-4CE6A54076E4 | SUPPORT | tests/e2e/family-media-session-ownership.spec.ts | 🔄 IN PROGRESS | Critical | Seven actual React/media-hook/cache-session/browser-adapter/installed-SDK cases: four two-tab ownership cases and three FamilyMediaImg Node SSR/Chromium hydration controls; only synthetic auth/Storage/image transport. | Retains observer-gap, active-switch and both held A/B signing settlement orders for existing SEC-001/Q59. | 7/7PASS in2.6s, fixturee169fe97; valid-cookie hydration warning reproduced then fixed, absent/external and immediate cached SPA controls pass; strict fixture types/lint pass and collector registration guard37/37PASS. Full integrated gates and media deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule; no server, provider operation or private production image. Test coverage is not another product finding. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
+| SUPPORT-4CE6A54076E4 | SUPPORT | tests/e2e/family-media-session-ownership.spec.ts | 🛠 FIXED + PASS | Critical | Seven actual React/media-hook/cache-session/browser-adapter/installed-SDK cases: four two-tab ownership cases and three FamilyMediaImg Node SSR/Chromium hydration controls; only synthetic auth/Storage/image transport. | Retains observer-gap, active-switch and both held A/B signing settlement orders for existing SEC-001/Q59. | 7/7PASS in2.6s, fixturee169fe97; valid-cookie hydration warning reproduced then fixed, absent/external and immediate cached SPA controls pass; strict fixture types/lint pass and collector registration guard37/37PASS. Full integrated gates and media deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule; no server, provider operation or private production image. Test coverage is not another product finding. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
 
 | SUPPORT-2D36C3920F6A | SUPPORT | tests/a-catalogue-says-each-key-once.test.ts | 🔄 IN PROGRESS | Medium | Source reviewed: every catalogue, duplicate-key detection and retained locator failure wording; incoming PR596 regression guard. | Canonical-path SHA-256 inventory registration; no additional product finding. | Incoming combined verification pending; no independent PASS claimed. | Added2026-09-27 while integrating PR596/597 after main e70. Existing permanent IDs/statuses and both audit registers preserved. |
+| API-AE3E5F465E18 | API | GET /api/admin/support-tickets/export | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| COMPONENT-409DF839B3FA | COMPONENT | components/admin/invite-admin-button.tsx | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| COMPONENT-28394844D064 | COMPONENT | components/admin/new-ticket-button.tsx | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| LIBRARY-03B2D9086BBF | LIBRARY | lib/admin/tickets-csv.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-E0C1FED5665F | SUPPORT | public/favicon.ico | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-2765D38F06C7 | SUPPORT | scripts/page-audit-crawl.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-414B63EEB699 | SUPPORT | scripts/page-audit-register.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-EFB584DC8A2A | SUPPORT | scripts/page-audit-report.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F62199809359 | SUPPORT | scripts/page-audit-session.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-720EE19CBB3B | SUPPORT | scripts/page-audit-static.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-0A28BAE100C1 | SUPPORT | scripts/page-audit.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-A2ADFB8F4A9D | SUPPORT | tests/a-browser-asking-for-favicon-ico-gets-one.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-A5666D922659 | SUPPORT | tests/a-button-does-something.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-2ED2B5AF211B | SUPPORT | tests/a-first-visit-with-two-events-records-both.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-20C466C244F0 | SUPPORT | tests/a-missing-record-is-reported-in-the-familys-language.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-85AFB505BF41 | SUPPORT | tests/a-modal-open-on-arrival-hydrates.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-334EEE32AD63 | SUPPORT | tests/a-page-fits-a-phone.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F6D57400196B | SUPPORT | tests/a-public-page-reads-in-the-readers-language.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-0FAF944BB694 | SUPPORT | tests/a-route-plan-override-uses-the-authenticated-principal.test.ts | 🔄 IN PROGRESS | Medium | Actual AI GET, role helper and installed SDK with synthetic transport: role override must use the already authenticated principal; cookie-only and same-principal controls retained. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-52C1B1C18BF1 | SUPPORT | tests/a-super-admin-page-and-its-endpoint-agree.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-908F8BF42734 | SUPPORT | tests/an-ai-feature-request-is-recorded-not-refused.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-DFBBA1A4E6A0 | SUPPORT | tests/an-ai-request-row-never-carries-what-was-typed.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-5147D781341F | SUPPORT | tests/e2e/modal-hydration.spec.ts | 🔄 IN PROGRESS | Medium | Actual React SSR/hydrateRoot and Modal/dialog behavior; initially-open and later-open controls retain focus, Tab/Escape and scroll restoration. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F81D1A92AB0C | SUPPORT | tests/every-page-is-in-the-page-register.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-31CE72104105 | SUPPORT | tests/no-catalogue-defines-a-key-twice.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-D1BFE4A72EF8 | SUPPORT | tests/two-widgets-on-one-table-do-not-share-a-channel.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-6184F8927CFB | SUPPORT | tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts | 🔄 IN PROGRESS | Medium | Current main e96 source restored unchanged; blob 418e10ff3ab1c1af44add11530bd3a1ddb929bdd. | Preserve the existing sidebar preference-read contract while reconciling concurrent main. | Read-only source/inventory review complete; current combined canonical execution and hosted acceptance pending. | Added2026-09-27 by canonical-path SHA-256 to inventory an already tracked test. Simulated React hooks/browser storage are unit coverage, not a live navigation/provider journey. No application change or workflow closure is claimed. |
 
 ## Inventory and evidence rules
 
@@ -45245,6 +45381,573 @@ document-migration, version, catalogue-key and i18n-integrity guards green
 
 **Status:** DONE (integration). Nothing here is applied to production; `B1` is
 unchanged.
+
+---
+
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-93 — every page on bubaly.com, one row each: the page audit register
+
+**File/path:** `scripts/page-audit-register.mjs`, `docs/audit/pages/*.md` (13
+lane files and the protocol), `scripts/page-audit-crawl.mjs`,
+`scripts/page-audit-session.mjs`, `scripts/page-audit-static.mjs`,
+`tests/every-page-is-in-the-page-register.test.ts`.
+
+**Problem.** Nothing listed the pages. 398 `page.tsx` files, and no record of
+which had been looked at, by whom, or what was found. A page nobody listed is a
+page nobody audited, and it goes missing without anyone noticing.
+
+**Fix.**
+- **Register.** Every page is one row in exactly one of 13 lane files, each
+  with a claim table so Claude and Codex workers can audit at the same time
+  without colliding. The "Page Audit Register" section of this file is
+  generated from them; lane holders never hand-edit it.
+- **Guard.** The test fails when a page is added or deleted without its row,
+  when a status is not one the protocol defines, when the OTHER lane gains a
+  page, or when the roll-up is hand-edited.
+- **Crawl** (`page-audit-crawl.mjs`). Drives Chromium over every route, or
+  every sitemap URL, at 390 px. Per page it records:
+  - status and redirect
+  - console and page errors
+  - failed same-origin requests
+  - raw catalogue keys
+  - the error boundary
+  - the not-found copy
+  - horizontal overflow
+- **Session** (`page-audit-session.mjs`). Signs a disposable account in
+  through the real login form and onboarding. It refuses any Supabase that
+  isn't local.
+- **Static read** (`page-audit-static.mjs`). Follows each page's imports and
+  counts hardcoded copy with the repo's own scanner.
+
+**Evidence** (local production build, local Supabase with all migrations):
+
+| Crawl | Result |
+|---|---|
+| Anonymous, 398 routes | No 5xx. No error boundary. No raw keys. Every signed-in route redirects to `/login`. |
+| Sitemap, 1,063 URLs (14 static, 1,049 blog posts) | Only environmental noise: the sandbox cannot reach external image hosts, and the tracking beacons rate-limit a crawl by IP by design. |
+| Signed in as a parent, 398 routes | 35 routes flagged: `C1-S9-94`–`C1-S9-99` and `C1-S9-102`. |
+
+The live-site half is on main as `scripts/audit-live-pages.mjs` (#588, another
+session): all 354 signed-in routes send a signed-out visitor to `/login` on
+production, and 16 blog hero ids that answer 404 were retired.
+
+**Status:** DONE (instrument).
+- PUBLIC and AUTH are claimed by Claude-1; the other lanes are FREE for any
+  worker.
+- Not yet crawled:
+  - as a child
+  - as a parent who is not a super administrator (a super administrator
+    passes every tier gate, so tier redirects were not exercised)
+  - dynamic routes with real ids
+  - CMS pages whose table is empty locally (`/features/[slug]` and siblings)
+
+---
+
+### `[CLAUDE-1][HIGH][REALTIME]` C1-S9-94 — two readers of one table crashed the calendar
+
+**File/path:** `lib/realtime/own-channel.ts` (new);
+`lib/hooks/use-realtime-query.ts`; eight modules that subscribe to
+`postgres_changes`.
+
+**Problem.** `/dashboard/calendar` threw `cannot add postgres_changes callbacks
+for realtime:calendar_events:<family> after subscribe()`, and its section fell
+to the error boundary.
+
+**Evidence.**
+- The browser client is a singleton, and realtime-js `channel(topic)` returns
+  the existing channel when one with that topic is already open.
+- The calendar mounts two `useRealtimeQuery('calendar_events')` readers. The
+  second received the first's already-subscribed channel.
+- Whichever reader unmounted first also removed the channel from under the
+  other, which then stopped updating without any sign.
+
+**Fix.** Every `postgres_changes` subscription goes through `ownChannel()`,
+which gives it a topic of its own. For `postgres_changes` the topic is only a
+label; the server filters on the table and filter passed to `.on()`. Presence
+stays on its shared topic, because presence works by meeting on that topic.
+
+**Guards.**
+- `tests/two-readers-of-one-table-do-not-share-a-channel.test.ts`:
+  - a fake that behaves like realtime-js (dedupes by topic, refuses `.on`
+    after `.subscribe`)
+  - a negative control proving the fake reproduces the crash
+  - a scan requiring `ownChannel` for every `postgres_changes` channel in
+    `app/`, `components/` and `lib/`
+- Follow-up: eight browser fixtures list the modules they load, and each now
+  lists `own-channel.ts`. The module-graph guard caught this. The ten fixture
+  specs pass locally (218 tests).
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][MARKETING]` C1-S9-95 — the blog's "copy link" copied whatever host you were on
+
+**File/path:** `app/(marketing)/blog/[slug]/share-buttons.tsx`.
+
+**Problem.** The copy button wrote `window.location.href` to the clipboard, so
+a reader on a preview deployment, `www.` or a tracking-tagged URL shared that
+address. The page's other share buttons already used the canonical URL.
+
+**Fix.** It copies `canonicalUrl('/blog/<slug>')`, the same value the other
+buttons use.
+
+**Guard.** `tests/blog-share-buttons.test.ts`: no `window.location` in the
+source (comments stripped), and the clipboard receives the canonical URL.
+Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][HYDRATION]` C1-S9-96 — a dialog open on arrival failed hydration
+
+**File/path:** `components/ui/modal.tsx`, `components/app/command-bar.tsx`.
+
+**Problem.** Pages that open a dialog on arrival logged a React hydration
+error: `/dashboard/vacations/new` and share links with a dialog in the URL.
+The portal was gated on `typeof document !== 'undefined'`, which is false on
+the server and true on the client's first render, so the two trees differed.
+
+**Fix.** `useHydrated()` is a `useSyncExternalStore` whose server snapshot is
+`false`. React reads that server snapshot during hydration too, so the first
+client render matches the server, and the dialog appears on the next render.
+The command bar uses the same gate.
+
+**Guard.** `tests/a-modal-open-on-arrival-hydrates.test.ts`:
+- `renderToString` renders the server markup
+- no portal is gated on a `typeof document/window` check
+- both files pin the gate
+
+Checked red against the old code. `tests/a-dialog-does-not-steal-the-caret.test.ts`
+(from main) models `useSyncExternalStore` as a client render after hydration,
+and its assertions are unchanged.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-97 — "we couldn't find that" was English in every locale
+
+**File/path:** `components/app/app-not-found.tsx`;
+`app/(app)/dashboard/not-found.tsx`; `app/(app)/wallet/not-found.tsx`.
+
+**Problem.** The signed-in app's not-found screen took its title, description
+and button labels as English defaults.
+
+**Fix.** It reads `appNotFound.*` (four keys, seven base catalogues). The
+callers pass only what differs.
+
+**Guard.** `tests/a-missing-record-is-reported-in-the-familys-language.test.ts`
+renders the screen in German. Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][AI]` C1-S9-98 — a scan that never ran was shown as an all-clear
+
+**File/path:**
+- `components/modules/autopilot-module.tsx`
+- `lib/server/route-feature-gate.ts`
+- `app/api/autopilot/scan/route.ts`
+- `lib/briefing/cache-isolation.ts`
+- `components/modules/briefing-module.tsx`
+
+**Problem.**
+- **Autopilot.** Signed in as a super administrator whose family is on the
+  free plan, `/dashboard/autopilot` said **"100% probability the day runs
+  smoothly"**, **0** risk alerts and **All clear**, while `POST
+  /api/autopilot/scan` had answered 403. The forecast is computed from open
+  suggestions. A refused scan leaves none, so the page presented "no data" as
+  "no risk".
+- **Briefing.** `/dashboard/briefing` said "Failed to generate briefing" in
+  English. The route had written a precise refusal in the reader's language:
+  wait, needs a plan, or try again. The client replaced it with one generic
+  string.
+
+**Root cause of the 403.** `requireFeature` lets a super administrator onto
+every feature page to preview it. F16 records the same choice for the family
+write path. None of the endpoints behind those pages allowed it.
+
+**Fix.**
+- **Route gates.** `refuseUnlessEntitled` and the on-demand scan let a super
+  administrator through, and only check for one after the family has been
+  refused, so entitled requests pay nothing extra. If the account can't be
+  read, they answer 503. The nightly cron still runs each family on its real
+  plan.
+- **Autopilot screen.**
+  - The forecast, the risk count and the all-clear wait for a scan that ran.
+  - Before the first scan finishes, the forecast shows "—" and "Scanning your
+    family…".
+  - After a failed scan, the forecast shows "—" and "No forecast — the scan
+    didn't run", and the list is replaced by an error with a retry.
+- **Briefing.**
+  - The session keeps the route's reason.
+  - Its two fallback strings are exported constants that the module
+    translates when it renders (`briefing.failedToGenerateBriefing`, new
+    `briefing.couldNotReadGeneratedBriefing`).
+
+**Guards** (each checked red against the old code):
+- `tests/route-plan-gate.test.ts`: a super admin passes below the tier; an
+  unreadable account gives 503.
+- `tests/autopilot-plan-gate.test.ts`: preview runs the scan; the cron does
+  not use the bypass.
+- `tests/autopilot-resolution-ui.test.ts`: no forecast after a 403, a 500 or
+  before the first scan; a forecast after a clean scan.
+- `tests/briefing-cache-isolation.test.ts`: the reasons for a 429, 403 and 503
+  are kept, and the fallback is the translatable constant.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MOBILE]` C1-S9-99 — seventeen pages scrolled sideways on a phone; one catalogue key said less than it was written to
+
+**File/path:** (17 routes)
+- `components/app/page-header.tsx`
+- six admin pages
+- `app/(app)/guardian/page.tsx`
+- `app/(app)/dashboard/social/settings/page.tsx`
+- `components/modules/{behavior,outcomes-launcher,sports,school}-module.tsx`
+- `components/marketplace/community-module.tsx`
+- `components/admin/feedback-admin.tsx`
+- `components/display/display-grid.tsx`
+- the seven base catalogues
+
+**Problem.** At 390 px, 17 routes had horizontal overflow. It ranged from 8 px
+on `/dashboard/sports` to 647 px on `/admin/support-tickets`:
+- `/admin/admins`, `/admin/content`, `/admin/feedback`,
+  `/admin/marketing/content`, `/admin/settings`, `/admin/support-tickets`,
+  `/admin/users`
+- `/marketplace/community`, `/dashboard/social/settings`, `/guardian`,
+  `/display`
+- `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`,
+  `/dashboard/recipes`, `/dashboard/school`, `/dashboard/sports`
+
+**Evidence.** The crawl's overflow figure, then a DOM bisection (hide each
+subtree until the page stops overflowing) for each route. Four causes:
+
+1. **A responsive grid with no mobile column count** (admin, social settings,
+   community, outcomes). With no template below the breakpoint, the single
+   column is an implicit `auto` track, and an auto track is never narrower
+   than its content's min-content, so a table or a filter row widened the
+   page. Fix: `grid-cols-1`, which is `minmax(0,1fr)`, and `minmax(0,1fr)` in
+   the lg templates.
+2. **A row of controls that could not wrap** (photos, recipes, behavior,
+   guardian, display). `PageHeader` wrapped its own slot, but the modules pass
+   in a row of buttons that did not wrap (31 call sites). The header now wraps
+   that row too. Behavior, guardian and display wrap their own rows.
+3. **A column tile laid out as a row** (sports, school). `.stat-card` is a
+   flex row, and these tiles are meant to stack. They now stack. Their labels
+   were also hardcoded English; 13 keys were added.
+4. **Text that could not wrap**:
+   - The GitHub notice on `/admin/feedback` sat loose in a flex row, so each
+     text run and `<code>` was its own item. It is now one wrapping sentence.
+   - A `truncate` on an inline link did nothing; the link is now a block.
+
+**Measured after the fix:** 0 px on all 17, with the same probe.
+
+**Found alongside.** All seven catalogues defined `actions.couldNotSaveThatPlace`,
+`couldNotDeleteThatPlace` and `couldNotUpdateThatGeofence` twice. The
+duplicates came from a Sep 26 commit on main. `JSON.parse` keeps the last copy,
+so the geofence failure lost the sentence it was written to say, "The alert
+setting has not changed". The later copies were removed.
+
+**Guards.**
+- `tests/a-page-fits-a-phone.test.ts` pins each cause:
+  - the nine grids
+  - the header's wrap
+  - every stacked stat tile being a column
+  - the notice and the block link
+  - a ratchet: responsive grids with no base column count may not exceed 330
+- `tests/no-catalogue-defines-a-key-twice.test.ts` scans lines, not the parsed
+  object. It was red on main's catalogues.
+
+**Status:** FIXED for the 17 routes. The ratchet's 330 remaining grids are
+`C1-S9-99a`, OPEN LOW: none overflows today, but any of them will once a long
+name or a table lands in it. The crawl measures them.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-100 — the public and sign-in pages' own words
+
+**File/path:**
+- 13 `page.tsx` files: `/login`, `/signup`, `/kid-login`, `/auth/recovery`,
+  `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/gift/[token]`,
+  `/pay/[handle]`, `/reviews`, `/reviews/new`, `/s/[slug]`
+- `components/auth/join-invite.tsx`
+- `app/reviews/new/review-form.tsx`
+
+**Problem.** The i18n gate covers `app/(marketing)`, and these pages are
+outside it. They carried:
+- a browser-tab title in English
+- the join link's "This invite link is missing its token."
+- the review page's "Review us on {platform}" buttons and English star labels
+
+**Fix.**
+- The titles come from `generateMetadata` and catalogue keys
+  (`pageTitle.*`, `authCallback.title`, `kidLogin.kidSignIn`).
+- The invite error reads `joinInvite.missingToken`.
+- Each review button is one whole sentence per platform, because "on the App
+  Store" and "on Google" take different words in German or French.
+- The star labels read `reviewsNewReviewForm.oneStar` and `reviewsNewReviewForm.nStars`, inside the scope the page ships to the browser.
+- 21 keys in seven catalogues.
+
+**Not changed, and why.** Three strings are written by the server into rows
+or emails with no reader locale:
+- the gift notification (`app/gift/actions.ts`)
+- the onboarding welcome email subject
+- the "[Imported during onboarding]" event note
+
+All three are `I18N-001`, which belongs to the owner.
+
+The scanner flags two TypeScript type fragments in `recovery-form.tsx` and
+`callback-completion.tsx`. They aren't copy.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][I18N]` C1-S9-101 — the signed-in app's pages carry 2,765 hardcoded English strings
+
+**File/path:** 596 files under `app/` and `components/`. Per page:
+`node scripts/page-audit-static.mjs`.
+
+**Problem.** The i18n gate declares these surfaces translated, and they are
+clean:
+- the marketing site
+- the app chrome (`components/app`)
+- the language control
+- Guardian's safety vocabulary
+
+Nothing gates the modules those pages render. Measured with the repo's own
+scanner, through each page's imports:
+
+| Lane | Pages | With no hardcoded copy | Strings |
+|---|---|---|---|
+| ADMIN | 80 | 3 | 534 |
+| DASH-A-F | 70 | 9 | 532 |
+| DASH-N-Z | 56 | 1 | 443 |
+| MONEY | 24 | 1 | 411 |
+| DASH-G-M | 31 | 0 | 267 |
+| HOME | 17 | 4 | 227 |
+| TRAVEL | 23 | 1 | 191 |
+| FAMILY | 16 | 0 | 124 |
+| MARKETPLACE | 20 | 0 | 65 |
+| SOCIAL | 16 | 0 | 49 |
+
+**Impact.** A family in any of the ten non-English locales gets a translated
+shell around English headings, buttons, empty states and errors. The previous
+finding (`C1-S9-100`) and the stat tiles in `C1-S9-99` are instances.
+
+**Fix path.** It is per page, which is what the lanes are for. The lane holder:
+1. lifts each string into `en-US.json` and the six other base catalogues
+2. adds the module's directory to `GATED_SURFACES` in `scripts/i18n-scan.mjs`
+   once it scans clean
+
+Adding a surface to the gate is a promise; the gate itself says so.
+
+**Status:** OPEN. A page row cannot be PASS while its own files carry
+hardcoded copy.
+
+---
+
+### `[CLAUDE-1][LOW][ROUTING]` C1-S9-102 — a missing record under `app/(app)` answers 200
+
+**File/path:** `app/(app)/loading.tsx`; every `notFound()` under `app/(app)`.
+
+**Problem.**
+- **What was seen.** Crawled with a placeholder id, nine dynamic routes showed
+  the correct not-found screen, answered HTTP **200**, and logged React
+  #419.
+- **Why.** `app/(app)/loading.tsx` wraps the segment in a Suspense boundary,
+  and the response has already started streaming (status 200) when the page
+  calls `notFound()`. The not-found UI then arrives as a client render.
+
+**Impact.** Low. These pages sit behind a sign-in and are `noindex`, so no
+crawler is misled. A person sees the right screen.
+
+**Fix path.** Resolve the record before the boundary. Or accept this, as
+Next.js documents it.
+
+**Status:** OPEN (LOW). This is framework behaviour and no screen is wrong. It
+is recorded so the #419 in the logs has a known cause.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-103 — the blog's save and subscribe controls answered in English
+
+**File/path:** `components/blog/heart-button.tsx`, `components/blog/subscribe-form.tsx`, `lib/i18n/scopes.ts`, `scripts/i18n-scan.mjs`.
+
+**Problem.** Found while reading the PUBLIC lane's forms. Every blog post's save button had four English labels ("Save this article", "Sign in to save this article" and two more). The subscribe form's failure message, "Something went wrong — try again in a moment.", was English on a translated blog. `components/blog` sat outside every gated i18n surface. The scanner also misses a literal in a ternary or a `setMessage('…')` argument, so the static read under-counts. `C1-S9-101`'s 2,765 is a floor, not a ceiling.
+
+**Fix.** Five keys in seven catalogues. The save button's keys use a `blogHeartButton` prefix, which is added to the marketing client scope. `components/blog` is now a gated surface (`marketing-blog-components`).
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-104 — a gift's occasion and its fallback names were English on every locale
+
+**File/path:** `lib/wallet/gift.ts`, `app/gift/[token]/page.tsx`, `components/wallet/gift-view.tsx`, `tests/wallet-gift.test.ts`.
+
+**Problem.** Found while reading the PUBLIC lane. `occasionLabel()` returned English ("🎂 Birthday", "Gift"). Both the public `/gift/[token]` page and the parent's gift screen (including its occasion picker) printed it. The public page also fell back to "a child" and "a family" when a name was unknown.
+
+**Fix.** It is now `occasionLabelKey()`, which returns a catalogue key that each caller renders with its own `t`. The fallbacks read `gift.aChild`, `gift.aFamily` and `gift.child`. That is eight keys in seven catalogues. The unit test pins the keys.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CONTROLS]` C1-S9-105 — buttons that did nothing when pressed
+
+**File/path:**
+- `app/(app)/admin/admins/page.tsx`
+- `app/(app)/admin/support-tickets/{page,actions}.ts(x)`
+- `components/admin/{invite-admin-button,new-ticket-button,ticket-row-actions}.tsx`
+- `app/api/admin/support-tickets/export/route.ts`, `lib/admin/tickets-csv.ts`
+- `components/modules/{sports,school}-module.tsx`
+
+**Problem.** Found while reading the pages the crawl had flagged. None of these could be seen by a crawl, because each one looked like a control and had no handler:
+- **`/admin/admins`: "Invite Admin".** `inviteAdminAction` existed and nothing called it.
+- **`/admin/support-tickets`: "Export" and "New Ticket".** `createTicketAction` existed and nothing called it. The row menu's "Assign agent" had neither a handler nor an action.
+- **`/dashboard/sports` and `/dashboard/school`: "Ask AI"** in each sidebar.
+- **The same two pages: a "more options" button on every table row**, with no menu behind it.
+- **The sports tab bar:** the six tabs changed only their own highlight. Messages and Resources had nothing behind them at all.
+
+**Fix.**
+- **Invite Admin and New Ticket** open a form that calls their existing action and shows the action's own refusal.
+- **Export** downloads a CSV from a new super-admin route:
+  - a failed read is a 502, not an empty file
+  - the export is audit-logged
+  - a cell starting `=` `+` `-` `@` is written as text, so a ticket subject can't become a spreadsheet formula
+- **"Assign agent"** is now "Assign to me", backed by a new `assignTicketToMeAction`.
+- **Ask AI** opens the page's AI insight, as the header icon already did.
+- **Each row's "more options"** is now a delete: confirmed first, and read back afterwards.
+- **The sports tabs** each show their own sections. The two empty tabs are gone.
+- **School's tab labels and weekday names** are now translated (weekdays via `Intl`), and "3 days left" comes from `Intl.RelativeTimeFormat`.
+- About 40 keys in seven catalogues.
+
+**Guard.** `tests/a-button-does-something.test.ts` scans every page and component for a `<button>` or `<Button>` with no onClick, type, formAction or asChild that isn't inside a `<form>`, `<Link>` or `<a>`. The scan strips comments first. A self-test proves it catches the original patterns and passes the legitimate ones. The CSV injection guard has its own unit cases.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SECURITY]` C1-S9-106 — the admin console claimed security policies it does not enforce
+
+**File/path:** `app/(app)/admin/admins/page.tsx` (Settings tab); `app/(app)/admin/layout.tsx`.
+
+**Problem.** The Settings tab of `/admin/admins` showed four switches:
+- "Require 2FA for all admins" (**on**)
+- "Admin session timeout — auto-logout after 8 hours" (**on**)
+- "IP allowlist" (off)
+- "Audit all admin actions" (**on**)
+
+They were hardcoded and did nothing when pressed. The code checks the three "on" claims as follows:
+- The admin layout checks only `isSuperAdmin()`; nothing requires a second factor for the console.
+- No admin session times out.
+- About 12 of the 35 admin page directories write an audit record.
+
+An operator reading this page to learn the console's security was told it had protections it does not have.
+
+**Fix.** The switches are replaced by four read-only statements of what is enforced today: two-step sign-in not required, no idle timeout, no IP allowlist, audit log partial. The intro says these aren't settings yet. All of it is translated.
+
+**Owner decision (OPEN).** Whether the admin console should *require* two-step sign-in (`requireAal2` exists and guards money, document and trust pages) and an idle timeout. Either is a product and security choice. It is recorded here and not decided by the audit.
+
+**Status:** FIXED (the page tells the truth). The policy gap is OPEN for the owner.
+
+---
+
+### `[CLAUDE-1][INFO][COORDINATION]` C1-S9-107 — one page register, not two
+
+**File/path:** `scripts/page-audit-register.mjs`; `tests/every-page-is-in-the-page-register.test.ts`; `docs/audit/pages/` (removed); `components/modules/autopilot-module.tsx`.
+
+**Problem.** Two sessions built a per-page register for the same instruction at the same time:
+- Claude-1's lane files in `docs/audit/pages/`, rolled up into this file.
+- session_01KP9rt5's **Every page** table (lanes A–F), merged to main in #591.
+
+Two registers means two answers to "what state is this page in". The second one also had no guard that it was complete.
+
+**Fix.**
+- **One register.** Main's table is the register. Claude-1's lane files and roll-up are removed.
+- **Guard re-pointed.** The completeness guard now reads that table: every `page.tsx` has exactly one row, and no row appears twice. The script still lists routes for the crawl and static tools.
+- **Lane A.** Claude-1 did not take lane A, which session_01TRY21 claimed (#594) while this was being merged. Its findings are in the hand-off table with the others.
+- **Lanes A–F.** All are claimed by other sessions, so Claude-1's fixes on their pages are listed in a hand-off table above the register rather than edited into someone else's rows.
+
+**Found in the merge.** Main's preview mode skips the automatic scan on open. My `C1-S9-98` forecast would then have shown "Scanning your family…" forever, because no scan ever starts. An unscanned preview now says so and offers Re-scan, which works for a super admin because the route lets them through (`C1-S9-98`). The two changes hold together.
+
+**Status:** DONE.
+
+---
+
+### `[CLAUDE-1][MEDIUM][I18N]` C1-S9-108 — public pages a German reader met in English, and two titles that ran off a phone
+
+**File/path:**
+- `components/marketing/cta.tsx`, `components/marketing/legal.tsx`
+- `app/(marketing)/ai/page.tsx`, `app/(marketing)/privacy/page.tsx`
+- `app/reviews/new/page.tsx`
+- seven catalogues
+
+**Problem.** Found by rendering every page in German with `scripts/page-audit-crawl.mjs --locale de-DE`, which reports visible text containing two or more English function words. The i18n gate had called these surfaces clean because the copy sat where it does not look:
+- **Closing call to action.** Every marketing page that used it with its defaults (`/`, `/faq`, `/privacy`, `/terms`, `/cookies`, `/acceptable-use`) ended on an English paragraph. The defaults lived in a parameter list.
+- **`/ai`.** Its call-to-action subtitle was an English JSX attribute.
+- **`/privacy`.** Two paragraphs of the policy were English literals inside an array of catalogue keys.
+- **`/reviews/new`.** When no custom copy was saved, the review request fell back to English defaults.
+- **Two legal titles.** At 390 px in German, "Datenschutzerklärung" and "Nutzungsbedingungen" are single words wider than the screen. They pushed `/privacy` 59 px and `/terms` 68 px sideways.
+
+**Fix.**
+- The CTA defaults are catalogue keys, and so is the `/ai` subtitle.
+- The two privacy paragraphs are keys, in the policy's formal register.
+- The review page falls back to translated defaults.
+- The legal title hyphenates by the page's `lang` and breaks as a fallback. 0 px overflow on all four legal pages in German.
+- Eight keys in seven catalogues.
+- `tests/a-public-page-reads-in-the-readers-language.test.ts` pins each fix.
+
+**Not fixed here (OPEN, content).** Some text is database content, not interface copy:
+- **FAQ answers.** The FAQ blocks on `/`, `/ai` and the other public pages come from `marketing_aeo_questions`. Migration `0279` translates only some of them, so the rest render in English. `scripts/translate-aeo-questions.mjs` exists for this and needs a translation run.
+- **Blog posts.** They are English articles. That is a content decision, not a defect in a page.
+
+**Status:** FIXED (interface copy and overflow). The AEO question translations are OPEN, as content.
+
+---
+
+### `[CLAUDE-1][MEDIUM][BILLING]` C1-S9-109 — the billing page's plan buttons, statuses and categories were English, and "Payment & invoices" failed silently
+
+**File/path:** `components/modules/billing-module.tsx`; seven catalogues.
+
+**Problem.**
+- **English on the page where a family chooses what to pay for** (`/dashboard/billing`, part of the `C1-S9-101` burn-down), in every locale:
+  - the plan-choice button ("Current plan", "Choose Family+", "Switch billing to annual")
+  - the subscription status badge, the plan names and descriptions, and the feature lists
+  - the six tab labels and the four stat labels
+  - the fifteen spending categories
+- **"Payment & invoices" did nothing when it failed.** It read the portal route's JSON, found no `url`, and stopped. Each refusal the route words for the reader was dropped: not a parent, no billing account, or billing unavailable.
+
+**Fix.**
+- **Labels.** Status, plan, tier and tab text are catalogue keys, in fields named `labelKey` and `nameKey` so the raw-key guard can tell them from copy. Tab ids are no longer labels.
+- **Categories.** Categories stay stored as the English word, because it is data and existing rows hold it. They are shown through `categoryLabel()`, and a family's own category shows as they typed it.
+- **Portal.** A portal failure now toasts the route's own reason, or a translated fallback.
+- About 70 keys in seven catalogues; plan names stay brand names.
+
+**Status:** FIXED. `billing-module` goes from 65 to 19 scanner findings. The 19 left are the stored category values (data, not copy) and four type-alias fragments the scanner misreads.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CHORES]` C1-S9-110 — chores showed English in every locale, and a template wrote English into the family's chore
+
+**File/path:** `components/modules/chores-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/chores` (part of the `C1-S9-101` burn-down) showed English in every locale: the status badges, the tab labels, the approval toast, and every "N pts".
+- **The ten chore templates held English copy.** Picking one wrote that English title and description into the family's new chore, so the chore stayed English for everyone who saw it.
+
+**Fix.**
+- Status and tab labels are catalogue keys (`labelKey`).
+- Templates hold `titleKey` and `descriptionKey`. Each is worded when it is shown and again when it is picked, so the chore is created in the picker's language.
+- 33 keys added to seven catalogues.
+
+**Status:** FIXED. Scanner findings for `chores-module` drop from 36 to 3, and those 3 are type-alias fragments.
 
 ---
 

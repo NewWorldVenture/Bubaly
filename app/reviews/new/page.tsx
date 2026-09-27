@@ -5,9 +5,11 @@ import { realTextOr } from '@/lib/marketing/reputation';
 import { ReviewForm, type PublicLink } from './review-form';
 import { getTranslations } from '@/lib/i18n/server';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
-  return { title: t('orderControls.leaveAReview'), robots: { index: false } };
+  return { title: t('pageTitle.leaveAReview'), robots: { index: false } };
 }
 export const dynamic = 'force-dynamic';
 
@@ -21,11 +23,14 @@ export default async function NewReviewPage() {
     console.warn('[reviews/new] reputation settings read failed; external links hidden', { error: settingsError.message });
   }
 
+  // Each button is one whole sentence per platform: "on the App Store" and
+  // "on Google" take different words in German or French, so the platform is
+  // not spliced into an English "Review us on …". Audit C1-S9-100.
   const publicLinks: PublicLink[] = [
-    s?.google_url ? { label: 'Google', url: s.google_url } : null,
-    s?.app_store_url ? { label: 'the App Store', url: s.app_store_url } : null,
-    s?.play_store_url ? { label: 'Google Play', url: s.play_store_url } : null,
-    s?.trustpilot_url ? { label: 'Trustpilot', url: s.trustpilot_url } : null,
+    s?.google_url ? { label: t('reviewsNew.reviewUsOnGoogle'), url: s.google_url } : null,
+    s?.app_store_url ? { label: t('reviewsNew.reviewUsOnAppStore'), url: s.app_store_url } : null,
+    s?.play_store_url ? { label: t('reviewsNew.reviewUsOnGooglePlay'), url: s.play_store_url } : null,
+    s?.trustpilot_url ? { label: t('reviewsNew.reviewUsOnTrustpilot'), url: s.trustpilot_url } : null,
   ].filter((x): x is PublicLink => x !== null);
 
   return (
@@ -35,11 +40,11 @@ export default async function NewReviewPage() {
         <ReviewForm
           // Seeder text in the settings row reads as the product talking to a
           // customer; each field falls back to the default instead.
-          headline={realTextOr(s?.request_headline, DEFAULT_REPUTATION.request_headline)}
-          message={realTextOr(s?.request_message, DEFAULT_REPUTATION.request_message)}
+          headline={realTextOr(s?.request_headline, t('reviewsNew.defaultHeadline'))}
+          message={realTextOr(s?.request_message, t('reviewsNew.defaultMessage'))}
           minPublicRating={s?.min_public_rating ?? DEFAULT_REPUTATION.min_public_rating}
-          thankYouHigh={realTextOr(s?.thank_you_high, DEFAULT_REPUTATION.thank_you_high)}
-          thankYouLow={realTextOr(s?.thank_you_low, DEFAULT_REPUTATION.thank_you_low)}
+          thankYouHigh={realTextOr(s?.thank_you_high, t('reviewsNew.defaultThankYouHigh'))}
+          thankYouLow={realTextOr(s?.thank_you_low, t('reviewsNew.defaultThankYouLow'))}
           publicLinks={publicLinks}
         />
       </div>

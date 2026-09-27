@@ -5,6 +5,8 @@ import { Logo } from '@/components/brand/logo';
 import { JoinInvite } from '@/components/auth/join-invite';
 import { LoadingBlock } from '@/components/ui/states';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('pageTitle.joinAFamily'), robots: { index: false } };

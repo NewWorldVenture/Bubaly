@@ -8,6 +8,8 @@ import { isSafeReturnPath, sessionStrength } from '@/lib/auth/mfa';
 import { Logo } from '@/components/brand/logo';
 import { StepUpForm } from '@/components/auth/step-up-form';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('pageTitle.confirmItsYou'), robots: { index: false, follow: false } };

@@ -8,6 +8,8 @@ import { KidLoginForm } from '@/components/auth/kid-login-form';
 // indexable login surface the product has. `/auth/*` is covered by the prefix
 // list and `/login` and `/signup` declare it here; this one simply inherited
 // the default. Audit C1-S9-15.
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('kidLogin.kidSignIn'), robots: { index: false, follow: false } };

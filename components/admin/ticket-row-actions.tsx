@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { MoreHorizontal, CheckCircle, XCircle, RefreshCw, User } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { resolveTicketAction, closeTicketAction, reopenTicketAction } from '@/app/(app)/admin/support-tickets/actions';
+import { resolveTicketAction, closeTicketAction, reopenTicketAction, assignTicketToMeAction } from '@/app/(app)/admin/support-tickets/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function TicketRowActions({ ticketId, status }: { ticketId: string; status: string }) {
@@ -19,7 +19,7 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
       try {
         const result = await fn(ticketId);
         if (!result.ok) {
-          toastError(result.error ?? 'Could not update that ticket.');
+          toastError(result.error ?? t('ticketRowActions.couldNotUpdateThatTicket'));
           return;
         }
         success(t('ticketRowActions.ticketStatusUpdated'));
@@ -70,8 +70,8 @@ export function TicketRowActions({ ticketId, status }: { ticketId: string; statu
                 <RefreshCw className="h-4 w-4" /> {t('ticketRowActions.reopen')}
               </button>
             )}
-            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated">
-              <User className="h-4 w-4" /> {t('ticketRowActions.assignAgent')}
+            <button onClick={() => act(assignTicketToMeAction)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-elevated">
+              <User className="h-4 w-4" /> {t('ticketRowActions.assignToMe')}
             </button>
           </div>
         </>

@@ -4,14 +4,20 @@ import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Section } from './sections';
 
+// The defaults were English literals in a parameter list, where the i18n gate
+// does not look: every marketing page that took them (/, /faq, /privacy,
+// /terms, /cookies, /acceptable-use…) closed on an English paragraph in every
+// locale. Audit C1-S9-108.
 export async function CTASection({
-  title = 'Less Managing Life. More Living It.',
-  subtitle = 'Set up your family in minutes, invite everyone, and let Bubaly handle the logistics — so you get your time, attention, and peace of mind back.',
+  title,
+  subtitle,
 }: {
   title?: string;
   subtitle?: string;
 }) {
   const t = await getTranslations();
+  title ??= t('root.lessManagingLifeMoreLivingIt');
+  subtitle ??= t('cta.setUpYourFamilyInMinutes');
   return (
     <Section>
       <div className="glass-card p-10 text-center shadow-glow sm:p-16">

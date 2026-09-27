@@ -263,7 +263,8 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
     expect(connections).toContain(".delete().eq('family_id', familyId).eq('provider', p.id).select('id')");
     expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, "success(t('connections.nameDisconnected'"));
     const chores = readFileSync('components/modules/chores-module.tsx', 'utf8');
-    expect(at(chores, 'if (wroteNoRows(approved))')).toBeLessThan(at(chores, "success(tr('chores.approvedPlusPoints'"));
+    // Translation changes the label, not the readback-before-success boundary.
+    expect(at(chores, 'if (wroteNoRows(approved))')).toBeLessThan(at(chores, "success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 }))"));
     const decisions = readFileSync('components/modules/decisions-module.tsx', 'utf8');
     expect(at(decisions, 'if (results.some((x) => wroteNoRows(x.data)))')).toBeLessThan(at(decisions, "success(t('decisionsModule.scoresSavedToTheDecision'))"));
   });

@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { SurveyForm } from './survey-form';
 import { getTranslations } from '@/lib/i18n/server';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('pageTitle.shareYourFeedback'), robots: { index: false } };

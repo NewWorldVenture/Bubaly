@@ -7,6 +7,8 @@ import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-serve
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
 
+// The tab title is copy like any other: it was English in every locale.
+// Audit C1-S9-100.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('authCallback.title'), robots: { index: false, follow: false }, referrer: 'no-referrer' };
