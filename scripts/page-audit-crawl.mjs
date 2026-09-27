@@ -50,7 +50,9 @@ const catalogue = JSON.parse(readFileSync(new URL('../lib/i18n/messages/en-US.js
 // coincidence ("ai.x" could be prose; "home.whatsForDinner" cannot).
 const KEYS = Object.keys(catalogue).filter((k) => /^[a-zA-Z]+\.[a-zA-Z0-9]{6,}$/.test(k));
 const ERROR_COPY = [catalogue['error.weHitAnUnexpectedError'], 'Application error: a server-side exception', 'Application error: a client-side exception'].filter(Boolean);
-const NOT_FOUND_COPY = catalogue['notFound.pageNotFound'];
+// The site's 404 and the signed-in app's own not-found (AppNotFound) word it
+// differently; either one on a route crawled with a real id is a finding.
+const NOT_FOUND_COPY = [catalogue['notFound.pageNotFound'], catalogue['appNotFound.title']].filter(Boolean);
 
 const PLACEHOLDER = {
   uuid: '00000000-0000-4000-8000-00000000abcd',
@@ -100,10 +102,15 @@ async function visit(context, route) {
     const u = new URL(page.url());
     result.finalPath = u.pathname + u.search;
     result.title = await page.title();
-    const text = await page.evaluate(() => document.body?.innerText ?? '');
-    result.rawKeys = KEYS.filter((k) => text.includes(k)).slice(0, 10);
+    const { text, code } = await page.evaluate(() => ({
+      text: document.body?.innerText ?? '',
+      // Identifiers a page shows AS code (an OAuth scope such as video.publish)
+      // can share a catalogue key's spelling without being one.
+      code: [...document.querySelectorAll('code, pre, kbd, samp')].map((e) => e.textContent ?? ''),
+    }));
+    result.rawKeys = KEYS.filter((k) => text.includes(k) && !code.some((c) => c.includes(k))).slice(0, 10);
     result.errorBoundary = ERROR_COPY.some((c) => text.includes(c));
-    result.notFound = !!NOT_FOUND_COPY && text.includes(NOT_FOUND_COPY);
+    result.notFound = NOT_FOUND_COPY.some((c) => text.includes(c));
     result.overflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
   } catch (e) {
     result.pageErrors.push(`navigation: ${String(e.message ?? e).split('\n')[0]}`);
@@ -120,12 +127,17 @@ async function visit(context, route) {
  * the result as `environmental`, and left out of the verdict, so a sandboxed
  * crawl does not report every photo on the blog as a defect.
  */
+// Beacons that rate-limit by IP by design: a crawl sends hundreds of page views
+// from one address in a minute, which a visitor never does. A 429 from them is
+// the limiter working, not the page failing.
+const RATE_LIMITED_BEACONS = /^POST \/api\/(mkt\/track|exit-intent\/resolve)\S* 429$/;
+
 function splitEnvironmental(r) {
-  const env = r.failed.filter((f) => /\/_next\/image\?url=https?%3A%2F%2F/.test(f));
+  const env = r.failed.filter((f) => /\/_next\/image\?url=https?%3A%2F%2F/.test(f) || RATE_LIMITED_BEACONS.test(f));
   let owed = env.length;
   r.failed = r.failed.filter((f) => !env.includes(f));
   r.consoleErrors = r.consoleErrors.filter((c) => {
-    if (owed > 0 && /Failed to load resource: the server responded with a status of (403|5\d\d)/.test(c)) { owed--; return false; }
+    if (owed > 0 && /Failed to load resource: the server responded with a status of (403|429|5\d\d)/.test(c)) { owed--; return false; }
     return true;
   });
   // A route crawled with a placeholder id SHOULD answer 404; the browser's
