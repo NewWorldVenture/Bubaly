@@ -45977,6 +45977,25 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][RECIPES]` C1-S9-117 — recipe categories, difficulty, dietary flags and AI remix buttons were English in every locale
+
+**File/path:** `components/modules/recipes-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/recipes` (part of the `C1-S9-101` burn-down), the following were English in every locale:
+- recipe categories and difficulty, on cards, in filters and in the form
+- the dietary flags on a recipe and in the form
+- the ten "AI Remix" buttons (their labels came from `lib/recipes/ai-actions.ts`)
+- the four stat tiles
+
+**Fix.**
+- Categories and difficulty are `labelKey`s.
+- Dietary flags stay stored as the English word and are shown through `flagLabel()`.
+- Remix buttons are worded by action id. The English instruction sent to the model is unchanged.
+
+**Status:** FIXED. Scanner findings for `recipes-module` drop from 19 to 3. The 3 left are stored values: the flag list, and the "Pantry" category a grocery line is filed under.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
