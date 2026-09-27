@@ -44,6 +44,10 @@ const laneFilter = arg('lane');
 const only = arg('only');
 const params = arg('params') ? JSON.parse(readFileSync(arg('params'), 'utf8')) : {};
 const concurrency = Number(arg('concurrency', '3'));
+// --locale de-DE: crawl in another language and report text nodes that read
+// as English prose. The i18n scanner reads source by pattern and misses copy
+// in a ternary or a setter argument; this reads what a German reader sees.
+const locale = arg('locale');
 
 const catalogue = JSON.parse(readFileSync(new URL('../lib/i18n/messages/en-US.json', import.meta.url), 'utf8'));
 // Keys long enough that seeing one verbatim in page text is a leak, not a
@@ -93,7 +97,7 @@ async function visit(context, route) {
     if (r.request().resourceType() === 'document') return; // recorded as `status`
     failed.push(`${r.request().method()} ${r.url().replace(origin, '')} ${r.status()}`);
   });
-  const result = { route, path, label, placeholder, status: 0, finalPath: '', title: '', consoleErrors, pageErrors, failed, rawKeys: [], errorBoundary: false, notFound: false, overflowPx: 0, ms: 0 };
+  const result = { route, path, label, placeholder, status: 0, finalPath: '', title: '', consoleErrors, pageErrors, failed, rawKeys: [], englishText: [], errorBoundary: false, notFound: false, overflowPx: 0, ms: 0 };
   const t0 = Date.now();
   try {
     const res = await page.goto(base + path, { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -111,6 +115,32 @@ async function visit(context, route) {
     result.rawKeys = KEYS.filter((k) => text.includes(k) && !code.some((c) => c.includes(k))).slice(0, 10);
     result.errorBoundary = ERROR_COPY.some((c) => text.includes(c));
     result.notFound = NOT_FOUND_COPY.some((c) => text.includes(c));
+    if (locale && !locale.startsWith('en')) {
+      result.englishText = await page.evaluate(() => {
+        // Two or more English function words in a run of three-plus words, in
+        // a visible text node outside code. Names and brands carry none.
+        const EN = /\b(the|your|you|and|with|this|that|for|are|not|from|have|will|can't|couldn't|isn't)\b/gi;
+        const out = new Set();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const el = n.parentElement;
+          if (!el || el.closest('code,pre,kbd,samp,script,style,noscript,[aria-hidden="true"]')) continue;
+          const text = (n.textContent ?? '').replace(/\s+/g, ' ').trim();
+          if (text.split(' ').length < 3) continue;
+          if ((text.match(EN) ?? []).length < 2) continue;
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height) continue;
+          out.add(text.slice(0, 120));
+        }
+        for (const el of document.querySelectorAll('[aria-label],[placeholder],[title]')) {
+          for (const a of ['aria-label', 'placeholder', 'title']) {
+            const v = el.getAttribute(a);
+            if (v && v.split(' ').length >= 3 && (v.match(EN) ?? []).length >= 2) out.add(`[${a}] ${v.slice(0, 100)}`);
+          }
+        }
+        return [...out].slice(0, 15);
+      });
+    }
     result.overflowPx = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
   } catch (e) {
     result.pageErrors.push(`navigation: ${String(e.message ?? e).split('\n')[0]}`);
@@ -157,6 +187,7 @@ export function verdict(r) {
   if (r.consoleErrors.length) problems.push(`${r.consoleErrors.length} console error(s)`);
   if (r.failed.length) problems.push(`${r.failed.length} failed request(s)`);
   if (r.rawKeys.length) problems.push(`raw keys: ${r.rawKeys.join(', ')}`);
+  if (r.englishText?.length) problems.push(`english: ${r.englishText.length}`);
   if (r.overflowPx > 1) problems.push(`overflow ${r.overflowPx}px`);
   if (r.notFound && !r.placeholder) problems.push('not found');
   return problems;
@@ -179,6 +210,7 @@ async function main() {
     viewport: { width: 390, height: 844 },
     ...(arg('state') ? { storageState: arg('state') } : {}),
   });
+  if (locale) await context.addCookies([{ name: 'bubaly-locale', value: locale, url: base }]);
   const results = [];
   let next = 0;
   async function worker() {
