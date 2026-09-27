@@ -25,7 +25,7 @@ export default async function AutomationPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-3">
         {(flows ?? []).length === 0 ? (
           <EmptyState icon={Workflow} title={tr('adminMarketingAutomation.noWorkflowsYet')} description={tr('automation.buildYourFirstAutomationOn')} />

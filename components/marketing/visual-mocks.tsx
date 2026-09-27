@@ -805,7 +805,7 @@ export function CheckList({ items, color = 'text-emerald-400' }: { items: string
 export async function SmallCtaBand() {
   const t = await getTranslations();
   return (
-    <section className="showcase-card grid items-center gap-6 rounded-2xl p-8 lg:grid-cols-[1fr_auto_auto] lg:p-10">
+    <section className="showcase-card grid items-center gap-6 rounded-2xl p-8 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:p-10">
       <div className="flex items-center gap-6">
         <IconOrb icon={Sparkles} className="hidden h-16 w-16 sm:inline-flex" />
         <div>

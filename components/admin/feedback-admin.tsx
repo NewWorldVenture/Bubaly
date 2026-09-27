@@ -138,7 +138,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-fg">{n.title}</p>
                   {n.body && <p className="mt-0.5 whitespace-pre-line text-muted">{n.body}</p>}
-                  <p className="mt-0.5 text-[11px] text-muted/60">{fmt(n.created_at)}</p>
+                  <p className="mt-0.5 text-[11px] text-muted">{fmt(n.created_at)}</p>
                 </div>
                 {n.url && <Link href={n.url} className="shrink-0 text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></Link>}
               </li>
@@ -162,12 +162,13 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
           {FILTERABLE_STATUSES.map((s) => (
             <FilterChip key={s} active={filter.status === s} onClick={() => setFilter((f) => ({ ...f, status: s }))}>
               <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_META[s].dot)} /> {STATUS_META[s].label}
-              <span className="text-muted/70">{summary.byStatus[s]}</span>
+              <span className="text-muted">{summary.byStatus[s]}</span>
             </FilterChip>
           ))}
         </div>
         <div className="flex items-center gap-2">
           <select
+            aria-label={t('feedbackAdmin.category')}
             value={filter.category}
             onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}
             className="h-9 rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand"
@@ -275,7 +276,7 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
               </a>
             )}
             {idea.pinned && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-text"><Pin className="h-3 w-3" /> {t('feedbackAdmin.pinned')}</span>}
-            <span className="text-[11px] text-muted/70">· {idea.author_name} · {fmt(idea.created_at)}</span>
+            <span className="text-[11px] text-muted">· {idea.author_name} · {fmt(idea.created_at)}</span>
           </div>
           <h3 className="mt-1 text-sm font-bold text-fg">{idea.title}</h3>
           {idea.problem && <p className="mt-1 text-xs text-muted"><span className="font-semibold">Problem:</span> {idea.problem}</p>}

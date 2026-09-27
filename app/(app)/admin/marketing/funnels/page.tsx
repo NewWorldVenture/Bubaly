@@ -23,7 +23,7 @@ export default async function FunnelsPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
         {(funnels ?? []).length === 0 ? (
           <EmptyState icon={Filter} title={t('adminMarketingFunnels.noFunnelsYet')} description={t('funnels.defineYourFirstFunnelOn')} />

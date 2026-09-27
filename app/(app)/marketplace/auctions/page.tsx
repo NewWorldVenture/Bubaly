@@ -11,7 +11,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 
-export const metadata: Metadata = { title: 'Live Auctions · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Live Auctions · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

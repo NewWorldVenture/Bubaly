@@ -5,7 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { TripIntelModule, type UpcomingEvent, type SavedTripPlan, type SavedDeparturePlan } from '@/components/modules/trip-intel-module';
 
-export const metadata: Metadata = { title: 'Trip Intelligence | Bubaly' };
+export const metadata: Metadata = { title: 'Trip Intelligence' };
 export const dynamic = 'force-dynamic';
 
 export default async function TripIntelPage() {

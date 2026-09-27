@@ -10,7 +10,7 @@ import { Settings, ArrowLeft } from 'lucide-react';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Settings · AI Call Guardian · Bubaly' };
+export const metadata: Metadata = { title: 'Settings · AI Call Guardian' };
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianSettingsPage() {
@@ -45,7 +45,7 @@ export default async function GuardianSettingsPage() {
 
   const Header = () => (
     <div className="flex items-center gap-3">
-      <a href="/guardian" className="rounded-lg p-1.5 text-muted hover:bg-surface transition">
+      <a href="/guardian" aria-label={t('guardian.aiCallGuardian')} className="rounded-lg p-1.5 text-muted hover:bg-surface transition">
         <ArrowLeft className="h-5 w-5" />
       </a>
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/15">

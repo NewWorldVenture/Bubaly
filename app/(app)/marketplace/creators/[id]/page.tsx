@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import {
   ArrowLeft, Star, ShieldCheck, Users, Package, Tag, MapPin,
   ShoppingBag, Clock, Gift, HelpCircle, Repeat, HandHeart,
@@ -18,8 +17,9 @@ import {
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
-export const metadata: Metadata = { title: 'Storefront · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Storefront · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 const KIND_ICON: Record<string, typeof ShoppingBag> = {
@@ -45,7 +45,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
   // renders a retryable 5xx, whereas notFound() would 404 a real storefront on a
   // DB blip (a permanent-gone signal). Reserve notFound() for a truly absent store.
   if (storeError) throw new Error(`Failed to load storefront "${id}": ${storeError.message}`);
-  if (!store) notFound();
+  if (!store) return <AppNotFound backHref="/marketplace/creators" />;
 
   const { data: members } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
   const ownerName = members?.find((m) => m.id === store.member_id)?.display_name ?? 'A neighbor';

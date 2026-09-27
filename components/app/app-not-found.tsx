@@ -24,9 +24,11 @@ export async function AppNotFound({
   backLabel?: string;
 }) {
   const t = await getTranslations();
+  // The defaults were English literals, so every not-found state in the app
+  // read English in every language (page audit, signed-in sweep).
   title ??= t('appNotFound.title');
   description ??= t('appNotFound.description');
-  backLabel ??= t('appNotFound.goToDashboard');
+  backLabel ??= t('notFound.goToDashboard');
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">

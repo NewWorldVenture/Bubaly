@@ -42,15 +42,17 @@ function iconFor(kind: string) {
   return KIND_ICON[kind] ?? CircleDot;
 }
 
-export function AutopilotModule() {
+/** `preview`: a super admin looking at a family without Autopilot. The scan
+ *  route answers them 403, so the screen does not scan on open, and says why. */
+export function AutopilotModule({ preview = false }: { preview?: boolean } = {}) {
   const { familyId, userId, role, selfMember } = useApp();
   const owner = `${userId}:${familyId}:${selfMember?.id ?? ''}:${role}`;
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
-  return <FamilyAutopilot key={owner} owner={owner} currentOwner={currentOwner} />;
+  return <FamilyAutopilot key={owner} owner={owner} currentOwner={currentOwner} preview={preview} />;
 }
 
-function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner: { current: string } }) {
+function FamilyAutopilot({ owner, currentOwner, preview }: { owner: string; currentOwner: { current: string }; preview: boolean }) {
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -103,12 +105,12 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
 
   // Auto-scan once when the screen opens.
   useEffect(() => {
-    if (!scannedOnce && familyId) {
+    if (!preview && !scannedOnce && familyId) {
       setScannedOnce(true);
       void runScan();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId, scannedOnce]);
+  }, [familyId, preview, scannedOnce]);
 
   const open = useMemo(() => data.filter((s) => s.family_id === familyId && s.status === 'open'), [data, familyId]);
   const handled = useMemo(() => data.filter((s) => s.family_id === familyId && (s.status === 'auto_executed' || s.status === 'executed')), [data, familyId]);
@@ -122,6 +124,9 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
   );
   const highRisks = open.filter((s) => s.urgency === 3).length;
   const scanned = lastScan.state === 'ok';
+  // A preview does not scan on open (the owner's cost choice), so with no scan
+  // pressed yet there is nothing in flight to wait for: say so, not "Scanning".
+  const idle = preview && lastScan.state === 'pending' && !scanning;
 
   async function resolve(s: Suggestion, dismiss = false) {
     if (!isCurrent() || s.family_id !== familyId || inFlight.current.has(s.id)) return;
@@ -176,6 +181,9 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
 
   return (
     <div className="module-page">
+      {preview && (
+        <p role="status" className="mb-4 rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">{t('featurePreview.notOnThisPlan')}</p>
+      )}
       <PageHeader
         title={t('autopilot.familyAutopilot')}
         description={t('autopilotModule.missionControlBubalyPredictsWhat')}
@@ -194,7 +202,7 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
           </div>
           <p className={cn('text-3xl font-black', !scanned ? 'text-muted' : probability >= 85 ? 'text-success' : probability >= 60 ? 'text-amber-500' : 'text-danger')}>{scanned ? `${probability}%` : '—'}</p>
           <p className="text-xs text-muted">
-            {scanned ? t('autopilot.probabilityTheDayRunsSmoothly') : lastScan.state === 'failed' ? t('autopilotModule.noForecastScanDidNotRun') : t('autopilotModule.scanningYourFamily')}
+            {scanned ? t('autopilot.probabilityTheDayRunsSmoothly') : lastScan.state === 'failed' ? t('autopilotModule.noForecastScanDidNotRun') : idle ? t('autopilotModule.noScanYet') : t('autopilotModule.scanningYourFamily')}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
@@ -216,6 +224,9 @@ function FamilyAutopilot({ owner, currentOwner }: { owner: string; currentOwner:
 
       {open.length === 0 && handled.length === 0 && approved.length === 0 && lastScan.state === 'failed' ? (
         <ErrorState message={`${t('autopilotModule.nothingCheckedYet')} ${lastScan.message}`} onRetry={runScan} />
+      ) : open.length === 0 && handled.length === 0 && approved.length === 0 && idle ? (
+        <EmptyState icon={Rocket} title={t('autopilotModule.noScanYet')}
+          action={<Button onClick={runScan} loading={scanning}><RefreshCw className="h-4 w-4" /> {t('autopilotResolution.rescan')}</Button>} />
       ) : open.length === 0 && handled.length === 0 && approved.length === 0 && !scanned ? (
         <SkeletonList />
       ) : open.length === 0 && handled.length === 0 && approved.length === 0 ? (

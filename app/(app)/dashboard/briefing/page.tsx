@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { isFeaturePreviewOnly } from '@/lib/server/feature-entitlement';
 import { BriefingModule } from '@/components/modules/briefing-module';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
@@ -11,7 +12,7 @@ import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Daily Briefing | Bubaly' };
+export const metadata: Metadata = { title: 'Daily Briefing' };
 
 export default async function BriefingPage() {
   const t = await getTranslations();
@@ -65,6 +66,7 @@ export default async function BriefingPage() {
     <>
       <ActivationBeacon milestone="first_brief_viewed" familyId={ctx.active.familyId} userId={ctx.user.id} signupAtIso={ctx.active.family.created_at} />
       <BriefingModule
+        preview={await isFeaturePreviewOnly(supabase, ctx.active.familyId, '/dashboard/briefing')}
         recap={<ChangeRecap change={change} />}
         relationships={insights.length ? <RelationshipInsights insights={insights} /> : null}
       />

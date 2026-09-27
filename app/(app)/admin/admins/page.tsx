@@ -179,11 +179,11 @@ export default async function AdminManagementPage({ searchParams }: Params) {
             <Card>
               <FilterForm action="/admin/admins" hidden={{ tab: 'users' }}>
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('admins.searchAdmins')} />
-                <FilterSelect name="role" defaultValue={roleFilter} options={[
+                <FilterSelect name="role" label={tr('admins.role')} defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
                   ...Object.entries(ROLE_META).map(([v, m]) => ({ value: v, label: m.label })),
                 ]} />
-                <FilterSelect name="status" defaultValue={statusFilter} options={[
+                <FilterSelect name="status" label={tr('admins.status')} defaultValue={statusFilter} options={[
                   { value: '', label: 'All Status' },
                   { value: 'active',   label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
@@ -489,11 +489,13 @@ function AdminStatCard({ icon: Icon, label, sub, value, color }: {
 
 function AvatarInitials({ name, size = 32 }: { name: string; size?: number }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
-  const colors = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-amber-500'];
+  // White on the 700 shade: at least 5:1 on every one. The theme's text-fg on
+  // the 500s read as low as 1.88:1 (amber), under AA's 4.5:1 for this size.
+  const colors = ['bg-violet-700 text-white', 'bg-blue-700 text-white', 'bg-emerald-700 text-white', 'bg-orange-700 text-white', 'bg-rose-700 text-white', 'bg-amber-700 text-white'];
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-fg ${color}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold ${color}`}
       style={{ width: size, height: size, fontSize: size * 0.35 }}
     >
       {initials || '?'}

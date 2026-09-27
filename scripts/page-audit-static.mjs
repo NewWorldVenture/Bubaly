@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Page audit — the static half of "read the page" (docs/audit/pages/README.md).
+// Page audit — the static half of "read the page" (finalaudit.md § Page Audit — every page on www.bubaly.com).
 //
 // For every page in the register, follows its imports (the `@/` alias and
 // relative paths; packages are skipped) to the app/ and components/ files that

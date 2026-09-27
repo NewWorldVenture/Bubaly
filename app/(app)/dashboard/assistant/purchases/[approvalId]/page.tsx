@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -11,6 +10,7 @@ import { loadPrivatePurchaseAnswer } from '@/lib/services/purchases/private-resu
 import { isManager } from '@/lib/constants/roles';
 import { retryPurchaseAnswer } from './actions';
 import { SubmitButton } from '@/components/ui/submit-button';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
@@ -28,7 +28,7 @@ export default async function PrivatePurchasePage({ params, searchParams }: {
   const t = await getTranslations();
   const scope = scopeFromUserContext(ctx, await createServer());
   const result = await loadPrivatePurchaseAnswer(scope, approvalId);
-  if (!result.ok && result.code === SERVICE_CODES.denied) notFound();
+  if (!result.ok && result.code === SERVICE_CODES.denied) return <AppNotFound backHref="/dashboard/assistant" />;
   const report = result.ok ? result.data : null;
   const failed = !result.ok || query.retry === 'failed';
   const button = 'inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-elevated';

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'My Store · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceStorePage() {

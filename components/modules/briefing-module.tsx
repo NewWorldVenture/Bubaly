@@ -772,7 +772,13 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-type BriefingModuleProps = { recap?: React.ReactNode; relationships?: React.ReactNode };
+type BriefingModuleProps = {
+  recap?: React.ReactNode;
+  relationships?: React.ReactNode;
+  /** A super admin previewing a family without the feature: no automatic generate
+   *  (the route would answer 403), and a line saying why. */
+  preview?: boolean;
+};
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
   const tr = useTranslations();
@@ -806,7 +812,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
   return <ScopedBriefingModule key={contextKey} contextKey={contextKey} now={now} tab={tab} setTab={setTab} {...props} />;
 }
 
-function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setTab }: BriefingModuleProps & {
+function ScopedBriefingModule({ recap, relationships, preview = false, contextKey, now, tab, setTab }: BriefingModuleProps & {
   contextKey: string;
   now: Date;
   tab: TabType;
@@ -842,9 +848,9 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 
   // Each tab gets one automatic attempt per mounted context. Failures stay retryable.
   useEffect(() => {
-    if (tab === 'kitchen' || state[tab].attempted) return;
+    if (preview || tab === 'kitchen' || state[tab].attempted) return;
     void session.generate(tab);
-  }, [session, state, tab]);
+  }, [preview, session, state, tab]);
 
   // Live data for kitchen mode
   const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
@@ -904,6 +910,9 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 
   return (
     <div className="space-y-6">
+      {preview && (
+        <p role="status" className="rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm text-muted">{tr('featurePreview.notOnThisPlan')}</p>
+      )}
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

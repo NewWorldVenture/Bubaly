@@ -12,7 +12,7 @@ import { activeLeftovers, leftoverNudge, type LeftoverLike } from '@/lib/food/le
 import { KitchenDashboard, type KitchenData } from '@/components/modules/kitchen-dashboard';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Smart Kitchen | Bubaly' };
+export const metadata: Metadata = { title: 'Smart Kitchen' };
 export const dynamic = 'force-dynamic';
 
 

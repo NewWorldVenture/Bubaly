@@ -7,7 +7,7 @@
 // requests that failed or answered >= 400, catalogue keys rendered raw instead
 // of their copy, the app's error boundary, and horizontal overflow at a phone
 // width. It does NOT decide PASS: a clean crawl is evidence for a row, not a
-// verdict (docs/audit/pages/README.md, "What audited means").
+// verdict (finalaudit.md § Page Audit — every page on www.bubaly.com).
 //
 //   node scripts/page-audit-crawl.mjs --base http://localhost:3107 \
 //     [--state storage.json] [--label parent] [--lane HOME] [--only /dashboard] \

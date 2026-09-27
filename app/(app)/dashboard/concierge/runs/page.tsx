@@ -20,7 +20,6 @@
 // 'unknown' with a timeline note needs a follow-up to `claim_ai_runs`.
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ArrowLeft, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -38,6 +37,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { StatusBadge } from '@/components/concierge/status-badge';
 import { cn } from '@/lib/utils/cn';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Run history' };
 export const dynamic = 'force-dynamic';
@@ -99,7 +99,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
 
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) {
-    if (access.status === 404) notFound();
+    if (access.status === 404) return <AppNotFound backHref="/dashboard" />;
     return <Unavailable message={access.error} retryHref={selfHref} />;
   }
 

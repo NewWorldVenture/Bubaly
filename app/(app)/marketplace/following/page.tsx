@@ -11,7 +11,7 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Following · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Following · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceFollowingPage() {

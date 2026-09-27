@@ -24,6 +24,564 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > convergence and is recorded as such — see B6 below, where Session A's `F-E03`
 > and Session B's `SEC-001` are one finding reached from two directions.
 
+<!-- page-audit:start -->
+## Page Audit — every page on www.bubaly.com
+
+*Started 2026-09-27 on the owner's instruction: "go through every single page
+on bubaly.com and audit to make sure each is working perfectly, with no
+issues … allow other bots (Claude and Codex) to work simultaneously on this.
+Make sure to fix everything uncovered before moving on."*
+
+**What a row's status means, exactly.** This is a *page* audit, not a workflow
+audit: ✅ CLEAN says the page renders correctly, not that every action on it has
+been exercised end to end. That is why no `PAGE-` or `UI-ROUTE-` row above is
+moved to PASS from here — those registers mean a full workflow verified, and
+this section links to them instead of overwriting them.
+
+A page is ✅ **CLEAN** when all three hold:
+
+- **Signed out, production** (`scripts/page-audit/crawl.mjs` against
+  https://www.bubaly.com, phone 375×812 and desktop 1280×800): the right answer
+  for a visitor — the page itself for a public route, a redirect to `/login`
+  for a signed-in one, a 404 for a dynamic route opened with an id that matches
+  nothing — with no uncaught error, no console error, no failed or 4xx/5xx
+  subresource, no horizontal overflow, and no axe WCAG 2.1 A/AA *serious* or
+  *critical* violation. Every link found on a crawled page is also requested.
+- **Signed in, local sweep** (`tests/e2e/every-page-signed-in.spec.ts`, run in
+  CI's E2E job against the disposable Supabase; locally the same against
+  `supabase start`): opened by a parent who is also a super admin, the page
+  answers below 500 and not 404 (a dynamic route may 404 on its no-such-id
+  path), throws nothing, logs no console error, renders no raw catalogue key,
+  does not double the brand in its title and does not overflow 1280 px. The
+  spec discovers routes from `app/**/page.tsx`, so a page added tomorrow is in
+  it tomorrow.
+- **Signed in, phone** (`scripts/page-audit/crawl.mjs` with `STORAGE_STATE`
+  set to that signed-in session, 375×812, against the same local build): the
+  signed-out crawl's checks — axe WCAG 2.1 A/AA *serious*/*critical*,
+  overflow, uncaught and console errors, failed subresources — on the page a
+  parent actually sees on a phone. Added after the desktop-only sweep had
+  called 340 pages clean: at phone width every signed-in page failed axe on
+  the shell (a nameless logo link, avatar initials at 4.46:1), and 55 pages
+  had their own failures. A page is not clean until all three checks hold.
+
+Other statuses: 🔧 **FIXED, NOT LIVE** (the defect is fixed in a named commit;
+production has not been re-crawled on it), ⚠️ **OPEN** (a defect is recorded and
+not fixed, with the reason), 🔒 **OWNER** (the fix is the owner's — data, a
+secret, a decision), 🔄 **CLAIMED** (someone is on it; see Claim).
+
+### Working on this in parallel (Claude, Codex, anyone)
+
+The 398 routes are split into six **lanes**. A lane is claimed as a whole, so
+two sessions never edit neighbouring rows and their merges do not conflict.
+
+1. `git fetch origin main` and read the **Lanes** table *on origin/main*, and
+   the open PRs touching `finalaudit.md`. Take a lane whose Claim is empty or
+   older than 12 hours.
+2. Put your session id and the UTC time in that lane's Claim cell, commit that
+   one line alone, and get it to `main` first (a claim nobody else can see is
+   not a claim).
+3. Work your lane's rows only: re-run the two checks for the rows you touch,
+   fix what you find (the same rules as the rest of this audit — a failing test
+   first, the fix, the test green, mutation-proved where it can be), update the
+   row, and move it to 🔧 FIXED, NOT LIVE with the commit. After the release
+   reaches production, re-crawl the route and move it to ✅ CLEAN.
+4. Release the lane (clear the Claim) when you stop, finished or not.
+
+Re-running the checks: `node scripts/page-audit/routes.mjs > paths.txt`, then
+`node scripts/page-audit/crawl.mjs paths.txt out.jsonl 4` and
+`python3 scripts/page-audit/summarize.py out.jsonl`; and
+`E2E_AUTHENTICATED=1 npx playwright test tests/e2e/every-page-signed-in.spec.ts --project=chromium`
+with the local Supabase credentials in the environment; and, for the phone
+column, `STORAGE_STATE=state.json BASE=http://localhost:3107 VIEWPORTS=phone
+node scripts/page-audit/crawl.mjs paths.txt out.jsonl 4` with a storage state
+saved from a signed-in browser.
+
+### Lanes
+
+| Lane | Routes | Rows | Claim |
+|---|---|---|---|
+| A | public, auth and marketing pages (everything outside the signed-in app) | 44 | — (a parallel session has worked the public side on `main`: #588, #589, #590 — it is theirs to claim) |
+| B | `/admin/**` | 80 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
+| C | `/dashboard/a…h**` | 95 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
+| D | `/dashboard/i…r**` | 53 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
+| E | `/dashboard/s…z**` | 67 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
+| F | the rest of the signed-in app (`/marketplace`, `/wallet`, `/family`, `/guardian`, `/kids`, `/services`, …) | 59 | session_01KP9rt5rVQ9jDMpZp2xBy3K, 2026-09-27 13:10Z |
+
+### What the first pass found, and where each fix is
+
+The first pass (production crawl of all 398 routes at 06dd3f7e's predecessor
+a30e6b3f/338b6b12; signed-in sweep on local builds of this branch) found the
+defects below. Every one is fixed or recorded; none is left unexplained.
+
+| Finding | Pages | Fix | Live? |
+|---|---|---|---|
+| Title doubled the brand ("… · Bubaly · Bubaly"): 67 static titles, 3 generated ones | 70 | `b12969cf`, `91de6e34`; guard `tests/a-page-title-does-not-carry-the-brand-the-template-adds.test.ts` | PR #591 |
+| Sideways-scrolling regions not keyboard-reachable (axe `scrollable-region-focusable`, phone) | `/`, `/pricing`, `/family-display` | `b12969cf` | PR #591 |
+| `/resources/benchmarks` 404s by design while unpublished but kept its real title | 1 | `b12969cf`; `tests/an-unpublished-benchmarks-page-keeps-no-benchmarks-title.test.ts` | PR #591 |
+| A dead `/gift/<token>` drew the live gift page's header | 1 | `b12969cf`; `tests/a-dead-gift-link-is-not-drawn-as-a-gift-page.test.ts` | PR #591 |
+| Last-resort error page had no `<title>` | (root error) | `b12969cf` | PR #591 |
+| White text on the dark theme's danger fill, 2.80:1 (axe `color-contrast`) | `/auth/signout/complete` and 13 components | #590 (parallel session) | ✅ live; re-crawled clean at 06dd3f7e |
+| The public review page showed the seeder's placeholder copy ("Important task #1", "…generated for testing purposes. Row 1.") | `/reviews/new` | #589 (parallel session) hides placeholder text; **the owner should still replace the production row in Admin → Marketing → Reviews** | ✅ live; re-crawled clean at 06dd3f7e |
+| 16 blog hero images 404 | blog posts | #588 (parallel session) | ✅ live |
+| Admin pages overflowed 1280 px by 118–417 px (`grid-cols-[1fr_…]` cannot shrink); 36 templates | 5 found, 36 templates | `91de6e34`; `tests/a-grid-column-can-shrink-to-the-screen.test.ts` | PR #591 |
+| Redirect-only pages answered 200 and redirected client-side after the shell mounted, cutting off the sidebar's reads | `/parent`, `/admin/tiers`, three consolidated dashboard routes | `91de6e34` (308s in `next.config.mjs`); `tests/an-old-route-is-one-redirect-not-a-page.test.ts` | PR #591 |
+| `notFound()` inside `app/(app)/loading.tsx`'s stream: a missing record answered 200 and threw React #419 | 13 found, 22 call sites | `199a94b5`; `tests/a-missing-record-in-the-app-is-answered-not-thrown.test.ts` | PR #591 |
+| The in-app not-found card was English in every language | every in-app not-found path | `199a94b5` (catalogue keys ×7 languages) | PR #591 |
+| Hydration mismatch (React #418): "New trip" opened during the server render, so the client drew a dialog the server had not | `/dashboard/vacations/new` | opened after mount (the first attempt, a `Modal`-wide change, was withdrawn when CI's weekly-meal journey timed out on it) | PR #591 |
+| A super admin's preview of a feature the family lacks fired the feature's work on open and hit a 403 | `/dashboard/autopilot`, `/dashboard/briefing` | `199a94b5`; `tests/an-admin-preview-does-not-fire-the-features-work.test.ts` | PR #591 |
+| Two readers of one table shared a realtime channel: `/dashboard/calendar` threw "cannot add `postgres_changes` callbacks … after `subscribe()`" and dropped a section to its error boundary (CI only: the local stack ran without realtime) | 1 (10 subscription sites) | `854d8dd7`, a port of #587's C1-S9-94 (`lib/realtime/own-channel.ts`); guard `tests/two-readers-of-one-table-do-not-share-a-channel.test.ts` | PR #591 |
+| React #418 from a relative time: "just now" on the server, "1m ago" in the browser (CI's sweep on `/admin/notifications`, whose first row is the sweep's own signup alert; reproduced 5/5 locally) | 1 found, 7 render sites | `04e55736` (`suppressHydrationWarning` on the element holding the time); guard `tests/a-relative-time-is-not-a-hydration-error.test.ts` | PR #591 |
+| **Signed in, phone:** the top bar's logo link had no name (axe `link-name`) | 347 | `b0d9e10b`; `tests/the-app-shell-passes-axe-on-a-phone.test.ts` | PR #591 |
+| **Signed in, phone:** avatar initials drawn white on the member colour, 4.46:1 on `#6366f1` and lower on lighter colours (axe `color-contrast`) | 268 | `b0d9e10b` (white or black, whichever reads); `tests/an-avatar-initial-is-readable-on-its-colour.test.ts` | PR #591 |
+| **Signed in, phone:** admin marketing section labels at 70% muted, 4.13:1 | 40 | `b0d9e10b` | PR #591 |
+| **Signed in, phone:** page-level axe failures — unnamed `<select>`s (32), unlabelled inputs (9), icon-only switches (3 pages), colour-only links (5), unfocusable scroll regions (6), low-contrast badges and hints, a tab list without tabs, a stray list item | 55 | `0474534d` (names for 32 selects and 9 fields; `FilterSelect` now requires a label), `00850725` (switches say they are switches and what they switch; icon-only links and buttons named), `98bcbd0b` (badges at 4.5:1+, links underlined, tables in named focusable regions, a tablist of tabs, a list that is a list); 26 catalogue keys × 7 languages; guard `tests/a-signed-in-control-has-a-name.test.ts` (65 of 66 cases red first). Done by a helper agent in its own worktree, reviewed and cherry-picked; `321cdd5e` keeps a label id off `useId` for the blurb editor's test runtime | PR #591 |
+| **Signed in, phone, second pass** (a re-crawl on a build with the fixes above: 330 routes' findings gone) — the admin area's own top bar had the same nameless logo link | 79 | `734c0c4d`; the shell guard now holds every link whose only content is the logo mark | PR #591 |
+| **Signed in, phone, second pass** — body copy in `text-muted` at 60–80% opacity, 3.33:1–4.15:1 ("Upload your first file to get started.", empty states, "13 guided steps") | 16 found, 48 classes in 22 files | `734c0c4d` (full `text-muted` on every text element; icons keep their dimming; the sidebar is untouched); guard `tests/faint-text-still-reads.test.ts` | PR #591 |
+| **Signed in, phone, second pass** — the recipe finder's back arrow unnamed; the journeys table's scroll box unreachable by keyboard | 2 | `734c0c4d` | PR #591 |
+| Five more relative-time helpers (`relativeDate`, `fmtRelative`, `fmtTimeAgo`, `fmtTimeAgo7`, `formatRelativeTime`) rendered like the one CI caught | 16 render sites | `4cde2d57`; the relative-time guard names all six and checks the enclosing element | PR #591 |
+| **Signed in, phone, third pass** (the build with every fix): **0 axe violations on all 393 signed-in routes**, no overflow, no 5xx | 393 | — | PR #591 |
+| `/welcome` read "Welcome to Bubaly · Bubaly" (a catalogue title ending in the brand in every language) | 1 | `17c86fb1`; the title guard now reads catalogue titles | PR #591 |
+| CI typecheck: `config.redirects` possibly undefined in the redirect test | — | `6d247466` | PR #591 |
+| An intermittent React #418 (hydration, "HTML": an element, not text) on a different page each time: `/economy`, `/dashboard/setup` (desktop sweeps), `/dashboard/social/settings`, `/dashboard/wishlists`, `/admin/marketing/video`, `/dashboard/school` (one each across three phone crawls of 393 pages), `/dashboard/auto/rentals`, `/dashboard/language` (a hunt of 546 signed-in loads, four at a time: 2 hits) | 8 | ⚠️ **OPEN.** Not reproduced alone, nor in 30 loads of those six pages with the CPU slowed 4×. A captured server response and the hydrated page have the same tree, so the difference exists only at the instant of hydration — a streaming race rather than wrong markup is the working theory; the relative-time cause above was one such race and is fixed. The CI sweep retries once and names the page when it recurs | — |
+| `/display`: one image request failed | 1 | this sandbox's proxy certificate; the Unsplash image answers 200 and the CSP allows `https:` images — not a site defect | — |
+
+All 433 internal links found on the crawled pages resolve. All 1,048 blog posts in the
+sitemap answer 200 on production (checked one by one, 2026-09-27 13:40Z; 13 that timed
+out through this sandbox's proxy answered 200 on a retry). Rendering and contrast of the
+posts is the parallel session's work (#588, #590).
+
+### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
+
+Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
+recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+theirs to update; the findings are listed here rather than edited under someone else's claim.
+
+| Route(s) | Lane | Finding → fix |
+|---|---|---|
+| `/dashboard/calendar` | C | second realtime reader of one table threw; shared channel → `C1-S9-94` (ported to main as `854d8dd7`) |
+| `/dashboard/autopilot`, `/dashboard/briefing` | C | "100% / All clear" shown over a refused scan; a refusal's reason replaced by generic English → `C1-S9-98` (composes with main's preview-only open: an explicit Re-scan now works for a super admin, and an unscanned preview says so) |
+| `/admin/admins`, `/admin/support-tickets` | B | Invite Admin, New Ticket, Export and "Assign agent" had no handler → `C1-S9-105`; the Settings tab showed "Require 2FA" and "session timeout" ON, neither enforced → `C1-S9-106` (owner decision recorded) |
+| `/admin/users`, `/admin/content`, `/admin/marketing/content`, `/admin/settings`, `/admin/feedback` | B | overflow at 390 px (implicit grid column; a wrapping notice; an inline truncate) → `C1-S9-99` |
+| `/dashboard/sports`, `/dashboard/school` | E | overflow at 390 px and English stat tiles → `C1-S9-99`; dead "Ask AI", dead row menus, sports tabs that switched nothing, English tab/day/due labels → `C1-S9-105` |
+| `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`, `/dashboard/recipes`, `/dashboard/social/settings` | C/D/E | overflow at 390 px → `C1-S9-99` (`PageHeader` now wraps a module's action row) |
+| `/guardian`, `/display`, `/marketplace/community` | F | overflow at 390 px → `C1-S9-99` |
+| `/dashboard/vacations/new` | C | dialog open on arrival failed hydration → `C1-S9-96` (Modal waits for hydration; main opens the dialog after mount — both hold) |
+| every in-app not-found | — | English in every locale → `C1-S9-97` (main's `199a94b5` did the same; merged) |
+| `/wallet/**`, parent gift screen | F | occasion labels English → `C1-S9-104` |
+| `/login`, `/signup`, `/kid-login`, `/auth/recovery`, `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/pay/[handle]`, `/reviews`, `/s/[slug]` | A | browser-tab title English in every locale → `C1-S9-100`; `/join`'s missing-token error English → `C1-S9-100` |
+| `/reviews/new` | A | "Review us on …" buttons and star labels English → `C1-S9-100` |
+| `/gift/[token]` | A | tab title, occasion label and "a child"/"a family" English → `C1-S9-100`, `C1-S9-104` (composes with main's dead-link card) |
+| `/blog`, `/blog/[slug]` | A | "copy link" copied the host, not the canonical URL → `C1-S9-95`; save button's labels and subscribe failure English → `C1-S9-103` |
+
+### Every page
+
+*398 routes (every `app/**/page.tsx` at 06dd3f7e, plus the five aliases now answered by `next.config.mjs`).* ✅ CLEAN **24** · 🔧 FIXED, NOT LIVE **366** · ⚠️ OPEN **8** · 🔒 OWNER **0** · 🔄 CLAIMED **0** · ⬜ NOT CHECKED **0**
+
+IDs link each route to its row in the Session A register (`PAGE-`) and the Session B summary (`UI-ROUTE-`). "Signed out · production" is the desktop answer of the crawl; "Signed in · sweep" is `tests/e2e/every-page-signed-in.spec.ts` on a local build of this branch; "Signed in · phone" is the crawler at 375 px with that signed-in session (axe, overflow, errors), before the fixes named in the row.
+
+| Route | IDs | Lane | Signed out · production | Signed in · sweep | Signed in · phone | Findings → fix | Status |
+|---|---|---|---|---|---|---|---|
+| `/` | PAGE-380 UI-ROUTE-0377 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/acceptable-use` | PAGE-359 UI-ROUTE-0356 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/admin` | PAGE-060 UI-ROUTE-0059 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/admins` | PAGE-001 UI-ROUTE-0001 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe color-contrast (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/ai` | PAGE-003 UI-ROUTE-0003 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/ai-activity` | PAGE-002 UI-ROUTE-0002 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/audit` | PAGE-005 UI-ROUTE-0005 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/audit-logs` | PAGE-004 UI-ROUTE-0004 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/backup` | PAGE-006 UI-ROUTE-0006 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/benchmarks` | PAGE-007 UI-ROUTE-0007 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/billing` | PAGE-008 UI-ROUTE-0008 | B | → /login | clean | clean | axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/admin/content` | PAGE-009 UI-ROUTE-0009 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/feedback` | PAGE-010 UI-ROUTE-0010 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/integrations` | PAGE-011 UI-ROUTE-0011 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing` | PAGE-038 UI-ROUTE-0038 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/ads` | PAGE-012 UI-ROUTE-0012 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/aeo` | PAGE-013 UI-ROUTE-0013 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/affiliates` | PAGE-014 UI-ROUTE-0014 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/analytics` | PAGE-015 UI-ROUTE-0015 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/assets` | PAGE-016 UI-ROUTE-0016 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/assistant` | PAGE-017 UI-ROUTE-0017 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/audit` | PAGE-018 UI-ROUTE-0018 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/automation` | PAGE-019 UI-ROUTE-0019 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/campaigns` | PAGE-022 UI-ROUTE-0022 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/campaigns/[id]` | PAGE-020 UI-ROUTE-0020 | B | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/campaigns/new` | PAGE-021 UI-ROUTE-0021 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/competitive` | PAGE-023 UI-ROUTE-0023 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/content` | PAGE-024 UI-ROUTE-0024 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/crm` | PAGE-025 UI-ROUTE-0025 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/customers` | PAGE-026 UI-ROUTE-0026 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/email` | PAGE-027 UI-ROUTE-0027 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/exit-intent` | PAGE-028 UI-ROUTE-0028 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/experiments` | PAGE-029 UI-ROUTE-0029 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/forms` | PAGE-030 UI-ROUTE-0030 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/funnels` | PAGE-031 UI-ROUTE-0031 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/health` | PAGE-032 UI-ROUTE-0032 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/intelligence` | PAGE-033 UI-ROUTE-0033 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/landing-pages` | PAGE-034 UI-ROUTE-0034 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/lead-scores` | PAGE-035 UI-ROUTE-0035 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/leads` | PAGE-036 UI-ROUTE-0036 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/loyalty` | PAGE-037 UI-ROUTE-0037 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/personalization` | PAGE-039 UI-ROUTE-0039 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/pipeline` | PAGE-040 UI-ROUTE-0040 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/platform` | PAGE-041 UI-ROUTE-0041 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/proposals` | PAGE-042 UI-ROUTE-0042 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/push` | PAGE-043 UI-ROUTE-0043 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/referrals` | PAGE-044 UI-ROUTE-0044 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/reputation` | PAGE-045 UI-ROUTE-0045 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/reviews` | PAGE-046 UI-ROUTE-0046 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/segments` | PAGE-047 UI-ROUTE-0047 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/seo` | PAGE-048 UI-ROUTE-0048 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/settings` | PAGE-049 UI-ROUTE-0049 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/sms` | PAGE-050 UI-ROUTE-0050 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/social` | PAGE-051 UI-ROUTE-0051 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/social/recurring` | PAGE-052 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/surveys` | PAGE-054 UI-ROUTE-0053 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/surveys/[id]` | PAGE-053 UI-ROUTE-0052 | B | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketing/video` | PAGE-055 UI-ROUTE-0054 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; one #418 (hydration) in the phone crawl or the #418 hunt; not reproduced alone | ⚠️ OPEN |
+| `/admin/marketing/visitor-intelligence` | PAGE-056 UI-ROUTE-0055 | B | → /login | clean | clean | axe color-contrast: marketing section labels (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/marketplace/reports` | PAGE-057 UI-ROUTE-0056 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/notifications` | PAGE-058 UI-ROUTE-0057 | B | → /login | clean | clean | React #418: "just now" on the server, "1m ago" in the browser (CI; reproduced 5/5) → `04e55736`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/onboarding` | PAGE-059 UI-ROUTE-0058 | B | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/reports` | PAGE-061 UI-ROUTE-0060 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/security` | PAGE-062 UI-ROUTE-0061 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/services` | PAGE-063 UI-ROUTE-0062 | B | → /login | clean | clean | axe color-contrast (phone) → `98bcbd0b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/settings` | PAGE-064 UI-ROUTE-0063 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/settings/social-links` | PAGE-065 UI-ROUTE-0064 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/social` | PAGE-067 UI-ROUTE-0066 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/social/audit` | PAGE-066 UI-ROUTE-0065 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/social/providers` | PAGE-068 UI-ROUTE-0067 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/social/usage` | PAGE-069 UI-ROUTE-0068 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/stripe` | PAGE-070 UI-ROUTE-0069 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/subscriptions` | PAGE-071 UI-ROUTE-0070 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/support` | PAGE-073 UI-ROUTE-0072 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/support-tickets` | PAGE-072 UI-ROUTE-0071 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe color-contrast (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/sync` | PAGE-074 UI-ROUTE-0073 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/admin/system` | PAGE-075 UI-ROUTE-0074 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/tier-features` | PAGE-076 UI-ROUTE-0075 | B | → /login | clean | clean | axe color-contrast (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/tiers` | PAGE-077 UI-ROUTE-0076 | B | 308 → /admin/tier-features (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, NOT LIVE |
+| `/admin/users` | PAGE-078 UI-ROUTE-0077 | B | → /login | clean | clean | overflowed 1280 px (1fr grid track) → `91de6e34`; axe link-name: the top bar logo link (phone) → `734c0c4d`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/admin/wallet` | PAGE-079 UI-ROUTE-0078 | B | → /login | clean | clean | axe button-name (phone) → `00850725`; axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/admin/wallet/reconciliation` | PAGE-080 UI-ROUTE-0079 | B | → /login | clean | clean | axe link-name: the top bar logo link (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/ai` | PAGE-360 UI-ROUTE-0357 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/alternatives/[slug]` | PAGE-361 UI-ROUTE-0358 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/audiences/[slug]` | PAGE-362 UI-ROUTE-0359 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/auth/complete` | PAGE-396 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/auth/recovery` | PAGE-397 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/auth/signout/complete` | PAGE-398 | A | 200 | clean | clean | axe color-contrast (white on danger, 2.80:1) → #590 (parallel session) | ✅ CLEAN |
+| `/auth/step-up` | PAGE-081 UI-ROUTE-0080 | A | 200 | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/blog` | PAGE-364 UI-ROUTE-0361 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/blog/[slug]` | PAGE-363 UI-ROUTE-0360 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/capture` | PAGE-083 UI-ROUTE-0082 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/capture/link` | PAGE-082 UI-ROUTE-0081 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/compare/[slug]` | PAGE-365 UI-ROUTE-0362 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/contact` | PAGE-366 UI-ROUTE-0363 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/cookies` | PAGE-367 UI-ROUTE-0364 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/customers/[slug]` | PAGE-368 UI-ROUTE-0365 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/dashboard` | PAGE-210 UI-ROUTE-0207 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/activity` | PAGE-084 UI-ROUTE-0083 | C | → /login | clean | clean | relative time rendered on the server could fail hydration at a minute boundary (same cause as /admin/notifications) → `04e55736`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/agents` | PAGE-085 UI-ROUTE-0084 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/announcements` | PAGE-086 UI-ROUTE-0085 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/app-store` | PAGE-087 UI-ROUTE-0086 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/assistant` | PAGE-088 UI-ROUTE-0087 | C | → /login | clean | clean | axe button-name (phone) → `00850725`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/assistant/purchases/[approvalId]` | PAGE-089 UI-ROUTE-0088 | C | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/assistants` | PAGE-090 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto` | PAGE-094 UI-ROUTE-0092 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/accident` | PAGE-091 UI-ROUTE-0089 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/insurance` | PAGE-092 UI-ROUTE-0090 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/licenses` | PAGE-093 UI-ROUTE-0091 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/registration` | PAGE-095 UI-ROUTE-0093 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/rentals` | PAGE-096 UI-ROUTE-0094 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the #418 hunt (273 signed-in loads × 4 in parallel); not reproduced alone | ⚠️ OPEN |
+| `/dashboard/auto/service` | PAGE-097 UI-ROUTE-0095 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/auto/vehicles` | PAGE-098 UI-ROUTE-0096 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/autonomous-family-management` | PAGE-099 UI-ROUTE-0097 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/autopay` | PAGE-100 UI-ROUTE-0098 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/autopilot` | PAGE-101 UI-ROUTE-0099 | C | → /login | clean | clean | admin preview fired the scan on open (403) → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/behavior` | PAGE-102 UI-ROUTE-0100 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/billing` | PAGE-103 UI-ROUTE-0101 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/bills` | PAGE-104 UI-ROUTE-0102 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/binder` | PAGE-105 UI-ROUTE-0103 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/briefing` | PAGE-106 UI-ROUTE-0104 | C | → /login | clean | clean | admin preview fired generate on open (403) → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/budgets` | PAGE-107 UI-ROUTE-0105 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/calendar` | PAGE-108 UI-ROUTE-0106 | C | → /login | clean | clean | two readers of calendar_events shared one realtime channel: "cannot add postgres_changes callbacks after subscribe()" (CI, realtime on) → `854d8dd7` (port of #587); axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/calm` | PAGE-109 UI-ROUTE-0107 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/care` | PAGE-110 UI-ROUTE-0108 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/career` | PAGE-111 UI-ROUTE-0109 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/celebrations` | PAGE-112 UI-ROUTE-0110 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/chores` | PAGE-113 UI-ROUTE-0111 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/closet` | PAGE-114 UI-ROUTE-0112 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/command-center` | PAGE-115 UI-ROUTE-0113 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/concierge` | PAGE-117 UI-ROUTE-0115 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/concierge-calls` | PAGE-116 UI-ROUTE-0114 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/concierge/runs` | PAGE-119 UI-ROUTE-0117 | C | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/concierge/runs/[id]` | PAGE-118 UI-ROUTE-0116 | C | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/conflicts` | PAGE-120 UI-ROUTE-0118 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/connections` | PAGE-121 UI-ROUTE-0119 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/contact-center` | PAGE-122 UI-ROUTE-0120 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/contacts` | PAGE-124 UI-ROUTE-0122 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/contacts/[id]` | PAGE-123 UI-ROUTE-0121 | C | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/decisions` | PAGE-125 UI-ROUTE-0123 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/declutter` | PAGE-126 UI-ROUTE-0124 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/dental` | PAGE-127 UI-ROUTE-0125 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/devices` | PAGE-128 UI-ROUTE-0126 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/dining` | PAGE-129 UI-ROUTE-0127 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/documents` | PAGE-130 UI-ROUTE-0128 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/due` | PAGE-131 UI-ROUTE-0129 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/expenses` | PAGE-132 UI-ROUTE-0130 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/experience` | PAGE-133 UI-ROUTE-0131 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family` | PAGE-154 UI-ROUTE-0152 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-access` | PAGE-134 UI-ROUTE-0132 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-ai-assistant` | PAGE-135 UI-ROUTE-0133 | C | 308 → /dashboard/assistant (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-automation` | PAGE-136 UI-ROUTE-0134 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-cfo` | PAGE-137 UI-ROUTE-0135 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-coo` | PAGE-138 UI-ROUTE-0136 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-digital-twin` | PAGE-139 UI-ROUTE-0137 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-emergency` | PAGE-140 UI-ROUTE-0138 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-health` | PAGE-141 UI-ROUTE-0139 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-knowledge-graph` | PAGE-142 UI-ROUTE-0140 | C | 308 → /dashboard/graph (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-memory` | PAGE-143 UI-ROUTE-0141 | C | 308 → /dashboard/memories (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-operating-index` | PAGE-144 UI-ROUTE-0142 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-operations` | PAGE-145 UI-ROUTE-0143 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-school` | PAGE-146 UI-ROUTE-0144 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-signals` | PAGE-147 UI-ROUTE-0145 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-sports` | PAGE-148 UI-ROUTE-0146 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-stress` | PAGE-149 UI-ROUTE-0147 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family-tree` | PAGE-150 UI-ROUTE-0148 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family/check-in` | PAGE-151 UI-ROUTE-0149 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family/driving-safety` | PAGE-152 UI-ROUTE-0150 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family/find-phone` | PAGE-153 UI-ROUTE-0151 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/family/play-dates` | PAGE-155 UI-ROUTE-0153 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/favorites` | PAGE-156 UI-ROUTE-0154 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/files/cloud` | PAGE-157 UI-ROUTE-0155 | C | → /login | clean | clean | title doubled the brand → `91de6e34`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/files/shared` | PAGE-158 UI-ROUTE-0156 | C | → /login | clean | clean | title doubled the brand → `91de6e34`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/files/vault` | PAGE-159 UI-ROUTE-0157 | C | → /login | clean | clean | title doubled the brand → `91de6e34`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/focus` | PAGE-160 UI-ROUTE-0158 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/food` | PAGE-161 UI-ROUTE-0159 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/fridge-chef` | PAGE-162 UI-ROUTE-0160 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/front-desk` | PAGE-163 UI-ROUTE-0161 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/goals` | PAGE-164 UI-ROUTE-0162 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/grandparent-portal` | PAGE-165 UI-ROUTE-0163 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/graph` | PAGE-166 UI-ROUTE-0164 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/grocery` | PAGE-167 UI-ROUTE-0165 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/habits` | PAGE-168 UI-ROUTE-0166 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/health` | PAGE-169 UI-ROUTE-0167 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home` | PAGE-173 UI-ROUTE-0171 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/assets/[id]` | PAGE-170 UI-ROUTE-0168 | C | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/diagnose` | PAGE-171 UI-ROUTE-0169 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/maintenance` | PAGE-172 UI-ROUTE-0170 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/pros` | PAGE-174 UI-ROUTE-0172 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/service` | PAGE-175 UI-ROUTE-0173 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/home/warranties` | PAGE-176 UI-ROUTE-0174 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/homework` | PAGE-177 UI-ROUTE-0175 | C | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/inbox` | PAGE-178 UI-ROUTE-0176 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/independence` | PAGE-179 UI-ROUTE-0177 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/insurance` | PAGE-180 UI-ROUTE-0178 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/intelligence` | PAGE-181 UI-ROUTE-0179 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/inventory` | PAGE-182 UI-ROUTE-0180 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/journal` | PAGE-183 UI-ROUTE-0181 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/journeys` | PAGE-184 UI-ROUTE-0182 | D | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/kitchen` | PAGE-185 UI-ROUTE-0183 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/knowledge` | PAGE-186 UI-ROUTE-0184 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/knowledge/seed` | PAGE-187 UI-ROUTE-0185 | D | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/language` | PAGE-188 UI-ROUTE-0186 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the #418 hunt; not reproduced alone | ⚠️ OPEN |
+| `/dashboard/library` | PAGE-189 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/life-events` | PAGE-190 UI-ROUTE-0187 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/locator` | PAGE-191 UI-ROUTE-0188 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/meals` | PAGE-192 UI-ROUTE-0189 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/medical` | PAGE-193 UI-ROUTE-0190 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/medications` | PAGE-194 UI-ROUTE-0191 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/memories` | PAGE-196 UI-ROUTE-0193 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/memories/create` | PAGE-195 UI-ROUTE-0192 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/messages` | PAGE-197 UI-ROUTE-0194 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/migrate` | PAGE-198 UI-ROUTE-0195 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/moments` | PAGE-199 UI-ROUTE-0196 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/money-timeline` | PAGE-200 UI-ROUTE-0197 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/more` | PAGE-201 UI-ROUTE-0198 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/moving` | PAGE-202 UI-ROUTE-0199 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/needs-you` | PAGE-203 UI-ROUTE-0200 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/next-best-actions` | PAGE-204 UI-ROUTE-0201 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/notes` | PAGE-205 UI-ROUTE-0202 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/notifications` | PAGE-206 UI-ROUTE-0203 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/nutrition` | PAGE-207 UI-ROUTE-0204 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/onboarding-funnel` | PAGE-208 UI-ROUTE-0205 | D | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/outcomes` | PAGE-209 UI-ROUTE-0206 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/pantry` | PAGE-211 UI-ROUTE-0208 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/paperwork` | PAGE-212 UI-ROUTE-0209 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/passwords` | PAGE-213 UI-ROUTE-0210 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/payments` | PAGE-214 UI-ROUTE-0211 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/pets` | PAGE-215 UI-ROUTE-0212 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/photos` | PAGE-216 UI-ROUTE-0213 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/planning` | PAGE-217 UI-ROUTE-0214 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/playbook` | PAGE-218 UI-ROUTE-0215 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/prep-plans` | PAGE-219 UI-ROUTE-0216 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/profile` | PAGE-220 UI-ROUTE-0217 | D | → /login | clean | clean | axe button-name (phone) → `00850725`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/projects` | PAGE-221 UI-ROUTE-0218 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/readiness` | PAGE-222 UI-ROUTE-0219 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/reasoning` | PAGE-223 UI-ROUTE-0220 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/recipes` | PAGE-225 UI-ROUTE-0222 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/recipes/discover` | PAGE-224 UI-ROUTE-0221 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe link-name (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/recipes/vote` | PAGE-226 UI-ROUTE-0223 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/relationship` | PAGE-227 UI-ROUTE-0224 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/reminders` | PAGE-228 UI-ROUTE-0225 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/renewals` | PAGE-229 UI-ROUTE-0226 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/rewards` | PAGE-230 UI-ROUTE-0227 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/rides` | PAGE-231 UI-ROUTE-0228 | D | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/savings` | PAGE-232 UI-ROUTE-0229 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/scan` | PAGE-233 UI-ROUTE-0230 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/school` | PAGE-234 UI-ROUTE-0231 | E | → /login | clean | clean (+ one #418) | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the phone crawl or the #418 hunt; not reproduced alone | ⚠️ OPEN |
+| `/dashboard/screen-time` | PAGE-235 UI-ROUTE-0232 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/search` | PAGE-236 UI-ROUTE-0233 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/security` | PAGE-237 UI-ROUTE-0234 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/settings` | PAGE-238 UI-ROUTE-0235 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/setup` | PAGE-239 UI-ROUTE-0236 | E | → /login | intermittent #418 | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the second sweep, clean in the first — intermittent, cause not found yet; the CI sweep will name it if it recurs | ⚠️ OPEN |
+| `/dashboard/signups` | PAGE-240 UI-ROUTE-0237 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sleep` | PAGE-241 UI-ROUTE-0238 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social` | PAGE-253 UI-ROUTE-0250 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social-feed` | PAGE-242 UI-ROUTE-0239 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/accounts` | PAGE-244 UI-ROUTE-0241 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/accounts/connect` | PAGE-243 UI-ROUTE-0240 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/analytics` | PAGE-245 UI-ROUTE-0242 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/calendar` | PAGE-246 UI-ROUTE-0243 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/content-studio` | PAGE-248 UI-ROUTE-0245 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/content-studio/new` | PAGE-247 UI-ROUTE-0244 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/failed` | PAGE-249 UI-ROUTE-0246 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/feed` | PAGE-250 UI-ROUTE-0247 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/inbox` | PAGE-251 UI-ROUTE-0248 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/media-library` | PAGE-252 UI-ROUTE-0249 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/posts` | PAGE-255 UI-ROUTE-0252 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/posts/[id]` | PAGE-254 UI-ROUTE-0251 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/published` | PAGE-256 UI-ROUTE-0253 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/scheduled` | PAGE-257 UI-ROUTE-0254 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/social/settings` | PAGE-258 UI-ROUTE-0255 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the phone crawl or the #418 hunt; not reproduced alone | ⚠️ OPEN |
+| `/dashboard/sports` | PAGE-259 UI-ROUTE-0256 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/subscriptions` | PAGE-260 UI-ROUTE-0257 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sync` | PAGE-265 UI-ROUTE-0262 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sync/accounts` | PAGE-262 UI-ROUTE-0259 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sync/accounts/[provider]` | PAGE-261 UI-ROUTE-0258 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sync/conflicts` | PAGE-263 UI-ROUTE-0260 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/sync/history` | PAGE-264 UI-ROUTE-0261 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/tax-vault` | PAGE-266 UI-ROUTE-0263 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/timetable` | PAGE-267 UI-ROUTE-0264 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/todos` | PAGE-268 UI-ROUTE-0265 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/trip-intel` | PAGE-269 UI-ROUTE-0266 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/trip-memories` | PAGE-270 UI-ROUTE-0267 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/trips` | PAGE-271 UI-ROUTE-0268 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/trust` | PAGE-272 UI-ROUTE-0269 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/utilities` | PAGE-273 UI-ROUTE-0270 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations` | PAGE-289 UI-ROUTE-0286 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]` | PAGE-284 UI-ROUTE-0281 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/activities` | PAGE-274 UI-ROUTE-0271 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/ai-assistant` | PAGE-275 UI-ROUTE-0272 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/budget` | PAGE-276 UI-ROUTE-0273 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/documents` | PAGE-277 UI-ROUTE-0274 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/emergency` | PAGE-278 UI-ROUTE-0275 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/family` | PAGE-279 UI-ROUTE-0276 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/itinerary` | PAGE-280 UI-ROUTE-0277 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/lodging` | PAGE-281 UI-ROUTE-0278 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/overview` | PAGE-282 UI-ROUTE-0279 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/packing` | PAGE-283 UI-ROUTE-0280 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/travel` | PAGE-285 UI-ROUTE-0282 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/[id]/weather` | PAGE-286 UI-ROUTE-0283 | E | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/calendar` | PAGE-287 UI-ROUTE-0284 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/new` | PAGE-288 UI-ROUTE-0285 | E | → /login | clean | clean | hydration mismatch (React #418): modal portal on first client render → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/vacations/reports` | PAGE-290 UI-ROUTE-0287 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/voice` | PAGE-291 UI-ROUTE-0288 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/voting` | PAGE-292 UI-ROUTE-0289 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/watchlist` | PAGE-293 UI-ROUTE-0290 | E | → /login | clean | clean | axe aria-required-children (phone) → `98bcbd0b`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/weather` | PAGE-294 UI-ROUTE-0291 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/weekend` | PAGE-295 UI-ROUTE-0292 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/weekly-briefing` | PAGE-296 UI-ROUTE-0293 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/dashboard/wishlists` | PAGE-297 UI-ROUTE-0294 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the phone crawl or the #418 hunt; not reproduced alone | ⚠️ OPEN |
+| `/dashboard/workload` | PAGE-298 UI-ROUTE-0295 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/display` | PAGE-299 UI-ROUTE-0296 | F | → /login | clean (sandbox-only failure) | clean | axe color-contrast (phone) → `98bcbd0b`; the sweep's one failure is an Unsplash image this sandbox's proxy certificate blocks; the image answers 200 and the CSP allows it | 🔧 FIXED, NOT LIVE |
+| `/display/setup` | PAGE-300 UI-ROUTE-0297 | F | → /login | clean | clean | axe listitem (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/economy` | PAGE-301 UI-ROUTE-0298 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 in the first sweep; clean in the second and in nine re-runs | ⚠️ OPEN |
+| `/f/[id]` | PAGE-369 UI-ROUTE-0366 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/family-display` | PAGE-370 UI-ROUTE-0367 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/family/activity` | PAGE-302 UI-ROUTE-0299 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe color-contrast (second pass) (phone) → `734c0c4d` | 🔧 FIXED, NOT LIVE |
+| `/family/members` | PAGE-303 UI-ROUTE-0300 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/family/notifications` | PAGE-304 UI-ROUTE-0301 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/family/permissions` | PAGE-305 UI-ROUTE-0302 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/family/reports` | PAGE-306 UI-ROUTE-0303 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/family/settings` | PAGE-307 UI-ROUTE-0304 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/faq` | PAGE-371 UI-ROUTE-0368 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/features` | PAGE-373 UI-ROUTE-0370 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/features/[slug]` | PAGE-372 UI-ROUTE-0369 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/feedback` | PAGE-308 UI-ROUTE-0305 | F | → /login | clean | clean | relative time rendered on the server could fail hydration at a minute boundary (same cause as /admin/notifications) → `04e55736`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/gift/[token]` | PAGE-388 UI-ROUTE-0385 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; dead link drawn as a live gift page → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/glossary/[slug]` | PAGE-374 UI-ROUTE-0371 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/guardian` | PAGE-311 UI-ROUTE-0308 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/guardian/contacts` | PAGE-309 UI-ROUTE-0306 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/guardian/history` | PAGE-310 UI-ROUTE-0307 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/guardian/rules` | PAGE-312 UI-ROUTE-0309 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/guardian/settings` | PAGE-313 UI-ROUTE-0310 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/guides/[slug]` | PAGE-375 UI-ROUTE-0372 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/home` | PAGE-314 UI-ROUTE-0311 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/how-it-works` | PAGE-376 UI-ROUTE-0373 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/join` | PAGE-389 UI-ROUTE-0386 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/kid-login` | PAGE-355 UI-ROUTE-0352 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/kids` | PAGE-315 UI-ROUTE-0312 | F | → /login | clean | clean | axe color-contrast (phone) → `98bcbd0b` | 🔧 FIXED, NOT LIVE |
+| `/kids/submit/[assignmentId]` | PAGE-316 UI-ROUTE-0313 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5` | 🔧 FIXED, NOT LIVE |
+| `/login` | PAGE-356 UI-ROUTE-0353 | A | → /login | clean | clean | — | ✅ CLEAN |
+| `/lp/[slug]` | PAGE-377 UI-ROUTE-0374 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/marketplace` | PAGE-330 UI-ROUTE-0327 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/alerts` | PAGE-317 UI-ROUTE-0314 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/auctions` | PAGE-318 UI-ROUTE-0315 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/browse` | PAGE-319 UI-ROUTE-0316 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/collections` | PAGE-320 UI-ROUTE-0317 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/community` | PAGE-321 UI-ROUTE-0318 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/creators` | PAGE-323 UI-ROUTE-0320 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-in-text-block (phone) → `98bcbd0b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/creators/[id]` | PAGE-322 UI-ROUTE-0319 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/deals` | PAGE-324 UI-ROUTE-0321 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/following` | PAGE-325 UI-ROUTE-0322 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/insights` | PAGE-326 UI-ROUTE-0323 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/item/[id]` | PAGE-327 UI-ROUTE-0324 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/negotiations` | PAGE-328 UI-ROUTE-0325 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/orders` | PAGE-329 UI-ROUTE-0326 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/questions` | PAGE-331 UI-ROUTE-0328 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/reviews` | PAGE-332 UI-ROUTE-0329 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/saved` | PAGE-333 UI-ROUTE-0330 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/seed` | PAGE-334 UI-ROUTE-0331 | F | → /login | clean | clean | non-admin/unavailable path threw notFound() into the stream → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe label (phone) → `0474534d`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/selling` | PAGE-335 UI-ROUTE-0332 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/marketplace/store` | PAGE-336 UI-ROUTE-0333 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/missions` | PAGE-338 UI-ROUTE-0335 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/missions/new` | PAGE-337 UI-ROUTE-0334 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/mobile` | PAGE-378 UI-ROUTE-0375 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/offline` | PAGE-390 UI-ROUTE-0387 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/onboarding` | PAGE-391 UI-ROUTE-0388 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/p/[slug]` | PAGE-379 UI-ROUTE-0376 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/parent` | PAGE-339 UI-ROUTE-0336 | F | 308 → /dashboard/family-operations (after the fix) | 308 | 308 | redirect-only page: 200, then a client-side redirect that cut off the sidebar → `91de6e34` (308 in next.config.mjs) | 🔧 FIXED, NOT LIVE |
+| `/pay/[handle]` | PAGE-392 UI-ROUTE-0389 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/pricing` | PAGE-381 UI-ROUTE-0378 | A | 200 | clean | clean | axe scrollable-region-focusable (phone) → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/privacy` | PAGE-382 UI-ROUTE-0379 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/questions/[slug]` | PAGE-383 UI-ROUTE-0380 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/referrals` | PAGE-340 UI-ROUTE-0337 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/resources/[slug]` | PAGE-384 UI-ROUTE-0381 | A | 404 (no-such-id path) | clean | clean | — | ✅ CLEAN |
+| `/resources/benchmarks` | PAGE-385 UI-ROUTE-0382 | A | 404 (unpublished, by design) | clean | clean | 404 by design but kept its real title → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/reviews` | PAGE-394 UI-ROUTE-0391 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/reviews/new` | PAGE-393 UI-ROUTE-0390 | A | 200 | clean | clean | title doubled the brand → `b12969cf`; seeder placeholder text on the public page → #589 (parallel session) | 🔧 FIXED, NOT LIVE |
+| `/s/[slug]` | PAGE-395 UI-ROUTE-0392 | A | 200 | clean | clean | title doubled the brand → `b12969cf` | 🔧 FIXED, NOT LIVE |
+| `/security` | PAGE-386 UI-ROUTE-0383 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/services` | PAGE-342 UI-ROUTE-0339 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/services/[category]` | PAGE-341 UI-ROUTE-0338 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/signup` | PAGE-357 UI-ROUTE-0354 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/terms` | PAGE-387 UI-ROUTE-0384 | A | 200 | clean | clean | — | ✅ CLEAN |
+| `/wallet` | PAGE-351 UI-ROUTE-0348 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/activity` | PAGE-343 UI-ROUTE-0340 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/allowance` | PAGE-344 UI-ROUTE-0341 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/babysitters` | PAGE-345 UI-ROUTE-0342 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/cards` | PAGE-346 UI-ROUTE-0343 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/children/[childId]` | PAGE-347 UI-ROUTE-0344 | F | → /login | clean | clean | not-found path threw notFound() into the stream (React #419, 200); English not-found copy → `199a94b5`; axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/gift` | PAGE-348 UI-ROUTE-0345 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe select-name (phone) → `0474534d` | 🔧 FIXED, NOT LIVE |
+| `/wallet/goals` | PAGE-349 UI-ROUTE-0346 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/invest` | PAGE-350 UI-ROUTE-0347 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/send` | PAGE-352 UI-ROUTE-0349 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/settings` | PAGE-353 UI-ROUTE-0350 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/wallet/treasury` | PAGE-354 UI-ROUTE-0351 | F | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, NOT LIVE |
+| `/welcome` | PAGE-358 UI-ROUTE-0355 | A | 200 | clean | clean | title "Welcome to Bubaly · Bubaly" → `17c86fb1` | 🔧 FIXED, NOT LIVE |
+<!-- page-audit:end -->
+
 ## Audit Status — Session A (this register)
 - Started: 2026-09-13
 - Last Updated: 2026-09-27
@@ -42,8 +600,8 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 *Different scheme and granularity from the block above; see Register B below.*
 
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27T12:20:00Z
-- Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z.
+- Last Updated: 2026-09-27T15:30:00Z
+- Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state.
 - Total Audit Items: 14180 — recounted by DISTINCT ID from the merged Audit Summary table when `main` (7e54596d) was merged into `claude/bubaly-repo-connect-etzqg7` (PR #548). `main`'s own table held 14,038 distinct IDs (its header read 14,075, counting the Pass BU additions recorded in prose); the branch's held 14,180, a superset of main's. The line that stood here on `main` follows: 14075 — **+4 in Pass BU**: SEC-007 (raised by the review of the SEC-006 fix) and SEC-008 (raised by the SEC-007 fix), each re-read against its routes before being recorded; SEC-009 (an opt-out a family set comes back on whenever the settings read fails — found by the `m35` fixer, re-read at every call site); and I18N-010 (a `t()` key no catalogue carries — found by three separate reviewers, measured tree-wide, fixed with a guard). **+33 the pass before**: SEC-006, TIME-010, SRV-001, TIME-009, CONC-001, DOC-002, AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005, METRIC-001, SPEC-001, SPEC-002, IMPORT-001, AUTH-004, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-009, AUDIT-010, TIME-001, TIME-002, TIME-003, TIME-004, TIME-005, TIME-006, TIME-007, TIME-008, AUDIT-011
 - Not Started: 13876
 - In Progress: 291
@@ -366,442 +924,14 @@ head 92340315):
   database policy, and a browser audit of the deployed site — is stated as such
   in each section rather than left to look verified.
 
-## Page Audit Register — every page on bubaly.com
+## Page Audit Register — see "Page Audit — every page on www.bubaly.com"
 
-One row per `page.tsx` (the routes bubaly.com serves), grouped into lanes so
-several agents can audit at once without editing the same file. Protocol,
-statuses and what "audited" means: `docs/audit/pages/README.md`. Started by
-Claude-1 on 2026-09-27; production (`bubaly.com`) is not reachable from this
-session's network policy, so the crawl runs against a local production build
-of the same tree (`next build && next start`) and a local Supabase.
-
-<!-- page-register:start — generated by scripts/page-audit-register.mjs; edit the lane files, not this -->
-
-**398 pages** — one row per `page.tsx`, grouped by lane. Status is set in the lane files under `docs/audit/pages/` by the agent holding the lane; this table is regenerated from them (`node scripts/page-audit-register.mjs --write`) and `tests/every-page-is-in-the-page-register.test.ts` fails if it is stale or a page is missing.
-
-| Lane | Pages | UNAUDITED | IN PROGRESS | PASS | FIXED | OPEN | BLOCKED |
-|---|---|---|---|---|---|---|---|
-| [PUBLIC](docs/audit/pages/PUBLIC.md) | 36 | 0 | 28 | 0 | 8 | 0 | 0 |
-| [AUTH](docs/audit/pages/AUTH.md) | 9 | 0 | 3 | 0 | 6 | 0 | 0 |
-| [ADMIN](docs/audit/pages/ADMIN.md) | 80 | 73 | 0 | 0 | 7 | 0 | 0 |
-| [MARKETPLACE](docs/audit/pages/MARKETPLACE.md) | 20 | 19 | 0 | 0 | 1 | 0 | 0 |
-| [MONEY](docs/audit/pages/MONEY.md) | 24 | 24 | 0 | 0 | 0 | 0 | 0 |
-| [TRAVEL](docs/audit/pages/TRAVEL.md) | 23 | 22 | 0 | 0 | 1 | 0 | 0 |
-| [SOCIAL](docs/audit/pages/SOCIAL.md) | 16 | 15 | 0 | 0 | 1 | 0 | 0 |
-| [FAMILY](docs/audit/pages/FAMILY.md) | 16 | 15 | 0 | 0 | 1 | 0 | 0 |
-| [HOME](docs/audit/pages/HOME.md) | 17 | 16 | 0 | 0 | 1 | 0 | 0 |
-| [DASH-A-F](docs/audit/pages/DASH-A-F.md) | 70 | 66 | 0 | 0 | 4 | 0 | 0 |
-| [DASH-G-M](docs/audit/pages/DASH-G-M.md) | 31 | 31 | 0 | 0 | 0 | 0 | 0 |
-| [DASH-N-Z](docs/audit/pages/DASH-N-Z.md) | 56 | 51 | 0 | 0 | 5 | 0 | 0 |
-| [OTHER](docs/audit/pages/OTHER.md) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **398** | **332** | **31** | **0** | **35** | **0** | **0** |
-
-<details><summary>Every page, with its status</summary>
-
-| Lane | Route | Status | Checked (UTC) | By | Notes |
-|---|---|---|---|---|---|
-| PUBLIC | `/acceptable-use` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/ai` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/alternatives/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/audiences/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/blog/[slug]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-95 @ 5bf0112f: copy-link copied window.location, not the canonical URL. |
-| PUBLIC | `/blog` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/compare/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/contact` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/cookies` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/customers/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/f/[id]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/family-display` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/faq` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/features/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/features` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/glossary/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/guides/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/how-it-works` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/lp/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/mobile` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/p/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/pricing` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/privacy` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/questions/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/resources/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/resources/benchmarks` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 404, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/security` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/terms` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| PUBLIC | `/gift/[token]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
-| PUBLIC | `/join` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title and invite error. |
-| PUBLIC | `/offline` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| PUBLIC | `/pay/[handle]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| PUBLIC | `/reviews/new` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title, review buttons and star labels. |
-| PUBLIC | `/reviews` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| PUBLIC | `/s/[slug]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| AUTH | `/auth/step-up` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| AUTH | `/auth/complete` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 3 hardcoded string(s) in its own files — C1-S9-101. |
-| AUTH | `/auth/recovery` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
-| AUTH | `/auth/signout/complete` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| AUTH | `/kid-login` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| AUTH | `/login` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
-| AUTH | `/signup` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
-| AUTH | `/welcome` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
-| AUTH | `/onboarding` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200 → /login?redirect=%2Fonboarding, no page errors, no raw keys, no overflow. Static: 2 flagged string(s) — see C1-S9-100 (not copy / I18N-001). Read pending. |
-| ADMIN | `/admin/admins` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 74 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/ai-activity` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/ai` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/audit-logs` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/audit` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/backup` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/benchmarks` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/billing` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/content` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 10 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/feedback` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 58px overflow (GitHub notice as loose flex items). Remaining: 8 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/integrations` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/ads` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/aeo` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/affiliates` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/analytics` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/assets` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/assistant` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/audit` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/automation` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/campaigns/[id]` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/campaigns/new` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/campaigns` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/competitive` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/content` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/marketing/crm` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/customers` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/email` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/exit-intent` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/experiments` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/forms` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/funnels` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/health` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/intelligence` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/landing-pages` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/lead-scores` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/leads` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/loyalty` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/personalization` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/pipeline` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/platform` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/proposals` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/push` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/referrals` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/reputation` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/reviews` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/segments` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/seo` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/settings` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/sms` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/social` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/social/recurring` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/surveys/[id]` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/surveys` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/video` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/visitor-intelligence` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketplace/reports` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/notifications` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/onboarding` | UNAUDITED | — | — |  |
-| ADMIN | `/admin` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/reports` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/security` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/services` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/settings` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/settings/social-links` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/social/audit` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/social` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/social/providers` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/social/usage` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/stripe` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/subscriptions` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/support-tickets` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 35 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/support` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/sync` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/system` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/tier-features` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/tiers` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/users` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 20 hardcoded string(s) in its own files — C1-S9-101. |
-| ADMIN | `/admin/wallet` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/wallet/reconciliation` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/alerts` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/auctions` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/browse` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/collections` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/community` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 16px overflow (implicit grid column sized to the input). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
-| MARKETPLACE | `/marketplace/creators/[id]` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/creators` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/deals` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/following` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/insights` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/item/[id]` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/negotiations` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/orders` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/questions` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/reviews` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/saved` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/seed` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/selling` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/store` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/billing` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/bills` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/money-timeline` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/savings` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/subscriptions` | UNAUDITED | — | — |  |
-| MONEY | `/dashboard/tax-vault` | UNAUDITED | — | — |  |
-| MONEY | `/economy` | UNAUDITED | — | — |  |
-| MONEY | `/kids` | UNAUDITED | — | — |  |
-| MONEY | `/kids/submit/[assignmentId]` | UNAUDITED | — | — |  |
-| MONEY | `/missions/new` | UNAUDITED | — | — |  |
-| MONEY | `/missions` | UNAUDITED | — | — |  |
-| MONEY | `/parent` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/activity` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/allowance` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/babysitters` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/cards` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/children/[childId]` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/gift` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/goals` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/invest` | UNAUDITED | — | — |  |
-| MONEY | `/wallet` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/send` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/settings` | UNAUDITED | — | — |  |
-| MONEY | `/wallet/treasury` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/concierge` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/concierge/runs/[id]` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/concierge/runs` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/trip-intel` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/trips` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/activities` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/ai-assistant` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/budget` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/documents` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/emergency` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/family` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/itinerary` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/lodging` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/overview` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/packing` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/travel` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/[id]/weather` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/calendar` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/new` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-96 @ 48df75c0: dialog open on arrival failed hydration; useHydrated gate. Remaining: 3 hardcoded string(s) in its own files — C1-S9-101. |
-| TRAVEL | `/dashboard/vacations` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/reports` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/weekend` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/accounts/connect` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/accounts` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/analytics` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/calendar` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/content-studio/new` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/content-studio` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/failed` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/feed` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/inbox` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/media-library` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/posts/[id]` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/posts` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/published` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/scheduled` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/settings` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 55px overflow (implicit grid column). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
-| FAMILY | `/dashboard/family/check-in` | UNAUDITED | — | — |  |
-| FAMILY | `/dashboard/family/driving-safety` | UNAUDITED | — | — |  |
-| FAMILY | `/dashboard/family/find-phone` | UNAUDITED | — | — |  |
-| FAMILY | `/dashboard/family` | UNAUDITED | — | — |  |
-| FAMILY | `/dashboard/family/play-dates` | UNAUDITED | — | — |  |
-| FAMILY | `/family/activity` | UNAUDITED | — | — |  |
-| FAMILY | `/family/members` | UNAUDITED | — | — |  |
-| FAMILY | `/family/notifications` | UNAUDITED | — | — |  |
-| FAMILY | `/family/permissions` | UNAUDITED | — | — |  |
-| FAMILY | `/family/reports` | UNAUDITED | — | — |  |
-| FAMILY | `/family/settings` | UNAUDITED | — | — |  |
-| FAMILY | `/guardian/contacts` | UNAUDITED | — | — |  |
-| FAMILY | `/guardian/history` | UNAUDITED | — | — |  |
-| FAMILY | `/guardian` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 53px overflow (header links did not wrap). Remaining: 26 hardcoded string(s) in its own files — C1-S9-101. |
-| FAMILY | `/guardian/rules` | UNAUDITED | — | — |  |
-| FAMILY | `/guardian/settings` | UNAUDITED | — | — |  |
-| HOME | `/capture/link` | UNAUDITED | — | — |  |
-| HOME | `/capture` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/assets/[id]` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/diagnose` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/maintenance` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/pros` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/service` | UNAUDITED | — | — |  |
-| HOME | `/dashboard/home/warranties` | UNAUDITED | — | — |  |
-| HOME | `/dashboard` | UNAUDITED | — | — |  |
-| HOME | `/display` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 12px overflow (clock/weather row did not wrap). Remaining: 22 hardcoded string(s) in its own files — C1-S9-101. |
-| HOME | `/display/setup` | UNAUDITED | — | — |  |
-| HOME | `/feedback` | UNAUDITED | — | — |  |
-| HOME | `/home` | UNAUDITED | — | — |  |
-| HOME | `/referrals` | UNAUDITED | — | — |  |
-| HOME | `/services/[category]` | UNAUDITED | — | — |  |
-| HOME | `/services` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/activity` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/agents` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/announcements` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/app-store` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/assistant` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/assistant/purchases/[approvalId]` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/assistants` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/accident` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/insurance` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/licenses` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/registration` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/rentals` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/service` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/auto/vehicles` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/autonomous-family-management` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/autopay` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/autopilot` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: showed 100%/All clear over a refused scan; forecast waits for a scan that ran; super-admin preview reaches the API. Remaining: 4 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-A-F | `/dashboard/behavior` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 30px overflow at 390px (filter row did not wrap). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-A-F | `/dashboard/binder` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/briefing` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: route reason (429/403/503) was replaced by generic English; kept and translated. Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-A-F | `/dashboard/budgets` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/calendar` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-94 @ 5bf0112f: second realtime reader of calendar_events crashed its section (shared channel); ownChannel. Remaining: 28 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-A-F | `/dashboard/calm` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/care` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/career` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/celebrations` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/chores` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/closet` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/command-center` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/concierge-calls` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/conflicts` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/connections` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/contact-center` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/contacts/[id]` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/contacts` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/decisions` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/declutter` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/dental` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/devices` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/dining` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/documents` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/due` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/expenses` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/experience` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-access` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-ai-assistant` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-automation` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-cfo` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-coo` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-digital-twin` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-emergency` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-health` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-knowledge-graph` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-memory` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-operating-index` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-operations` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-school` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-signals` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-sports` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-stress` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/family-tree` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/favorites` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/files/cloud` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/files/shared` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/files/vault` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/focus` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/food` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/fridge-chef` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/front-desk` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/goals` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/grandparent-portal` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/graph` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/grocery` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/habits` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/health` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/homework` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/inbox` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/independence` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/insurance` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/intelligence` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/inventory` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/journal` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/journeys` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/kitchen` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/knowledge` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/knowledge/seed` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/language` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/library` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/life-events` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/locator` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/meals` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/medical` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/medications` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/memories/create` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/memories` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/messages` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/migrate` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/moments` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/more` | UNAUDITED | — | — |  |
-| DASH-G-M | `/dashboard/moving` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/needs-you` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/next-best-actions` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/notes` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/notifications` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/nutrition` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/onboarding-funnel` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/outcomes` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 43px overflow (implicit grid column). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-N-Z | `/dashboard/pantry` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/paperwork` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/passwords` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/payments` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/pets` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/photos` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (PageHeader action row did not wrap). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-N-Z | `/dashboard/planning` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/playbook` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/prep-plans` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/profile` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/projects` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/readiness` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/reasoning` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/recipes/discover` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/recipes` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (PageHeader action row did not wrap). Remaining: 21 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-N-Z | `/dashboard/recipes/vote` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/relationship` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/reminders` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/renewals` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/rewards` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/rides` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/scan` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/school` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (stacked stat tiles laid out as a row) and English tile labels. Remaining: 16 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-N-Z | `/dashboard/screen-time` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/search` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/security` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/settings` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/setup` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/signups` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sleep` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/social-feed` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sports` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (stacked stat tiles laid out as a row) and English tile labels. Remaining: 13 hardcoded string(s) in its own files — C1-S9-101. |
-| DASH-N-Z | `/dashboard/sync/accounts/[provider]` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sync/accounts` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sync/conflicts` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sync/history` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sync` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/timetable` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/todos` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/trip-memories` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/trust` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/utilities` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/voice` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/voting` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/watchlist` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/weather` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/weekly-briefing` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/wishlists` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/workload` | UNAUDITED | — | — |  |
-
-</details>
-
-<!-- page-register:end -->
+The per-page register is the **Every page** table in *Page Audit — every page on
+www.bubaly.com* (lanes A–F, claim protocol there). A second register kept by
+Claude-1 in `docs/audit/pages/` was retired on 2026-09-27 so the site has one
+answer per page (`C1-S9-107`); its findings are in that table and in the
+`C1-S9-93`…`C1-S9-106` entries. `node scripts/page-audit-register.mjs` checks
+that every `page.tsx` has exactly one row there.
 
 ## Status Legend
 - ⬜ NOT STARTED
@@ -45526,6 +45656,28 @@ An operator reading this page to learn the console's security was told it had pr
 **Owner decision (OPEN).** Whether the admin console should *require* two-step sign-in (`requireAal2` exists and guards money, document and trust pages) and an idle timeout. Either is a product and security choice. It is recorded here and not decided by the audit.
 
 **Status:** FIXED (the page tells the truth). The policy gap is OPEN for the owner.
+
+---
+
+### `[CLAUDE-1][INFO][COORDINATION]` C1-S9-107 — one page register, not two
+
+**File/path:** `scripts/page-audit-register.mjs`; `tests/every-page-is-in-the-page-register.test.ts`; `docs/audit/pages/` (removed); `components/modules/autopilot-module.tsx`.
+
+**Problem.** Two sessions built a per-page register for the same instruction at the same time:
+- Claude-1's lane files in `docs/audit/pages/`, rolled up into this file.
+- session_01KP9rt5's **Every page** table (lanes A–F), merged to main in #591.
+
+Two registers means two answers to "what state is this page in". The second one also had no guard that it was complete.
+
+**Fix.**
+- **One register.** Main's table is the register. Claude-1's lane files and roll-up are removed.
+- **Guard re-pointed.** The completeness guard now reads that table: every `page.tsx` has exactly one row, and no row appears twice. The script still lists routes for the crawl and static tools.
+- **Lane A.** Claude-1 did not take lane A, which session_01TRY21 claimed (#594) while this was being merged. Its findings are in the hand-off table with the others.
+- **Lanes A–F.** All are claimed by other sessions, so Claude-1's fixes on their pages are listed in a hand-off table above the register rather than edited into someone else's rows.
+
+**Found in the merge.** Main's preview mode skips the automatic scan on open. My `C1-S9-98` forecast would then have shown "Scanning your family…" forever, because no scan ever starts. An unscanned preview now says so and offers Re-scan, which works for a super admin because the route lets them through (`C1-S9-98`). The two changes hold together.
+
+**Status:** DONE.
 
 ---
 

@@ -12,7 +12,7 @@ import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'My Bubaly' };
+export const metadata: Metadata = { title: { absolute: 'My Bubaly' } };
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {

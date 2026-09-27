@@ -9,7 +9,7 @@ import { Shield } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'AI Call Guardian · Bubaly' };
+export const metadata: Metadata = { title: 'AI Call Guardian' };
 export const dynamic = 'force-dynamic';
 
 export default async function GuardianPage() {

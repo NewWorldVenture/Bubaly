@@ -9,7 +9,7 @@ describe('marketplace listing detail read boundary', () => {
     expect(source).toContain('const { data: listing, error: listingError }');
     expect(source).toContain("return <ErrorState message={");
     expectSays(source, 'item.couldNotLoadThisListing', "Could not load this listing from the marketplace. Refresh and try again.");
-    expect(source).toContain('if (!listing) notFound();');
+    expect(source).toContain('if (!listing) return <AppNotFound backHref="/marketplace" />;');
   });
 
   it('surfaces dependent detail read failures without hiding the listing', () => {

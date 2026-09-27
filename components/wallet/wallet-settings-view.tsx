@@ -125,7 +125,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
 
       {/* Toggles */}
       <div className="mt-4 space-y-2">
-        <button type="button" disabled={!canManage} onClick={() => setAutoAccept((v) => !v)}
+        <button type="button" role="switch" aria-checked={autoAccept} disabled={!canManage} onClick={() => setAutoAccept((v) => !v)}
           className="flex w-full items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-left transition hover:bg-elevated disabled:opacity-60">
           <Gift className="h-4 w-4 flex-shrink-0 text-pink-400" />
           <div className="min-w-0 flex-1">

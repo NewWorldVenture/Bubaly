@@ -236,7 +236,7 @@ export function NotesModule() {
             {viewing.body && isChecklist(viewing.body)
               ? <div className="space-y-0.5">{renderChecklist(viewing.body)}</div>
               : <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{viewing.body}</p>}
-            <p className="mt-6 text-xs text-muted">{t('notes.updated')} {fmtRelative(viewing.updated_at)}</p>
+            <p suppressHydrationWarning className="mt-6 text-xs text-muted">{t('notes.updated')} {fmtRelative(viewing.updated_at)}</p>
           </div>
         </Modal>
       )}
@@ -288,7 +288,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
               </button>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
-              <span className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
+              <span suppressHydrationWarning className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
                 <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1.5 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
@@ -358,7 +358,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
             )}
             </button>
             <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-2">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted">
+              <div suppressHydrationWarning className="flex items-center gap-1.5 text-[10px] text-muted">
                 {checklist && <span className="text-success">{checkCount}/{totalCheck}</span>}
                 <Clock className="h-2.5 w-2.5" />
                 {fmtRelative(note.updated_at)}

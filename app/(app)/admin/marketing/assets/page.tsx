@@ -71,7 +71,7 @@ export default async function AssetsPage() {
       <Card>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><UploadCloud className="h-4 w-4 text-brand-text" /> {tr('adminMarketingAssets.uploadAsset')}</h2>
         <form action={uploadAssetAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input type="file" name="file" required className={`${inputCls} py-1.5 file:mr-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs lg:col-span-2`} />
+          <input type="file" name="file" required aria-label={tr('adminMarketingAssets.uploadAsset')} className={`${inputCls} py-1.5 file:mr-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs lg:col-span-2`} />
           <select name="kind" defaultValue="" className={inputCls} aria-label={tr('adminMarketingAssets.assetKind')}>
             <option value="">{tr('adminMarketingAssets.autoDetectKind')}</option>
             {ASSET_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}

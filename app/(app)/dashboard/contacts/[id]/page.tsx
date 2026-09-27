@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
-import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -10,6 +9,7 @@ import {
 } from '@/lib/contacts/timeline';
 import { ContactTimelineModule, ContactTimelineReadError } from '@/components/modules/contact-timeline-module';
 import type { Tables } from '@/lib/database.types';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -51,7 +51,7 @@ export default async function ContactTimelinePage({ params }: { params: Promise<
     console.error('[dashboard-contact-timeline] contact read failed');
     return <ReadFailure />;
   }
-  if (!contact) notFound();
+  if (!contact) return <AppNotFound backHref="/dashboard/contacts" />;
 
   // These are required reads: unavailable history must not become an empty timeline.
   let interactions: Tables<'contact_interactions'>[] = [];

@@ -286,7 +286,7 @@ function VoiceCaptureSession() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
-                    <p className="text-xs text-muted">
+                    <p suppressHydrationWarning className="text-xs text-muted">
                       {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {fmtTimeAgo7(c.created_at)}
                     </p>
                   </div>

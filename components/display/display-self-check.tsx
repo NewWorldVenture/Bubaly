@@ -185,23 +185,27 @@ export function DisplaySelfCheck() {
         </button>
       </div>
 
-      <ul className="mt-4 space-y-2.5" role="status" aria-live="polite">
-        {SELF_CHECK_IDS.map((id) => {
-          const result = results[id];
-          const state = result ? result.outcome : running === id ? 'running' : 'idle';
-          return (
-            <li key={id} className="flex items-start gap-2.5 text-sm">
-              <span className="mt-0.5"><OutcomeIcon outcome={state} /></span>
-              <span className="min-w-0">
-                <span className="font-medium">{t(CHECK_NAME[id])}</span>
-                <span className="block text-muted">
-                  {result ? t(result.detailKey) : t('displaySetup.notTestedYet')}
+      {/* The live region wraps the list rather than being it: role="status" on
+          the <ul> replaced its list role and left every <li> outside a list. */}
+      <div role="status" aria-live="polite">
+        <ul className="mt-4 space-y-2.5">
+          {SELF_CHECK_IDS.map((id) => {
+            const result = results[id];
+            const state = result ? result.outcome : running === id ? 'running' : 'idle';
+            return (
+              <li key={id} className="flex items-start gap-2.5 text-sm">
+                <span className="mt-0.5"><OutcomeIcon outcome={state} /></span>
+                <span className="min-w-0">
+                  <span className="font-medium">{t(CHECK_NAME[id])}</span>
+                  <span className="block text-muted">
+                    {result ? t(result.detailKey) : t('displaySetup.notTestedYet')}
+                  </span>
                 </span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }

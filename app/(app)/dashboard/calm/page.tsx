@@ -10,7 +10,7 @@ import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { autopilotTitleFor } from '@/lib/autopilot/engine';
 
-export const metadata: Metadata = { title: 'Calm | Bubaly' };
+export const metadata: Metadata = { title: 'Calm' };
 export const dynamic = 'force-dynamic';
 
 type FoiSuggestion = { id?: string; title?: string; detail?: string; href?: string; impact?: number };

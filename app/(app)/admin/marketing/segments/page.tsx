@@ -34,7 +34,7 @@ export default async function SegmentsPage() {
   const { customers } = customersResult;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-3">
         <p className="text-sm text-muted">{t('adminMarketingSegments.dynamicAudiencesRecomputedLiveAgainstYour')}</p>
         {(segments ?? []).length === 0 ? (

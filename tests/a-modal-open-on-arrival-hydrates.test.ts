@@ -18,7 +18,7 @@ import { useHydrated } from '@/components/ui/modal';
  * portal while hydrating, and React discarded the whole tree and rebuilt it on
  * the client. `useHydrated` reads the server snapshot during hydration, so the
  * portal waits one commit instead. The crawl on the rebuilt server is the
- * behavioural proof (docs/audit/pages/TRAVEL.md); these hold the class shut.
+ * behavioural proof (the page-audit crawl, C1-S9-96); these hold the class shut.
  */
 describe('a modal open on arrival hydrates (C1-S9-96)', () => {
   it('useHydrated answers false on the server, which is the snapshot hydration reads', () => {

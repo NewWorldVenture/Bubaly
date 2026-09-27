@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { ConnectionsModule } from '@/components/modules/connections-module';
 
-export const metadata: Metadata = { title: 'Connections | Bubaly' };
+export const metadata: Metadata = { title: 'Connections' };
 
 export default async function ConnectionsPage() {
   await requireUserContext();

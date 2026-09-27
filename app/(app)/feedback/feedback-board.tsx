@@ -231,7 +231,7 @@ function CommentThread({ ideaId }: { ideaId: string }) {
               <p className="text-xs">
                 <span className={cn('font-semibold', c.is_team && 'text-brand-text')}>{c.author_name}</span>
                 {c.is_team && <span className="ml-1.5 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">{t('feedbackBoard.team')}</span>}
-                <span className="ml-1.5 text-muted">{timeAgo(c.created_at)}</span>
+                <span className="ml-1.5 text-muted" suppressHydrationWarning>{timeAgo(c.created_at)}</span>
               </p>
               <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.body}</p>
             </div>
@@ -341,7 +341,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
             <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 hover:text-brand-text">
               <MessageCircle className="h-3.5 w-3.5" /> {idea.comment_count} {idea.comment_count === 1 ? 'comment' : 'comments'}
             </button>
-            <span className="text-muted/70">{t('feedbackFeedbackBoard.by')} {idea.author_name}</span>
+            <span className="text-muted">{t('feedbackFeedbackBoard.by')} {idea.author_name}</span>
             {isSuperAdmin && <span className="ml-auto"><StatusControl idea={idea} onChanged={onStatus} /></span>}
           </div>
           {open && <CommentThread ideaId={idea.id} />}

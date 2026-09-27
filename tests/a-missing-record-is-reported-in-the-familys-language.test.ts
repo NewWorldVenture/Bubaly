@@ -28,7 +28,7 @@ describe('a missing record is reported in the family’s language (C1-S9-97)', (
   it('renders its default title, description and action from the catalogue', async () => {
     const html = renderToStaticMarkup(await AppNotFound({}));
     expect(html).toContain('Das konnten wir nicht finden');
-    expect(html).toContain('Zum Dashboard');
+    expect(html).toContain('Zur Übersicht');
     expect(html).not.toContain('We couldn’t find that');
     expect(html).not.toContain('Go to dashboard');
   });

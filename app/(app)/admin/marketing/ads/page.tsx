@@ -37,7 +37,7 @@ export default async function AdsPage() {
         <Card><p className="text-xs text-muted">{t('adminMarketingAds.totalSpend')}</p><p className="text-2xl font-bold">{fmtMoney(totalSpend)}</p></Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           {(ads ?? []).length === 0 ? (
             <EmptyState icon={Target} title={t('adminMarketingAds.noAdCampaignsYet')} description={t('ads.planYourFirstAdCampaign')} />
@@ -63,7 +63,7 @@ export default async function AdsPage() {
           <h2 className="mb-3 font-semibold">{t('adminMarketingAds.newAdCampaign')}</h2>
           <form action={createAdCampaign} className="space-y-3 text-sm">
             <input name="name" required placeholder={t('adminMarketingAds.campaignName')} className={inputCls} />
-            <select name="platform" className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
+            <select name="platform" aria-label={t('adminMarketingAds.platform')} className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
             <input name="objective" placeholder={t('adminMarketingAds.objectiveEGSignups')} className={inputCls} />
             <input name="budgetDollars" type="number" min="0" placeholder={t('adminMarketingAds.budget')} className={inputCls} />
             <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAds.create')}</SubmitButton>

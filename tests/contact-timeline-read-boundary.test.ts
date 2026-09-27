@@ -137,7 +137,9 @@ it('allows genuinely empty successful history and distinguishes a missing contac
   expect(await draftReconnectMessageAction('contact-1')).toMatchObject({ ok: true });
   expect(h.complete.mock.calls[0][0].messages[0].content).toContain('no logged history');
   h.missingContact = true; h.complete.mockClear(); h.provider.mockClear(); h.ledger.mockClear();
-  await expect(pageHtml()).rejects.toThrow('NOT_FOUND');
+  // A missing contact is answered in place with the not-found card (page audit:
+  // a thrown notFound() inside the app's streamed boundary was React #419).
+  expect(await ContactTimelinePage({ params: Promise.resolve({ id: 'contact-1' }) })).toMatchObject({ type: expect.objectContaining({ name: 'AppNotFound' }), props: { backHref: '/dashboard/contacts' } });
   expect(await draftReconnectMessageAction('contact-1')).toEqual({ ok: false, error: t('actions.contactNotFound') });
   expectNoDraftWork();
 });
