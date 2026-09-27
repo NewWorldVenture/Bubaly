@@ -89,7 +89,7 @@ describe('the drive-time fan-out has a width somebody chose', () => {
       live++; peak = Math.max(peak, live);
       await new Promise((r) => setTimeout(r, 1));
       live--; seen.push(req.eventId);
-      return { driveSeconds: 600, source: 'test' as const };
+      return { driveSeconds: 600, source: 'manual' as const };
     });
     // Every event answered, and nothing left out.
     expect(Object.keys(out)).toHaveLength(40);
@@ -101,7 +101,7 @@ describe('the drive-time fan-out has a width somebody chose', () => {
 
   it('still lets a fetcher that cannot answer fall through', async () => {
     const events = [event('a'), event('b')];
-    const out = await resolveDriveTimes(events, async (req) => (req.eventId === 'a' ? null : { driveSeconds: 300, source: 'test' as const }));
+    const out = await resolveDriveTimes(events, async (req) => (req.eventId === 'a' ? null : { driveSeconds: 300, source: 'manual' as const }));
     expect(Object.keys(out)).toEqual(['b']);
   });
 
@@ -109,7 +109,7 @@ describe('the drive-time fan-out has a width somebody chose', () => {
     const calls: string[] = [];
     const out = await resolveDriveTimes(
       [{ ...event('a'), location: null }, { ...event('b'), all_day: true }, { ...event('c'), location: '   ' }],
-      async (req) => { calls.push(req.eventId); return { driveSeconds: 1, source: 'test' as const }; },
+      async (req) => { calls.push(req.eventId); return { driveSeconds: 1, source: 'manual' as const }; },
     );
     expect(calls).toEqual([]);
     expect(out).toEqual({});

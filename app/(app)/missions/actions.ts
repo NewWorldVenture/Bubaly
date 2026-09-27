@@ -404,7 +404,9 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
     if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
     return;
   }
-  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
+  // The ACTOR is whoever disputed, not whose chore it is. Logging the assignee
+  // made the ledger agree with the bug rather than record it.
+  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
 }
