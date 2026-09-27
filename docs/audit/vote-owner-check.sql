@@ -28,7 +28,7 @@ begin
   insert into public.family_poll_votes (family_id, poll_id, option_id, member_id) values (fam, poll, opt2, mB) returning id into bVote;
   -- The forged vote goes into a SECOND poll that B has not voted in. In the first
   -- one B already holds a vote, and a single-choice poll takes one vote per member
-  -- (0390's trigger, BEFORE INSERT, so ahead of RLS's WITH CHECK): the forgery
+  -- (0391's trigger, BEFORE INSERT, so ahead of RLS's WITH CHECK): the forgery
   -- would be refused there with 23505 by the single-choice rule, which this probe
   -- would misread as "reached the unique index". Here ownership is the only rule
   -- that can refuse it, which is the rule this probe exists to measure.

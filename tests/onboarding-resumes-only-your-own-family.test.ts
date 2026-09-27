@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest';
 // onboarding, became that family's parent and read its password vault.
 //
 // Three layers now. docs/audit/onboarding-claim-ownership-check.sql holds the
-// two in the database (0398). This holds the one that ships with the code and
-// so protects production before 0398 is applied: the action refuses a resumed
+// two in the database (0399). This holds the one that ships with the code and
+// so protects production before 0399 is applied: the action refuses a resumed
 // claim it did not create, BEFORE it writes the membership.
 
 const action = readFileSync('app/onboarding/actions.ts', 'utf8');
@@ -44,13 +44,13 @@ describe('onboarding resumes only your own family (SEC-018)', () => {
   });
 
   it('the migration fixes the function and the row, and checks itself', () => {
-    const sql = readFileSync('supabase/migrations/0398_onboarding_resumes_only_your_own_family.sql', 'utf8');
+    const sql = readFileSync('supabase/migrations/0399_onboarding_resumes_only_your_own_family.sql', 'utf8');
     expect(sql).toContain('and f.created_by = p_user_id');
     expect(sql).toMatch(/fm\.user_id is not null\s+and fm\.user_id <> p_user_id/);
     expect(sql).toContain('set family_id = excluded.family_id');
     expect(sql).toContain('revoke insert on public.onboarding_progress from anon, authenticated');
     expect(sql).toContain("a.attname not in ('id', 'user_id', 'family_id', 'created_at')");
-    expect(sql).toContain("0398: a client can still choose its onboarding family");
+    expect(sql).toContain("0399: a client can still choose its onboarding family");
   });
 
   it('the probe holds the takeover, the removed creator and the legitimate resume', () => {

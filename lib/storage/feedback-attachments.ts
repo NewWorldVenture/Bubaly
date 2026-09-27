@@ -29,7 +29,7 @@ export function feedbackAttachmentPathFromUrl(value: string, expectedOrigin?: st
  * The storage path for a stored attachment value, whether it is a bare path or
  * one of the public URLs this bucket used to hand out.
  *
- * The bucket is private as of 0393, so `getPublicUrl` no longer produces
+ * The bucket is private as of 0394, so `getPublicUrl` no longer produces
  * anything that resolves and new uploads record the path itself. Rows written
  * before that still hold the full `/storage/v1/object/public/...` URL, and they
  * are not rewritten: this reads either, and the admin console signs whatever

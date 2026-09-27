@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
 //
 // pgcrypto is not in `public`. Supabase installs extensions into a schema called
 // `extensions`, so a pin naming only `public` pins away the function the body
-// calls. Creating a marketplace circle was broken from 0176 until 0388 — long
+// calls. Creating a marketplace circle was broken from 0176 until 0389 — long
 // after a guard began watching the exact line and asking the wrong question of
 // it.
 //
@@ -59,7 +59,7 @@ const NEEDS_EXTENSIONS_SCHEMA = [
 
 /**
  * SQL comments, removed. The bodies here explain themselves at length — 0314's
- * comment names `translate`, `upper` and the ambiguous characters, and 0388's
+ * comment names `translate`, `upper` and the ambiguous characters, and 0389's
  * names `gen_random_bytes` five times while describing the very bug this guard
  * exists to catch. A scan that reads its own explanation as evidence reports
  * the fix as the defect.
@@ -74,7 +74,7 @@ type Def = { file: string; header: string; body: string };
  * Every function's EFFECTIVE definition: `create or replace` means the last
  * migration to define a name is the only one that describes the database, so a
  * guard that flags each historical text would pin 0176 as broken forever and go
- * red no matter what 0388 did.
+ * red no matter what 0389 did.
  */
 function effectiveDefinitions(): Map<string, Def> {
   const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();

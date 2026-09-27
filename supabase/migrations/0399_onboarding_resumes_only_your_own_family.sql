@@ -60,7 +60,7 @@ begin
     return;
   end if;
 
-  -- Resume only this user's own, still-unclaimed wizard family (0398).
+  -- Resume only this user's own, still-unclaimed wizard family (0399).
   select op.family_id into v_family_id
     from public.onboarding_progress op
     join public.families f on f.id = op.family_id
@@ -99,7 +99,7 @@ end;
 $$;
 
 comment on function public.onboarding_claim_family(uuid, text, text) is
-  'Claims the caller''s first family under a per-user lock. Resumes only a family the caller created that has no other login member (0398, SEC-018).';
+  'Claims the caller''s first family under a per-user lock. Resumes only a family the caller created that has no other login member (0399, SEC-018).';
 
 -- Clients cannot choose which family their onboarding row names.
 do $$
@@ -121,10 +121,10 @@ do $$
 begin
   if has_column_privilege('authenticated', 'public.onboarding_progress', 'family_id', 'UPDATE')
      or has_table_privilege('authenticated', 'public.onboarding_progress', 'INSERT') then
-    raise exception '0398: a client can still choose its onboarding family';
+    raise exception '0399: a client can still choose its onboarding family';
   end if;
   if not has_column_privilege('authenticated', 'public.onboarding_progress', 'status', 'UPDATE')
      or not has_column_privilege('authenticated', 'public.onboarding_progress', 'source', 'UPDATE') then
-    raise exception '0398: the calendar setup path lost the columns it updates';
+    raise exception '0399: the calendar setup path lost the columns it updates';
   end if;
 end $$;

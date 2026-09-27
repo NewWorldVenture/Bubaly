@@ -1,4 +1,4 @@
--- Bubaly :: 0388 - a pinned search_path must still reach the extension
+-- Bubaly :: 0389 - a pinned search_path must still reach the extension
 --
 -- `marketplace_create_circle` has never worked on this database. Calling it:
 --
@@ -83,4 +83,4 @@ begin
 end $$;
 
 comment on function public.marketplace_create_circle(uuid, text, text) is
-  'Creates a sharing circle and its owner membership. search_path names `extensions` as well as `public` because pgcrypto lives there and the body calls gen_random_bytes — pinning `public` alone raised 42883 on every call from 0176 until 0388. The join code excludes 0, 1, O and I in both cases (0314).';
+  'Creates a sharing circle and its owner membership. search_path names `extensions` as well as `public` because pgcrypto lives there and the body calls gen_random_bytes — pinning `public` alone raised 42883 on every call from 0176 until 0389. The join code excludes 0, 1, O and I in both cases (0314).';

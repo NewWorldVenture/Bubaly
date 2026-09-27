@@ -32,7 +32,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useConfirm } from '@/components/ui/confirm';
 
 // SEC-016: `reserve_cents` and `highest_max_cents` are not client-selectable
-// (0396), so this module names its columns — a `*` read now fails with 42501.
+// (0397), so this module names its columns — a `*` read now fails with 42501.
 type Listing = Omit<Tables<'marketplace_listings'>, 'reserve_cents' | 'highest_max_cents'>;
 // A literal, not a joined array: supabase-js types the result by parsing this
 // string, and a computed one reads as GenericStringError.

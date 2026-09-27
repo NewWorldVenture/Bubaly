@@ -39,7 +39,7 @@ begin
     from public.family_automation_runs
    where state = 'awaiting_approval' and status in ('executed', 'dismissed');
   if stuck > 0 then
-    raise exception '0399: % decided run(s) still read as awaiting approval', stuck;
+    raise exception '0400: % decided run(s) still read as awaiting approval', stuck;
   end if;
 end
 $check$;

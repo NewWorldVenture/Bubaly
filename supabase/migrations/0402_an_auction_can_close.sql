@@ -125,11 +125,11 @@ do $check$
 begin
   if position('current_user' in pg_get_functiondef('public.marketplace_close_auction(uuid, timestamptz)'::regprocedure)) > 0
      and position('auth.role()' in pg_get_functiondef('public.marketplace_close_auction(uuid, timestamptz)'::regprocedure)) = 0 then
-    raise exception '0401: marketplace_close_auction still tests current_user';
+    raise exception '0402: marketplace_close_auction still tests current_user';
   end if;
   if has_function_privilege('anon', 'public.marketplace_close_auction(uuid, timestamptz)', 'execute')
      or has_function_privilege('authenticated', 'public.marketplace_close_auction(uuid, timestamptz)', 'execute') then
-    raise exception '0401: a client role can execute marketplace_close_auction';
+    raise exception '0402: a client role can execute marketplace_close_auction';
   end if;
 end
 $check$;

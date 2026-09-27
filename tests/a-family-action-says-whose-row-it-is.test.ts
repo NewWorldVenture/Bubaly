@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 // loaded their row filtered on `family_id` only and then attributed the write
 // to the ASSIGNEE, so a sibling could submit a photo against another child's
 // chore, or open a dispute the record said that child had raised. Fixed in the
-// actions and in `0395`; `docs/audit/chore-proof-ownership-check.sql` proves the
+// actions and in `0396`; `docs/audit/chore-proof-ownership-check.sql` proves the
 // database half, and this file holds the app half.
 const AREAS = ['wallet', 'kids', 'economy', 'missions', 'money'];
 const MANAGER_GATE = /\bisManager\s*\(|\bisFamilyAdmin\s*\(|requireManager\s*\(|assertManager\s*\(/;

@@ -1,5 +1,5 @@
 -- Guardian's screening decisions are the parents'. (AUTHZ-005; migrations 0318 and
--- 0345 on main for contacts, member profiles and suggestions, 0397 for
+-- 0345 on main for contacts, member profiles and suggestions, 0398 for
 -- guardian_communications)
 --
 -- Guardian screens calls and texts for the family. Who rings through, who goes

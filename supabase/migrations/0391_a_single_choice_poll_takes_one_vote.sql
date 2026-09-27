@@ -1,4 +1,4 @@
--- Bubaly :: 0390 - a single-choice poll takes one vote per member
+-- Bubaly :: 0391 - a single-choice poll takes one vote per member
 --
 -- `family_polls.kind` is 'single' or 'multi', and components/modules/voting-module.tsx
 -- enforces the difference in the browser:
@@ -85,7 +85,7 @@ begin
 end $$;
 
 comment on function public.family_poll_vote_is_single() is
-  'Refuses a second vote by one member on a single-choice poll. The rule reads family_polls.kind, which a unique index cannot reach across, and takes `for update` on the poll so two simultaneous votes cannot both find none (0390).';
+  'Refuses a second vote by one member on a single-choice poll. The rule reads family_polls.kind, which a unique index cannot reach across, and takes `for update` on the poll so two simultaneous votes cannot both find none (0391).';
 
 do $$
 declare
@@ -108,7 +108,7 @@ begin
   ) d;
   if stuffed > 0 then
     raise notice
-      '0390: % member/poll pair(s) already hold more than one vote on a single-choice poll. The trigger stops new ones; these rows are left untouched and need a decision.',
+      '0391: % member/poll pair(s) already hold more than one vote on a single-choice poll. The trigger stops new ones; these rows are left untouched and need a decision.',
       stuffed;
   end if;
 

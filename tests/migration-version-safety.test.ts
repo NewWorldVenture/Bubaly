@@ -302,54 +302,61 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
-    // 0388_a_definer_function_reaches_its_extensions.sql pins
+    // 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql narrows a
+    // member session's INSERT on notifications to rows addressed to the
+    // member themselves; notify() writes everyone else's with the service
+    // role. Held by docs/audit/notification-authorship-check.sql (re-
+    // controlled) and tests/a-notification-for-someone-else-is-written-by-
+    // bubaly.test.ts.
+    //
+    // 0389_a_definer_function_reaches_its_extensions.sql pins
     // marketplace_create_circle's search_path to `public, extensions`, because
     // pgcrypto lives in `extensions` and the function raised 42883 on every call
     // from 0176 on. Ported from the claude/logged-in-pages-supabase-7q6vtf audit
     // branch, where it was numbered 0318 before main claimed that number.
     //
-    // 0389_an_approved_investment_can_actually_be_approved.sql casts the
+    // 0390_an_approved_investment_can_actually_be_approved.sql casts the
     // ledger direction in invest_decide_order: a CASE over two literals is
     // `text`, which does not cast to the enum, so every APPROVAL raised 42804
     // from 0196 on while rejection worked. Ported from the same branch (0321).
     //
-    // 0390_a_single_choice_poll_takes_one_vote.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0391_a_single_choice_poll_takes_one_vote.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0322 before main claimed that number.
     //
-    // 0391_a_family_timezone_is_a_zone_that_exists.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0392_a_family_timezone_is_a_zone_that_exists.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0323 before main claimed that number.
     //
-    // 0392_a_stored_credential_is_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0393_a_stored_credential_is_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0324 before main claimed that number.
     //
-    // 0393_a_feedback_screenshot_is_not_world_readable.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0394_a_feedback_screenshot_is_not_world_readable.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0325 before main claimed that number.
     //
-    // 0394_the_vaults_ask_for_the_second_factor.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0395_the_vaults_ask_for_the_second_factor.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0326 before main claimed that number.
     //
-    // 0395_a_chore_proof_belongs_to_whose_chore_it_is.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0396_a_chore_proof_belongs_to_whose_chore_it_is.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0327 before main claimed that number.
     //
-    // 0396_a_proxy_bid_ceiling_is_secret.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0397_a_proxy_bid_ceiling_is_secret.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0328 before main claimed that number.
     //
-    // 0397_guardian_screening_is_the_parents_decision.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0398_guardian_screening_is_the_parents_decision.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0330 before main claimed that number.
     //
-    // 0398_onboarding_resumes_only_your_own_family.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0399_onboarding_resumes_only_your_own_family.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0331 before main claimed that number.
     //
-    // 0399_decided_concierge_runs_leave_needs_you.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0400_decided_concierge_runs_leave_needs_you.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0332 before main claimed that number.
     //
-    // 0400_service_only_functions_are_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0401_service_only_functions_are_service_only.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0333 before main claimed that number.
     //
-    // 0401_an_auction_can_close.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // 0402_an_auction_can_close.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0334 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0402');
+    expect(audit.nextVersion).toBe('0403');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

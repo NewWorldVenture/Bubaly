@@ -1,4 +1,4 @@
--- Bubaly :: 0391 - a family timezone is a zone that exists
+-- Bubaly :: 0392 - a family timezone is a zone that exists
 --
 -- `families.timezone` is the zone every wall-clock answer a family gets is
 -- computed from: which local day a routine belongs to, what "today" means, the
@@ -89,7 +89,7 @@ begin
 end $$;
 
 comment on function public.family_timezone_exists() is
-  'Refuses a families.timezone that neither pg_timezone_names nor pg_timezone_abbrevs knows. The union is used because Intl accepts both IANA names and legacy abbreviations, and a guard narrower than the application would reject values the form offers (0391).';
+  'Refuses a families.timezone that neither pg_timezone_names nor pg_timezone_abbrevs knows. The union is used because Intl accepts both IANA names and legacy abbreviations, and a guard narrower than the application would reject values the form offers (0392).';
 
 do $$
 declare
@@ -109,7 +109,7 @@ begin
      and not exists (select 1 from pg_timezone_abbrevs a where a.abbrev = f.timezone);
   if unknown_zones > 0 then
     raise notice
-      '0391: % family/families are stored with a zone this server does not know and are therefore being computed on UTC today. The trigger stops new ones; these need a decision.',
+      '0392: % family/families are stored with a zone this server does not know and are therefore being computed on UTC today. The trigger stops new ones; these need a decision.',
       unknown_zones;
   end if;
 

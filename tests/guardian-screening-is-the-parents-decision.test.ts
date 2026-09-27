@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 // the write policies on guardian_contacts, guardian_member_profiles and
 // guardian_suggestions as manager writes — so this branch's migration carries
 // only guardian_communications, the one they left open.
-const migration = readFileSync('supabase/migrations/0397_guardian_screening_is_the_parents_decision.sql', 'utf8');
+const migration = readFileSync('supabase/migrations/0398_guardian_screening_is_the_parents_decision.sql', 'utf8');
 const trustAndRouting = readFileSync('supabase/migrations/0345_guardian_trust_and_routing_are_manager_writes.sql', 'utf8');
 const probe = readFileSync('docs/audit/guardian-authority-check.sql', 'utf8');
 const actions = readFileSync('app/(app)/guardian/actions.ts', 'utf8');

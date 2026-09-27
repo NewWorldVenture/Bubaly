@@ -49,10 +49,10 @@ begin
     'public.marketplace_place_bid_unchecked(uuid, uuid, uuid, bigint)'
   ] loop
     if has_function_privilege('anon', fn, 'execute') or has_function_privilege('authenticated', fn, 'execute') then
-      raise exception '0400: a client role can still execute %', fn;
+      raise exception '0401: a client role can still execute %', fn;
     end if;
     if not has_function_privilege('service_role', fn, 'execute') then
-      raise exception '0400: service_role lost %, so its server caller is broken', fn;
+      raise exception '0401: service_role lost %, so its server caller is broken', fn;
     end if;
   end loop;
 end

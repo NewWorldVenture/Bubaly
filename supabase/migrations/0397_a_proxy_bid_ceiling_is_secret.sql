@@ -68,9 +68,9 @@ alter table public.marketplace_listings
     ) stored;
 
 comment on column public.marketplace_listings.has_reserve is
-  'Whether the seller set a reserve. The figure itself (reserve_cents) is not client-selectable (0396).';
+  'Whether the seller set a reserve. The figure itself (reserve_cents) is not client-selectable (0397).';
 comment on column public.marketplace_listings.reserve_met is
-  'Mirror of reserveMet() in lib/marketplace/auction.ts: no reserve, or a bid has reached it (0396).';
+  'Mirror of reserveMet() in lib/marketplace/auction.ts: no reserve, or a bid has reached it (0397).';
 
 do $$
 declare
@@ -109,7 +109,7 @@ begin
    where a.attname in ('reserve_cents', 'highest_max_cents', 'max_cents')
      and has_column_privilege(r.role, format('public.%I', t.tbl), a.attname, 'SELECT');
   if v_leaks is not null then
-    raise exception '0396: secret columns still client-selectable: %', v_leaks;
+    raise exception '0397: secret columns still client-selectable: %', v_leaks;
   end if;
 
   select string_agg(format('%s.%s', t.tbl, a.attname), ', ')
@@ -119,6 +119,6 @@ begin
    where a.attname not in ('reserve_cents', 'highest_max_cents', 'max_cents')
      and not has_column_privilege('authenticated', format('public.%I', t.tbl), a.attname, 'SELECT');
   if v_blocked is not null then
-    raise exception '0396: ordinary columns lost their SELECT grant: %', v_blocked;
+    raise exception '0397: ordinary columns lost their SELECT grant: %', v_blocked;
   end if;
 end $$;

@@ -21,7 +21,7 @@ export interface AuctionListing {
 
 /**
  * What a browser is allowed to know about an auction. SEC-016: the reserve
- * FIGURE is a secret between the seller and the database (0396 revokes client
+ * FIGURE is a secret between the seller and the database (0397 revokes client
  * SELECT on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`),
  * so the client gets the two facts the UI actually shows — whether there is a
  * reserve, and whether a bid has reached it — as generated columns computed by

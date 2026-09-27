@@ -84,7 +84,7 @@
 -- no verified factor. It is reused rather than restated, so the money tables
 -- and the vaults cannot drift onto two different definitions of "stepped up".
 comment on function public.session_cleared_step_up() is
-  'True when this session has cleared step-up: either the user has no verified authenticator (two-step is off for them) or the session reached aal2. Guards writes to the money tables (0382) and every access to the credential, tax and binder vaults (0394). Mirrors needsStepUp in lib/auth/mfa.ts.';
+  'True when this session has cleared step-up: either the user has no verified authenticator (two-step is off for them) or the session reached aal2. Guards writes to the money tables (0382) and every access to the credential, tax and binder vaults (0395). Mirrors needsStepUp in lib/auth/mfa.ts.';
 
 drop policy if exists family_credentials_assurance_guard on public.family_credentials;
 create policy family_credentials_assurance_guard on public.family_credentials

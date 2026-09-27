@@ -11,7 +11,7 @@
 -- enforcing it: `family_poll_votes` carries UNIQUE (option_id, member_id) —
 -- one vote per OPTION, which is the correct rule for a 'multi' poll and no rule
 -- at all for a 'single' one — and the table is reachable from the client.
--- Measured before 0390:
+-- Measured before 0391:
 --
 --   SINGLE-choice poll: one member cast 3 votes across 3 options
 --

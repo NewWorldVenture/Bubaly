@@ -8,12 +8,12 @@
 --
 --   marketplace_create_circle  pinned `search_path = public` while calling
 --                              gen_random_bytes, which lives in `extensions`
---                              → 42883 on every call since 0176 (fixed in 0388)
+--                              → 42883 on every call since 0176 (fixed in 0389)
 --
 --   invest_decide_order        wrote `direction` from a CASE over two string
 --                              literals, which is `text` and does not cast to
 --                              wallet_txn_direction
---                              → 42804 on every APPROVAL since 0196 (fixed in 0389)
+--                              → 42804 on every APPROVAL since 0196 (fixed in 0390)
 --
 -- Both hid behind an early return — a membership check, a reject branch — so a
 -- probe calling the function with dummy arguments would have reported success

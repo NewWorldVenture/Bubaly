@@ -8,7 +8,7 @@ import { signFeedbackAttachments } from '@/lib/storage/feedback-attachment-signi
 // family's calendar, children's names and balances, taken at the moment
 // something went wrong.
 //
-// 0393 makes the bucket private. That turns every stored value into something
+// 0394 makes the bucket private. That turns every stored value into something
 // an `<img src>` cannot load, so the one surface that draws them — the
 // super-admin triage console — resolves each to a short-lived signed URL. This
 // covers the resolver, and the two properties that stop the fix becoming its
@@ -21,12 +21,12 @@ const PATH = `${OWNER}/2f8a1c44-1111-4222-8333-444455556666.png`;
 const PUBLIC_URL = `${ORIGIN}/storage/v1/object/public/feedback-attachments/${PATH}`;
 
 describe('reading the stored attachment value', () => {
-  it('accepts a bare path — what an upload records as of 0393', () => {
+  it('accepts a bare path — what an upload records as of 0394', () => {
     expect(feedbackAttachmentPath(PATH)).toBe(PATH);
     expect(feedbackAttachmentPath(`  ${PATH}  `)).toBe(PATH);
   });
 
-  it('still accepts the public URL rows written before 0393 hold', () => {
+  it('still accepts the public URL rows written before 0394 hold', () => {
     // Those rows are deliberately not rewritten, so this is the only thing
     // keeping their screenshots visible in triage.
     expect(feedbackAttachmentPath(PUBLIC_URL)).toBe(PATH);

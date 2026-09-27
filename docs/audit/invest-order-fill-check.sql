@@ -12,7 +12,7 @@
 -- `case when v_order.side = 'buy' then 'debit' else 'credit' end`. A bare
 -- literal is `unknown` and coerces to the enum — which is why `'adjustment'`
 -- and `'completed'` on the lines above it were fine — but a CASE over two
--- literals is `text`, and `text` does not implicitly cast to an enum. 0389
+-- literals is `text`, and `text` does not implicitly cast to an enum. 0390
 -- casts it.
 --
 -- The asymmetry is why nobody noticed: rejection returns before that INSERT, so

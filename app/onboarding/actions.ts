@@ -282,7 +282,7 @@ export async function resetOnboardingAction(): Promise<Result> {
   //    `active_family_id` is the user's own preference row, so it names
   //    whatever family they set it to. Written straight into
   //    onboarding_progress.family_id by the service role, it walked around the
-  //    column 0398 takes away from clients — the pointer SEC-018 turned on. Only
+  //    column 0399 takes away from clients — the pointer SEC-018 turned on. Only
   //    a family the user is an active member of is recorded.
   const preferred = (prefRow?.active_family_id as string | null) ?? null;
   const { data: membership } = preferred
@@ -465,7 +465,7 @@ export async function finalizeOnboardingAction(input: {
     // someone else's family there became a parent of it and could read its
     // password vault. prepareCalendarFamily has always refused this ("Family
     // owner changed"); this is the same check, in the path that lacked it, so
-    // it holds the moment this code deploys rather than when 0398 is applied.
+    // it holds the moment this code deploys rather than when 0399 is applied.
     if (!newFamily) {
       const { data: claimed, error: claimedError } = await admin
         .from('families').select('created_by').eq('id', familyId).maybeSingle();

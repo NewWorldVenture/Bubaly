@@ -46,7 +46,7 @@
 --   child_logins           "Managers manage child_logins" FOR ALL,
 --                          USING and WITH CHECK can_manage_family(family_id)
 --   social_account_tokens   all four policies, can_manage_family(family_id) —
---                           DROPPED by 0392, which leaves the table with RLS on
+--                           DROPPED by 0393, which leaves the table with RLS on
 --                           and no policy: no JWT reaches it, a manager
 --                           included; controls (b) and (c) assert that
 --   driver_licenses         is_family_member(family_id)
@@ -186,7 +186,7 @@ begin
   -- empty table.
   select count(*) into n from public.social_account_tokens where family_id = ctl_fam;
   if n <> 1 then
-    raise exception '0392 boundary UNPROVEN (control seed): the owner sees % seeded control token row(s), expected 1', n;
+    raise exception '0393 boundary UNPROVEN (control seed): the owner sees % seeded control token row(s), expected 1', n;
   end if;
   insert into public.child_logins (family_id, member_id, user_id, username, created_by)
     values (ctl_fam, ctl_ward_m, ctl_ward, 'k0297-control-ward', kid);
@@ -230,9 +230,9 @@ begin
 
   -- (b) + (c) social_account_tokens, in the family this child DOES manage.
   --     These began as the other answer — a manager reads and inserts — and
-  --     0392 removed that answer: the token store answers to NOBODY holding a
+  --     0393 removed that answer: the token store answers to NOBODY holding a
   --     JWT, a manager included, matching sync_tokens. So the control now
-  --     asserts 0392's rule where can_manage_family says YES, which is what
+  --     asserts 0393's rule where can_manage_family says YES, which is what
   --     proves the refusals at 3 are not can_manage_family's. The seeded row is
   --     counted as the owner first (just after the seed), so a zero here cannot
   --     be an empty table, and the service-role leg at the end proves the
@@ -244,7 +244,7 @@ begin
     n := -1; ctl_err := format('%s: %s', sqlstate, sqlerrm);
   end;
   if n > 0 then
-    raise exception '0392 boundary BROKEN (control b): a MANAGER of the control household reads % OAuth token row(s) — the store is service-role only', n;
+    raise exception '0393 boundary BROKEN (control b): a MANAGER of the control household reads % OAuth token row(s) — the store is service-role only', n;
   end if;
 
   refused := false;
@@ -254,7 +254,7 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0392 boundary BROKEN (control c): a MANAGER of the control household inserted a social OAuth token row — the store is service-role only';
+    raise exception '0393 boundary BROKEN (control c): a MANAGER of the control household inserted a social OAuth token row — the store is service-role only';
   end if;
 
   -- (d) "Managers manage child_logins" for UPDATE. THE SAME COLUMN the takeover
@@ -355,7 +355,7 @@ begin
     raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
   end if;
 
-  -- ── the OAuth tokens: an adult is refused too, as of 0392 ───────────────
+  -- ── the OAuth tokens: an adult is refused too, as of 0393 ───────────────
   --
   -- This block used to assert the opposite — that an adult could read and
   -- insert token rows, on the principle that 0297 must not "lock the grown-ups
@@ -366,13 +366,13 @@ begin
   -- it at all. So the adult's access was not a feature anyone had; it was the
   -- shape of the policy, asserted back at itself.
   --
-  -- 0392 closes the table to every client role, matching sync_tokens, which
+  -- 0393 closes the table to every client role, matching sync_tokens, which
   -- has always been `qual=false`. The grown-ups are not locked out of anything
   -- — the app that acts for them runs as the service role, and the control at
   -- the end of this block is what actually proves that.
   select count(*) into n from public.social_account_tokens where family_id = fam;
   if n <> 0 then
-    raise exception '0297/0392: an ADULT reads % social OAuth token row(s) through a client role', n;
+    raise exception '0297/0393: an ADULT reads % social OAuth token row(s) through a client role', n;
   end if;
   refused := false;
   begin
@@ -381,7 +381,7 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0297/0392: an ADULT inserted a social OAuth token row through a client role';
+    raise exception '0297/0393: an ADULT inserted a social OAuth token row through a client role';
   end if;
 
   -- The control that replaces the old expectation: the feature still works.
@@ -389,14 +389,14 @@ begin
   reset role;
   select count(*) into n from public.social_account_tokens where family_id = fam;
   if n <> 1 then
-    raise exception '0297/0392: the service role sees %/1 seeded token row — the social connection is broken, not secured', n;
+    raise exception '0297/0393: the service role sees %/1 seeded token row — the social connection is broken, not secured', n;
   end if;
   insert into public.social_account_tokens (family_id, account_id, platform, provider_account_id, access_token_enc)
     values (fam, acct, 'instagram', 'service-added', 'enc');
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0297/0392: the service role cannot write a token row (rows: %)', n;
+    raise exception '0297/0393: the service role cannot write a token row (rows: %)', n;
   end if;
 
-  raise notice '0297+0392 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences and logins; the token table answers only the service role (0392)';
+  raise notice '0297+0393 OK: the same child CAN read their own licence and CAN read, rename and delete child logins in the family they manage (control); in the family they do not they are refused a parent licence, a sibling login and the OAuth tokens; parent and adult keep the licences and logins; the token table answers only the service role (0393)';
 end $$;

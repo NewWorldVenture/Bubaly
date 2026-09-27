@@ -1,4 +1,4 @@
--- Bubaly :: 0389 - a parent could reject an investment order and never approve one
+-- Bubaly :: 0390 - a parent could reject an investment order and never approve one
 --
 -- `invest_decide_order` has two outcomes and only one of them has ever worked.
 -- Measured, as a manager, against a funded wallet and a pending buy order:
@@ -38,7 +38,7 @@
 -- Found by `plpgsql_check`, which resolves a plpgsql body against the real
 -- catalogue instead of waiting for the line to be reached. A plpgsql function
 -- binds its SQL at CALL time, so a body can be catastrophically wrong and still
--- install cleanly — the same property that hid 0388's unreachable
+-- install cleanly — the same property that hid 0389's unreachable
 -- `gen_random_bytes` behind a membership check. It reported exactly one error
 -- across every non-trigger plpgsql function in `public`, and this was it.
 
@@ -140,7 +140,7 @@ begin
      metadata)
   values
     (v_order.family_id, v_order.child_wallet_id, v_bucket, 'adjustment', 'completed',
-     -- The cast is the fix (0389). A CASE over two literals is `text`, not
+     -- The cast is the fix (0390). A CASE over two literals is `text`, not
      -- `unknown`, and `text` does not implicitly cast to an enum.
      (case when v_order.side = 'buy' then 'debit' else 'credit' end)::public.wallet_txn_direction,
      v_order.amount_cents,
@@ -184,4 +184,4 @@ revoke all on function public.invest_decide_order(uuid, boolean) from public;
 grant execute on function public.invest_decide_order(uuid, boolean) to authenticated;
 
 comment on function public.invest_decide_order(uuid, boolean) is
-  'Decides a child investment order. The wallet direction is cast explicitly to wallet_txn_direction: a CASE over two string literals is text, not unknown, so it does not implicitly cast to the enum and every APPROVAL raised 42804 from 0196 until 0389 while rejection worked (0389).';
+  'Decides a child investment order. The wallet direction is cast explicitly to wallet_txn_direction: a CASE over two string literals is text, not unknown, so it does not implicitly cast to the enum and every APPROVAL raised 42804 from 0196 until 0390 while rejection worked (0390).';

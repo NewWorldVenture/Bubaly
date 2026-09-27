@@ -11,7 +11,7 @@
 --     and (coalesce(qual,'')||coalesce(with_check,'')) ilike '%aal%';   -> 0
 --
 -- 0382 guarded WRITES to three money tables with `session_cleared_step_up()`.
--- This probe holds 0394, which uses the same helper for the vaults and guards
+-- This probe holds 0395, which uses the same helper for the vaults and guards
 -- the READ as well — reading a stored password is the thing being protected.
 --
 -- The three cases below are the whole rule, and the two CONTROLS matter more
