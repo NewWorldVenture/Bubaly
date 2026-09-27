@@ -1,11 +1,11 @@
--- Behavioural proof for 0382: two first captures at once give a family ONE
+-- Behavioural proof for 0443: two first captures at once give a family ONE
 -- default list, not two (DATA-007).
 --
 -- The race is made deterministic rather than hoped for. A holder session takes
 -- ACCESS EXCLUSIVE on grocery_lists, so any read of the table waits. Two racer
 -- sessions then call get-or-create at the same moment:
 --
---   * with 0382's function, the first racer takes the per-family advisory lock
+--   * with 0443's function, the first racer takes the per-family advisory lock
 --     and waits on the table; the second waits on the ADVISORY lock. Released,
 --     the first reads nothing and inserts, commits, and only then does the
 --     second read — and finds the first one's list.
@@ -23,23 +23,23 @@
 create extension if not exists dblink;
 
 -- Re-runnable: the suite is run twice against one database.
-delete from public.grocery_lists  where family_id in ('ab820000-0000-4000-8000-0000000000f1', 'ab820000-0000-4000-8000-0000000000f2', 'ab820000-0000-4000-8000-0000000000f3');
-delete from public.todo_lists     where family_id = 'ab820000-0000-4000-8000-0000000000f1';
-delete from public.family_members where user_id in ('ab820000-0000-4000-8000-000000000001', 'ab820000-0000-4000-8000-000000000002');
-delete from public.families       where id in ('ab820000-0000-4000-8000-0000000000f1', 'ab820000-0000-4000-8000-0000000000f2', 'ab820000-0000-4000-8000-0000000000f3');
+delete from public.grocery_lists  where family_id in ('ab430000-0000-4000-8000-0000000000f1', 'ab430000-0000-4000-8000-0000000000f2', 'ab430000-0000-4000-8000-0000000000f3');
+delete from public.todo_lists     where family_id = 'ab430000-0000-4000-8000-0000000000f1';
+delete from public.family_members where user_id in ('ab430000-0000-4000-8000-000000000001', 'ab430000-0000-4000-8000-000000000002');
+delete from public.families       where id in ('ab430000-0000-4000-8000-0000000000f1', 'ab430000-0000-4000-8000-0000000000f2', 'ab430000-0000-4000-8000-0000000000f3');
 
 insert into public.families (id, name) values
-  ('ab820000-0000-4000-8000-0000000000f1', 'One List'),
-  ('ab820000-0000-4000-8000-0000000000f2', 'One List (race, control)'),
-  ('ab820000-0000-4000-8000-0000000000f3', 'One List (race, 0382)');
+  ('ab430000-0000-4000-8000-0000000000f1', 'One List'),
+  ('ab430000-0000-4000-8000-0000000000f2', 'One List (race, control)'),
+  ('ab430000-0000-4000-8000-0000000000f3', 'One List (race, 0443)');
 insert into auth.users (id, email) values
-  ('ab820000-0000-4000-8000-000000000001', 'onelist-p@example.test'),
-  ('ab820000-0000-4000-8000-000000000002', 'onelist-o@example.test')
+  ('ab430000-0000-4000-8000-000000000001', 'onelist-p@example.test'),
+  ('ab430000-0000-4000-8000-000000000002', 'onelist-o@example.test')
   on conflict do nothing;
 insert into public.family_members (family_id, user_id, display_name, role, is_active) values
-  ('ab820000-0000-4000-8000-0000000000f1', 'ab820000-0000-4000-8000-000000000001', 'Parent', 'parent', true);
+  ('ab430000-0000-4000-8000-0000000000f1', 'ab430000-0000-4000-8000-000000000001', 'Parent', 'parent', true);
 
--- The negative control's function: 0382's body with the advisory lock removed,
+-- The negative control's function: 0443's body with the advisory lock removed,
 -- asserted to differ from the real one in exactly that.
 create or replace function public.dl_probe_no_lock(p_family_id uuid) returns uuid
 language plpgsql as $fn$
@@ -105,7 +105,7 @@ end $proc$;
 
 do $$
 declare
-  fam   uuid := 'ab820000-0000-4000-8000-0000000000f1';
+  fam   uuid := 'ab430000-0000-4000-8000-0000000000f1';
   first uuid; again uuid; archived uuid; todo_a uuid; todo_b uuid; named uuid;
   n int;
   refused boolean;
@@ -125,15 +125,15 @@ begin
   end if;
 
   -- 1. As a member: one list, the same one every time.
-  perform set_config('request.jwt.claim.sub', 'ab820000-0000-4000-8000-000000000001', true);
+  perform set_config('request.jwt.claim.sub', 'ab430000-0000-4000-8000-000000000001', true);
   set local role authenticated;
-  first := public.ensure_default_grocery_list(fam, 'Groceries', 'ab820000-0000-4000-8000-000000000001');
-  again := public.ensure_default_grocery_list(fam, 'Groceries', 'ab820000-0000-4000-8000-000000000001');
+  first := public.ensure_default_grocery_list(fam, 'Groceries', 'ab430000-0000-4000-8000-000000000001');
+  again := public.ensure_default_grocery_list(fam, 'Groceries', 'ab430000-0000-4000-8000-000000000001');
   if first is null or first <> again then fails := fails || 'a second call did not return the family''s list'::text; end if;
 
   -- 2. An archived list is not the default: archive it, and a new one is made.
   update public.grocery_lists set archived_at = now() where id = first;
-  archived := public.ensure_default_grocery_list(fam, 'Groceries', 'ab820000-0000-4000-8000-000000000001');
+  archived := public.ensure_default_grocery_list(fam, 'Groceries', 'ab430000-0000-4000-8000-000000000001');
   if archived = first then fails := fails || 'an archived list was handed back as the default'::text; end if;
 
   -- 3. The to-do twin: default and named lists, each once.
@@ -148,11 +148,11 @@ begin
   reset role;
 
   -- 4. A non-member is refused by the table's own RLS, not waved through.
-  perform set_config('request.jwt.claim.sub', 'ab820000-0000-4000-8000-000000000002', true);
+  perform set_config('request.jwt.claim.sub', 'ab430000-0000-4000-8000-000000000002', true);
   set local role authenticated;
   refused := false;
   begin
-    perform public.ensure_default_grocery_list(fam, 'Groceries', 'ab820000-0000-4000-8000-000000000002');
+    perform public.ensure_default_grocery_list(fam, 'Groceries', 'ab430000-0000-4000-8000-000000000002');
   exception when insufficient_privilege then refused := true;
   end;
   reset role;
@@ -172,13 +172,13 @@ declare
   outcome text;
   n       int;
 begin
-  call public.dl_probe_race('public.dl_probe_no_lock', 'ab820000-0000-4000-8000-0000000000f2', outcome);
+  call public.dl_probe_race('public.dl_probe_no_lock', 'ab430000-0000-4000-8000-0000000000f2', outcome);
   if outcome <> 'raced' then
     raise notice 'SKIP: the race did not happen (%), so the control proves nothing', outcome;
     return;
   end if;
   select count(*) into n from public.grocery_lists
-   where family_id = 'ab820000-0000-4000-8000-0000000000f2' and archived_at is null;
+   where family_id = 'ab430000-0000-4000-8000-0000000000f2' and archived_at is null;
   if n <> 2 then
     raise exception 'negative control did not reproduce the defect: the lock-less get-or-create made % list(s), not 2 — this probe cannot see a race', n;
   end if;
@@ -190,15 +190,15 @@ declare
   outcome text;
   n       int;
 begin
-  call public.dl_probe_race('public.dl_probe_with_lock', 'ab820000-0000-4000-8000-0000000000f3', outcome);
+  call public.dl_probe_race('public.dl_probe_with_lock', 'ab430000-0000-4000-8000-0000000000f3', outcome);
   if outcome <> 'raced' then
-    raise notice 'SKIP: the race did not happen against 0382 (%)', outcome;
+    raise notice 'SKIP: the race did not happen against 0443 (%)', outcome;
     return;
   end if;
   select count(*) into n from public.grocery_lists
-   where family_id = 'ab820000-0000-4000-8000-0000000000f3' and archived_at is null;
+   where family_id = 'ab430000-0000-4000-8000-0000000000f3' and archived_at is null;
   if n <> 1 then
-    raise exception 'two first captures at once made % default lists — 0382 does not serialise get-or-create', n;
+    raise exception 'two first captures at once made % default lists — 0443 does not serialise get-or-create', n;
   end if;
   raise notice 'OK  a family gets one default list: two racing first captures made 1 (the lock-less control made 2); RLS still decides, archived lists are not the default, and the to-do twin holds';
 end $$;

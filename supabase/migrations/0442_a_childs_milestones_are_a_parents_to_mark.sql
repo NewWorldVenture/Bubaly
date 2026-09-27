@@ -1,4 +1,4 @@
--- 0381_a_childs_milestones_are_a_parents_to_mark.sql
+-- 0442_a_childs_milestones_are_a_parents_to_mark.sql
 --
 -- independence_milestones is the Independence Ladder: the responsibilities a
 -- parent hands a child as they grow ("Makes their own lunch", "Walks to school
@@ -11,9 +11,9 @@
 -- parent's side ("Added to Casey's ladder", "Casey achieved …").
 --
 -- The same shape this branch has closed for grades (0301), chores (0303), health
--- records (0307) and Guardian screening (0376): every member still READS the
+-- records (0307) and Guardian screening (0376 (as numbered before the merge; dropped at the merge as main's duplicate)): every member still READS the
 -- ladder — a child seeing their own progress is the point of it — and only a
--- manager writes it. Applied in 0376's idiom: permissive mng_* policies, a
+-- manager writes it. Applied in the dropped Guardian screening migration's (0376 (as numbered before the merge; dropped at the merge as main's duplicate) before the merge) idiom: permissive mng_* policies, a
 -- RESTRICTIVE guard per command so a later permissive policy cannot reopen it,
 -- strays swept by shape, and an assertion that none remain.
 --
@@ -63,7 +63,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, t);
       swept := swept + 1;
-      raise notice '0381: dropped permissive write policy %.%', t, pol.polname;
+      raise notice '0442: dropped permissive write policy %.%', t, pol.polname;
     end loop;
   end loop;
 
@@ -77,8 +77,8 @@ begin
     and p.polcmd in ('a','w','d','*')
     and pg_get_expr(coalesce(p.polqual, p.polwithcheck), p.polrelid) !~ 'can_manage_family';
   if remaining <> 0 then
-    raise exception '0381: % permissive write policy(ies) on independence_milestones still do not require a manager', remaining;
+    raise exception '0442: % permissive write policy(ies) on independence_milestones still do not require a manager', remaining;
   end if;
 
-  raise notice '0381: independence milestones are manager-written (% stray policy(ies) swept)', swept;
+  raise notice '0442: independence milestones are manager-written (% stray policy(ies) swept)', swept;
 end $$;

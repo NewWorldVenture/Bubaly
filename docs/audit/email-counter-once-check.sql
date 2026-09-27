@@ -1,6 +1,6 @@
--- Behavioural proof for 0380: one Resend event moves a campaign counter once.
+-- Behavioural proof for 0441: one Resend event moves a campaign counter once.
 --
--- Before 0380 the webhook incremented the counter and THEN finalised the
+-- Before 0441 the webhook incremented the counter and THEN finalised the
 -- receipt; a failed finalisation released the claim, the provider retried, and
 -- the same event was counted twice. apply_resend_campaign_counter() marks the
 -- receipt and increments in one transaction, only for the claim holder.

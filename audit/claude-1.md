@@ -7910,7 +7910,7 @@ session's block: **I shipped a regression and CI found it, not me.**
   widened to `user_id = auth.uid() or is_family_member(family_id)` — and the
   moment that lands, all eleven tables open to every removed member, silently,
   in a commit about an onboarding screen.
-- **Files:** `supabase/migrations/0361_a_policy_should_say_what_it_checks.sql`,
+- **Files:** `supabase/migrations/0426_a_policy_should_say_what_it_checks.sql`,
   `docs/audit/removed-member-read-boundary-check.sql`
 - **Status:** FIXED, as hardening with **no behaviour change today** — which is
   stated plainly rather than dressed up. Each policy now checks the thing it
@@ -7918,7 +7918,7 @@ session's block: **I shipped a regression and CI found it, not me.**
   joins never had; `network_aggregates_select` gets it one level in.
 - **The probe asserts the boundary TWICE** — once as the schema stands, and once
   with `fm_select` deliberately widened to the shape that interstitial would
-  need. The second is the assertion 0361 exists for, and it carries a control
+  need. The second is the assertion 0426 exists for, and it carries a control
   for the control: it first checks the widening actually took (the removed
   member can now see their own row), because otherwise it would pass by doing
   nothing. `alter policy` keeps command and roles, the original expression is
@@ -8098,7 +8098,7 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
 
 - **Raised by:** Claude-3 (`audit/claude-3.md:1369`), VERIFIED on their live
   replay. Re-verified still open here, policy for policy.
-- **Files:** `supabase/migrations/0362_a_driving_score_is_not_the_drivers_to_grade.sql`,
+- **Files:** `supabase/migrations/0427_a_driving_score_is_not_the_drivers_to_grade.sql`,
   `docs/audit/driving-score-write-boundary-check.sql`
 - **Problem:** `driving_trips` and `driver_licenses` are the two tables of one
   feature, added together by 0114, and they do not carry the same rule. The
@@ -8147,7 +8147,7 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   `tests/ai-prompt-injection.test.ts` failed once in the first UTC sweep after
   this change and then passed **23 consecutive times** (20 isolated runs plus
   three full shard-1 runs). Ruled out as caused by this diff on contents rather
-  than on repetition: 0362 touches only `supabase/migrations/` and a comment and
+  than on repetition: 0427 touches only `supabase/migrations/` and a comment and
   number in `tests/migration-version-safety.test.ts`, neither of which that test
   imports. The one non-deterministic input in its path is the 6-character fence
   nonce, and 62^6 makes a collision implausible. Not chased further, and not
@@ -8286,7 +8286,7 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
 - main landed **seven migrations at once** (0304–0310), colliding with this
   branch's entire 0304–0310 block. Ninth collision event, fifteen numbers, and
   every merge since 0300 has brought one. This branch's seven moved together to
-  **0363–0369**, keeping their order.
+  **0428–0432**, keeping their order.
 - **The number was the least of it.** Two findings came out of reconciling them:
 
   1. **A SYMBOL collision, invisible to the migration ledger.** This branch's
@@ -8313,18 +8313,18 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
 - **The other red probe was the opposite case and this branch was right.**
   `economy-invest-decision-check.sql` inserted a redemption with a self-chosen
   title and cost and no `reward_id` — as a POSITIVE control. That is precisely
-  what 0363's `economy_redemption_request_guard` refuses: a child naming their
+  what 0428's `economy_redemption_request_guard` refuses: a child naming their
   own price. main's 0304 guards only the decision, not the cost. The control's
   intent (a child may queue a redemption) is preserved by giving it a real
   catalogue reward to name, and the probe now says why.
 - **A latent defect in my own recent work, found by reading main's approach.**
   main's guards are RESTRICTIVE (`as restrictive`, 0254's mechanism): they AND
   with the permissive union and can only narrow. My by-shape sweeps in **0316 and
-  0362 did not filter on `polpermissive`**, so a restrictive guard landing on
+  0427 did not filter on `polpermissive`**, so a restrictive guard landing on
   `medical_profiles` or `driving_trips` would make my migration REFUSE TO APPLY
   over somebody else's tightening — a guard failing in the safe direction.
-  Earlier migrations (0311, 0315, 0365–0368) filter correctly; I knew the rule
-  and stopped applying it. Both fixed. **0361's sweep deliberately does NOT
+  Earlier migrations (0311, 0315, 0429–0368 (as numbered before the merge; dropped at the merge as main's duplicate)) filter correctly; I knew the rule
+  and stopped applying it. Both fixed. **0426's sweep deliberately does NOT
   filter**, and now says so: it asks whether a policy delegates its `is_active`
   check to another table, and a restrictive policy with that predicate leans on
   `fm_select` exactly as hard.
@@ -11835,7 +11835,7 @@ budget 12, and the workflow YAML still parses.
 `paths:` filters — `0274_finance_transaction_operation_receipts.sql`,
 `0245_move_planner.sql` and `0271_move_date_recalculation.sql`,
 `0070_vacations.sql` and `0270_travel_confirmation_import.sql`. This branch has
-renumbered a migration **ten times** (the tenth moved our own 0311 to 0370 to
+renumbered a migration **ten times** (the tenth moved our own 0311 to 0433 to
 clear a collision with main). A renumbering that lands on one of these makes the
 filter match nothing, the workflow never runs again, and **a runtime test that
 never runs looks exactly like one that passes.**
@@ -11860,7 +11860,7 @@ after I wrote it.
 
 **Also checked and correct, after nearly filing it as a defect.**
 `supabase-forward-release.yml`'s input label reads "Apply the pinned 0240-0254
-release", and this branch is at migration 0370 — which looks stale, and the
+release", and this branch is at migration 0433 — which looks stale, and the
 script's own header says the range "used to be stated twice ... the repository
 moved 38 migrations past 0254". But `supabase/production-forward-release.json`
 pins exactly `0240_closet_outfits.sql` through `0254_wallet_write_policy_drift.sql`,
@@ -12487,10 +12487,10 @@ Postgres removes the rows the policy admits — none — and PostgREST answers
 `error: null`. Branching on `error` alone cannot tell "removed" from "not yours
 to remove".
 
-**The audit's own migrations are what made it live.** 0371 (medications,
-medication_schedules manager-only), 0366 (health_visits, immunizations, care_log
-as Rule B — the subject may not erase a record about themselves), 0373
-(behaviour notes belong to their author), 0374 (journals), 0367 (check-ins
+**The audit's own migrations are what made it live.** 0434 (medications,
+medication_schedules manager-only), 0430 (health_visits, immunizations, care_log
+as Rule B — the subject may not erase a record about themselves), 0436
+(behaviour notes belong to their author), 0437 (journals), 0431 (check-ins
 scoped by created_by). A child pressing Delete on their own immunization record
 was told "Deleted" and the record stayed.
 

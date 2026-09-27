@@ -1,12 +1,12 @@
 -- ============================================================================
--- 0370 — an UPDATE policy that guards the row it lets you touch, but not the
+-- 0433 — an UPDATE policy that guards the row it lets you touch, but not the
 --        row you turn it into.
 --
 -- Renumbered from 0311. main landed 0311_family_scoped_references — the TENTH
 -- collision event between the two sessions, and every merge since 0300 has
 -- brought one. Only the number changed. Order is not load-bearing here: this
 -- touches marketplace_orders and marketplace_offers, and nothing in this
--- branch's 0312-0369 goes near either table, so running last is the same as
+-- branch's 0312-0432 goes near either table, so running last is the same as
 -- running first.
 --
 -- Raised by Claude-3 against `marketplace_orders_update`. Swept by SHAPE rather
@@ -59,7 +59,7 @@
 --
 -- plus the return-reminder cron, which stamps `due_reminder_sent_at` and
 -- `overdue_notified_at` through the service client. Neither column is frozen
--- here, and the service role is let through regardless, in 0365's idiom.
+-- here, and the service role is let through regardless, in 0429's idiom.
 --
 -- Not changed: reads, inserts, and every other column. `status`, `notes`,
 -- `starts_on`, `ends_on` and `message` stay editable — advancing a deal is the
@@ -101,7 +101,7 @@ end $$;
 
 -- ── Rule 2: the terms themselves ────────────────────────────────────────────
 --
--- Column-wise, in the idiom main's 0305 uses for chore_assignments and 0365 for the
+-- Column-wise, in the idiom main's 0305 uses for chore_assignments and 0429 for the
 -- family's entitlement: name the columns that carry the deal and refuse an
 -- untrusted writer touching them, leaving the rest of the row alone. The frozen
 -- list travels as a trigger argument so both tables share one function and the
@@ -180,9 +180,32 @@ create trigger trg_marketplace_offers_terms_are_fixed
 -- request of your own and make it cancelled, and you may do nothing else to it.
 -- A containment rule cannot tell that from the marketplace bug, so it is listed
 -- here with its reason. Add to this list only with the same kind of sentence.
+--
+-- Three more since the merge of `main`'s 0344-0380, each read from the catalog:
+--
+--   reward_redemptions_update (main's 0373)
+--     using      can_manage_family or (self and status = 'requested')
+--     with check can_manage_family or (self and status in ('requested','cancelled'))
+--     A transition guard in the same sense as the first: you may take your own
+--     pending request and withdraw it, and do nothing else to it.
+--
+--   sync_external_mappings_owner_update (main's 0355)
+--   marketplace_questions_update        (main's 0371)
+--     Each WITH CHECK is its USING plus one more conjunct (`user_id is null or
+--     user_id = auth.uid()`; `answered_by is null or answered_by = me`) written
+--     BETWEEN the USING's own terms, so the USING's text is not a substring of
+--     the WITH CHECK's. Stronger, not weaker — exactly what this sweep asks for
+--     — and the containment approximation cannot see it. Named rather than
+--     rewritten: they are main's, and the answer they encode (a mapping is its
+--     account owner's, an answer is the seller's own) is right.
 do $$
 declare
-  transition_guards text[] := array['approval_requests_cancel_own'];
+  transition_guards text[] := array[
+    'approval_requests_cancel_own',
+    'reward_redemptions_update',
+    'sync_external_mappings_owner_update',
+    'marketplace_questions_update'
+  ];
   stragglers text;
 begin
   select string_agg(format('%s.%s', p.polrelid::regclass, p.polname), ', ')
@@ -200,6 +223,6 @@ begin
                  in pg_get_expr(p.polwithcheck, p.polrelid)) = 0;
 
   if stragglers is not null then
-    raise exception '0370: UPDATE policies guard the old row more tightly than the new one: %. Either carry the USING into the WITH CHECK, or add the policy to transition_guards here with a sentence saying why the new row is judged by a different rule.', stragglers;
+    raise exception '0433: UPDATE policies guard the old row more tightly than the new one: %. Either carry the USING into the WITH CHECK, or add the policy to transition_guards here with a sentence saying why the new row is judged by a different rule.', stragglers;
   end if;
 end $$;

@@ -1,4 +1,4 @@
--- Bubaly :: 0366 - a health record is not a sibling's to rewrite
+-- Bubaly :: 0430 - a health record is not a sibling's to rewrite
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0307. main landed seven migrations at once — 0304 economy
 -- invest decision guard, 0305 chore award amounts, 0306 money instructions,
@@ -6,7 +6,7 @@
 -- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
 -- collision event between the two sessions and by far the largest; every merge
 -- since 0300 has brought one. Only the numbers changed: this branch's seven
--- moved together to 0363-0369, keeping their order relative to each other.
+-- moved together to 0428-0432, keeping their order relative to each other.
 --
 -- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
 -- they AND with everything here and nothing in this block can loosen them by
@@ -136,7 +136,7 @@ begin
 
     -- Sweep stray permissive WRITE policies BY SHAPE, not by name — 0217
     -- narrowed five wallet tables by name and left six behind, which is how
-    -- 0368 came to exist. `*` (FOR ALL) is included: that is the shape being
+    -- 0368 (as numbered before the merge; dropped at the merge as main's duplicate) came to exist. `*` (FOR ALL) is included: that is the shape being
     -- replaced here, and its read half has been restated above.
     for pol in
       select p.polname from pg_policy p
@@ -148,7 +148,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, spec.tbl);
       swept := swept + 1;
-      raise notice '0366: dropped stray permissive write policy %.%', spec.tbl, pol.polname;
+      raise notice '0430: dropped stray permissive write policy %.%', spec.tbl, pol.polname;
     end loop;
 
     select count(*) into remaining
@@ -159,9 +159,9 @@ begin
       and p.polpermissive and p.polcmd in ('a','w','d','*')
       and not (p.polname = any(keep));
     if remaining <> 0 then
-      raise exception '0366 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, spec.tbl;
+      raise exception '0430 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, spec.tbl;
     end if;
   end loop;
 
-  raise notice '0366 OK: % stray write policy(ies) swept across 9 health tables; a health record is the subject''s, the author''s or a manager''s', swept;
+  raise notice '0430 OK: % stray write policy(ies) swept across 9 health tables; a health record is the subject''s, the author''s or a manager''s', swept;
 end $$;

@@ -1,4 +1,4 @@
--- Bubaly :: 0361 - a policy should say what it checks
+-- Bubaly :: 0426 - a policy should say what it checks
 -- ----------------------------------------------------------------------------
 -- Fifteen policies across eleven tables decide family membership with an inline
 -- subquery instead of `is_family_member(family_id)`:
@@ -48,7 +48,7 @@
 
 -- ── The ten family-scoped tables ─────────────────────────────────────────────
 -- Same shape, same column, one loop. `for all` policies get BOTH halves stated:
--- Postgres reuses a missing `with check` from `using`, which is the reuse 0370
+-- Postgres reuses a missing `with check` from `using`, which is the reuse 0433
 -- was written about, and a policy this long-lived should not rely on a reader
 -- knowing that rule.
 do $$
@@ -68,7 +68,21 @@ begin
       ('todo_lists',          'family member access')
     ) as t(tbl, pol)
   loop
-    execute format('drop policy if exists %I on public.%I', spec.pol, spec.tbl);
+    if not exists (
+      select 1 from pg_policy p
+      join pg_class c on c.oid = p.polrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relname = spec.tbl and p.polname = spec.pol
+    ) then
+      -- main's 0367 (a message is its sender's) and 0368 (a conversation is not
+      -- anyone's to wipe) have already REPLACED the blanket policy on
+      -- family_messages and family_conversations with per-command policies that
+      -- read is_family_member and narrow it. Re-creating the blanket here would
+      -- OR that narrowing away, so a policy main removed stays removed.
+      raise notice '0426: %.% is not there (replaced by main''s per-command policies) — left as main wrote them', spec.tbl, spec.pol;
+      continue;
+    end if;
+    execute format('drop policy %I on public.%I', spec.pol, spec.tbl);
     execute format(
       'create policy %I on public.%I for all to public '
       'using (public.is_family_member(family_id)) '
@@ -137,7 +151,7 @@ create policy profiles_select_self on public.profiles
 -- rather than in the next audit.
 --
 -- This sweep does NOT filter on `polpermissive`, unlike the ones in 0316 and
--- 0362, and the difference is deliberate. Those ask "can something OR my
+-- 0427, and the difference is deliberate. Those ask "can something OR my
 -- narrowing away", which only a permissive policy can do. This one asks "does
 -- this policy delegate its `is_active` check to another table", and a
 -- RESTRICTIVE policy written with the same inline subquery leans on `fm_select`
@@ -181,5 +195,5 @@ begin
       stray;
   end if;
 
-  raise notice '0361 OK: every membership check states its own is_active';
+  raise notice '0426 OK: every membership check states its own is_active';
 end $$;

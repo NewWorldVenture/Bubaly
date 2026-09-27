@@ -1,4 +1,4 @@
--- 0379_a_device_is_buzzed_once_per_notification.sql
+-- 0440_a_device_is_buzzed_once_per_notification.sql
 --
 -- PUSH-003 (the half left open) / PUSH-006: a per-device delivery receipt.
 --

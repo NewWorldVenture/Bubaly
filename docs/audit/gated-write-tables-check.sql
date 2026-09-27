@@ -12,7 +12,7 @@
 --
 -- Deriving it from the migration SQL was tried three times and cannot work. The
 -- third attempt failed STRUCTURALLY rather than by a bug: a large share of these
--- policies are generated inside PL/pgSQL loops, e.g. 0371 —
+-- policies are generated inside PL/pgSQL loops, e.g. 0434 —
 --
 --   execute format('create policy %1$s_mng_update on public.%1$I for update
 --                   to authenticated using (public.can_manage_family(family_id))', t);
@@ -49,43 +49,55 @@
 do $$
 declare
   measured text[];
+  -- Three measurements. The first two are this branch's own (92 tables, then 108
+  -- after main 7e54596d was merged). The third was taken on the merge of main's
+  -- 0344-0380 into PR #548, whose C1-K pass narrowed writes on 32 more —
+  -- chore_assignments and chore_submissions, family_messages and
+  -- family_conversations, kid_progress, the social_* set, the sync engine's
+  -- tables and the rest — recorded here exactly as this probe demands, so the
+  -- client guard in tests/a-filtered-delete-is-not-a-deletion.test.ts covers
+  -- them too (its KNOWN_UNFIXED records the call sites that measurement
+  -- revealed).
   recorded text[] := array[
-    -- Measured on a full 374-migration replay (main 0001-0360 + PR #548).
-    -- A table joins this list when a
-    -- migration narrows its UPDATE or DELETE; it leaves when one widens it. Do
-    -- not edit by hand to make this probe pass — the probe IS the measurement,
-    -- and a disagreement means the client guard's list needs the same change.
-    'ai_conversations', 'ai_messages', 'allowance_rules', 'approval_requests',
-    'assistant_links', 'autopilot_suggestions', 'babysitter_payments',
-    'babysitter_profiles', 'behavior_logs', 'billing_customers', 'bills',
-    'budgets', 'call_logs', 'care_log', 'child_logins', 'child_wallets',
-    'compliance_disclosures', 'concierge_calls', 'currency_transactions',
-    'dashboard_layouts', 'documents', 'driver_licenses', 'driving_trips',
-    'economy_redemptions', 'economy_rewards', 'emergency_sessions', 'event_rsvps',
-    'family_ai_settings', 'family_automation_rules', 'family_automation_runs',
-    'family_communications', 'family_credentials', 'family_currencies',
+    'ai_conversations', 'ai_messages', 'allowance_rules', 'announcement_reads',
+    'approval_requests', 'assistant_links', 'autopilot_suggestions',
+    'babysitter_payments', 'babysitter_profiles', 'behavior_logs', 'billing_customers',
+    'bills', 'budgets', 'call_logs', 'care_log', 'child_logins', 'child_wallets',
+    'chore_assignments', 'chore_submissions', 'compliance_disclosures',
+    'concierge_calls', 'currency_transactions', 'dashboard_layouts', 'documents',
+    'driver_licenses', 'driving_trips', 'economy_redemptions', 'economy_rewards',
+    'emergency_sessions', 'event_rsvps', 'family_ai_settings',
+    'family_automation_rules', 'family_automation_runs', 'family_communications',
+    'family_conversations', 'family_credentials', 'family_currencies',
     'family_dashboard_settings', 'family_digital_twin_profiles',
     'family_emergency_contacts', 'family_emergency_plans', 'family_facts',
-    'family_members', 'family_places', 'family_playbook_suggestions',
-    'family_wallets', 'financial_accounts', 'front_desk_settings', 'gift_links',
-    'gift_payments', 'grades', 'guardian_contacts', 'guardian_member_profiles',
-    'guardian_routing_rules', 'guardian_suggestions', 'health_goals',
-    'health_metrics', 'health_providers', 'health_visits', 'home_assets',
-    'home_briefs', 'immunizations', 'independence_milestones',
-    'insurance_policies', 'invest_holdings', 'invest_orders', 'invites',
-    'journal_entries', 'library_progress', 'location_events',
-    'marketplace_listing_shares', 'marketplace_listings', 'marketplace_offers',
-    'marketplace_orders', 'marketplace_stores', 'medical_profiles',
-    'medication_schedules', 'medications', 'member_locations',
-    'money_timeline_insights', 'notifications', 'nutrition_logs',
-    'onboarding_progress', 'opportunities', 'parent_approvals', 'pay_handles',
-    'permission_grants', 'push_devices', 'renewals', 'rewards', 'rides',
-    'safety_check_ins', 'savings_goals', 'screen_time_limits', 'sleep_checkins',
-    'sleep_logs', 'social_access_permissions', 'social_account_tokens',
-    'subscriptions', 'support_tickets', 'symptom_logs', 'sync_tokens',
+    'family_members', 'family_messages', 'family_places',
+    'family_playbook_suggestions', 'family_poll_votes', 'family_wallets',
+    'financial_accounts', 'front_desk_settings', 'gift_links', 'gift_payments',
+    'grades', 'guardian_contacts', 'guardian_member_profiles',
+    'guardian_routing_rules', 'guardian_suggestions', 'health_goals', 'health_metrics',
+    'health_providers', 'health_visits', 'home_assets', 'home_briefs', 'immunizations',
+    'independence_milestones', 'insurance_policies', 'invest_holdings',
+    'invest_orders', 'invites', 'journal_entries', 'kid_progress', 'library_progress',
+    'location_events', 'marketplace_handoffs', 'marketplace_listing_shares',
+    'marketplace_listings', 'marketplace_offers', 'marketplace_orders',
+    'marketplace_questions', 'marketplace_stores', 'meal_vote_ballots',
+    'medical_profiles', 'medication_schedules', 'medications', 'member_badges',
+    'member_locations', 'money_timeline_insights', 'network_consent', 'notifications',
+    'nutrition_logs', 'onboarding_progress', 'opportunities', 'parent_approvals',
+    'pay_handles', 'permission_grants', 'push_devices', 'renewals',
+    'reward_redemptions', 'rewards', 'rides', 'safety_check_ins', 'savings_goals',
+    'screen_time_entries', 'screen_time_limits', 'sleep_checkins', 'sleep_logs',
+    'social_access_permissions', 'social_account_tokens', 'social_accounts',
+    'social_ai_generations', 'social_calendar_items', 'social_campaigns',
+    'social_comments', 'social_content_templates', 'social_media_library',
+    'social_post_assets', 'social_post_targets', 'social_post_variants',
+    'social_posts', 'social_publish_jobs', 'social_publish_results',
+    'social_schedules', 'social_settings', 'subscriptions', 'support_tickets',
+    'symptom_logs', 'sync_accounts', 'sync_external_mappings', 'sync_tokens',
     'transactions', 'trip_items', 'trips', 'trust_delegations', 'trust_policies',
     'trust_scores', 'wallet_buckets', 'wallet_goals', 'wallet_rules',
-    'wallet_transactions'
+    'wallet_transactions', 'watchlist_votes'
   ];
   added   text[];
   removed text[];

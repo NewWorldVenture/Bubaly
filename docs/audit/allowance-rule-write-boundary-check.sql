@@ -15,7 +15,7 @@
 -- the product working. A guard that blinded them would be a different bug.
 --
 -- This file was written for the audit branch's own migration over all six
--- (0309, later 0368). At the merge with main it turned out main had closed
+-- (0309, later 0368 (as numbered before the merge; dropped at the merge as main's duplicate)). At the merge with main it turned out main had closed
 -- every one of them first — allowance_rules in 0306, which was on the branch's
 -- base all along — with restrictive guards over the permissive policy it keeps,
 -- and main's probes name those guards as the refusal. The branch's migration

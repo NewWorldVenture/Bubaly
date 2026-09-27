@@ -58,7 +58,7 @@ export function JournalModule() {
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
     // reports success over a record that is still there.
-    // 0374: a journal is the one thing nobody else writes, so a blocked delete
+    // 0437: a journal is the one thing nobody else writes, so a blocked delete
     // here is the expected outcome for anyone but its author.
     const { data, error: delErr } = await supabase.from('journal_entries').delete()
       .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
@@ -198,7 +198,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };
     // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
     // not rewrite comes back `error: null` with nothing changed. See
-    // 0374 makes a journal nobody
+    // 0437 makes a journal nobody
     // else's, and tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
     // predicate bounds the write to one household and `.select('id')` makes
     // the empty result an answer. An INSERT needs neither — RLS refuses one

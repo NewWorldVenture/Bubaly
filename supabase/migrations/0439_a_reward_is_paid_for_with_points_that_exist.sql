@@ -1,4 +1,4 @@
--- 0378_a_reward_is_paid_for_with_points_that_exist.sql
+-- 0439_a_reward_is_paid_for_with_points_that_exist.sql
 --
 -- DATA-004: a reward could be approved with points the child did not have.
 --

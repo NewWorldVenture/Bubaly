@@ -1,4 +1,4 @@
--- Behavioural proof for 0361, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0426, run as real `authenticated` sessions under RLS.
 --
 -- Removing someone from a household is `update({ is_active: false })` on their
 -- `family_members` row (family-module.tsx:483, settings-module.tsx:181,
@@ -15,7 +15,7 @@
 -- and once with `fm_select` deliberately widened to admit an inactive
 -- membership — the shape `audit/claude-4.md:1596` would need if its
 -- "you were removed" interstitial were built on the session client. The second
--- assertion is the one that fails without 0361, and it is the whole reason this
+-- assertion is the one that fails without 0426, and it is the whole reason this
 -- file exists.
 --
 -- No blanket `grant ... on all tables in schema public`: the bootstrap's
@@ -34,7 +34,7 @@ declare
   fm_select_was text;
   n          int;
 
-  -- Every table 0361 rewrote that is family-scoped and seeded below. Asserted
+  -- Every table 0426 rewrote that is family-scoped and seeded below. Asserted
   -- as a set rather than one at a time so a table added to the migration and
   -- forgotten here shows up as a missing row count, not as silence.
   tables text[] := array[
@@ -130,7 +130,7 @@ begin
   -- ══ THE SAME BOUNDARY, WITHOUT ITS ACCIDENTAL PROP ═════════════════════
   -- Widen `fm_select` to admit an inactive membership — the read a
   -- "you are no longer part of this family" screen needs if it is ever built on
-  -- the session client rather than the service client. Before 0361 this ALONE
+  -- the session client rather than the service client. Before 0426 this ALONE
   -- reopened all ten tables, because their predicates delegated the `is_active`
   -- question to this policy. `alter policy` keeps the command and the roles, so
   -- only the expression moves; the original is captured and restored below, and
@@ -192,5 +192,5 @@ begin
   delete from public.family_members       where user_id in (here_uid, gone_uid);
   delete from public.families             where id = fam;
 
-  raise notice '0361 removed-member boundary: holds as the schema stands, and holds with fm_select widened';
+  raise notice '0426 removed-member boundary: holds as the schema stands, and holds with fm_select widened';
 end $$;

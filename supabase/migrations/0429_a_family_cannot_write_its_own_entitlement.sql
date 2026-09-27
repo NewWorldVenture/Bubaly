@@ -1,4 +1,4 @@
--- Bubaly :: 0365 - a family cannot write the row that decides what it paid for
+-- Bubaly :: 0429 - a family cannot write the row that decides what it paid for
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0306. main landed seven migrations at once — 0304 economy
 -- invest decision guard, 0305 chore award amounts, 0306 money instructions,
@@ -6,7 +6,7 @@
 -- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
 -- collision event between the two sessions and by far the largest; every merge
 -- since 0300 has brought one. Only the numbers changed: this branch's seven
--- moved together to 0363-0369, keeping their order relative to each other.
+-- moved together to 0428-0432, keeping their order relative to each other.
 --
 -- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
 -- they AND with everything here and nothing in this block can loosen them by
@@ -18,7 +18,7 @@
 -- A PARALLEL SESSION REACHED THIS SAME FINDING and landed
 -- `0300_entitlement_is_not_client_writable.sql` on main while this was in
 -- flight — the second time the two sessions have converged on one defect, after
--- invites (their 0298, this branch's 0364). Their migration runs FIRST, and the
+-- invites (their 0298, this branch's 0364 (as numbered before the merge; dropped at the merge as main's duplicate)). Their migration runs FIRST, and the
 -- two are complementary rather than duplicative, so both stay:
 --
 --   * On `subscriptions` and `billing_customers` they agree, and agree with
@@ -149,7 +149,7 @@ begin
       tbl || '_no_client_delete', tbl);
 
     -- Sweep stray PERMISSIVE write policies BY SHAPE, not by name. Narrowing by
-    -- name is how 0217 left six wallet tables behind for 0368 to find.
+    -- name is how 0217 left six wallet tables behind for 0368 (as numbered before the merge; dropped at the merge as main's duplicate) to find.
     for pol in
       select p.polname from pg_policy p
       join pg_class c on c.oid = p.polrelid
@@ -159,7 +159,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, tbl);
       swept := swept + 1;
-      raise notice '0365: dropped stray permissive write policy %.%', tbl, pol.polname;
+      raise notice '0429: dropped stray permissive write policy %.%', tbl, pol.polname;
     end loop;
 
     select count(*) into remaining
@@ -169,7 +169,7 @@ begin
     where n.nspname = 'public' and c.relname = tbl
       and p.polpermissive and p.polcmd in ('a','w','d','*');
     if remaining <> 0 then
-      raise exception '0365 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, tbl;
+      raise exception '0429 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, tbl;
     end if;
 
     -- Belt as well as braces: with no table grant, RLS never gets asked. The
@@ -178,7 +178,7 @@ begin
     execute format('revoke insert, update, delete on public.%I from anon', tbl);
   end loop;
 
-  raise notice '0365 OK: % stray write policy(ies) swept; the entitlement row is the server''s to write', swept;
+  raise notice '0429 OK: % stray write policy(ies) swept; the entitlement row is the server''s to write', swept;
 end $$;
 
 -- ── families: the two columns that are entitlement, not profile ─────────────

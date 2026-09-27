@@ -12,11 +12,11 @@ vi.mock('server-only', () => ({}));
  *
  * Every writer that files a grocery or a to-do without naming a list read "the
  * oldest open list" and inserted one when there was none, with nothing between
- * the two. 0382 makes the get-or-create one serialised operation, and
+ * the two. 0443 makes the get-or-create one serialised operation, and
  * docs/audit/a-family-gets-one-default-list-check.sql races two real sessions
  * against it and against a lock-less copy. This file holds the application's
  * half: that every caller goes through the RPC, that a real error is never read
- * as "no list", and that a database without 0382 still works.
+ * as "no list", and that a database without 0443 still works.
  */
 
 const { ensureDefaultGroceryListId } = await import('@/lib/services/groceries');
@@ -46,7 +46,7 @@ describe('the default grocery list is one operation', () => {
     expect((db as unknown as { table: (t: string) => unknown[] }).table('grocery_lists')).toEqual([]);
   });
 
-  it('still works on a database without 0382, and still makes only one', async () => {
+  it('still works on a database without 0443, and still makes only one', async () => {
     // No handler: the in-memory client answers 42883, as Postgres does.
     const db = createInMemorySupabase<Db>({ defaults: { grocery_lists: { is_archived: false, archived_at: null } } });
     const first = await ensureDefaultGroceryListId(db, 'fam-1', 'user-1');
@@ -79,7 +79,7 @@ describe('no writer creates a default list around the one get-or-create', () => 
   //
   // Each exception says why:
   //   lib/services/*                    the helpers' own fallback for a
-  //                                     database without 0382
+  //                                     database without 0443
   //   shopping-, todos-, recipes-module a list the person NAMED ("New list",
   //                                     "Add to a new list")
   //   dashboard/migrate/actions.ts      the importer's own named list, looked

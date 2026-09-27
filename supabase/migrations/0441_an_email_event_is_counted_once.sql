@@ -1,4 +1,4 @@
--- 0380_an_email_event_is_counted_once.sql
+-- 0441_an_email_event_is_counted_once.sql
 --
 -- EMAIL-002, the half left open: one Resend event could move a campaign
 -- counter twice.

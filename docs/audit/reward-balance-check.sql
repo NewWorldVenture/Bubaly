@@ -1,7 +1,7 @@
--- Behavioural proof for 0378, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0439, run as real `authenticated` sessions under RLS.
 --
 -- A redemption spends points when it ENTERS 'approved' or 'fulfilled'. Before
--- 0378 nothing below the browser checked the member could pay: a parent could
+-- 0439 nothing below the browser checked the member could pay: a parent could
 -- approve a reward for a child with no points, approve two requests that
 -- together cost more than the balance, or move a paid-for reward onto a sibling.
 --

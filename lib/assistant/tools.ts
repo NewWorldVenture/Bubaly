@@ -65,7 +65,7 @@ function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
 
 /**
  * Get-or-create the family's default grocery list — through the one serialised
- * get-or-create (0382, DATA-007) the rest of the product uses, so two first
+ * get-or-create (0443, DATA-007) the rest of the product uses, so two first
  * captures at once, one from the assistant and one from the app, cannot give a
  * family two lists. The name stays what the assistant always used.
  */

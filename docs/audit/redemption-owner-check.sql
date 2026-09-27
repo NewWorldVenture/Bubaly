@@ -14,7 +14,7 @@ declare
   uPar uuid := '00000000-0000-4000-8000-00000000eeea';
   uA uuid := '00000000-0000-4000-8000-00000000eeeb';
   uB uuid := '00000000-0000-4000-8000-00000000eeec';
-  mA uuid; mB uuid; reward uuid; approved uuid; bReq uuid; cur uuid;
+  mA uuid; mB uuid; reward uuid; approved uuid; bReq uuid; cur uuid; erew uuid;
   n int; failures int := 0;
 begin
   delete from public.families where id = fam;
@@ -30,6 +30,12 @@ begin
   insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
     values (fam, reward, mB, 'Game night', 500, 'requested') returning id into bReq;
   insert into public.family_currencies (family_id, name) values (fam, 'Stars') returning id into cur;
+  -- PR #548's 0428 makes a token redemption name a catalogue reward and cost
+  -- what the family set for it, so the two economy_redemptions inserts below
+  -- reference this reward at its own price. The question this probe asks —
+  -- WHOSE balance a request may spend — is unchanged by that.
+  insert into public.economy_rewards (family_id, currency_id, title, cost, is_active)
+    values (fam, cur, 'Ice cream', 10, true) returning id into erew;
 
   perform set_config('request.jwt.claim.sub', uA::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', uA, 'role', 'authenticated')::text, true);
@@ -53,15 +59,15 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise warning 'BREACH: a child deleted a sibling''s request (rows: %)', n; failures := failures + 1; end if;
   begin
-    insert into public.economy_redemptions (family_id, currency_id, member_id, title, cost, status)
-      values (fam, cur, mB, 'Ice cream', 10, 'pending');
+    insert into public.economy_redemptions (family_id, reward_id, currency_id, member_id, title, cost, status)
+      values (fam, erew, cur, mB, 'Ice cream', 10, 'pending');
     raise warning 'BREACH: a child requested tokens on a sibling''s balance'; failures := failures + 1;
   exception when insufficient_privilege then null;
   end;
   insert into public.reward_redemptions (family_id, reward_id, member_id, reward_title, cost_points, status)
     values (fam, reward, mA, 'Game night', 500, 'requested');
-  insert into public.economy_redemptions (family_id, currency_id, member_id, title, cost, status)
-    values (fam, cur, mA, 'Ice cream', 10, 'pending');
+  insert into public.economy_redemptions (family_id, reward_id, currency_id, member_id, title, cost, status)
+    values (fam, erew, cur, mA, 'Ice cream', 10, 'pending');
   reset role;
 
   perform set_config('request.jwt.claim.sub', uPar::text, true);

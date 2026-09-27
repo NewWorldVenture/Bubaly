@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       if (names.length === 0) return NextResponse.json({ added: 0 });
 
       // The family's default grocery list, found or created as ONE operation
-      // (0382, DATA-007) — the same get-or-create every other writer uses, so a
+      // (0443, DATA-007) — the same get-or-create every other writer uses, so a
       // pantry-chef shop and a quick capture at the same moment cannot give a
       // family two lists. Both archive columns are asked, inside the helper.
       const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');

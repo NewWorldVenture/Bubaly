@@ -1,6 +1,6 @@
--- Behavioural proof for 0373 AND for 0297, run as real `authenticated` sessions
+-- Behavioural proof for main's 0377 (this branch's 0436 was dropped at the merge as its duplicate) AND for 0297, run as real `authenticated` sessions
 -- under RLS. Two sessions found the child_logins half independently and 0297
--- landed first, keeping the policy's name and re-predicating it; 0373 covers
+-- landed first, keeping the policy's name and re-predicating it; 0436 covers
 -- behavior_logs. This probe asserts both halves whichever migration supplied
 -- them, which is the right shape for a boundary check: it tests the boundary,
 -- not the file that drew it.
@@ -123,13 +123,22 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 4. …but may still record one, and correct their own.
+  -- 4. …but may still record one. Correcting it afterwards is NOT theirs: this
+  --    probe once asserted an author may edit their own note, and main's 0377
+  --    decided the other way — a note a child can rewrite after the fact is not
+  --    a record, so UPDATE and DELETE are a manager's. That is why this branch's
+  --    author-or-manager migration was dropped as 0377's duplicate; this leg
+  --    asserts main's rule.
   insert into public.behavior_logs (family_id, member_id, kind, note, logged_by)
   values (fam, child_mid, 'positive', 'Tidied the kitchen', child_uid) returning id into child_note;
-  update public.behavior_logs set note = 'Tidied the whole kitchen' where id = child_note;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception 'a member can no longer correct the note they wrote (%)', n;
+    raise exception 'a member can no longer record a note in their own name (%)', n;
+  end if;
+  update public.behavior_logs set note = 'Tidied the whole kitchen' where id = child_note;
+  get diagnostics n = row_count;
+  if n <> 0 then
+    raise exception 'a child rewrote the note they logged (%) — main''s 0377 makes a behaviour note a manager''s to correct', n;
   end if;
 
   reset role;

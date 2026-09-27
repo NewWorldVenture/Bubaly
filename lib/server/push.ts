@@ -53,7 +53,7 @@ function ensureVapid(): boolean {
 
 /** Private transport: callers must first resolve the recipient's push consent. */
 /**
- * Which devices one notification has already reached (migration 0379).
+ * Which devices one notification has already reached (migration 0440).
  *
  * `pushed_at` stamps a notification only when EVERY device succeeded, so a
  * partial failure used to re-send to all of them on the next run. With a
@@ -247,7 +247,7 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * deliberately withheld notifications. Whole-family notifications fan out to every
  * active member. Call after the notification engine runs (cron + on-demand).
  * Failed or unconfigured delivery stays pending for retry. A retry reaches only
- * the devices with no receipt in push_deliveries (0379), so a partial failure no
+ * the devices with no receipt in push_deliveries (0440), so a partial failure no
  * longer re-sends to the devices that succeeded; an acknowledgement failure after
  * a real send can still reach that one device again.
  * A service-only app_settings cursor advances through stable created_at/id

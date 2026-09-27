@@ -155,7 +155,7 @@ describe('autopilot persistence boundaries', () => {
   it('does not treat list lookup or stale suggestion archival errors as empty state', () => {
     const source = readFileSync(resolve(process.cwd(), 'lib/autopilot/scan.ts'), 'utf8');
 
-    // The list lookup moved behind ensureDefaultGroceryListId (0382, DATA-007),
+    // The list lookup moved behind ensureDefaultGroceryListId (0443, DATA-007),
     // which returns a failed read as an error rather than "no list"; the scan
     // still throws on it rather than carrying on as though the family had none.
     expect(source).toContain("if (!list.id) throw new Error('Autopilot could not open or create the family shopping list')");

@@ -56,7 +56,7 @@ function makeDb(tables: Record<string, TableSpec>) {
     });
     return proxy;
   };
-  // The food slice reads allergies through `family_allergies()` (0375) rather
+  // The food slice reads allergies through `family_allergies()` (0438) rather
   // than selecting `medical_profiles`, whose SELECT policy is now
   // manager-or-self. Served from the same spec, and — like `from()` above —
   // recording the argument rather than filtering on it.

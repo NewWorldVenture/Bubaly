@@ -76,7 +76,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
         cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
       };
       // See immunizations-module: the earlier fix reached the DELETE below and not
-      // this UPDATE, and RLS filters the two the same way. 0366 gives health_visits
+      // this UPDATE, and RLS filters the two the same way. 0430 gives health_visits
       // the same Rule B treatment, so a blocked edit answered `error: null` and was
       // reported as saved.
       const { data, error } = form.id
@@ -95,7 +95,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
     // See immunizations-module: RLS filters a DELETE instead of refusing it, so
     // without `.select('id')` a blocked removal is indistinguishable from a
-    // successful one. 0366 gives health_visits the same Rule B treatment.
+    // successful one. 0430 gives health_visits the same Rule B treatment.
     const { data, error } = await createClient().from('health_visits').delete()
       .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
     if (error) { toastError(describeDbError(error)); return; }

@@ -176,7 +176,7 @@ begin
   values (fam, parent_uid, 'Parent', 'parent', true) returning id into parent_mid;
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (fam, child_uid, 'Child', 'child', true) returning id into child_mid;
-  -- The child has EARNED the 100 points step 6 spends. Since 0378 a reward
+  -- The child has EARNED the 100 points step 6 spends. Since 0439 a reward
   -- cannot be approved with points that do not exist, and this probe is about
   -- WHO decides, not whether the child can pay — reward-balance-check.sql is.
   insert into public.chores (family_id, title) values (fam, 'Dishes') returning id into chore;
@@ -198,7 +198,7 @@ begin
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (ctl_fam, child_uid, 'Child (a manager here)', 'parent', true) returning id into ctl_mid;
   -- The control's redemptions must be PAYABLE, for the same reason as above:
-  -- since 0378 an unpayable one is refused by the balance guard, and a control
+  -- since 0439 an unpayable one is refused by the balance guard, and a control
   -- refused for that reason proves nothing about 0295's manager gate. Enough
   -- for every leg the control runs (0a's approved redemption, q3 and q4).
   insert into public.chores (family_id, title) values (ctl_fam, 'Control chores') returning id into chore;
@@ -412,7 +412,7 @@ begin
   end if;
 
   -- 7c. Every trigger on the table, and what it calls. The three in the
-  --     header, plus 0378's balance guard. That one cannot be what refused
+  --     header, plus 0439's balance guard. That one cannot be what refused
   --     checks 1, 3 and 4: it raises 23514, not the 42501 they assert, and it
   --     fires after the decision guard by name (`zz_`), so a non-manager's
   --     decision is refused before a balance is ever summed.

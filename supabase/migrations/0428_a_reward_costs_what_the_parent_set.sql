@@ -1,4 +1,4 @@
--- Bubaly :: 0363 - a reward costs what the parent set
+-- Bubaly :: 0428 - a reward costs what the parent set
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0304. main landed seven migrations at once — 0304 economy
 -- invest decision guard, 0305 chore award amounts, 0306 money instructions,
@@ -6,7 +6,7 @@
 -- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
 -- collision event between the two sessions and by far the largest; every merge
 -- since 0300 has brought one. Only the numbers changed: this branch's seven
--- moved together to 0363-0369, keeping their order relative to each other.
+-- moved together to 0428-0432, keeping their order relative to each other.
 --
 -- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
 -- they AND with everything here and nothing in this block can loosen them by

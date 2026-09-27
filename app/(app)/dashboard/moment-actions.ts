@@ -129,7 +129,7 @@ export async function addMomentGroceryAction(input: {
   if (input.familyId && input.familyId !== familyId) return { ok: false, error: t('momentActions.couldNotAddToGroceries') };
   const supabase = await createServer();
 
-  // The family's default list — found or created as ONE operation (0382,
+  // The family's default list — found or created as ONE operation (0443,
   // DATA-007), the same get-or-create the Grocery module, the assistant and
   // quick capture use, so the moment's items land exactly where the family
   // shops and two taps at once cannot make a second "Groceries".

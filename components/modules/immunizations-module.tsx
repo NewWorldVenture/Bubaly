@@ -76,7 +76,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       };
       // The SAME reasoning as `remove` below, which is the point worth recording:
       // that fix landed on the DELETE and stopped one line short of the UPDATE in
-      // the same function. RLS filters both identically — 0366 makes this a Rule B
+      // the same function. RLS filters both identically — 0430 makes this a Rule B
       // table, a record of medical fact its subject may not rewrite — so an edit a
       // member is not allowed to make comes back `error: null` with nothing
       // changed, and "Record updated" was the answer either way. The family_id
@@ -99,7 +99,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
     if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
     // `.select('id')` is the whole point: RLS filters a DELETE rather than
     // refusing it, so a row this member may not remove comes back as
-    // `error: null` with nothing deleted. 0366 makes immunizations a Rule B
+    // `error: null` with nothing deleted. 0430 makes immunizations a Rule B
     // table — a record of medical fact, which its SUBJECT may not erase — so
     // that is a live outcome for a child pressing this button, and reporting it
     // as "Deleted" told them their record was gone when it was not.

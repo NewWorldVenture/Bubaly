@@ -71,7 +71,7 @@ function fixture(options: { counterFunction?: boolean } = {}) {
       };
       return query;
     },
-    // 0380's apply_resend_campaign_counter, emulated over the same store and
+    // 0441's apply_resend_campaign_counter, emulated over the same store and
     // through the same interceptor: a campaign read/update failure fails the
     // whole call, as the real function's transaction would, so nothing is
     // marked and nothing counted. `counterFunction: false` answers the way
@@ -388,7 +388,7 @@ describe('signed Resend suppression and durable receipt execution', () => {
 describe('campaign counters survive concurrent events', () => {
   const campaign = 'campaign-under-contention';
 
-  // These exercise the compare-and-set loop, which since 0380 is the fallback
+  // These exercise the compare-and-set loop, which since 0441 is the fallback
   // for a database without apply_resend_campaign_counter.
   function withCampaign(counters: Row) {
     const f = fixture({ counterFunction: false });
@@ -451,7 +451,7 @@ describe('campaign counters survive concurrent events', () => {
   });
 });
 
-// EMAIL-002's other half (0380). The counter used to be incremented before the
+// EMAIL-002's other half (0441). The counter used to be incremented before the
 // receipt was finalised; a failed finalisation released the claim, the provider
 // retried, and the same event was counted again.
 describe('an email event is counted once', () => {
@@ -474,7 +474,7 @@ describe('an email event is counted once', () => {
     expect(f.event().status).toBe('processed');
   });
 
-  it('without 0380 the same path still counts twice — the gap the migration closes', async () => {
+  it('without 0441 the same path still counts twice — the gap the migration closes', async () => {
     const f = fixture({ counterFunction: false });
     f.db.seed('marketing_email_campaigns', [{ id: campaign, opens: 0 }]);
     let failFinalisation = true;

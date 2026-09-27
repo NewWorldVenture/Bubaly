@@ -61,7 +61,7 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
     });
     return b;
   };
-  // `foodProfile` reads allergies through the `family_allergies` RPC (0375), not
+  // `foodProfile` reads allergies through the `family_allergies` RPC (0438), not
   // a select on `medical_profiles`. Logged as `rpc:<name>` with its arguments in
   // `filters`, so a test can assert which family was asked about.
   const rpc = (name: string, args: Record<string, unknown> = {}) => {

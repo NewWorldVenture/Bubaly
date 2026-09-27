@@ -1310,7 +1310,7 @@ no ci.yml run existed after b05f0b32 and that ci.yml has no workflow_dispatch so
 I had no trigger. True, and not the cause. PR #548's mergeable_state was "dirty"
 - an unresolved conflict with main. GitHub builds pull_request runs against
 refs/pull/548/merge; a conflicted PR produces NO run at all, silently. Merging
-main (4cbcb95b, the eleventh collision: 0312-0316 renumbered to 0371-0375)
+main (4cbcb95b, the eleventh collision: 0312-0316 renumbered to 0434-0438)
 restored it. One API call would have found this at any point.
 
 VERIFIED BY CI on a8bfff31, run 35412413029 - the first real verification of ~27
@@ -1334,10 +1334,10 @@ Run 3217 on 4cbcb95b reads "cancelled", not "failed" - superseded 67s later by
 a8bfff31 under concurrency: cancel-in-progress. Checked rather than assumed.
 
 VERIFIED LOCALLY: 14,275 green under both timezones, tsc clean, lint 0 at 12,
-migration audit passes at 345 files with 0376 next.
+migration audit passes at 345 files with 0376 (as numbered before the merge; dropped at the merge as main's duplicate) next.
 Q42 (HIGH, client paths): RLS FILTERS a write rather than refusing it, so twelve
 client delete/update paths across eight modules reported success over records
-they never touched. Made live by this audit own 0366/0367/0371/0373/0374. Fixed
+they never touched. Made live by this audit own 0430/0431/0434/0436/0437. Fixed
 with .select(id) + family scope + honest messaging; guard added; locator-module
 needed nothing because it gates in code, not only in RLS. 14,283 green.
 
@@ -1345,6 +1345,6 @@ LAST-UPDATE: 2026-09-19, after the main merge and the first green CI.
 
 ## PR #548 (claude/bubaly-repo-connect-etzqg7) — main merged, 2026-09-26
 
-CURRENT: origin/main 7e54596d merged into the branch (98 conflicting files, 163 hunks). The branch's 21 migrations renumbered 0318-0338 → 0361-0381; 0364, 0368, 0376 and 0377 dropped as duplicates of main's 0298, 0306/0322/0324, 0318 and 0319 (found by running main's probes on the merged chain, not by name); 0367 narrowed to safety_check_ins. Next free: 0382.
+CURRENT: origin/main 7e54596d merged into the branch (98 conflicting files, 163 hunks). The branch's 21 migrations renumbered 0318-0338 → 0426-0442; 0364, 0368, 0376 and 0377 dropped as duplicates of main's 0298, 0306/0322/0324, 0318 and 0319 (found by running main's probes on the merged chain, not by name); 0431 narrowed to safety_check_ins. Next free: 0443.
 VERIFIED: replay 374/374 · probes 91/91 twice · tsc clean · lint 0 errors (18/18) · vitest 18,684/18,687 (3 = container Node 22) · build exit 0.
-RECORD: finalaudit.md Q68. E2E runs in CI on the pushed merge. No production migration applied by an agent; 0361-0381 reach production only when #548 merges.
+RECORD: finalaudit.md Q68. E2E runs in CI on the pushed merge. No production migration applied by an agent; 0426-0442 reach production only when #548 merges.

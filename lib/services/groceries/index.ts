@@ -126,12 +126,12 @@ export { normalizeName };
  * used to read "the oldest open list" and insert one when there was none, with
  * nothing serialising the two, so two first captures at once gave the family
  * two "Groceries" lists — and the shopping module opens the oldest, so half of
- * what was captured sat on a list nobody looks at. 0382's
+ * what was captured sat on a list nobody looks at. 0443's
  * `ensure_default_grocery_list` holds a per-family advisory lock across the
  * read and the insert; docs/audit/a-family-gets-one-default-list-check.sql
  * races two sessions against it and against a lock-less copy.
  *
- * A database without 0382 answers PGRST202, and the read-then-insert that ran
+ * A database without 0443 answers PGRST202, and the read-then-insert that ran
  * before is the fallback: a deploy can precede its migration. Any other error
  * is returned, never mistaken for "no list".
  *
@@ -553,8 +553,8 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
   //
-  // Which is why the allergies come through `family_allergies()` (0375) and not
-  // a select. `scope.db` is the CALLER's client, and since 0375 the table's own
+  // Which is why the allergies come through `family_allergies()` (0438) and not
+  // a select. `scope.db` is the CALLER's client, and since 0438 the table's own
   // SELECT policy is manager-or-self — a child selecting it would get
   // `{ data: [], error: null }`, the guard below would pass, and the list would
   // get its peanut butter with nothing having gone wrong anywhere. The RPC

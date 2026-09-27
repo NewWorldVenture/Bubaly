@@ -1,4 +1,4 @@
--- Bubaly :: 0369 - a Guardian number belongs to one family
+-- Bubaly :: 0432 - a Guardian number belongs to one family
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0310. main landed seven migrations at once — 0304 economy
 -- invest decision guard, 0305 chore award amounts, 0306 money instructions,
@@ -6,7 +6,7 @@
 -- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
 -- collision event between the two sessions and by far the largest; every merge
 -- since 0300 has brought one. Only the numbers changed: this branch's seven
--- moved together to 0363-0369, keeping their order relative to each other.
+-- moved together to 0428-0432, keeping their order relative to each other.
 --
 -- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
 -- they AND with everything here and nothing in this block can loosen them by
@@ -74,7 +74,7 @@ begin
 
   if dupes > 0 then
     raise warning
-      '0369: skipped uq_guardian_profiles_phone — % Guardian number(s) are held by more than one profile. '
+      '0432: skipped uq_guardian_profiles_phone — % Guardian number(s) are held by more than one profile. '
       'Every inbound call, SMS and WhatsApp to each of them is being dropped and marked handled RIGHT NOW. '
       'Decide which household keeps each number, clear the others, and then run: '
       'create unique index concurrently uq_guardian_profiles_phone on '
@@ -84,6 +84,6 @@ begin
     create unique index if not exists uq_guardian_profiles_phone
       on public.guardian_member_profiles (guardian_phone)
       where guardian_phone is not null;
-    raise notice '0369 OK: a Guardian number now belongs to one family';
+    raise notice '0432 OK: a Guardian number now belongs to one family';
   end if;
 end $$;

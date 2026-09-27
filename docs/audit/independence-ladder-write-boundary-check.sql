@@ -1,7 +1,7 @@
--- Behavioural proof for 0381, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0442, run as real `authenticated` sessions under RLS.
 --
 -- The Independence Ladder is a parent's record of what a child is trusted to
--- do. Before 0381 every member could write it — the child it is about
+-- do. Before 0442 every member could write it — the child it is about
 -- included — so a child could mark their own milestones achieved, skip the
 -- ones they would rather not do, start milestones on a sibling's track, or
 -- delete one. A child must still SEE their ladder: that is the point of it.

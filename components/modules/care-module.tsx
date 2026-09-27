@@ -145,7 +145,7 @@ export function CareModule() {
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
     // reports success over a record that is still there.
-    // 0366 treats care_log as Rule B — a record of medical fact about someone,
+    // 0430 treats care_log as Rule B — a record of medical fact about someone,
     // which its subject may not erase.
     const { data, error: err } = await sb.from('care_log').delete()
       .eq('id', e.id).eq('family_id', familyId).select('id').maybeSingle();

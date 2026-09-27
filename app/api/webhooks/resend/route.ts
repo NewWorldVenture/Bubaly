@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (field && campaignId) {
-      // Once per EVENT (0380): the database marks this receipt and increments the
+      // Once per EVENT (0441): the database marks this receipt and increments the
       // counter in one transaction, and only for the worker holding the claim. A
       // retry of an event that was counted — finalisation failed, the claim was
       // released, the provider sent it again — finds the marker and counts
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
       } else if (!isMissingFunctionError(counterRpcError)) {
         throw new Error('Counter persistence failed');
       } else {
-      // A database without 0380 keeps the compare-and-set loop — correct under
+      // A database without 0441 keeps the compare-and-set loop — correct under
       // concurrency, though a failed finalisation can still count an event twice.
       //
       // Read-modify-write loses an event whenever two land for the same campaign

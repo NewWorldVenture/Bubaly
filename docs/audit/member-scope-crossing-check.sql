@@ -458,7 +458,7 @@ begin
   for t, expected in
     -- The READ policy each table's zeroes are attributed to. These were 0088's
     -- `symptom_logs_all` and 00730's `Members manage behavior_logs`, both FOR
-    -- ALL; the audit branch's 0366 and 0373 split each into per-verb policies
+    -- ALL; the audit branch's 0430 and 0436 split each into per-verb policies
     -- so writes could be narrowed, and the read half kept exactly this USING
     -- under its own name. The attribution is the same predicate, re-derived.
     select * from (values ('symptom_logs', 'symptom_logs_read'),

@@ -112,7 +112,7 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
   // The family's default grocery list, found or created as ONE operation
-  // (0382, DATA-007). This read used to drop its error — `const { data: list }`
+  // (0443, DATA-007). This read used to drop its error — `const { data: list }`
   // — so a failed lookup looked like "no list" and created a second
   // "Groceries" beside the one that failed to load.
   const list = await ensureDefaultGroceryListId(supabase, familyId, ctx.user.id, 'Groceries');

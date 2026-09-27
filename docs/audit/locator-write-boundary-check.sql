@@ -1,4 +1,4 @@
--- Behavioural proof for 0335 (main) and 0367 together, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0335 and 0379 (this branch's locator migration, 0431, was dropped at the merge as 0379's duplicate once 0335 had taken its other two tables), run as real `authenticated` sessions under RLS.
 --
 -- `app/(app)/dashboard/locator/actions.ts:30` says "Strictly self-only — a
 -- member can only post their own location", and the server action keeps that

@@ -116,7 +116,7 @@ export function defaultReminderIso(dayKey: string, tz: string): string {
 }
 
 /**
- * Get-or-create the family's active shopping list, as ONE operation (0382,
+ * Get-or-create the family's active shopping list, as ONE operation (0443,
  * DATA-007): the scan runs beside a family who may be capturing their first
  * item at the same moment, and a read-then-insert of its own gave them two.
  */

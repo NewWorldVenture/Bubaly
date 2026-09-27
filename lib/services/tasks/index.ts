@@ -41,7 +41,7 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Get-or-create a family's to-do list — the oldest open one, or the oldest
  * open one with `name` — as ONE operation (DATA-007). The same race and the
- * same fix as `ensureDefaultGroceryListId` in lib/services/groceries: 0382's
+ * same fix as `ensureDefaultGroceryListId` in lib/services/groceries: 0443's
  * `ensure_default_todo_list` serialises the read and the insert per family
  * (and per name, when one is asked for), and a database without it falls back
  * to the read-then-insert that ran before.

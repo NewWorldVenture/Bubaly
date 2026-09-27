@@ -53,7 +53,7 @@ function makeDb(respond: (call: Call) => Reply) {
     return b;
   };
   // Allergies reach the grocery and meal services through `family_allergies()`
-  // (0375) rather than a select, so the fake answers RPCs too. Logged as
+  // (0438) rather than a select, so the fake answers RPCs too. Logged as
   // `rpc:<name>` with its arguments in `filters`.
   const rpc = (name: string, args: Record<string, unknown> = {}) => {
     const call: Call = { table: `rpc:${name}`, kind: 'select', filters: { ...args } };

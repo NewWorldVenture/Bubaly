@@ -1,4 +1,4 @@
--- Behavioural proof for 0370, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0433, run as real `authenticated` sessions under RLS.
 --
 -- `marketplace_orders_update` and `marketplace_offers_update` each guarded the
 -- row you were allowed to TOUCH — only the two parties, only the offerer or the
@@ -166,7 +166,7 @@ begin
     raise exception 'a member who is neither buyer nor seller wrote the order (%)', n;
   end if;
 
-  -- 6. …and cannot write themselves INTO it either. Before 0370 the WITH CHECK
+  -- 6. …and cannot write themselves INTO it either. Before 0433 the WITH CHECK
   --    was `is_family_member(family_id)`, so the row the USING refused could
   --    still be rewritten by anyone the USING happened to admit.
   select buyer_member into v_text from public.marketplace_orders where id = ord;
@@ -224,12 +224,12 @@ begin
     raise exception 'the trusted server cannot correct an order (%)', v_cents;
   end if;
 
-  raise notice '0370 marketplace deal terms: all assertions held';
+  raise notice '0433 marketplace deal terms: all assertions held';
 end $$;
 
 -- The class, not the two names: no permissive UPDATE policy in `public` may
 -- guard the old row more tightly than the new one, bar the one transition guard
--- 0370 names and explains.
+-- 0433 names and explains.
 do $$
 declare
   stragglers text;
@@ -244,12 +244,19 @@ begin
     and p.polpermissive
     and p.polqual is not null
     and p.polwithcheck is not null
-    and p.polname <> 'approval_requests_cancel_own'
+    -- The transition guards 0433 names and explains: approval_requests_cancel_own,
+    -- and since the merge of main three of its policies — reward_redemptions_update
+    -- (a request may become cancelled by its own member), and
+    -- sync_external_mappings_owner_update and marketplace_questions_update, whose
+    -- WITH CHECK is the USING plus a conjunct written between its terms, which
+    -- textual containment cannot see.
+    and p.polname not in ('approval_requests_cancel_own', 'reward_redemptions_update',
+                          'sync_external_mappings_owner_update', 'marketplace_questions_update')
     and position(pg_get_expr(p.polqual, p.polrelid)
                  in pg_get_expr(p.polwithcheck, p.polrelid)) = 0;
 
   if stragglers is not null then
     raise exception 'an UPDATE policy guards the old row more tightly than the new one: %', stragglers;
   end if;
-  raise notice '0370 asymmetric-WITH-CHECK sweep: clean';
+  raise notice '0433 asymmetric-WITH-CHECK sweep: clean';
 end $$;

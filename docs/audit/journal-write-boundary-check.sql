@@ -1,4 +1,4 @@
--- Behavioural proof for 0374, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0364 (this branch's 0437 was dropped at the merge as its duplicate), run as real `authenticated` sessions under RLS.
 --
 -- `journal_entries` had ONE policy — `FOR ALL using/with check
 -- (is_family_member(family_id))` — so every member of a household could read,
@@ -67,12 +67,16 @@ begin
     raise exception 'a child can no longer edit their OWN journal entry (%)', n;
   end if;
 
-  -- Reads are family-wide by design, and that is the filed owner decision
-  -- rather than an oversight. Asserted so the migration cannot quietly narrow
-  -- it without this probe saying so.
+  -- Reads were family-wide when this probe was written, and it said so here
+  -- while filing "who may read a child's journal" as a household decision.
+  -- main's 0364 made that decision — a private journal is private: an entry is
+  -- read by its own member, or by a manager only when it is not marked private
+  -- — so the child sees their own entry and NOT the parent's private one. This
+  -- branch's journal migration was dropped as 0364's duplicate; this leg
+  -- asserts main's rule.
   select count(*) into n from public.journal_entries where family_id = fam;
-  if n <> 2 then
-    raise exception 'journal reads are no longer family-wide (% of 2 visible)', n;
+  if n <> 1 then
+    raise exception 'a child sees % of the family''s 2 entries; main''s 0364 shows them exactly their own', n;
   end if;
 
   -- ══ THE BOUNDARY ═══════════════════════════════════════════════════════
@@ -103,7 +107,7 @@ begin
 
   -- 4. Handing their own entry to the parent — the WITH CHECK half. USING
   --    admits the row (it is theirs); only a symmetric WITH CHECK refuses the
-  --    row it would become. This is 0370's lesson applied here.
+  --    row it would become. This is 0433's lesson applied here.
   begin
     update public.journal_entries set member_id = parent_mid where id = kid_entry;
     raise exception 'a child moved their own entry into a parent''s journal';
@@ -137,5 +141,5 @@ begin
   delete from public.family_members   where user_id in (parent_uid, kid_uid);
   delete from public.families         where id = fam;
 
-  raise notice '0374 journal write boundary: all assertions held';
+  raise notice 'journal write boundary (main''s 0364): all assertions held';
 end $$;

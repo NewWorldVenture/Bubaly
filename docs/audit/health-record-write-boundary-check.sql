@@ -1,11 +1,11 @@
--- Behavioural proof for 0366, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0430, run as real `authenticated` sessions under RLS.
 --
 -- Nine health tables were `for all using (is_family_member(family_id))`: any
 -- member could rewrite or delete any other member's health record. All nine are
 -- written directly from the browser and NONE of the six modules that write them
 -- contains a role check, so RLS was the only boundary there was.
 --
--- 0366 applies TWO rules, and this probe asserts the difference between them
+-- 0430 applies TWO rules, and this probe asserts the difference between them
 -- rather than treating the nine as one list:
 --
 --   RULE A (a log you keep about yourself: symptom_logs, health_metrics,
@@ -17,7 +17,7 @@
 --             the record of their own vaccination is the defect, not the
 --             feature — which is exactly where A and B part company.
 --
--- INSERT is unchanged on all nine and asserted so: 0371 filed "is logging a
+-- INSERT is unchanged on all nine and asserted so: 0434 filed "is logging a
 -- vaccination any member's to do?" as an owner decision and it is still filed.
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
@@ -78,7 +78,7 @@ begin
   perform set_config('request.jwt.claim.sub', kidB_uid::text, true);
   set local role authenticated;
 
-  -- 1. RULE A: cannot rewrite a sibling's symptom log. Before 0366: UPDATE 1.
+  -- 1. RULE A: cannot rewrite a sibling's symptom log. Before 0430: UPDATE 1.
   update public.symptom_logs set status = 'resolved' where id = sym;
   get diagnostics n = row_count;
   if n <> 0 then

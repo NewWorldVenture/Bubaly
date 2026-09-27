@@ -175,7 +175,7 @@ begin
     insert into public.family_currencies (family_id, name) values (fam, 'Stars') returning id into currency;
   end if;
   -- A catalogue reward for the request control below to name. It has to exist
-  -- because a redemption is no longer allowed to invent its own price: 0363's
+  -- because a redemption is no longer allowed to invent its own price: 0428's
   -- `economy_redemption_request_guard` requires a member's request to name a
   -- real, active reward of this family and to carry that reward's own cost and
   -- currency. This probe's control previously inserted a free-form

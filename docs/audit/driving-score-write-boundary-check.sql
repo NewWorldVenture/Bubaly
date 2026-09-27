@@ -1,4 +1,4 @@
--- Behavioural proof for 0362, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for main's 0365 (this branch's 0427 was dropped at the merge as its duplicate), run as real `authenticated` sessions under RLS.
 --
 -- `driving_trips` and `driver_licenses` are the two tables of one feature and
 -- did not carry the same rule. The licence had
@@ -68,13 +68,17 @@ begin
     raise exception 'a teen sees % of 2 trips; the driving view reads family-wide', n;
   end if;
 
-  -- 3. And can withdraw the entry THEY made. The view offers Delete to every
-  --    member with no role gate; a rule that failed here would leave a UI whose
-  --    primary control does not work.
+  -- 3. And CANNOT withdraw the entry they made. This probe once asserted the
+  --    opposite (the view offered Delete to every member), and main's 0365
+  --    decided the other way: a driving record is not the driver's to erase —
+  --    a teen's 90 mph trip stays on the record until a parent removes it. That
+  --    is why this branch's driving migration was dropped as 0365's duplicate:
+  --    its UPDATE half was 0365's, and its DELETE half would have widened it.
+  --    The view reads back and reports a refused delete rather than "Deleted".
   delete from public.driving_trips where id = teen_trip;
   get diagnostics n = row_count;
-  if n <> 1 then
-    raise exception 'a teen can no longer delete the trip they logged themselves (%)', n;
+  if n <> 0 then
+    raise exception 'a teen erased the trip they logged themselves (%) — main''s 0365 makes a trip a manager''s to erase', n;
   end if;
 
   -- ══ THE BOUNDARY ═══════════════════════════════════════════════════════
@@ -131,5 +135,5 @@ begin
   delete from public.family_members where user_id in (parent_uid, teen_uid);
   delete from public.families       where id = fam;
 
-  raise notice '0362 driving score write boundary: all assertions held';
+  raise notice 'driving score write boundary (main''s 0365): all assertions held';
 end $$;

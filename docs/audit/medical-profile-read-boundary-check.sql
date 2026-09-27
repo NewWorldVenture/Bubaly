@@ -1,4 +1,4 @@
--- Behavioural proof for 0375, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0438, run as real `authenticated` sessions under RLS.
 --
 -- `medical_profiles` is one row per member: blood type, allergies, conditions,
 -- current medications, physician, pharmacy, emergency contacts. Its SELECT
@@ -218,12 +218,12 @@ begin
   delete from public.family_members   where user_id in (parent_uid, kid_uid, sib_uid, carer_uid, out_uid);
   delete from public.families         where id in (fam, other_fam);
 
-  raise notice '0375 medical profile read boundary: all assertions held';
+  raise notice '0438 medical profile read boundary: all assertions held';
 end $$;
 
 -- 10. Reachability, checked against the fully replayed schema rather than at
 --     the migration's own moment. Supabase's default privileges hand EXECUTE on
---     every new function to anon and authenticated; 0375 revokes anon's, and a
+--     every new function to anon and authenticated; 0438 revokes anon's, and a
 --     later migration re-creating the function would hand it straight back —
 --     which is the exact way the privileged-RPC grants came undone before.
 do $$
@@ -234,5 +234,5 @@ begin
   if not has_function_privilege('authenticated', 'public.family_allergies(uuid)', 'EXECUTE') then
     raise exception 'authenticated cannot execute family_allergies — the meal planner is allergy-blind';
   end if;
-  raise notice '0375 family_allergies grants: authenticated only, at the end of the chain';
+  raise notice '0438 family_allergies grants: authenticated only, at the end of the chain';
 end $$;
