@@ -46362,6 +46362,23 @@ Settings and the money timeline also carried unused English copies next to keys 
 
 ---
 
+### `[CLAUDE-1][LOW][FIND-TIME/DECLUTTER/DINING]` C1-S9-128 — find-a-time durations and windows, declutter zone health and dining stats were English in every locale
+
+**File/path:** `components/modules/find-time-modal.tsx`, `components/modules/declutter-module.tsx`, `components/modules/dining-module.tsx`; seven catalogues.
+
+**Problem.** These labels were English in every locale:
+- the calendar's "Find a time" dialog: durations ("1 hour") and search windows ("Next 2 weeks")
+- the declutter zone health chip ("Due for a reset")
+- the four dining stat tiles
+
+**Fix.** Each label now comes from a catalogue key.
+
+**Status:** FIXED.
+
+**OPEN:** the zone kinds in `lib/declutter/missions.ts` (`ZONE_KINDS[].label`) are still English lib data in the zone picker.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

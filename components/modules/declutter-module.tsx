@@ -33,7 +33,7 @@ const HEALTH_STYLE = {
   overdue: 'border-rose-500/30 bg-rose-500/10 text-rose-200',
   never: 'border-border bg-surface/60 text-muted',
 } as const;
-const HEALTH_LABEL = { fresh: 'Fresh', due: 'Due for a reset', overdue: 'Overdue', never: 'Never reset' } as const;
+const HEALTH_KEY = { fresh: 'declutterModule.health.fresh', due: 'declutterModule.health.due', overdue: 'declutterModule.health.overdue', never: 'declutterModule.health.never' } as const;
 
 export function DeclutterModule() {
   const locale = useLocale();
@@ -239,7 +239,7 @@ export function DeclutterModule() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium">{z.name}</p>
                           {z.room && <span className="text-xs text-muted">{z.room}</span>}
-                          <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{HEALTH_LABEL[h.health]}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
+                          <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{tr(HEALTH_KEY[h.health])}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <div className="flex gap-0.5" aria-label={`Clutter ${z.clutter_score} of 5`}>

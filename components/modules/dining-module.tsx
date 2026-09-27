@@ -120,10 +120,10 @@ export function DiningModule({ restaurants, visits, stats }: { restaurants: Dini
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Favorites', value: stats.favorites ?? UNKNOWN, icon: '❤️' },
-          { label: 'Visits · 30d', value: stats.visits30d ?? UNKNOWN, icon: '🍽️' },
-          { label: 'Spend · 30d', value: stats.spend30dCents == null ? UNKNOWN : money(stats.spend30dCents), icon: '🧾' },
-          { label: 'Avg rating', value: stats.avgRating ?? UNKNOWN, icon: '⭐' },
+          { label: t('diningModule.stat.favorites'), value: stats.favorites ?? UNKNOWN, icon: '❤️' },
+          { label: t('diningModule.stat.visits30d'), value: stats.visits30d ?? UNKNOWN, icon: '🍽️' },
+          { label: t('diningModule.stat.spend30d'), value: stats.spend30dCents == null ? UNKNOWN : money(stats.spend30dCents), icon: '🧾' },
+          { label: t('diningModule.stat.avgRating'), value: stats.avgRating ?? UNKNOWN, icon: '⭐' },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
