@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
-import { requireMarketingAdmin, logMarketingAudit } from '@/lib/marketing/admin';
+import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthorizationError } from '@/lib/marketing/admin';
 import { resolveProvider } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
@@ -85,8 +85,15 @@ Use ONLY the real data provided as grounding. Never fabricate metrics, rankings,
 
     return NextResponse.json({ text: completion.text });
   } catch (err) {
+    // A refusal is not an outage. Logging it at error level and blaming the
+    // provider is how a permissions problem became indistinguishable from a
+    // missing API key in alerting (F-E09).
+    if (isMarketingAuthorizationError(err)) {
+      const refused = 'Forbidden';
+      return NextResponse.json({ error: refused }, { status: err.reason === 'unauthenticated' ? 401 : 403 });
+    }
     console.error('Marketing AI error:', err);
-    const msg = err instanceof Error && err.message.includes('Forbidden') ? 'Forbidden' : 'Could not generate. Check that the OpenAI API key is set.';
+    const msg = 'Could not generate. Check that the OpenAI API key is set.';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

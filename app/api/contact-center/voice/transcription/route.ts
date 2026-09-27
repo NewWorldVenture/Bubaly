@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
-import { validateTwilioSignature } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
@@ -24,11 +24,8 @@ export async function POST(req: NextRequest) {
   const params = Object.fromEntries(form.value.entries()) as Record<string, string>;
 
   const familyId = new URL(req.url).searchParams.get('familyId') ?? '';
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    const url = `${BASE_URL}/api/contact-center/voice/transcription?familyId=${familyId}`;
-    if (!validateTwilioSignature(sig, url, params)) return new NextResponse('Unauthorized', { status: 401 });
-  }
+  const verdict = verifyTwilioRequest(req, params, 'contact-center/voice/transcription');
+  if (!verdict.ok) return twilioRefusal(verdict);
   if (!familyId) return new NextResponse(null, { status: 204 });
 
   const text = (params.TranscriptionText ?? '').slice(0, 4096);

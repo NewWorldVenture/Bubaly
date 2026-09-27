@@ -8,6 +8,7 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { validateTwilioSignature } from '@/lib/guardian/twilio';
+import { twilioSignedUrlCandidates } from '@/lib/server/twilio-ingress';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
@@ -46,7 +47,15 @@ export async function POST(req: NextRequest) {
     if (configuredOrigin.origin !== BASE_URL || !['http:', 'https:'].includes(configuredOrigin.protocol)) throw new Error('Invalid callback origin');
   } catch { return new NextResponse('Contact Center temporarily unavailable', { status: 503 }); }
   const sig = req.headers.get('x-twilio-signature') ?? '';
-  if (!validateTwilioSignature(sig, `${BASE_URL}/api/contact-center/sms`, params)) {
+  // The configured URL first, then the one the platform says it received.
+  // NEXT_PUBLIC_APP_URL has to match what is typed into the Twilio console byte
+  // for byte; a `www.` or a scheme apart is a silent rejection of every genuine
+  // callback, which is F-E07's second half. Each candidate is still a full
+  // HMAC-SHA1 under the shared auth token, so offering a second one grants
+  // nothing to anyone who does not already hold it. The configured URL stays
+  // first, so every request that verifies today verifies by the same path.
+  const signedAs = [`${BASE_URL}/api/contact-center/sms`, ...twilioSignedUrlCandidates(req)];
+  if (!signedAs.some((url) => validateTwilioSignature(sig, url, params))) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 

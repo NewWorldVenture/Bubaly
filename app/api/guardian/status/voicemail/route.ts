@@ -8,7 +8,8 @@ import type { Database } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables, type GuardianTables } from '@/lib/supabase/guardian-tables';
-import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
+import { wrapTwiml, twimlSay, twimlHangup } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
 import { isValidGuardianEventId } from '@/lib/guardian/callbacks';
 import { claimGuardianVoicemail, finishGuardianVoicemail, guardianVoicemailReceiptId, releaseGuardianVoicemail, requireGuardianVoicemailLease } from '@/lib/guardian/voicemail-intake';
@@ -18,7 +19,6 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 // The legacy Guardian adapter erases query results to an overloaded from()
 // return type. Keep this route's actual table schema through bounded queries.
@@ -38,14 +38,8 @@ export async function POST(req: NextRequest) {
   if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
   const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
-  // Validate Twilio signature (skip in dev) — same guard as the inbound routes.
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    const url = `${BASE_URL}${req.nextUrl.pathname}${req.nextUrl.search}`;
-    if (!validateTwilioSignature(sig, url, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-  }
+  const verdict = verifyTwilioRequest(req, params, 'guardian/status/voicemail');
+  if (!verdict.ok) return twilioRefusal(verdict);
 
   const recordingUrl = params.RecordingUrl ?? null;
   const recordingDuration = params.RecordingDuration ? parseInt(params.RecordingDuration, 10) : null;

@@ -12,6 +12,7 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
 import { isManager } from '@/lib/constants/roles';
+import { bearerMatches } from '@/lib/server/secret-compare';
 
 export const runtime = 'nodejs';
 
@@ -22,9 +23,8 @@ export async function POST(req: NextRequest) {
   // Internal only — verify with shared secret. Fail CLOSED: this endpoint can
   // blast SMS + outbound calls to every parent, so an unset secret must mean
   // "disabled", never "open". (CRON_SECRET is the deploy-wide fallback.)
-  const authHeader = req.headers.get('authorization');
   const secret = process.env.GUARDIAN_INTERNAL_SECRET || process.env.CRON_SECRET;
-  if (!secret || authHeader !== `Bearer ${secret}`) {
+  if (!bearerMatches(req.headers.get('authorization'), secret)) {
     return NextResponse.json({ error: tr('escalate.unauthorized') }, { status: 401 });
   }
 

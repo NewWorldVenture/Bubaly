@@ -92,7 +92,7 @@ describe('the assistant bridge is reachable by the devices that speak to it', ()
  */
 const SELF_AUTHENTICATING = [
   'hasCronAuthorization', 'hasInternalSecret',
-  'validateTwilioSignature', 'x-twilio-signature',
+  'validateTwilioSignature', 'verifyTwilioRequest', 'x-twilio-signature',
   'readPresentedToken', 'looksLikeAssistantToken', 'verifyAlexaRequest',
   'CONTACT_CENTER_INBOUND_SECRET',
   'stripe-signature', 'svix-signature',
@@ -203,7 +203,7 @@ describe('middleware public API boundary', () => {
       expect(
         readFileSync(`app/api/contact-center/${route}/route.ts`, 'utf8'),
         `${route} must authenticate itself`,
-      ).toMatch(/validateTwilioSignature|CONTACT_CENTER_INBOUND_SECRET/);
+      ).toMatch(/verifyTwilioRequest|validateTwilioSignature|CONTACT_CENTER_INBOUND_SECRET/);
     }
   });
 
