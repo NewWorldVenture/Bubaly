@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 
@@ -26,7 +27,7 @@ describe('dashboard analytics read boundary', () => {
     expect(journeys).toMatch(/const \{ rows: data, error \} = await readAll\(/);
     expect(journeys).toContain('MiniError');
     // The error branch must precede the empty-rows branch.
-    expect(journeys.indexOf('error ?')).toBeLessThan(journeys.indexOf('rows.length === 0'));
+    expect(at(journeys, 'error ?')).toBeLessThan(at(journeys, 'rows.length === 0'));
   });
 
   it('onboarding-funnel surfaces failed funnel AND activation reads', () => {
@@ -35,7 +36,7 @@ describe('dashboard analytics read boundary', () => {
     expect(funnel).toContain('funnelError ?');
     expect(funnel).toContain('actError ?');
     // Each error branch precedes its corresponding empty branch.
-    expect(funnel.indexOf('funnelError ?')).toBeLessThan(funnel.indexOf('funnel.startedSessions === 0'));
-    expect(funnel.indexOf('actError ?')).toBeLessThan(funnel.indexOf('activation.cohorts === 0'));
+    expect(at(funnel, 'funnelError ?')).toBeLessThan(at(funnel, 'funnel.startedSessions === 0'));
+    expect(at(funnel, 'actError ?')).toBeLessThan(at(funnel, 'activation.cohorts === 0'));
   });
 });

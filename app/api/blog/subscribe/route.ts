@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -157,12 +158,21 @@ export async function POST(req: NextRequest) {
     const patch = wasActive
       ? { status: 'active' }
       : { status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) };
-    const { error } = await supabase
+    const { data: patched, error } = await supabase
       .from('blog_subscribers')
       .update(patch)
-      .eq('id', existing.id);
+      .eq('id', existing.id)
+      .select('id');
     if (error) {
       console.error('[blog-subscribe] re-activation write failed', { subscriberId: existing.id, error });
+      return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+    }
+    // Service role, so zero rows means the row was deleted between the lookup
+    // and this write — and a notice sent now would carry a token for a row
+    // that no longer exists. Refused like any failed write, so the retry takes
+    // the insert path. Audit C1-S9-62.
+    if (wroteNoRows(patched)) {
+      console.error('[blog-subscribe] re-activation matched no row; it was removed mid-request', { subscriberId: existing.id });
       return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
     }
   } else {

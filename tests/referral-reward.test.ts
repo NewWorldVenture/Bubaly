@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // M39 — a converted referral credits BOTH families' Stripe customer balances
 // and flips to 'rewarded' only once Stripe has confirmed both. The Stripe
 // client is a recorder; the rows are the in-memory Supabase, so the test reads
@@ -192,14 +193,14 @@ describe('reward wiring (source)', () => {
   const server = readFileSync('lib/referrals/server.ts', 'utf8');
 
   it('the Stripe webhook fulfils the reward right after marking the conversion, without failing the event', () => {
-    expect(route.indexOf('await markReferralConverted(supabase, familyId)')).toBeLessThan(route.indexOf('await rewardConvertedReferral(supabase, familyId'));
+    expect(at(route, 'await markReferralConverted(supabase, familyId)')).toBeLessThan(at(route, 'await rewardConvertedReferral(supabase, familyId'));
     expect(route).toContain("catch (e) { console.error('[referral] reward fulfilment failed', e); }");
     expect(route).toContain('referredCustomerRef');
   });
 
   it("'rewarded' is written only after the Stripe credit calls, guarded on the converted status", () => {
     const body = server.slice(server.indexOf('export async function rewardReferral'));
-    expect(body.indexOf('createBalanceTransaction(')).toBeLessThan(body.indexOf("status: 'rewarded'"));
+    expect(at(body, 'createBalanceTransaction(')).toBeLessThan(at(body, "status: 'rewarded'"));
     const flip = body.slice(body.indexOf("status: 'rewarded'"));
     expect(flip).toContain(".eq('status', 'converted')");
     expect(body).toContain('idempotencyKey: rewardIdempotencyKey(referralId, side)');

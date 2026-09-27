@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -50,7 +51,7 @@ describe('the sitemap cannot be served from a stale build cache', () => {
       expect(source, `${fn} catches`).toMatch(/catch \(error\)/);
       expect(source, `${fn} rethrows framework errors first`).toMatch(/unstable_rethrow\(error\)/);
       // The rethrow must come BEFORE the fallback, or it never runs.
-      expect(source.indexOf('unstable_rethrow(error)')).toBeLessThan(source.indexOf('return [];'));
+      expect(at(source, 'unstable_rethrow(error)')).toBeLessThan(at(source, 'return [];'));
     }
   });
 

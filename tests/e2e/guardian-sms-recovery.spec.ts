@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../lib/database.types';
-import { withGuardianTables } from '../../lib/supabase/guardian-tables';
 import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 const INGRESS_TOKEN = 'ci-only-guardian-signed-ingress-fixture';
@@ -52,7 +51,7 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
     requireSyntheticConfiguration();
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
     if (!serviceKey || !anonKey) throw new Error('Guardian recovery E2E needs disposable backend configuration.');
-    const admin = client(origin, serviceKey), guardian = withGuardianTables(admin);
+    const admin = client(origin, serviceKey), guardian = admin;
     const sid = `SM${randomUUID().replaceAll('-', '')}`, untrustedSid = `SM${randomUUID().replaceAll('-', '')}`;
     let account: OwnedAccount | undefined;
     let manager: OwnedAccount | undefined;
@@ -101,7 +100,7 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       const login = await child.auth.signInWithPassword({ email: account.email, password: account.password });
       expect(!login.error && login.data.user?.id === account.userId, 'Sign in only the owned synthetic child account').toBe(true);
       const untrustedId = randomUUID();
-      const untrusted = await withGuardianTables(child).from('guardian_communications').insert({
+      const untrusted = await child.from('guardian_communications').insert({
         id: untrustedId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
         from_number: params.From, to_number: params.To, body: 'Unverified member-written message',
         twilio_sms_sid: untrustedSid, status: 'screening',

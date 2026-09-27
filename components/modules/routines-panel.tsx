@@ -13,7 +13,7 @@ import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { applyRoutineToCalendarAction, undoCalendarEventsAction } from '@/app/(app)/dashboard/calendar/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/states';
@@ -153,7 +153,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
       if (!result.ok) { toastError(result.error); return; }
 
       const ids = result.eventIds;
-      success(`Added ${ids.length} events for this week`, {
+      success(tr('modules.addedEventsThisWeek', { count: ids.length }), {
         label: 'Undo',
         onClick: () => {
           void undoCalendarEventsAction(ids).then((undone) => {
@@ -164,11 +164,11 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             delete applyIds.current[key];
             success(tr('routinesPanel.undone'));
             onApplied();
-          }, (err: unknown) => {
-            // A rejection used to leave the Undo looking done. It is not: the
-            // events are still on the calendar.
-            console.error('[routines] undo failed', err);
-            toastError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong'));
+          }).catch((error: unknown) => {
+            // A rejection used to leave "Undo" looking done, silently. It is not:
+            // the events are still on the calendar. Audit C1-S9-74.
+            console.error('[routines] undo failed', error);
+            toastError(tr('actions.couldNotUndoThoseEvents'));
           });
         },
       });
@@ -179,8 +179,10 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   async function deleteTemplate(t: Template) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('routines.deleteRoutineBody') }))) return;
     return run(`del:${t.id}`, async () => {
-      const { error } = await createClient().from('routine_templates').delete().eq('id', t.id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as deleted. Audit C1-S9-82.
+      const { data: removed, error } = await createClient().from('routine_templates').delete().eq('id', t.id).select('id');
       if (error) throw error;
+      if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(tr('routinesPanel.routineDeleted'));
       refreshAll();
     });
@@ -304,11 +306,18 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       const sb = createClient();
       let templateId = template?.id;
       if (templateId) {
-        const { error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId);
+        // The template update licenses replacing its steps, so it is confirmed
+        // first: under RLS a refused row is no error and zero rows. Audit C1-S9-82.
+        const { data: renamed, error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId).select('id');
         if (error) throw error;
+        if (wroteNoRows(renamed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
         // Replace items wholesale (simple + correct for a small list). If the
         // delete fails we must NOT insert or the template keeps the old steps
-        // alongside the new ones (duplicates).
+        // alongside the new ones (duplicates). Zero rows is a legitimate answer
+        // here (a template whose steps were never written, e.g. a half-saved
+        // one), and the items share the template's policy, which the confirmed
+        // update above has just passed — so this delete is left unconfirmed on
+        // purpose. Audit C1-S9-82.
         const { error: delErr } = await sb.from('routine_template_items').delete().eq('template_id', templateId);
         if (delErr) throw delErr;
       } else {

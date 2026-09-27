@@ -8,6 +8,7 @@ import {
   Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon, MonitorCog,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
@@ -28,6 +29,7 @@ import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { HintsTicker } from './hints-ticker';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
@@ -592,7 +594,18 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
   const part = dayPart(now, timezone);
   // Photo surfaces never come up empty: real family photos win, the curated
   // ambient set stands in until the family uploads some.
-  const ambientPhotos = data.photos.length ? data.photos : [...AMBIENT_FALLBACK_PHOTOS];
+  //
+  // `data.photos` are STORED references. Family photos are signed here with
+  // this display's session (SEC-001) and the signed URL is reused across the
+  // 120-second refresh, so the slideshow is not re-downloaded — or remounted,
+  // since it is keyed by URL — every two minutes. A photo that cannot be signed
+  // is left out rather than shown through its public URL; while the first
+  // signing is in flight the frame shows its gradient, not the stock set, so a
+  // family's photos do not flash in behind someone else's.
+  const media = useFamilyMediaUrls(data.photos);
+  const signedPhotos = data.photos.map((p) => media(p)).filter((u): u is string => typeof u === 'string');
+  const photosPending = data.photos.some((p) => media(p) === undefined);
+  const ambientPhotos = signedPhotos.length ? signedPhotos : photosPending ? [] : [...AMBIENT_FALLBACK_PHOTOS];
   const photoBg = settings.background === 'photos';
 
   // Echo-style bottom hints, recomputed as the clock ticks.
@@ -646,7 +659,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       const { error } = await supabase.from('display_layouts')
         .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
       if (!owner.active) return;
-      if (error) { toastError(error.message); return; }
+      if (error) { toastError(describeDbError(error)); return; }
       setPersisted({ tiles, settings });
       success(tr('displayGrid.displaySaved'));
       if (draftRevision.current === revision) setEditing(false);
@@ -681,7 +694,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       if (!owner.active) return;
       if (error) {
         console.error('[display] setup card dismissal write failed', error);
-        toastError(error.message);
+        toastError(describeDbError(error));
         return;
       }
       setSettings((current) => ({ ...current, setupDismissed: true }));

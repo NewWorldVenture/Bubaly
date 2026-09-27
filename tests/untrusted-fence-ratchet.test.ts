@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { fenceUntrustedBlock, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 
 // §44's fence is genuinely well built — nonce markers, a rule the model is told
 // to obey, thirteen context slices using it. What it lacked was a way to know
@@ -61,5 +62,44 @@ describe('the untrusted-content fence reaches every tool-calling prompt', () => 
   it('every one of them reaches lib/ai/safety/untrusted', () => {
     const bare = toolCallingModules().filter((path) => !reachesFence(path));
     expect(bare, `these hand a model write tools without reaching the fence: ${bare.join(', ')}`).toEqual([]);
+  });
+});
+
+describe('a fence budget never cuts a scalar in half (C1-S9-10)', () => {
+  // Both fences bounded with a plain `.slice(max)`. When the budget lands
+  // between the two halves of a surrogate pair, the prompt carries a LONE
+  // surrogate — the same defect `safeContactText` exists to prevent on the
+  // storage side, reached from the prompt side. Only the Contact Center caller
+  // pre-bounded scalar-safely; the other seven call sites did not, so the cut
+  // is fixed in the helper rather than at each of them.
+  const lone = (s: string) => [...s].some((c) => {
+    const p = c.codePointAt(0)!;
+    return p >= 0xd800 && p <= 0xdfff;
+  });
+
+  it('fenceUntrustedBlock drops a half-pair rather than emitting it', () => {
+    // 'a'.repeat(9) + '😀' is 11 UTF-16 units; a budget of 10 lands mid-emoji.
+    const fenced = fenceUntrustedBlock('t', 'a'.repeat(9) + '😀', 10);
+    expect(lone(fenced), 'a lone surrogate reached the prompt').toBe(false);
+    expect(fenced).toContain('a'.repeat(9));
+    expect(fenced).not.toContain('😀');
+  });
+
+  it('keeps a pair that fits whole', () => {
+    const fenced = fenceUntrustedBlock('t', 'a'.repeat(9) + '😀', 11);
+    expect(fenced).toContain('😀');
+    expect(lone(fenced)).toBe(false);
+  });
+
+  it('sanitizeUntrusted bounds the same way', () => {
+    // Long enough that the cut actually happens: sanitizeUntrusted returns
+    // early when the text already fits, so a same-length input would have
+    // exercised nothing and passed against the naive slice too.
+    const cut = sanitizeUntrusted('b'.repeat(9) + '😀' + 'tail', 11);
+    expect(lone(cut), 'a lone surrogate survived sanitisation').toBe(false);
+  });
+
+  it('is unchanged for text inside the budget', () => {
+    expect(fenceUntrustedBlock('t', 'plain text', 100)).toContain('plain text');
   });
 });

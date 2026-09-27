@@ -7,7 +7,7 @@
 import { cookies, headers } from 'next/headers';
 
 import { LOCALE_COOKIE, type Locale } from '@/lib/i18n/locales';
-import { getMessages, translate, type Messages } from '@/lib/i18n/messages';
+import { getMessages, pluralize, translate, type Messages } from '@/lib/i18n/messages';
 import { resolveLocale, type LocaleSource } from '@/lib/i18n/resolve';
 
 export type LocaleContext = {
@@ -78,4 +78,22 @@ export async function getTranslations() {
   const { messages } = await getLocaleContext();
   return (key: string, params?: Record<string, string | number>) =>
     translate(messages, key, params);
+}
+
+/**
+ * Server-component pluraliser:
+ *
+ *   const plural = await getPlurals();
+ *   <p>{plural('inventory.overdueLoans', summary.overdueLoans)}</p>
+ *
+ * The counterpart to `usePlural()` on the client. It asks the catalogue for
+ * `<key>.<category>` using the active locale's own CLDR plural rules, because
+ * `${n} item${n === 1 ? '' : 's'}` is English grammar compiled into the source
+ * and no translation can undo it — see `lib/i18n/translate.ts` for why, in the
+ * three distinct ways it breaks.
+ */
+export async function getPlurals() {
+  const { locale, messages } = await getLocaleContext();
+  return (key: string, count: number, params?: Record<string, string | number>) =>
+    pluralize(messages, locale.code, key, count, params);
 }

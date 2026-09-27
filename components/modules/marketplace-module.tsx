@@ -9,7 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -149,16 +149,21 @@ export function MarketplaceModule({
       location: form.location.trim() || null,
       photo_url: form.photo_url.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('marketplace_listings').update(fields).eq('id', form.id)
-      : await sb.from('marketplace_listings').insert({ ...fields, family_id: familyId, member_id: selfId, created_by: userId });
+    // A refused row is no error and zero rows: 0154 scopes these writes to the
+    // listing's own seller, and RLS FILTERS an UPDATE rather than refusing it. It
+    // used to say "Listing updated" and let go of the photo just uploaded for it,
+    // which no listing then referenced; zero rows now takes the failure path,
+    // cleanup included. The INSERT is read back for the same branch. Audit C1-S9-85.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('marketplace_listings').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
+      : await sb.from('marketplace_listings').insert({ ...fields, family_id: familyId, member_id: selfId, created_by: userId }).select('id');
     setSaving(false);
-    if (err) {
+    if (err || wroteNoRows(saved)) {
       await cleanupOwnedPhoto();
-      toastError(describeDbError(err));
+      toastError(err ? describeDbError(err) : t('errors.thatChangeWasNotSaved'));
       return;
     }
-    success(form.id ? 'Listing updated' : 'Posted to the family marketplace');
+    success(form.id ? t('marketplaceModule.listingUpdated') : t('marketplaceModule.postedToTheFamilyMarketplace'));
     setOwnedPhotoPath(null);
     setModalOpen(false);
   }
@@ -166,12 +171,24 @@ export function MarketplaceModule({
   async function remove(l: Listing) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: l.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
-    if (err) { toastError(describeDbError(err)); return; }
+    // The OBJECT goes first and its result is READ — the same ordering
+    // documents-module keeps. Deleting the row first makes a surviving file
+    // INVISIBLE: nothing references its URL any more, so nobody can see it,
+    // open it or try again, while the screen says the listing is gone. Here
+    // that survivor is worse than invisible — `marketplace-photos` is a PUBLIC
+    // bucket, so the photo stays reachable by URL to anyone who has it.
+    // Removing first cannot destroy someone else's picture: 0194 scopes storage
+    // deletes to the uploader's own folder, so another seller's object is
+    // filtered, and the seller-scoped row delete below is then refused too.
     if (l.photo_url) {
       const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
-      if (photoError) toastError(t('marketplaceModule.listingRemovedButItsUploaded'));
+      if (photoError) { toastError(t('marketplaceModule.theUploadedPhotoCouldNot')); return; }
     }
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: removed2, error: err } = await sb.from('marketplace_listings').delete()
+      .eq('id', l.id).eq('family_id', familyId).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('marketplaceModule.removed'));
   }
 

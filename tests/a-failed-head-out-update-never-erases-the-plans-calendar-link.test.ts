@@ -50,7 +50,9 @@ function fakeClient() {
     for (const method of ['select', 'eq', 'order', 'limit']) chain[method] = () => chain;
     chain.update = (values: Record<string, unknown>) => {
       writes.list.push({ table, op: 'update', values });
-      settle = async () => (table === 'calendar_events' ? db.calendarUpdate : { data: null, error: null });
+      // Updates are confirmed with `.select('id')` (merge with the audit branch,
+      // Audit C1-S9-89), so a landed update answers with the row it changed.
+      settle = async () => (table === 'calendar_events' ? db.calendarUpdate : { data: [{ id: 'plan-1' }], error: null });
       return chain;
     };
     chain.insert = (values: Record<string, unknown>) => {
@@ -102,7 +104,7 @@ const planWrites = () => writes.list.filter((w) => w.table === 'departure_plans'
 beforeEach(() => {
   writes.list.length = 0;
   db.planRead = { data: { ...STORED_PLAN }, error: null };
-  db.calendarUpdate = { data: null, error: null };
+  db.calendarUpdate = { data: [{ id: 'evt-1' }], error: null };
   db.calendarInsert = { data: { id: 'evt-new' }, error: null };
 });
 

@@ -25,7 +25,7 @@ import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/service
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { googleAdapter } from '@/lib/sync/providers/google-adapter';
-import { logSyncProviderError } from '@/lib/sync/audit';
+import { logSyncProviderError, recordSyncFailure } from '@/lib/sync/audit';
 
 type Admin = ReturnType<typeof createServiceClient>;
 type Account = { id: string; user_id: string | null; family_id: string; external_id: string | null };
@@ -108,9 +108,8 @@ export async function runGoogleSync(admin: Admin, account: Account): Promise<Run
       code: status ? String(status) : 'sync_failed', message_redacted: msg, http_status: status,
       is_fatal: status === 401 || status === 403,
     });
-    if (run) await admin.from('sync_job_runs').update({ status: 'failed', sync_status: 'error', error: msg, finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt }).eq('id', run.id);
-    if (job) await admin.from('sync_jobs').update({ status: 'failed', last_error: msg }).eq('id', job.id);
-    await admin.from('sync_connections').update({ health: 'error', sync_status: 'error', last_error: msg }).eq('account_id', account.id);
+    // Confirmed and logged, never raised — see recordSyncFailure. Audit C1-S9-68.
+    await recordSyncFailure(admin, { runId: run?.id ?? null, jobId: job?.id ?? null, accountId: account.id, message: msg, startedAt });
   }
 
   return result;

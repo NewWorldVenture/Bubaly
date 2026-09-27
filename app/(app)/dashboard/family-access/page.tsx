@@ -6,8 +6,8 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
-import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
+import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Kid Logins' };
 export const dynamic = 'force-dynamic';

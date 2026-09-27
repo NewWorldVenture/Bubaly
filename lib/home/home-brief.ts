@@ -21,7 +21,22 @@ export interface HomeStep {
 }
 
 export interface HomeBriefInput {
-  /** The already-resolved family timezone; legacy callers default to UTC. */
+  /**
+   * The already-resolved family timezone.
+   *
+   * Optional, and that is a DELIBERATE contract rather than an oversight:
+   * tests/first-brief-callers-timezone.test.ts asserts that omitting it still
+   * yields the UTC brief. Worth stating precisely, because the previous comment
+   * ("legacy callers default to UTC") reads as though such callers exist:
+   * no PRODUCTION caller omits it. There is exactly one, the home dashboard,
+   * and it passes `tz` resolved from `families.timezone`.
+   *
+   * So the risk here is not today's code, it is the NEXT server-side caller
+   * quietly taking the UTC path. That is guarded by
+   * tests/a-zone-aware-helper-called-without-the-zone.test.ts rather than by
+   * removing the default, which would delete a contract someone wrote on
+   * purpose in order to fix nothing.
+   */
   timezone?: string;
   /** Events in the next ~7 days (already family-scoped). */
   upcomingEvents: BriefEvent[];

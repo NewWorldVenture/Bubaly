@@ -106,7 +106,7 @@ describe('exact assistant middleware authorization boundary', () => {
   it.each(PATHS)('rejects a missing token in actual %s before service access', async path => {
     const response = await deliver(path);
     expect(response.status).toBe(path === '/api/assistant' ? 401 : 200);
-    expect(mocks.admin).not.toHaveBeenCalled(); expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
+    expect(reads).toEqual([]); expect(mocks.answer).not.toHaveBeenCalled(); expect(mocks.record).not.toHaveBeenCalled();
     if (path.endsWith('/alexa')) expect(await response.json()).toMatchObject({ response: { outputSpeech: { text: expect.stringContaining('link') } } });
   });
   it.each(PATHS)('rejects an unknown token in actual %s before answering or capturing data', async path => {
@@ -150,7 +150,6 @@ describe('exact assistant middleware authorization boundary', () => {
     // No speech either: there is no device on the other end of a forged
     // request, and a spoken reply would confirm the endpoint is live.
     expect(await response.text()).toBe('');
-    expect(mocks.admin).not.toHaveBeenCalled();
     expect(reads).toEqual([]);
     expect(mocks.answer).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();

@@ -31,8 +31,13 @@ test('the mobile menu becomes usable when its client code is ready', async ({ br
   // and a fresh context does not. The viewport is then overridden exactly as
   // `setViewportSize` used to, so the only difference from before is the cold
   // cache.
+  //
+  // Service workers are blocked in that context too (Audit C1-S9-62). The
+  // production build registers `public/sw.js`, which claims clients and answers
+  // script requests itself — and a request a service worker handles never
+  // reaches `page.route`, so the hold would not engage however cold the cache.
   const slowContext = await browser.newContext({
-    ...testInfo.project.use, baseURL, viewport: { width: 390, height: 844 },
+    ...testInfo.project.use, baseURL, viewport: { width: 390, height: 844 }, serviceWorkers: 'block',
   });
   const slowPage = await slowContext.newPage();
   let releaseScripts!: () => void;
@@ -68,6 +73,7 @@ test('the mobile menu becomes usable when its client code is ready', async ({ br
     await slowContext.close();
   }
 });
+
 
 test('Get started reaches the welcome page before sign-in', async ({ page }) => {
   await page.getByRole('link', { name: /get started/i }).first().click();

@@ -26,6 +26,7 @@ import { preOpenWindow } from '@/lib/utils/open-url';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { createFormat } from '@/lib/utils/format';
+import { openOnKey } from '@/lib/ui/a11y';
 
 type Document = Tables<'documents'>;
 
@@ -144,6 +145,21 @@ export function DocumentsModule() {
   const [page, setPage] = useState(1);
   const [showAllFolders, setShowAllFolders] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(menuId !== null)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuId]);
   const [confirmDoc, setConfirmDoc] = useState<Document | null>(null);
   const [favPending, setFavPending] = useState<Record<string, boolean>>({});
 
@@ -231,7 +247,7 @@ export function DocumentsModule() {
     const next = !isFav(doc);
     setFavPending((p) => ({ ...p, [doc.id]: next }));
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).select('id');
+    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).eq('family_id', familyId).select('id');
     if (err || wroteNoRows(rows)) {
       setFavPending((p) => { const { [doc.id]: _drop, ...rest } = p; return rest; });
       toastError(err ? describeDbError(err) : tr('errors.thatChangeWasNotSaved'));
@@ -253,12 +269,22 @@ export function DocumentsModule() {
   async function remove(doc: Document) {
     setConfirmDoc(null);
     const sb = createClient();
-    // NOTE the order: the storage object is removed FIRST, so a row delete the
-    // database refuses leaves a row pointing at a file that no longer exists.
-    // Verifying the delete at least makes that visible instead of reporting it
-    // as done; the ordering itself is recorded in audit/claude-1.md.
-    if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
-    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).select('id');
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
+    if (doc.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(sb, doc.storage_path);
+      if (storageError) return toastError(storageError);
+    }
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('documentsModule.fileDeleted')); refresh();
@@ -267,7 +293,7 @@ export function DocumentsModule() {
   function pickFile(f: File | null) {
     // Fail fast at pick time (before the form) with the real bucket limit.
     if (f && f.size > DOCUMENT_MAX_BYTES) {
-      toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`);
+      toastError(tr('modules.fileTooLargeNamed', { name: f.name, max: DOCUMENT_MAX_MB }));
       return;
     }
     setFile(f);
@@ -619,11 +645,17 @@ export function DocumentsModule() {
       <Modal open={open} title={form.category === '' ? 'New Folder' : 'Upload File'} onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
+          {/* The only way to choose a file: the real <input> is `hidden`, so without
+              a keyboard path this drop zone is a dead end rather than an untidy
+              one — a keyboard user cannot upload a document at all. `role=button`
+              + tabIndex + openOnKey is the documented fallback for a div that must
+              stay a div, and the name is copy already rendered inside it. */}
           <div
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
             role="button"
             tabIndex={0}
+            aria-label={tr('documents.browseFiles')}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
             className="focus-ring cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"

@@ -5,7 +5,7 @@ import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane, Sparkles, Wallet, MapPi
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -84,6 +84,8 @@ export function VotingModule() {
   const error = pollsError || optionsError || votesError || vacationsError || budgetsError;
   const refresh = () => { void refreshPolls(); void refreshOptions(); void refreshVotes(); void refreshVacations(); void refreshBudgets(); };
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<Form | null>(null);
   const optionsByPoll = useMemo(() => {
     const m = new Map<string, Option[]>();
@@ -99,34 +101,47 @@ export function VotingModule() {
 
   async function createPoll(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.question.trim()) return;
-    const opts = form.options.filter((o) => o.label.trim());
-    if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
-    const supabase = createClient();
-    const { data: poll, error } = await supabase.from('family_polls').insert({
-      family_id: familyId,
-      vacation_id: form.vacation_id || null,
-      question: form.question.trim(),
-      description: form.description.trim() || null,
-      kind: form.kind,
-      decision_category: form.decision_category,
-      budget_cents: form.budget ? Math.round(Number(form.budget) * 100) : null,
-      required_tags: parseTags(form.required_tags),
-      closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
-      created_by: userId,
-    }).select('id').single();
-    if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
-    const { error: oErr } = await supabase.from('family_poll_options').insert(
-      opts.map((o, i) => ({
-        family_id: familyId, poll_id: poll.id, label: o.label.trim(), sort: i,
-        cost_cents: o.cost.trim() ? Math.round(Number(o.cost) * 100) : null,
-        travel_minutes: o.travel.trim() ? Math.round(Number(o.travel)) : null,
-        tags: parseTags(o.tags),
-      })),
-    );
-    if (oErr) return toastError(describeDbError(oErr));
-    success(tr('votingModule.pollCreated'));
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.question.trim()) return;
+      const opts = form.options.filter((o) => o.label.trim());
+      if (opts.length < 2) return toastError(tr('votingModule.addAtLeastTwoOptions'));
+      const supabase = createClient();
+      const { data: poll, error } = await supabase.from('family_polls').insert({
+        family_id: familyId,
+        vacation_id: form.vacation_id || null,
+        question: form.question.trim(),
+        description: form.description.trim() || null,
+        kind: form.kind,
+        decision_category: form.decision_category,
+        budget_cents: form.budget ? Math.round(Number(form.budget) * 100) : null,
+        required_tags: parseTags(form.required_tags),
+        closes_at: form.closes_at ? new Date(form.closes_at).toISOString() : null,
+        created_by: userId,
+      }).select('id').single();
+      if (error || !poll) return toastError(describeDbError(error, tr('votingModule.couldNotCreate')));
+      const { error: oErr } = await supabase.from('family_poll_options').insert(
+        opts.map((o, i) => ({
+          family_id: familyId, poll_id: poll.id, label: o.label.trim(), sort: i,
+          cost_cents: o.cost.trim() ? Math.round(Number(o.cost) * 100) : null,
+          travel_minutes: o.travel.trim() ? Math.round(Number(o.travel)) : null,
+          tags: parseTags(o.tags),
+        })),
+      );
+      if (oErr) return toastError(describeDbError(oErr));
+      success(tr('votingModule.pollCreated'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function vote(poll: Poll, optionId: string) {
@@ -134,6 +149,10 @@ export function VotingModule() {
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
+    // These two are keyed by member and option, not by id, and are left
+    // unconfirmed on purpose: un-voting a vote that is already gone, or
+    // clearing a prior single-choice vote that is not there, is the ordinary
+    // case, and the insert below is what the member sees. Audit C1-S9-81.
     if (mine.has(optionId)) {
       const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
       if (unErr) toastError(describeDbError(unErr));
@@ -150,13 +169,15 @@ export function VotingModule() {
   }
 
   async function setStatus(id: string, status: string) {
-    const { error } = await createClient().from('family_polls').update({ status }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('family_polls').update({ status }).eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(tr('votingModule.deleteThisPoll'))) return;
-    const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(tr('votingModule.deleted'));
+    const { data: removed, error } = await createClient().from('family_polls').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved')); else success(tr('votingModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
@@ -357,7 +378,7 @@ export function VotingModule() {
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('voting.cancel')}</Button>
-              <Button type="submit">{tr('voting.createPoll')}</Button>
+              <Button type="submit" loading={saving}>{tr('voting.createPoll')}</Button>
             </div>
           </form>
         </Modal>

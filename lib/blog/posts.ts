@@ -117,23 +117,19 @@ export function normalizeBody(raw: unknown): BlogBlock[] {
 // uploads (*.supabase.co) pass through untouched.
 const UNVERIFIED_IMAGE_HOSTS = ['loremflickr.com'];
 
-// Hero photos that no longer exist at their source. Lorem Picsum has no image
-// under these ids (it answers 404), so /_next/image answered 404 for every card
-// and hero that used one: a broken image and a console error on the article
-// and on every page that lists it as related. Found by the 2026-09-27 page
-// audit (finalaudit.md, "Page audit — every page"); each id re-checked by hand.
-// Dropped to `undefined` like an unverified host, so <BlogCover> draws the
-// cover instead. This is read-side on purpose: it is live the moment it ships,
-// where a data fix waits on the production migration ledger (F-001).
-export const RETIRED_HERO_IMAGE_URLS: ReadonlySet<string> = new Set(
-  [138, 148, 150, 245, 246, 262, 489, 601, 624, 632, 636, 720, 843, 850, 963, 968]
-    .map((id) => `https://picsum.photos/id/${id}/1600/900`),
-);
+// Lorem Picsum ids that no longer exist: `https://picsum.photos/id/<n>/…`
+// answers 404 for each of these (checked one by one on 2026-09-27 against every
+// id migrations 0232/0235 assign), so the post showed a broken image and
+// `/_next/image` logged a 404 in every visitor's console. Dropped to the
+// generated cover like an unverified host. `/seed/<slug>/` URLs always resolve.
+const RETIRED_PICSUM_IDS = new Set([138, 148, 150, 245, 246, 262, 489, 601, 624, 632, 636, 720, 843, 850, 963, 968]);
 
 export function freeLicensedImage(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
-  if (RETIRED_HERO_IMAGE_URLS.has(url)) return undefined;
-  return UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h)) ? undefined : url;
+  if (UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h))) return undefined;
+  const picsum = /^https:\/\/picsum\.photos\/id\/(\d+)\//.exec(url);
+  if (picsum && RETIRED_PICSUM_IDS.has(Number(picsum[1]))) return undefined;
+  return url;
 }
 
 function toPost(r: Row): BlogPost {

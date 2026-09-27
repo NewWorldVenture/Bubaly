@@ -13,7 +13,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createMealAction, planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 import { addMealPlanToGroceryListAction, setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import type { Substitution } from '@/lib/meals/substitutions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { panelTallies, panelVoterCount, panelMyPick } from '@/lib/meals/vote-panel';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -30,6 +30,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { formatMealDay, mealWeek } from '@/lib/meals/week';
 import type { Ingredient, PlanSlot } from '@/lib/services/meals';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
@@ -87,6 +88,11 @@ export function MealsModule() {
   const [newMealOpen, setNewMealOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // The backdrop below dismisses this menu with a click and cannot be reached by
+  // keyboard at all, so Escape is the keyboard path — bound here rather than
+  // implied, which is the difference between an accessible dismissal and a lint
+  // rule silenced with a comment that promises one.
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [recipeSearch, setRecipeSearch] = useState('');
   const [dinnerIdx, setDinnerIdx] = useState(0);
   const [addingPlan, setAddingPlan] = useState(false);
@@ -278,8 +284,10 @@ export function MealsModule() {
   }
 
   async function toggleFavorite(r: Recipe) {
-    const { error } = await createClient().from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: updated, error } = await createClient().from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshRecipes();
   }
 
@@ -318,6 +326,10 @@ export function MealsModule() {
     // The clear below also still wipes a member's per-option opinions from the
     // recipes page. That is the same disagreement, on the write side, and it
     // is left alone deliberately for the same reason.
+    //
+    // The clear's ERROR is checked; its row count is left unconfirmed on
+    // purpose: a member's first vote has no prior ballot, so zero rows is the
+    // ordinary answer. Audit C1-S9-83.
     const { error: clearError } = await sb.from('meal_vote_ballots')
       .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
     if (clearError) return toastError(describeDbError(clearError));
@@ -350,7 +362,11 @@ export function MealsModule() {
                   </Button>
                   {moreOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                      {/* Presentational: no content, no name, nothing to focus. A
+                          click anywhere dismisses the menu; the keyboard path is
+                          Escape, bound where `moreOpen` is declared. */}
+                      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                      <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                         <button onClick={() => { setMoreOpen(false); setAutoPlanOpen(true); }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface">

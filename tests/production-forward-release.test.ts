@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { assertNoNewerMigrations, releaseRangeOf, releaseVersionsOf, assertPreflight, assertReleased, buildReleaseSql, readReleaseFiles, releaseLedger, releaseModeFromArgs, runForwardRelease } from '../scripts/apply-production-forward-release.mjs';
@@ -236,7 +237,7 @@ describe('reviewed production forward release', () => {
     expect(sql.startsWith('begin;')).toBe(true);
     expect(sql.endsWith('commit;')).toBe(true);
     expect(sql).toContain("lock_timeout = '5s'");
-    expect(sql.indexOf('Release ledger changed')).toBeLessThan(sql.indexOf(files[0].sql));
+    expect(at(sql, 'Release ledger changed')).toBeLessThan(at(sql, files[0].sql));
     expect(sql.match(/insert into supabase_migrations.schema_migrations\(/g)).toHaveLength(15);
     for (const file of files) expect(sql).toContain(file.sql);
     expect(sql).not.toMatch(/migration repair|--include-all|drop schema|truncate table/i);

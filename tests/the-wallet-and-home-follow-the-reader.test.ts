@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { fmtUsd, fmtDollars, fmtCount, fmtSignedUsd, fmtTxnDate } from '@/lib/wallet/hub';
 import { usd as homeUsd } from '@/lib/home/home-data';
 import { usd as utilityUsd } from '@/lib/home/utilities';
+import { at } from './helpers/source-order';
 
 describe('lib/wallet/hub — the Family Wallet', () => {
   it('formats cents in the reader locale, in dollars', () => {
@@ -47,7 +48,7 @@ describe('lib/wallet/hub — the Family Wallet', () => {
   it('orders a transaction date the way the reader writes dates', () => {
     const de = fmtTxnDate('2026-07-14', 'de-DE');
     expect(de).toBe('14. Juli 2026');
-    expect(de.indexOf('14')).toBeLessThan(de.indexOf('Juli'));
+    expect(at(de, '14')).toBeLessThan(at(de, 'Juli'));
     expect(fmtTxnDate('2026-07-14')).toBe('Jul 14, 2026');
     expect(fmtTxnDate('not-a-date', 'de-DE')).toBe('');
   });

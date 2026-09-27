@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyCompletionRewards, awardBadges, ensureProgress } from '@/lib/chores/server';
 import { DIFFICULTY_XP } from '@/lib/chores/logic';
 
@@ -162,12 +162,57 @@ describe('chore reward persistence boundaries', () => {
     expect(calls).toEqual([{ table: 'member_badges', operation: 'upsert' }]);
   });
 
+  // ── The streak is counted in the FAMILY's day ─────────────────────────────
+  //
+  // `kid_progress.last_activity` is the only thing `nextStreak` compares, so
+  // whichever zone this is read in IS the streak rule. It used to be
+  // `new Date().toISOString().slice(0, 10)` — UTC — and the failure is not a
+  // cosmetic off-by-one, it is a lost streak: a child who finishes a chore at
+  // 6pm Monday in Los Angeles has TUESDAY written down, so when they finish
+  // another at 10am Tuesday `nextStreak` sees lastActivity === today and does
+  // not increment. Two days running, and the streak does not move. Evening then
+  // next morning is the ordinary rhythm for a school-age child.
+  describe('the streak counts the family\u2019s day, not the host\u2019s', () => {
+    // Since 0341 the streak arithmetic is SQL's (`p_today - last_activity = 1`),
+    // run under the row lock; what TypeScript still owns is WHICH DAY it names
+    // as `p_today`. That is the half this branch's streak finding was about, so
+    // the assertion moved to the argument: a wrong day here is a wrong streak
+    // there, in both directions, exactly as the SQL comment describes.
+    async function todaySent(at: string, tz: string): Promise<unknown> {
+      const { client, rpcArgs } = fakeClient(() => ({ data: null, error: null }));
+      await applyCompletionRewards(client as never, { ...rewardOptions, tz, now: new Date(at) });
+      return rpcArgs[0]?.p_today;
+    }
+
+    // A Los Angeles EVENING, because that is the only time the two answers
+    // differ — 2026-06-24T01:00Z is 6pm on the 23rd in Los Angeles and already
+    // the 24th in UTC. A morning instant would pass under the bug as easily as
+    // under the fix; the first draft of this test used 10am and proved nothing.
+    const TUESDAY_EVENING = '2026-06-24T01:00:00Z';
+
+    it('files the award against the family\u2019s day', async () => {
+      expect(await todaySent(TUESDAY_EVENING, 'America/Los_Angeles')).toBe('2026-06-23');
+    });
+
+    it('gives two households two different \u2014 and both correct \u2014 days', async () => {
+      expect(await todaySent(TUESDAY_EVENING, 'America/Los_Angeles')).toBe('2026-06-23');
+      expect(await todaySent(TUESDAY_EVENING, 'UTC')).toBe('2026-06-24');
+    });
+  });
+
   it('rolls an approved assignment back when reward application fails', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/(app)/missions/actions.ts'), 'utf8');
 
     expect(source).toContain(".eq('family_id', args.familyId).select('id').single()");
     expect(source).toContain("throw new Error('Could not save chore approval')");
-    expect(source).toContain("const { error: rollbackError } = await supabase.from('chore_assignments').update");
+    // Was the exact destructure. C1-S9-55 bound the rollback's ROWS too — a
+    // rollback matching nothing leaves the assignment marked approved, with
+    // points and cash recorded as awarded, when the code that awards them
+    // failed. The literal went; the behaviour got stronger.
+    expect(source).toContain("from('chore_assignments').update");
+    expect(source).toContain('error: rollbackError');
+    expect(source).toContain('wroteNoRows(rolledBackAssignment)');
+    expect(source).toContain('an approval may be stranded');
     expect(source).toContain('args.assignment.points_awarded');
   });
 });

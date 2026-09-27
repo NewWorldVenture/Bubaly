@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fetchWithTimeout } from '@/lib/client-fetch';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const serverFiles = [
   'lib/ai/provider.ts',
@@ -28,7 +28,7 @@ describe('external fetch deadlines', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}'));
     vi.stubGlobal('fetch', fetchMock);
 
-    await fetchExternal('https://provider.example.test', undefined, 1000);
+    await fetchWithDeadline('https://provider.example.test', undefined, 1000);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(init.signal?.aborted).toBe(false);
@@ -47,7 +47,7 @@ describe('external fetch deadlines', () => {
   it('keeps audited fixed-provider files behind an explicit timeout wrapper', () => {
     for (const file of serverFiles) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).toContain('fetchExternal');
+      expect(source, file).toContain('fetchWithDeadline');
       expect(source, file).not.toMatch(/await fetch\(/);
     }
   });

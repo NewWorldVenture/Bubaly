@@ -7,6 +7,7 @@ import { decryptSecret, encryptSecret } from '@/lib/sync/crypto';
 import type { Tables } from '@/lib/database.types';
 import { authorizeScheduledToken, scheduleSignal } from './scheduled-authority';
 import type { ConnectorPublishInput } from './connectors';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export class XBoundaryError extends Error {
   constructor(public readonly key: string) { super(key); }
@@ -235,19 +236,31 @@ async function refreshXAccessToken(actor: XActor, accountId: string, providerAcc
     if (!outcome.permanent) {
       // X was briefly unreachable. Hand the row back with its credentials
       // untouched so the next attempt retries instead of demanding a reconnect.
-      await db.from('social_account_tokens').update({ metadata: { x_state: 'ready', x_revision: claim } })
+      // Compare-and-set on the claim, so zero rows is ordinary (another worker
+      // took over); the ERROR was discarded with it and is now logged. The
+      // throw below happens either way. Audit C1-S9-68.
+      const { error: handBackError } = await db.from('social_account_tokens').update({ metadata: { x_state: 'ready', x_revision: claim } })
         .eq('id', row.id).eq('family_id', actor.familyId).contains('metadata', { x_state: 'refreshing', x_revision: claim });
+      if (handBackError) console.error('[social-x] could not hand the token row back after a transient failure', { accountId, error: handBackError.message });
       xFailure('storageUnavailable');
     }
     // The refresh token is spent or revoked. Blocking it stops every later
     // publish from spending a round trip on a credential that cannot work, and
     // is the state a reconnect already knows how to take back over from.
-    await db.from('social_account_tokens').update({
+    // Compare-and-set, as above: zero rows is ordinary, the error is logged.
+    const { error: blockError } = await db.from('social_account_tokens').update({
       access_token_enc: null, refresh_token_enc: null, updated_by: actor.userId,
       metadata: { x_state: 'blocked', x_revision: randomUUID(), x_revoked_at: Date.now() },
     }).eq('id', row.id).eq('family_id', actor.familyId).contains('metadata', { x_state: 'refreshing', x_revision: claim });
-    await db.from('social_accounts').update({ health: 'error', last_error: 'socialX.reconnectRequired', updated_by: actor.userId })
-      .eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x');
+    if (blockError) console.error('[social-x] could not block a spent refresh token', { accountId, error: blockError.message });
+    // The caller gets the throw below, but the accounts page reads THIS row: a
+    // health write that did nothing left X showing as healthy while every
+    // publish failed. Confirmed for the log. Audit C1-S9-68.
+    const { data: flagged, error: healthError } = await db.from('social_accounts').update({ health: 'error', last_error: 'socialX.reconnectRequired', updated_by: actor.userId })
+      .eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x').select('id');
+    if (healthError || wroteNoRows(flagged)) {
+      console.error('[social-x] could not mark the account as needing a reconnect; it may still show as healthy', { accountId, error: healthError?.message ?? 'no rows updated' });
+    }
     xFailure('reconnectRequired');
   }
 
@@ -261,8 +274,12 @@ async function refreshXAccessToken(actor: XActor, accountId: string, providerAcc
   }).eq('id', row.id).eq('family_id', actor.familyId).eq('platform', 'x')
     .contains('metadata', { x_state: 'refreshing', x_revision: claim }).select('id').single();
   if (saved.error || !saved.data) xFailure();
-  await db.from('social_accounts').update({ health: 'healthy', last_error: null, scopes: grant.scopes, updated_by: actor.userId })
+  // Filtered to a connected, live account, so zero rows is an ordinary
+  // concurrent disconnect; the error was discarded and is now logged.
+  // Audit C1-S9-68.
+  const { error: healedError } = await db.from('social_accounts').update({ health: 'healthy', last_error: null, scopes: grant.scopes, updated_by: actor.userId })
     .eq('id', accountId).eq('family_id', actor.familyId).eq('platform', 'x').eq('status', 'connected').is('deleted_at', null);
+  if (healedError) console.error('[social-x] could not mark the account healthy after a refresh', { accountId, error: healedError.message });
 }
 
 async function readXAccessToken(actor: XActor, accountId: string, providerAccountId: string, signal?: AbortSignal): Promise<string> {
@@ -283,6 +300,8 @@ export async function clearXTokens(actor: XActor, accountId: string): Promise<vo
   const db = createServiceClient();
   await accountRow(db, actor, accountId);
   // Clear every row, including legacy duplicates, without making them eligible to publish.
+  // Rows deliberately not checked: an account with no X tokens has nothing to
+  // revoke, and zero is the right answer for it. Audit C1-S9-68.
   const cleared = await db.from('social_account_tokens').update({ access_token_enc: null, refresh_token_enc: null,
     metadata: { x_state: 'blocked', x_revision: randomUUID(), x_revoked_at: Date.now() }, updated_by: actor.userId })
     .eq('account_id', accountId).eq('family_id', actor.familyId).eq('platform', 'x');

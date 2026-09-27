@@ -106,6 +106,12 @@ export async function syncGithubNowAction(): Promise<{ ok: true; summary: string
 export async function markAdminNotificationsReadAction(ids?: string[]): Promise<Result> {
   const g = await guard();
   if (!('supabase' in g)) return g;
+  // Deliberately NOT confirmed. Without ids this is `.eq('is_read', false)`,
+  // where zero rows is the ordinary "nothing unread"; with ids, zero rows means
+  // they no longer exist, and there is nothing left to mark. Either way the
+  // badge is re-read by the revalidation below, so it cannot go on showing a
+  // count that is not there. Built across three statements, which is why the
+  // ratchet could not see it until C1-S9-61. Audit C1-S9-61.
   let q = g.supabase.from('admin_notifications').update({ is_read: true });
   q = ids && ids.length ? q.in('id', ids) : q.eq('is_read', false);
   const { error } = await q;

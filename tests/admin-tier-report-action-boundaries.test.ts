@@ -7,7 +7,7 @@ const reportActions = readFileSync('app/(app)/admin/marketplace/reports/actions.
 
 describe('privileged tier and report action boundaries', () => {
   it('fails closed for tier settings authorization and validation', () => {
-    expect(tierActions).toContain('describeActionError');
+    expect(tierActions).toContain('describeActionError(');
     expect(tierActions).toContain("if (!('supabase' in guarded)) return guarded;");
     expect(tierActions).toContain('FEATURE_CATALOG_BY_KEY[key]');
     expect(tierActions).toContain("if (!isFeatureTier(tier)) return { ok: false, error: t('actions.chooseAValidTier') }");

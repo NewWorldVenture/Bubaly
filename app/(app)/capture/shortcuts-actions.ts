@@ -9,6 +9,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS } from '@/lib/capture/shortcuts';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -36,7 +37,7 @@ export async function loadCaptureShortcuts(): Promise<CaptureShortcutsRead> {
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
   if (error) {
     console.error('[capture/shortcuts] preferences read failed', error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: describeActionError(error) };
   }
   const prefs = (data?.notification_prefs as Record<string, unknown> | null) ?? null;
   const saved = prefs?.[CAPTURE_SHORTCUTS_PREF_KEY];
@@ -62,13 +63,13 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
   if (readError) {
     console.error('[capture/shortcuts] preferences read failed', readError);
-    return { ok: false, error: readError.message };
+    return { ok: false, error: describeActionError(readError) };
   }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged = { ...prefs, [CAPTURE_SHORTCUTS_PREF_KEY]: keys };
 
   const { error } = await supabase.from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

@@ -5,8 +5,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * `alreadySubscribedAs` is set when "Add & Sync Now" re-synced a subscription
@@ -106,7 +108,9 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
       if (!winner.ok || !winner.feed) return { ok: false, error: t('calendarSync.couldNotCheckExistingFeeds') };
       feed = winner.feed;
     } else if (error || !data) {
-      return { ok: false, error: error?.message ?? 'Could not save the feed' };
+      // Classified, not raw: the browser gets a sentence it can act on, never
+      // the database's own message (tests/the-database-does-not-talk-to-the-browser).
+      return { ok: false, error: describeActionError(error, 'Could not save the feed') };
     } else {
       feed = data;
       createdHere = true;
@@ -187,15 +191,23 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
 
 /** Removes a feed; its imported events cascade-delete via the FK. */
 export async function removeCalendarFeed(feedId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { error } = await supabase
+  // The imported events cascade with the row, so a delete that matched nothing
+  // removed nothing at all — and the caller answers `{ ok: true }`, which the
+  // settings page reads as "feed removed". The family would keep seeing a
+  // stranger's calendar in theirs with no row left in the UI to unsubscribe
+  // from. Audit C1-S9-59.
+  const { data: removed, error } = await supabase
     .from('calendar_feeds')
     .delete()
     .eq('id', feedId)
-    .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
+  if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.feedNotFound') };
 
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');

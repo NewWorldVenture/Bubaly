@@ -47,6 +47,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   // Honest disclosure: if the Bubaly service fee is configured + enabled, tell
   // families before they pay. Reads only the non-secret fee config.
+  // Both notices are translated (C1-S9-71): BillingModule renders this string
+  // as-is, so an English literal here reached every locale unchanged.
   //
   // In the reader's language and money format: the sentence is a catalogue key
   // and the amount is formatted for the locale this request resolved, so a
@@ -58,9 +60,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const { locale } = await getLocaleContext();
   let serviceFeeNotice: string | null = null;
   try {
-    const { data } = await createServiceClient()
+    const { data, error } = await createServiceClient()
       .from('stripe_settings').select('enabled, service_fee_cents, service_fee_price_id').eq('id', 'singleton').maybeSingle();
-    if (serviceFeeEnabled(data)) {
+    if (error) {
+      // This notice exists so a family is told about a fee BEFORE they pay. A
+      // refused read used to land here with `data` null and show nothing — the
+      // `catch` below cannot see a resolved error — so a configured fee went
+      // undisclosed. We cannot know whether a fee applies, so say only what is
+      // true either way: Stripe Checkout itemises every charge before payment.
+      // Silence is the one answer that could mislead. Audit C1-S9-71.
+      console.error('[billing] service fee settings read failed; showing the cautious notice', error);
+      serviceFeeNotice = tr('billing.serviceFeeShownAtCheckout');
+    } else if (serviceFeeEnabled(data)) {
       serviceFeeNotice = tr('billing.serviceFeeAddedAtCheckout', { amount: formatServiceFee(resolveServiceFeeCents(data), locale.code) });
     }
   } catch {

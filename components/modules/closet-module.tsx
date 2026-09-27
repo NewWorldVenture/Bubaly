@@ -8,7 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -27,6 +27,8 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
+import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -45,11 +47,6 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
   return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 };
-
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
-}
 
 export function ClosetModule() {
   const locale = useLocale();
@@ -129,13 +126,20 @@ export function ClosetModule() {
       occasion, temp_c: tempC, weather: weatherLabelFromTemp(tempC), created_by: userId,
     });
     if (error) { setBusy(false); return toastError(describeDbError(error)); }
-    const results = await Promise.all(itemIds.map((id) => {
-      const current = itemById.get(id);
-      return supabase.from('wardrobe_items').update({ wear_count: (current?.wear_count ?? 0) + 1, last_worn_on: todayIso() }).eq('id', id);
-    }));
+    // Each bump is a compare-and-swap on the LIVE count, not `cached + 1`: two
+    // members logging the same item at once each add their wear. Audit C1-S9-90.
+    const store: WearStore = {
+      readWearCount: (id) => supabase.from('wardrobe_items').select('wear_count').eq('id', id).maybeSingle(),
+      writeWearCount: (id, expected, next, wornOn) => supabase.from('wardrobe_items')
+        .update({ wear_count: next, last_worn_on: wornOn }).eq('id', id).eq('wear_count', expected).select('id'),
+    };
+    const results = await Promise.all(itemIds.map((id) => bumpWearCount(store, id, todayIso())));
     setBusy(false);
-    const failed = results.find((r) => r.error);
-    if (failed?.error) return toastError(describeDbError(failed.error));
+    const failed = results.find((r): r is Extract<WearBump, { reason: 'error' }> => !r.ok && r.reason === 'error');
+    if (failed) return toastError(describeDbError(failed.error));
+    // A bump that did not land is an item the log names but whose count did
+    // not move. Audit C1-S9-81.
+    if (results.some((r) => !r.ok)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.loggedTodaySOutfit'));
   }
 
@@ -152,27 +156,32 @@ export function ClosetModule() {
   }
 
   async function setItemStatus(item: Item, status: WardrobeStatus) {
-    const { error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('wardrobe_items').update({ status }).eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
   async function deleteItem(item: Item) {
     if (!(await askConfirm({ title: t('confirm.removeNamed', { name: item.name }), body: t('confirm.cannotBeUndone') }))) return;
-    const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
+    const { data: removed, error } = await createClient().from('wardrobe_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.itemRemoved'));
   }
 
   async function toggleFavorite(outfit: Outfit) {
-    const { error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id);
+    const { data: updated2, error } = await createClient().from('outfits').update({ is_favorite: !outfit.is_favorite }).eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteOutfit(outfit: Outfit) {
     if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: outfit.name }), body: t('confirm.cannotBeUndone') }))) return;
-    const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
+    const { data: removed2, error } = await createClient().from('outfits').delete().eq('id', outfit.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('closetModule.outfitDeleted'));
   }
 
@@ -242,11 +251,10 @@ export function ClosetModule() {
             <>
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                 {suggestion.picks.map((p) => {
-                  const url = photoUrl(p.item.photo_path);
                   return (
                     <li key={p.item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 px-3 py-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-                      {url ? <img src={url} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/10 text-xl">{categoryMeta(p.item.category).emoji}</span>}
+                      <FamilyMediaImg src={p.item.photo_path} alt="" className="h-10 w-10 rounded-lg object-cover"
+                        fallback={<span className="grid h-10 w-10 place-items-center rounded-lg bg-brand/10 text-xl">{categoryMeta(p.item.category).emoji}</span>} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{p.item.name}</p>
                         <p className="truncate text-xs text-muted">{p.reasons.slice(0, 2).join(' · ') || categoryMeta(p.item.category).label}</p>
@@ -308,13 +316,12 @@ export function ClosetModule() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((item) => {
-            const url = photoUrl(item.photo_path);
             const cpw = costPerWear(item);
             return (
               <div key={item.id} className="group rounded-2xl border border-border bg-surface/40 p-3">
                 <div className="flex items-start gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-                  {url ? <img src={url} alt={item.name} className="h-14 w-14 rounded-xl object-cover" /> : <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl">{categoryMeta(item.category).emoji}</span>}
+                  <FamilyMediaImg src={item.photo_path} alt={item.name} className="h-14 w-14 shrink-0 rounded-xl object-cover"
+                    fallback={<span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl">{categoryMeta(item.category).emoji}</span>} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{item.name}</p>
                     <p className="truncate text-xs text-muted">{categoryMeta(item.category).label}{item.color ? ` · ${item.color}` : ''}{item.size ? ` · ${item.size}` : ''}</p>
@@ -419,7 +426,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   const [seasons, setSeasons] = useState<string[]>(item?.seasons ?? []);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(t('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'closet', file.name);
@@ -454,15 +461,15 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id)
-      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved, error } = item
+      ? await supabase.from('wardrobe_items').update(payload).eq('id', item.id).select('id')
+      : await supabase.from('wardrobe_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add a closet item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -502,8 +509,8 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
           <Field label={t('closet.price')} hint={t('closetModule.enablesCostPerWear')}>{(id) => <Input id={id} name="price" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={item?.price_cents != null ? (item.price_cents / 100).toFixed(2) : ''} />}</Field>
         </div>
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnails */}
-          {url ? <img src={url} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>}
+          <FamilyMediaImg src={photoPath} alt="" className="h-12 w-12 rounded-xl object-cover"
+            fallback={<span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>} />
           <label className="cursor-pointer text-sm text-brand-text">
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />

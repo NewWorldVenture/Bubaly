@@ -28,33 +28,45 @@ import { describe, expect, it } from 'vitest';
  * with speech, toast, journey and router dependencies, so driving it would
  * measure the harness more than the fix. What it pins is exact — the two
  * history writes must not be able to reject into the surrounding control flow.
+ *
+ * Two sessions fixed this independently. main routed both writes through an
+ * inline `recordVoiceHistory`; the audit branch (C1-S8-06) through
+ * `recordVoiceCommand` in lib/voice/history.ts, which settles an ASYNC thunk
+ * so a builder that throws synchronously is caught too, and which its own test
+ * (tests/a-voice-failure-still-reaches-the-user.test.ts) drives against a
+ * rejecting and a throwing client. The merge kept the library helper, so this
+ * file pins the same properties against that name and home.
  */
 
 const source = readFileSync('components/modules/voice-module.tsx', 'utf8');
+const helperSource = readFileSync('lib/voice/history.ts', 'utf8');
 
 describe('the voice history is written best-effort', () => {
-  // Two sessions fixed this independently; the one on main routes both writes
-  // through `recordVoiceHistory`, which settles AND catches and is called with
-  // `void` so the capture is neither lost nor delayed by its own log. The
-  // property asserted is that a history write cannot reject into run().
+  // Both writes go through `recordVoiceCommand`, which settles (an async thunk,
+  // so a synchronous throw is settled too) and is called with `void` so the
+  // capture is neither lost nor delayed by its own log. The property asserted
+  // is that a history write cannot reject into run().
 
   it('sends both history writes through the best-effort helper', () => {
-    expect(source.match(/void recordVoiceHistory\(/g) ?? []).toHaveLength(2);
+    expect(source.match(/void recordVoiceCommand\(/g) ?? []).toHaveLength(2);
   });
 
   it('has no bare awaited insert left in the command path', () => {
     expect(source).not.toMatch(/await sb\.from\('voice_commands'\)\s*\.insert\(/);
+    expect(source).not.toMatch(/from\('voice_commands'\)\s*\.\s*insert\(/);
   });
 
-  it('the helper cannot reject: it settles, and catches what settling cannot', () => {
-    const helper = source.slice(source.indexOf('async function recordVoiceHistory'));
+  it('the helper cannot reject: it settles, and settles a synchronous throw too', () => {
+    const helper = helperSource.slice(helperSource.indexOf('export async function recordVoiceCommand'));
     const body = helper.slice(0, helper.indexOf('\n}\n') + 2);
     expect(body).toMatch(/await settle\(/);
-    expect(body).toMatch(/try \{[\s\S]*\} catch/);
+    // The async thunk is what turns a builder that THROWS into a settled
+    // `{ error }`; without it settle is never reached.
+    expect(body).toMatch(/await settle\(\(async \(\) => /);
   });
 
   it('records the failure rather than swallowing it silently', () => {
-    expect(source).toContain("console.error('[voice] history write failed'");
+    expect(helperSource).toContain("console.error('[voice] command history write failed'");
   });
 
   it('still reports a real command failure to the user', () => {

@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange,
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -60,6 +61,8 @@ export function WeekendModule() {
   const loading = eventsLoading || plansLoading || searchesLoading || feedsLoading;
   const error = eventsError || plansError || searchesError || feedsError;
   const refresh = () => { void refreshEvents(); void refreshPlans(); void refreshSearches(); void refreshFeeds(); };
+
+  const [saving, setSaving] = useState(false);
 
   const [zip, setZip] = useState('');
   const [radius, setRadius] = useState<number>(DEFAULT_RADIUS);
@@ -110,33 +113,52 @@ export function WeekendModule() {
   async function setStatus(event: Event, status: WeekendPlanStatus) {
     const existing = planByEvent.get(event.id);
     const sb = createClient();
-    const { error } = existing
-      ? await sb.from('weekend_plans').update({ status }).eq('id', existing.id)
-      : await sb.from('weekend_plans').insert({ family_id: familyId, event_id: event.id, status, created_by: userId });
-    if (error) toastError(describeDbError(error)); else success(existing ? 'Updated' : 'Saved to plans');
+    const { data: planned, error } = existing
+      ? await sb.from('weekend_plans').update({ status }).eq('id', existing.id).select('id')
+      : await sb.from('weekend_plans').insert({ family_id: familyId, event_id: event.id, status, created_by: userId }).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(planned)) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(existing ? 'Updated' : 'Saved to plans');
   }
   async function removePlan(id: string) {
-    const { error } = await createClient().from('weekend_plans').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('weekendModule.removed'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: removed2, error } = await createClient().from('weekend_plans').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('weekendModule.removed'));
   }
 
   async function addFeed(e: React.FormEvent) {
     e.preventDefault();
-    if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError(t('weekendModule.nameAndUrlRequired'));
-    try { new URL(feedForm.url.trim()); } catch { return toastError(t('weekendModule.enterAValidUrl')); }
-    const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
-    if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError(t('weekendModule.nameAndUrlRequired'));
+      try { new URL(feedForm.url.trim()); } catch { return toastError(t('weekendModule.enterAValidUrl')); }
+      const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
+      if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggleFeed(f: Feed) {
-    const { error } = await settle(
-      createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id));
+    // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-81.
+    const { data: toggled, error } = await settle(
+      createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id).select('id'));
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(toggled)) return toastError(t('errors.thatChangeWasNotSaved'));
     void refreshFeeds();
   }
   async function removeFeed(id: string) {
     if (!confirm(t('weekendModule.removeThisSource'))) return;
-    const { error } = await settle(createClient().from('weekend_feeds').delete().eq('id', id));
+    const { data: removedFeed, error } = await settle(createClient().from('weekend_feeds').delete().eq('id', id).select('id'));
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removedFeed)) return toastError(t('errors.thatChangeWasNotSaved'));
     void refreshFeeds();
   }
 
@@ -180,7 +202,7 @@ export function WeekendModule() {
                     <span className="font-medium">{f.label}</span>
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
-                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
+                    <a href={safeWebLink(f.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
                     <button aria-label={t('a11y.delete')} onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
@@ -190,7 +212,7 @@ export function WeekendModule() {
               <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder={t('weekend.nameEGCityCalendar')} className="h-9" />
               <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
               <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
-              <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
+              <Button type="submit" loading={saving} size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
             </form>
           </div>
         )}
@@ -261,7 +283,7 @@ export function WeekendModule() {
                           ) : (
                             <Button size="sm" variant="secondary" onClick={() => setStatus(e, 'interested')}><Star className="h-3.5 w-3.5" /> {t('weekend.save')}</Button>
                           )}
-                          {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">{t('weekend.tickets')} <ExternalLink className="h-3 w-3" /></a>}
+                          {e.url && <a href={safeWebLink(e.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:underline">{t('weekend.tickets')} <ExternalLink className="h-3 w-3" /></a>}
                         </div>
                       </div>
                     </div>

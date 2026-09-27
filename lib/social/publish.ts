@@ -10,6 +10,7 @@ import { getConnector, type ConnectorPublishInput, type ConnectorPublishOutput }
 import { needsPublishApproval, scheduleFailure } from './scheduled-authority';
 import { derivePostStatus, type TargetStatus } from './content';
 import type { SocialPlatform } from './capabilities';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Client = SupabaseClient<Database>;
 
@@ -28,12 +29,15 @@ async function markJobFailed(
   userId: string | null,
   message: string,
 ): Promise<void> {
-  const { error } = await supabase
+  // Logged on zero rows too — a job left "publishing" in the queue is the
+  // symptom. Never raised; the failure is already being reported. C1-S9-68.
+  const { data: marked, error } = await supabase
     .from('social_publish_jobs')
     .update({ status: 'failed', last_error: message, updated_by: userId })
     .eq('id', jobId)
-    .eq('family_id', familyId);
-  if (error) console.error('[social-publish] failed-job update failed', error);
+    .eq('family_id', familyId)
+    .select('id');
+  if (error || wroteNoRows(marked)) console.error('[social-publish] failed-job update failed', error ?? { jobId, error: 'no rows updated' });
 }
 
 async function abortJob(

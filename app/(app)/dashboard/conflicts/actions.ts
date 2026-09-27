@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { updateEvent } from '@/lib/services/calendar';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { SERVICE_CODES } from '@/lib/services/types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * Apply a conflict resolution by rescheduling one event. Family-scoped: RLS plus

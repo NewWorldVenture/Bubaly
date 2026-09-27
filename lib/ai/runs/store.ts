@@ -26,7 +26,7 @@ import type {
 } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { remapBindings } from './bindings';
 import {
@@ -172,14 +172,22 @@ export async function updateRequest(
   patch: Database['public']['Tables']['ai_requests']['Update'],
   opts?: StoreOpts,
 ): Promise<ServiceResult<null>> {
-  const { error } = await ledgerClient(scope, opts)
+  // The three generic updaters below are the run graph's state transitions —
+  // a step marked done, a run completed — and each answered `ok(null)` for an
+  // update that matched nothing, so the executor went on believing a
+  // transition had landed. That is how a step runs twice, or a finished run
+  // shows as still working. The C1-S9-55 shape (lib/family/actions.ts), fixed
+  // the same way: zero rows is the same failure, with the same message.
+  // Audit C1-S9-66.
+  const { data: updated, error } = await ledgerClient(scope, opts)
     .from('ai_requests')
     .update(patch)
     .eq('id', requestId)
-    .eq('family_id', scope.familyId);
-  if (error) {
-    console.error('[ai/runs] failed to update the request', error);
-    return fail(describeDbError(error, 'Bubaly could not update that request.'), { code: SERVICE_CODES.db, retryable: true });
+    .eq('family_id', scope.familyId)
+    .select('id');
+  if (error || wroteNoRows(updated)) {
+    console.error('[ai/runs] failed to update the request', error ?? { requestId, error: 'no rows updated' });
+    return fail(error ? describeDbError(error, 'Bubaly could not update that request.') : 'Bubaly could not update that request.', { code: SERVICE_CODES.db, retryable: true });
   }
   return ok(null);
 }
@@ -303,6 +311,9 @@ export async function savePlan(
   const version = (prior?.[0]?.version ?? 0) + 1;
 
   if (version > 1) {
+    // Rows deliberately not checked: the status filter means a previous plan
+    // that already finished or failed matches nothing, and that is ordinary.
+    // Audit C1-S9-66.
     const { error: supersedeError } = await db
       .from('ai_plans')
       .update({ status: 'superseded' })
@@ -394,14 +405,15 @@ export async function updateStep(
   patch: Database['public']['Tables']['ai_plan_steps']['Update'],
   opts?: StoreOpts,
 ): Promise<ServiceResult<null>> {
-  const { error } = await ledgerClient(scope, opts)
+  const { data: updated, error } = await ledgerClient(scope, opts)
     .from('ai_plan_steps')
     .update(patch)
     .eq('id', stepId)
-    .eq('family_id', scope.familyId);
-  if (error) {
-    console.error('[ai/runs] failed to update a plan step', error);
-    return fail(describeDbError(error, 'Bubaly could not update that step.'), { code: SERVICE_CODES.db, retryable: true });
+    .eq('family_id', scope.familyId)
+    .select('id');
+  if (error || wroteNoRows(updated)) {
+    console.error('[ai/runs] failed to update a plan step', error ?? { stepId, error: 'no rows updated' });
+    return fail(error ? describeDbError(error, 'Bubaly could not update that step.') : 'Bubaly could not update that step.', { code: SERVICE_CODES.db, retryable: true });
   }
   return ok(null);
 }
@@ -516,14 +528,15 @@ export async function updateRun(
   patch: Database['public']['Tables']['family_automation_runs']['Update'],
   opts?: StoreOpts,
 ): Promise<ServiceResult<null>> {
-  const { error } = await ledgerClient(scope, opts)
+  const { data: updated, error } = await ledgerClient(scope, opts)
     .from('family_automation_runs')
     .update(patch)
     .eq('id', runId)
-    .eq('family_id', scope.familyId);
-  if (error) {
-    console.error('[ai/runs] failed to update the run', error);
-    return fail(describeDbError(error, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
+    .eq('family_id', scope.familyId)
+    .select('id');
+  if (error || wroteNoRows(updated)) {
+    console.error('[ai/runs] failed to update the run', error ?? { runId, error: 'no rows updated' });
+    return fail(error ? describeDbError(error, 'Bubaly could not update that run.') : 'Bubaly could not update that run.', { code: SERVICE_CODES.db, retryable: true });
   }
   return ok(null);
 }
@@ -682,6 +695,9 @@ export async function releaseRun(
   runId: string,
   leaseOwner: string,
 ): Promise<void> {
+  // Rows deliberately not checked: filtered on `lease_owner`, so zero rows means
+  // the lease was already taken over or expired — not ours to release.
+  // Audit C1-S9-66.
   const { error } = await db
     .from('family_automation_runs')
     .update({ lease_owner: null, lease_expires_at: null })

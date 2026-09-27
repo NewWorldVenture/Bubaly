@@ -75,14 +75,22 @@ export const DENSITY_FONT_PCT: Record<Density, number> = {
   comfortable: 100, cozy: 104, playful: 110,
 };
 
-export const DENSITY_LABELS: Record<Density, string> = {
-  comfortable: 'Standard', cozy: 'Cozy', playful: 'Relaxed',
+// KEYS, not words. These are module-scope constants under lib/, read long
+// before a request has a locale — the blind spot the i18n gate exists for, and
+// the same shape `lib/marketing/*.ts` uses for exactly this reason. Holding
+// English here put "Standard / Cozy / Relaxed" and their descriptions in front
+// of every non-English family in Settings; `components/app/display-comfort.tsx`
+// resolves them.
+export const DENSITY_LABEL_KEYS: Record<Density, string> = {
+  comfortable: 'roleSurface.densityStandard',
+  cozy: 'roleSurface.densityCozy',
+  playful: 'roleSurface.densityRelaxed',
 };
 
-export const DENSITY_DESCRIPTIONS: Record<Density, string> = {
-  comfortable: 'The default text size and spacing.',
-  cozy: 'A little larger text and spacing.',
-  playful: 'The biggest text and roomiest tap targets.',
+export const DENSITY_DESCRIPTION_KEYS: Record<Density, string> = {
+  comfortable: 'roleSurface.densityStandardDesc',
+  cozy: 'roleSurface.densityCozyDesc',
+  playful: 'roleSurface.densityRelaxedDesc',
 };
 
 /** Densities a user can pick in Settings (in order), plus 'auto' = role default. */

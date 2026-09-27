@@ -84,7 +84,12 @@ const ENTRY = /app\/.*\/(page|layout|template|default)\.tsx$/;
 /** Clock helpers only — `fmtDate` is deliberately absent. See the header. */
 const FORMATS_A_TIME = /\bfmt(Relative|TimeAgo|DateTime|Time)\s*\(/;
 /** `getFormat(tz)` binds a zone; `getFormat()` does not. The argument is the fix. */
-const BINDS_A_ZONE = /getFormat\(\s*[A-Za-z_$]/;
+//
+// `createFormat(locale, t, tz)` binds one too: /home builds it from the catalogue
+// it already holds rather than paying `getFormat`'s second locale lookup (merge
+// with main, Audit C1-S9-89). Only a zone-named LAST argument counts — the
+// two-argument call is the unbound one.
+const BINDS_A_ZONE = /getFormat\(\s*[A-Za-z_$]|createFormat\([^;]*,\s*(?:tz|timeZone|zone)\s*\)/;
 
 /**
  * Comments stripped first, and the sibling ratchet learned this the hard way:
@@ -148,6 +153,8 @@ describe('a server-rendered time only goes unbound down', () => {
       'fmtDate is matching again — this ratchet is counting DATE columns as defects').toBe(false);
     expect(BINDS_A_ZONE.test('const { fmtTime } = await getFormat(tz);')).toBe(true);
     expect(BINDS_A_ZONE.test('const { fmtMoney } = await getFormat();')).toBe(false);
+    expect(BINDS_A_ZONE.test('createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);')).toBe(true);
+    expect(BINDS_A_ZONE.test('createFormat(locale.code, (key, params) => translate(catalogue, key, params));')).toBe(false);
     for (const p of ['app/(app)/home/page.tsx', 'app/(app)/dashboard/x/layout.tsx']) {
       expect(ENTRY.test(p), p).toBe(true);
     }

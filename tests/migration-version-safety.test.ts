@@ -40,8 +40,8 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0353 takes network consent and
-    // affiliate commissions out of members' hands. Stating it rather than deriving it is
+    // Bumped whenever a migration lands — 0418 pins what the one public bucket
+    // accepts. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
     //
@@ -308,7 +308,117 @@ describe('Supabase migration filename safety', () => {
     // role. Held by docs/audit/notification-authorship-check.sql (re-
     // controlled) and tests/a-notification-for-someone-else-is-written-by-
     // bubaly.test.ts.
-    expect(audit.nextVersion).toBe('0389');
+    //
+    // 0406–0418, less 0412, 0413 and 0417, are the audit branch's (PR #556):
+    // ten files, and the FIFTH time that branch's numbers have moved. They sat
+    // at 0300/0304–0309, then 0318–0330, then 0361–0370, and main claimed each
+    // range while they waited — the last time with the C1-K pass above, which
+    // is the collision this pin surfaced on the merge that brought it in. The
+    // order is theirs, unchanged: 0406 social tokens service-role only; 0407
+    // no TRUNCATE for the public roles; 0408 household secrets; 0409–0411 the
+    // marketplace parties, reviews and review deletes; 0414 health records;
+    // 0415 the paperwork stamp; 0416 the private journal; 0418 the public
+    // bucket's MIME allowlist. The slots are the ones an earlier close-out of
+    // the same branch had already replayed and probed against this tree with
+    // all thirteen files at 0406–0418, so the ten keep those and the three
+    // gaps are the three the branch DROPPED on its own merge with main (Audit
+    // C1-S9-89): its social-restriction DELETE policy duplicated 0319 here,
+    // less its `to authenticated`; its location policies are superseded by
+    // 0335, and stacking them broke 0335's own negative control; and its
+    // behaviour/care-log policy contradicted 0338's probe on whether a child
+    // may log behaviour — recorded in finalaudit.md for the owner to decide
+    // rather than settled by whichever merge came last. 0381–0388 went to
+    // the paragraphs above (#581, #584) after that block was picked, and
+    // 0389–0405 stay free, spoken for by other in-flight branches at the time;
+    // a number below the one pinned is still free to land.
+    //
+    // 0406 puts the OAuth token store (social_account_tokens) back behind the
+    // service role — 0034 created it deny-all and said never to add a policy,
+    // and 0297 added four on the premise that "every policy was
+    // is_family_member" when there were none (C3-S5-01). 0407 revokes TRUNCATE
+    // from anon and authenticated across public: RLS is never consulted for
+    // TRUNCATE, so `using (false)` did not stop it, and Supabase's default
+    // privileges had handed both roles TRUNCATE on the marketing spine and both
+    // credential stores (C3-S3-02, C3-S5-09). 0408 makes household_info's
+    // `is_sensitive` flag reach RLS — wifi keys and alarm codes were masked by
+    // an eye toggle over a row every child's browser already held.
+    //
+    // 0409 makes the marketplace's party columns immutable with a BEFORE UPDATE
+    // trigger: 0154's UPDATE policies checked the row you started with, and
+    // `with check (is_family_member)` let a buyer make themselves the seller of
+    // record on their own completed order. 0410 scopes marketplace_reviews,
+    // _saves and _follows UPDATE to the author (the SUBJECT of a one-star
+    // review was rewriting its rating) and replaces 0409's table-branching
+    // trigger function with a generic one that takes its column list from the
+    // trigger definition. 0411 is the same fix for DELETE on the four
+    // per-member marketplace tables — deleting a review is rewriting it —
+    // with the author, a manager who is not the review's subject, and the
+    // listing owner (for offers) kept.
+    //
+    // 0414 adds restrictive manager guards to immunizations and health_visits
+    // — the two health tables 0309 named the class for and stopped short of —
+    // in 0254's mechanism and 0309's shape; medication_doses stays open as
+    // 0309 left it. 0415 adds paperwork_stamp_action(): stamping one paperwork
+    // action used to rewrite the WHOLE `actions` array from a copy read
+    // earlier, so "Add to calendar" followed by "Remind me" erased the first
+    // stamp and the retap created a second event; one element via jsonb_set,
+    // refusing an element already stamped, SECURITY INVOKER so RLS is
+    // unchanged. 0416 makes journal_entries' `is_private` mean what it says on
+    // SELECT — self, or a family MANAGER once the owner marks an entry not
+    // private, which is 0364's owner-or-manager rule and what
+    // docs/audit/private-journal-check.sql pins: a sibling never reads another
+    // member's entry — and gives family_insurance_policies the manager-gated
+    // writes its twin insurance_policies always had. 0418 pins
+    // `allowed_mime_types` on the one PUBLIC bucket that accepted anything
+    // (family-media), read off the six upload modules' own `accept` lists, so
+    // an SVG or HTML upload is no longer a page hosted on the project's own
+    // Supabase domain (F-E03's cheap half, which the LB-009 deferral was never
+    // meant to cover).
+    //
+    // 0426-0443 are PR #548's block, and it has moved twice. The branch
+    // numbered it 0318-0338 against a main that stopped at 0317; main then
+    // landed its own 0318-0360, and the author moved the block to 0361-0382 on
+    // merging main at 7e54596d. main then landed 0344-0380 (#579, the C1-K
+    // pass) and 0381-0387 (#581), so the block collided again, all of it this
+    // time, and it moved as one block, in order and by name, into the range
+    // this PR was assigned: 0361->0426, 0362->0427, 0363->0428, 0365->0429,
+    // 0366->0430, 0367->0431, 0369->0432, 0370->0433, 0371->0434,
+    // 0372->0435, 0373->0436, 0374->0437, 0375->0438, 0378->0439,
+    // 0379->0440, 0380->0441, 0381->0442, 0382->0443. Above main's newest
+    // rather than into any gap below it, because a version below the newest
+    // one applied is not what `supabase db push` applies without being told
+    // to. What the survivors touch: policy predicates (0426), reward prices
+    // (0428), subscriptions and billing_customers (0429), nine health tables
+    // (0430), a guardian_phone unique index (0432), marketplace deal terms
+    // (0433), medications (0434), grades and screen-time limits (0435),
+    // medical_profiles reads + family_allergies() (0438), a reward balance
+    // trigger (0439), push_deliveries (0440), the Resend counter (0441) and
+    // independence_milestones (0442).
+    //
+    // 0443_a_family_gets_one_default_list.sql adds ensure_default_grocery_list
+    // and ensure_default_todo_list: get-or-create of a family's DEFAULT list as
+    // one operation under a per-family advisory lock (DATA-007), SECURITY
+    // INVOKER so RLS decides exactly what it decided before. Held by
+    // docs/audit/a-family-gets-one-default-list-check.sql, which races two
+    // sessions against it and against a lock-less copy.
+    //
+    // 0427, 0431, 0436 AND 0437 ARE PERMANENTLY UNUSED, and that is recorded
+    // rather than renumbered, for the reason given for 0334 and 0337 above.
+    // Each was the branch's fix for a subject #579 had since closed, and each
+    // is shown by a probe going red with the file put back on the replayed
+    // chain, not by comparing names: 0427 (driving scores) is main's 0365, a
+    // trip is a manager's to erase (driving-score-write-boundary-check); 0431
+    // (safety check-ins, whose locator half 0335 had already taken) is main's
+    // 0379 (locator-write-boundary-check, step 6: with it a child files a
+    // check-in naming nobody); 0436 (behaviour-note authorship) is main's 0377
+    // (access-record-write-boundary-check); 0437 (journals) is main's 0364
+    // (main's private-journal-check). Laid over main's, each replaced or
+    // widened the rule main's guards stand on. The author had already dropped
+    // four more the same way on the first merge (numbered 0364, 0368, 0376 and
+    // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
+    // those never took a number in this range, and the numbers they held then
+    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
+    expect(audit.nextVersion).toBe('0444');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

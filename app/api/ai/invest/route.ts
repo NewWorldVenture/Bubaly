@@ -5,7 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { portfolioValue, type Holding, type PriceMap } from '@/lib/invest/portfolio';
@@ -36,7 +36,13 @@ export async function POST(req: NextRequest) {
     );
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
-      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+      // The family's midnight, not the host's. This bound is the daily AI
+      // quota window: on a UTC host `setHours(0,0,0,0)` rolls over at 17:00 in
+      // California and 11:00 in Sydney, so a household's allowance reset in the
+      // middle of their afternoon and calls made after it were counted against
+      // tomorrow. Same defect and same fix as the kitchen display
+      // (app/(app)/display/page.tsx:122).
+      const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
       const { count, error: meterError } = await supabase
         .from('wallet_audit_logs').select('id', { count: 'exact', head: true })
         .eq('family_id', familyId).eq('action', 'ai_invest_call').gte('created_at', startOfDay.toISOString());
@@ -56,18 +62,34 @@ export async function POST(req: NextRequest) {
     const body = (boundedBody.value ?? {}) as { childWalletId?: string; assetId?: string };
 
     // Resolve the child's name + (optional) selected asset + portfolio value.
+    // The two name lookups degrade honestly: "your child" instead of a first
+    // name is a blander answer, not a wrong one, so a failed read is logged and
+    // the fallback stands.
     let childName = 'your child';
     if (body.childWalletId) {
-      const { data: cw } = await supabase.from('child_wallets').select('member_id').eq('id', body.childWalletId).eq('family_id', familyId).maybeSingle();
+      const { data: cw, error: cwError } = await supabase.from('child_wallets').select('member_id').eq('id', body.childWalletId).eq('family_id', familyId).maybeSingle();
+      if (cwError) console.warn('[ai/invest] child wallet read failed; using a generic name', { familyId, error: cwError.message });
       if (cw?.member_id) {
-        const { data: m } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+        const { data: m, error: mError } = await supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle();
+        if (mError) console.warn('[ai/invest] member read failed; using a generic name', { familyId, error: mError.message });
         if (m?.display_name) childName = m.display_name.split(' ')[0] || m.display_name;
       }
     }
 
+    // The ASSET does not degrade honestly, and that is the difference. The
+    // caller named a specific asset; a refused read left name, description and
+    // risk level all null, and the model went on to give investing guidance to
+    // a CHILD about an asset it had been told nothing about — including its
+    // risk level, which is the one fact this feature exists to teach. A blander
+    // name is a smaller answer; an unknown asset is a different question.
+    // Audit C1-S9-40.
     let assetName: string | null = null, assetDescription: string | null = null, riskLevel: string | null = null;
     if (body.assetId) {
-      const { data: a } = await supabase.from('invest_assets').select('name, description, risk_level').eq('id', body.assetId).maybeSingle();
+      const { data: a, error: assetError } = await supabase.from('invest_assets').select('name, description, risk_level').eq('id', body.assetId).maybeSingle();
+      if (assetError) {
+        console.error('[ai/invest] asset read failed', { assetId: body.assetId, error: assetError.message });
+        return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+      }
       if (a) { assetName = a.name; assetDescription = a.description; riskLevel = a.risk_level; }
     }
 

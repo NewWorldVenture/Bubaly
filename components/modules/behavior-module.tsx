@@ -7,7 +7,7 @@ import { useApp } from '@/components/app/app-context';
 import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -32,11 +32,17 @@ const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 export function BehaviorModule() {
   const tr = useTranslations();
   const { familyId, userId, members, role } = useApp();
-  const { success, error: toastError } = useToast();
-  // The behavior log is what a parent reviews: anyone may log, but only a
-  // manager changes or removes an entry (0377) - a child cannot delete the
-  // hard day they had.
+  // The behavior log is what a parent reviews. 0377 made changing or removing
+  // an entry a manager's write — a child cannot delete the hard day they had.
+  // `member_id` is commented "-- the child" and `logged_by` is the adult who
+  // wrote it, so the person observed is not the author, and these controls keep
+  // logging a manager's on screen too (C1-S8-09). That is the UI half only: the
+  // branch's migration that made INSERT manager-only was dropped on the merge
+  // with main (C1-S9-89), and 0377's rule — anyone in the family may log —
+  // stands in the database; finalaudit.md records it for the owner.
+  const canEdit = isManager(role);
   const canRemove = isManager(role);
+  const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const { data: logs, loading, error, refresh } = useRealtimeQuery<Log>({
@@ -49,6 +55,8 @@ export function BehaviorModule() {
       .gte('occurred_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
       .order('occurred_at', { ascending: false }).limit(1000),
   });
+
+  const [saving, setSaving] = useState(false);
 
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
@@ -69,29 +77,53 @@ export function BehaviorModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      category: form.category.trim() || 'general',
-      note: form.note.trim() || null,
-      points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
-      occurred_at: new Date(form.occurred_at).toISOString(),
-    };
-    const { error } = form.id
-      ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
-      : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Logged');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        category: form.category.trim() || 'general',
+        note: form.note.trim() || null,
+        points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
+        occurred_at: new Date(form.occurred_at).toISOString(),
+      };
+      // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+      // not rewrite comes back `error: null` with nothing changed. See
+      // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+      // predicate bounds the write to one household and `.select('id')` makes
+      // the empty result an answer. An INSERT needs neither — RLS refuses one
+      // with an error instead of filtering it away.
+      const { data, error } = form.id
+        ? await supabase.from('behavior_logs').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
+        : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(data)) return toastError(tr('errors.thatChangeWasNotSaved'));
+      success(form.id ? tr('behaviorModule.noteUpdated') : tr('behaviorModule.noteLogged'));
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there. main's 0377 makes a
+    // behaviour note a manager's to erase.
     const { data, error } = await createClient().from('behavior_logs').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
-    else if (!data?.length) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (wroteNoRows(data)) toastError(tr('errors.thatChangeWasNotSaved'));
     else success(tr('behaviorModule.deleted'));
   }
 
@@ -128,7 +160,7 @@ export function BehaviorModule() {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
             <Award className="h-4 w-4" /> {tr('behavior.independence')}
           </Link>
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>
+          {canEdit && <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>}
         </div>
       </div>
 
@@ -259,7 +291,7 @@ export function BehaviorModule() {
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('behavior.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>
         </Modal>

@@ -121,7 +121,7 @@ export function RidesModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = form.id
-      ? await sb.from('rides').update(fields).eq('id', form.id).select('id')
+      ? await sb.from('rides').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('rides').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -133,7 +133,7 @@ export function RidesModule() {
   async function remove(r: Ride) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('rides').delete().eq('id', r.id).select('id');
+    const { data: rows, error: err } = await sb.from('rides').delete().eq('id', r.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('ridesModule.rideDeleted'));
@@ -141,7 +141,7 @@ export function RidesModule() {
 
   async function setStatus(r: Ride, status: RideStatus) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('rides').update({ status }).eq('id', r.id).select('id');
+    const { data: rows, error: err } = await sb.from('rides').update({ status }).eq('id', r.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }

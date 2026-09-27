@@ -24,6 +24,8 @@ import {
   type ApprovalHistoryRow, type ExistingAiPolicy, type PolicyCandidate, type ToolCallHistoryRow,
 } from '@/lib/autopilot/policy-candidates';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -55,7 +57,7 @@ function canonicalToolName(name: string | null): string | null {
  */
 export async function loadPolicyHistory(supabase: DB, familyId: string, now: Date, windowDays = POLICY_WINDOW_DAYS): Promise<PolicyHistory> {
   const sinceIso = new Date(now.getTime() - windowDays * 86400000).toISOString();
-  const [approvalsResult, toolCallsResult, policiesResult, suggestionsResult] = await Promise.all([
+  const [approvalsResult, toolCallsResult, policiesResult, suggestionsResult] = await settleAll([
     supabase.from('approval_requests')
       .select('id, domain, capability, status, decided_at, requested_by_kind, payload, payload_kind')
       .eq('family_id', familyId).eq('requested_by_kind', 'ai')
@@ -144,11 +146,15 @@ export async function runPolicyScan(
     if (prior) {
       // The streak grew since the offer was made: say so on the open card.
       if (prior.status === 'open' && (prior.detail !== d.detail || prior.confidence !== d.confidence)) {
-        const { error } = await supabase.from('autopilot_suggestions')
+        // `refreshed` is reported back from the scan, and it counted cards that
+        // matched nothing (resolved by a parent since the read). Counted only
+        // when one changed; zero rows is ordinary, so it is not an error.
+        // Audit C1-S9-69.
+        const { data: refreshedRow, error } = await supabase.from('autopilot_suggestions')
           .update({ detail: d.detail, confidence: d.confidence, payload: d.payload as never, expires_at: d.expiresAt })
-          .eq('id', prior.id).eq('family_id', familyId);
+          .eq('id', prior.id).eq('family_id', familyId).select('id');
         if (error) throw new Error('Autopilot could not refresh the policy suggestion');
-        refreshed++;
+        if (!wroteNoRows(refreshedRow)) refreshed++;
       }
       continue;
     }

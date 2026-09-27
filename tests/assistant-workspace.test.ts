@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // The assistant workspace (§54) and the card components (§53), server-rendered
 // the way Next renders client components on first paint. A throw here is the
 // route error boundary in production, so every kind is rendered in both
@@ -8,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
@@ -43,7 +45,7 @@ import { withLocale } from './helpers/render-translated';
 const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
-const render = (node: React.ReactElement) => renderToStaticMarkup(React.createElement(ToastProvider, null, node));
+const render = (node: React.ReactElement) => renderTranslated(React.createElement(ToastProvider, null, node));
 
 const CARDS: ResultCard[] = [
   { kind: 'meal_plan', title: '5 dinners planned', week_start: '2026-09-07', replaced: 1, created_meals: 2, href: '/dashboard/meals', days: Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-0${i + 1}`, label: `Day ${i + 1}`, meals: [{ meal_type: 'breakfast', name: 'Oats' }, { meal_type: 'dinner', name: i === 3 ? null : `Dish ${i + 1}` }] })) },
@@ -102,7 +104,7 @@ describe('result card components', () => {
     const html = render(React.createElement(ResultCardView, { card: CARDS[8] }));
     expect(html).toContain('role="meter"');
     expect(html).toContain('aria-valuenow="72"');
-    expect(html.indexOf('Passport expires')).toBeLessThan(html.indexOf('Renew Sam’s passport'));
+    expect(at(html, 'Passport expires')).toBeLessThan(at(html, 'Renew Sam’s passport'));
     expect(html).toContain('12 days to go');
   });
 
@@ -182,7 +184,7 @@ describe('result pane', () => {
 
   it('renders the groups, highlights the pointed-at card, and has empty / loading / error states', () => {
     const html = render(React.createElement(ResultPane, { messages, canDecide: false, highlightId: cardId('a2', 0) }));
-    expect(html.indexOf('1 overlap')).toBeLessThan(html.indexOf('5 dinners planned'));
+    expect(at(html, '1 overlap')).toBeLessThan(at(html, '5 dinners planned'));
     expect(html).toMatch(/data-card-id="a2:0"[^>]*ring-2/);
     expect(render(React.createElement(ResultPane, { messages: [], canDecide: false }))).toContain('Nothing planned yet');
     expect(render(React.createElement(ResultPane, { messages: [{ id: 'u', role: 'user', content: 'x' }, { id: 'a', role: 'assistant', content: '' }], streaming: true, canDecide: false }))).toContain('role="status"');

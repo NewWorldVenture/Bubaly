@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildAssistantTools, type AssistantCtx } from '@/lib/assistant/tools';
 
+// A database without 0443 (DATA-007): the default-list get-or-create answers
+// "function missing" and falls back to the read-then-insert these cases were
+// written against. tests/a-family-gets-one-default-list.test.ts covers the RPC path.
+const missingDefaultListRpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+
 type DbArg = Parameters<typeof buildAssistantTools>[0];
 type Operation = 'select' | 'insert' | 'update' | 'delete' | 'upsert';
 type Result = { data?: unknown; error?: unknown; count?: number };
@@ -12,6 +17,7 @@ function fakeDb(resolveResult: (table: string, operation: Operation, count: numb
   const counts = new Map<string, number>();
 
   const db = {
+    rpc: missingDefaultListRpc,
     from(table: string) {
       let operation: Operation = 'select';
       let payload: unknown;
@@ -103,8 +109,10 @@ describe('assistant persistence boundaries', () => {
         };
       }
       if (table === 'family_reminders' && operation === 'insert') return { error: new Error('next reminder failed') };
-      if (table === 'family_reminders' && operation === 'update' && count === 1) return { error: null };
-      if (table === 'family_reminders' && operation === 'update' && count === 2) return { error: null };
+      // Both updates now ask `.select()` (C1-S9-69); a matched update answers
+      // with its row, so the complete and the restore each return one.
+      if (table === 'family_reminders' && operation === 'update' && count === 1) return { data: [{ id: 'reminder-1' }], error: null };
+      if (table === 'family_reminders' && operation === 'update' && count === 2) return { data: [{ id: 'reminder-1' }], error: null };
       return { data: [], error: null };
     });
 

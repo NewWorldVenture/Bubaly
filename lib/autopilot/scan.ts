@@ -48,6 +48,8 @@ import { notify } from '@/lib/services/notifications';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
@@ -116,21 +118,15 @@ export function defaultReminderIso(dayKey: string, tz: string): string {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : `${dayKey}T09:00:00Z`;
 }
 
-/** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
+/**
+ * Get-or-create the family's active shopping list, as ONE operation (0443,
+ * DATA-007): the scan runs beside a family who may be capturing their first
+ * item at the same moment, and a read-then-insert of its own gave them two.
+ */
 async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
-  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
-  // `archived_at` (0014) — and only `archived_at` is ever written, by the
-  // shopping module. Asking one of them calls an archived list open and
-  // quietly files the family's groceries where nobody is looking.
-  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) throw new Error('Autopilot could not read the family shopping list');
-  if (existing) return existing.id;
-  const { data: created, error: createError } = await supabase.from('grocery_lists')
-    .insert({ family_id: familyId, name: 'Shopping List', created_by: userId }).select('id').maybeSingle();
-  if (createError || !created?.id) throw new Error('Autopilot could not create the family shopping list');
-  return created?.id ?? null;
+  const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Shopping List');
+  if (!list.id) throw new Error('Autopilot could not open or create the family shopping list');
+  return list.id;
 }
 
 /**
@@ -287,8 +283,11 @@ export async function runAutopilotScan(
       const existingProfile = profileByMember.get(t.memberId);
       if (existingProfile) {
         const merged = { ...(existingProfile.metadata as Record<string, unknown> ?? {}), autopilot_traits: t };
-        const { error: updateError } = await supabase.from('family_digital_twin_profiles').update({ metadata: merged as never }).eq('id', existingProfile.id);
-        if (updateError) console.error('[autopilot] trait update failed', updateError);
+        // Best-effort, as the comment above says; logged on zero rows too.
+        // Audit C1-S9-69.
+        const { data: traitsSaved, error: updateError } = await supabase.from('family_digital_twin_profiles')
+          .update({ metadata: merged as never }).eq('id', existingProfile.id).select('id');
+        if (updateError || wroteNoRows(traitsSaved)) console.error('[autopilot] trait update failed', updateError ?? { profileId: existingProfile.id, error: 'no rows updated' });
       } else {
         const { error: insertError } = await supabase.from('family_digital_twin_profiles').insert({
           family_id: familyId, member_id: t.memberId, metadata: { autopilot_traits: t } as never, created_by: userId,
@@ -390,13 +389,21 @@ export async function runAutopilotScan(
 
     if (suggestionError || !inserted?.id) {
       const cleanupErrors: unknown[] = [];
+      // Side effects THIS scan created, so removing fewer than were created is a
+      // cleanup failure — a reminder or grocery line left behind for a
+      // suggestion that was never saved — and joins the report below.
+      // Audit C1-S9-69.
       if (createdReminderId) {
-        const { error } = await supabase.from('reminders').delete().eq('id', createdReminderId).eq('family_id', familyId);
+        const { data: removedReminder, error } = await supabase.from('reminders').delete().eq('id', createdReminderId).eq('family_id', familyId).select('id');
         if (error) cleanupErrors.push(error);
+        else if (wroteNoRows(removedReminder)) cleanupErrors.push({ reminderId: createdReminderId, error: 'no rows deleted' });
       }
       if (createdGroceryIds.length > 0) {
-        const { error } = await supabase.from('grocery_items').delete().in('id', createdGroceryIds).eq('family_id', familyId);
+        const { data: removedGroceries, error } = await supabase.from('grocery_items').delete().in('id', createdGroceryIds).eq('family_id', familyId).select('id');
         if (error) cleanupErrors.push(error);
+        else if ((removedGroceries?.length ?? 0) !== createdGroceryIds.length) {
+          cleanupErrors.push({ removed: removedGroceries?.length ?? 0, created: createdGroceryIds.length });
+        }
       }
       if (cleanupErrors.length > 0) console.error('[autopilot] side-effect cleanup failed', cleanupErrors);
       throw new Error('Autopilot could not save the suggestion');

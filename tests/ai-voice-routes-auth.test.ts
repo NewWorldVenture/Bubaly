@@ -13,7 +13,7 @@ const getBearerUserContext = vi.fn();
 const ensureActiveFamily = vi.fn();
 const getOpenAIKey = vi.fn();
 const enforceAIRateLimit = vi.fn();
-const fetchExternal = vi.fn();
+const fetchWithDeadline = vi.fn();
 
 const cookieClient = { from: () => cookieClient, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } } as Record<string, unknown>;
 const bearerClient = { from: () => bearerClient } as Record<string, unknown>;
@@ -34,7 +34,7 @@ vi.mock('@/lib/server/feature-tiers', () => ({
 }));
 vi.mock('@/lib/ai/settings', () => ({ getOpenAIKey: (...a: unknown[]) => getOpenAIKey(...a) }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: (...a: unknown[]) => enforceAIRateLimit(...a) }));
-vi.mock('@/lib/server/external-fetch', () => ({ fetchExternal: (...a: unknown[]) => fetchExternal(...a) }));
+vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: (...a: unknown[]) => fetchWithDeadline(...a) }));
 
 const ctx = {
   user: { id: 'user-1', email: 'parent@example.com' },
@@ -65,7 +65,7 @@ beforeEach(() => {
   getBearerUserContext.mockResolvedValue({ ok: false, reason: 'invalid_token' });
   getOpenAIKey.mockResolvedValue('sk-test');
   enforceAIRateLimit.mockResolvedValue({ ok: true });
-  fetchExternal.mockResolvedValue(new Response(JSON.stringify({ text: 'Plan dinners for the week' }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  fetchWithDeadline.mockResolvedValue(new Response(JSON.stringify({ text: 'Plan dinners for the week' }), { status: 200, headers: { 'content-type': 'application/json' } }));
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });
@@ -76,7 +76,7 @@ describe('POST /api/ai/voice/transcribe', () => {
     const res = await POST(transcribeRequest());
     expect(res.status).toBe(401);
     expect((await res.json()).code).toBe('signed_out');
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('accepts a bearer JWT and transcribes under that caller', async () => {
@@ -105,7 +105,7 @@ describe('POST /api/ai/voice/transcribe', () => {
     const { POST } = await import('@/app/api/ai/voice/transcribe/route');
     const res = await POST(transcribeRequest({ authorization: 'Bearer stale' }));
     expect(res.status).toBe(401);
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('503s with no transcription key, and never invents a transcript', async () => {
@@ -117,7 +117,7 @@ describe('POST /api/ai/voice/transcribe', () => {
     const body = await res.json();
     expect(body.code).toBe('not_configured');
     expect(body.text).toBeUndefined();
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('a family that is not set up yet gets 403, not a transcript', async () => {
@@ -135,12 +135,12 @@ describe('POST /api/ai/voice/speak', () => {
     const res = await POST(speakRequest());
     expect(res.status).toBe(401);
     expect((await res.json()).code).toBe('signed_out');
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('accepts a bearer JWT and streams the audio back', async () => {
     getBearerUserContext.mockResolvedValue({ ok: true, supabase: bearerClient, ctx, user: ctx.user });
-    fetchExternal.mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    fetchWithDeadline.mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
     const { POST } = await import('@/app/api/ai/voice/speak/route');
     const res = await POST(speakRequest({ authorization: 'Bearer token-abc' }));
     expect(res.status).toBe(200);
@@ -156,7 +156,7 @@ describe('POST /api/ai/voice/speak', () => {
     expect(res.status).toBe(503);
     expect(res.headers.get('Content-Type')).toContain('application/json');
     expect((await res.json()).code).toBe('not_configured');
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 });
 
@@ -181,7 +181,7 @@ describe.each([
     expect((await response.json()).code).toBe(code);
     expect(enforceAIRateLimit).not.toHaveBeenCalled();
     expect(getOpenAIKey).not.toHaveBeenCalled();
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('accepts a matching family UUID', async () => {
@@ -189,7 +189,7 @@ describe.each([
     const { POST } = await route();
     const response = await POST(request({ authorization: 'Bearer tok', 'X-Bubaly-Family-Id': FAMILY.toUpperCase() }));
     expect(response.status).toBe(200);
-    expect(fetchExternal).toHaveBeenCalledOnce();
+    expect(fetchWithDeadline).toHaveBeenCalledOnce();
   });
 
   it('also checks cookie clients', async () => {
@@ -197,7 +197,7 @@ describe.each([
     const { POST } = await route();
     const response = await POST(request({ 'X-Bubaly-Family-Id': OTHER_FAMILY }));
     expect(response.status).toBe(409);
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 
   it('uses the bearer-selected language despite the geo header', async () => {
@@ -219,6 +219,6 @@ describe.each([
     expect(response.status).toBe(503);
     expect((await response.json()).code).toBe('unavailable');
     expect(getOpenAIKey).not.toHaveBeenCalled();
-    expect(fetchExternal).not.toHaveBeenCalled();
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
   });
 });

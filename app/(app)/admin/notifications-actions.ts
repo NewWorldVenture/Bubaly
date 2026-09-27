@@ -15,6 +15,12 @@ export async function markAdminNotesReadAction(ids?: string[]): Promise<Result> 
   const t = await getTranslations();
   if (!(await isSuperAdmin())) return { ok: false, error: t('notificationsActions.notAuthorized') };
   const supabase = createServiceClient();
+  // Deliberately NOT confirmed. Without ids this is `.eq('is_read', false)`,
+  // where zero rows is the ordinary "nothing unread"; with ids, zero rows means
+  // they no longer exist, and there is nothing left to mark. Either way the
+  // badge is re-read by the revalidation below, so it cannot go on showing a
+  // count that is not there. Built across three statements, which is why the
+  // ratchet could not see it until C1-S9-61. Audit C1-S9-61.
   let q = supabase.from('admin_notifications').update({ is_read: true });
   q = ids && ids.length ? q.in('id', ids) : q.eq('is_read', false);
   const { error } = await q;

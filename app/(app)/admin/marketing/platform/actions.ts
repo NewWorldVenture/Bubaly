@@ -151,6 +151,11 @@ export async function saveMarketingTemplate(formData: FormData): Promise<void> {
   // is only right when this row is about to take its place: ticking the box on a
   // draft must not leave the page type with no template at all.
   if (edited.is_default && storedStatus === 'active') {
+    // Deliberately NOT confirmed: this clears whichever template WAS the default
+    // for the page type, and when none was, zero rows is exactly right. The
+    // write that matters — the save below — is confirmed. Invisible to the
+    // write ratchet until C1-S9-61, as the first statement in its block.
+    // Audit C1-S9-61.
     const { error: clearDefaultError } = await supabase.from('marketing_content_templates')
       .update({ is_default: false, updated_by: actorId })
       .eq('page_type', pageType).eq('status', 'active');

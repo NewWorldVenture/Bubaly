@@ -50,6 +50,9 @@ vi.mock('react', async (original) => ({
         : next;
     }];
   },
+  // The form wires its three captions to their inputs with useId, which needs
+  // a dispatcher this harness does not have. A fixed id is all it asks for.
+  useId: () => ':routing:',
 }));
 vi.mock('@/app/(app)/guardian/actions', () => ({
   upsertMemberProfileAction: async (input: Record<string, unknown>) => {

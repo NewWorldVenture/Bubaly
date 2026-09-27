@@ -11,7 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -28,6 +28,8 @@ import {
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -105,6 +107,21 @@ export function MessagesModule() {
   const [showArchived, setShowArchived] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(filterOpen)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [filterOpen]);
   const [summaries, setSummaries] = useState<ReturnType<typeof summarizeConversations>>(
     { lastByConv: new Map(), unreadByConv: new Map() },
   );
@@ -175,6 +192,11 @@ export function MessagesModule() {
   }, [familyId, userId, members, loadConversations]);
 
   // ── Load messages for active conv ──────────────────────────
+  // `toastError` is in the deps because it IS a dependency — this callback
+  // calls it. It is safe to list: `useToast`'s context value is memoised on
+  // `[push]` (see the comment in components/ui/toast.tsx, which says it exists
+  // for exactly this), so the identity is stable and adding it cannot make
+  // this callback — or the effects that depend on it — re-run per toast.
   const loadMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
     const supabase = createClient();
@@ -205,13 +227,15 @@ export function MessagesModule() {
       if (!rpcErr) return;
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
+        // Best-effort fallback for read receipts when the RPC is unavailable;
+        // logged, and deliberately not confirmed row by row. Audit C1-S9-81.
         const { error } = await settle(supabase.from('family_messages')
           .update({ read_by: [...(m.read_by ?? []), userId] })
           .eq('id', m.id));
         if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
       }
     })();
-  }, [userId]);
+  }, [userId, toastError]);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -281,7 +305,7 @@ export function MessagesModule() {
       return;
     }
     setSummaries(summarizeConversations(data ?? [], userId));
-  }, [familyId, userId]);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 
@@ -322,7 +346,7 @@ export function MessagesModule() {
     e.preventDefault();
     const content = text.trim();
     if (!content || !activeConv || sending) return;
-    if (content.length > 4000) { toastError('Message is too long (max 4000 characters)'); return; }
+    if (content.length > 4000) { toastError(tr('validation.messageTooLong', { max: 4000 })); return; }
     const prevReplyTo = replyTo;
     setSending(true);
     setText('');
@@ -386,7 +410,7 @@ export function MessagesModule() {
   async function sendFile(file: File) {
     if (!activeConv || uploadingFile) return;
     // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
-    if (file.size > 25 * 1024 * 1024) { toastError('File is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.fileTooLarge', { max: 25 })); return; }
     setUploadingFile(true);
     try {
       const supabase = createClient();
@@ -410,7 +434,11 @@ export function MessagesModule() {
       });
       if (insErr) {
         // Roll back the orphaned upload if the message row failed to insert.
-        await supabase.storage.from('family-media').remove([stored.path]);
+        // Genuine rollback — the row never landed, so a surviving object is
+        // referenced by nothing and the user is already being told this failed.
+        // Named in a log rather than swallowed. Audit C1-S6-01.
+        const { error: rollbackError } = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollbackError) console.error('[messages] upload rollback left an object behind', { path: stored.path }, rollbackError);
         toastError(describeDbError(insErr));
       }
     } catch (err) {
@@ -480,22 +508,26 @@ export function MessagesModule() {
     // remove keys with empty arrays
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   function selectConversation(conv: Conversation) {
@@ -522,6 +554,10 @@ export function MessagesModule() {
     () => messages.filter((m) => m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
     [messages],
   );
+  // SEC-001: attachments are private conversations. Every image, file and voice
+  // note below is read through a URL signed with this viewer's session; a Giphy
+  // link in the same field is external and passes through unchanged.
+  const media = useFamilyMediaUrls(messages.map((m) => m.attachment_url));
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
     const label = timeGroup(msg.created_at);
@@ -781,15 +817,16 @@ export function MessagesModule() {
                               )}>
                                 {/* Image */}
                                 {msg.kind === 'image' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={msg.attachment_url} alt={msg.attachment_name ?? 'Photo'}
-                                      className="mb-2 max-h-56 rounded-xl object-cover" />
+                                  <a href={media(msg.attachment_url) ?? undefined} target="_blank" rel="noreferrer">
+                                    <FamilyMediaImg src={msg.attachment_url} alt={msg.attachment_name ?? 'Photo'}
+                                      className="mb-2 max-h-56 rounded-xl object-cover"
+                                      fallback={<span className="mb-2 block h-40 w-56 max-w-full rounded-xl bg-surface/40" />} />
                                   </a>
                                 )}
                                 {/* File — download card */}
                                 {msg.kind === 'file' && msg.attachment_url && (
-                                  <a href={msg.attachment_url} target="_blank" rel="noreferrer" download
+                                  <a href={media(msg.attachment_url) ?? undefined} target="_blank" rel="noreferrer" download
+                                    aria-disabled={media(msg.attachment_url) ? undefined : true}
                                     className={cn(
                                       'flex min-w-[13rem] items-center gap-3 rounded-xl border p-2.5',
                                       isMine ? 'border-brand-fg/25 bg-brand-fg/10' : 'border-border bg-surface/50',
@@ -809,7 +846,7 @@ export function MessagesModule() {
                                 {/* Voice message — inline audio player ('voice' is the
                                     legacy/seed kind; 'audio' is what the recorder sends). */}
                                 {(msg.kind === 'audio' || msg.kind === 'voice') && msg.attachment_url && (
-                                  <audio controls preload="none" src={msg.attachment_url}
+                                  <audio controls preload="none" src={media(msg.attachment_url) ?? undefined}
                                     className="mb-1 h-10 w-56 max-w-full" aria-label={tr('messages.voiceMessage')} />
                                 )}
                                 {/* Text */}
@@ -1077,10 +1114,9 @@ export function MessagesModule() {
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {sharedPhotos.map((p) => (
-                  <a key={p.id} href={p.attachment_url ?? '#'} target="_blank" rel="noreferrer"
+                  <a key={p.id} href={media(p.attachment_url) ?? undefined} target="_blank" rel="noreferrer"
                     className="aspect-square overflow-hidden rounded-lg bg-elevated">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.attachment_url ?? ''} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
+                    <FamilyMediaImg src={p.attachment_url} alt={p.attachment_name ?? 'Shared photo'} className="h-full w-full object-cover" />
                   </a>
                 ))}
               </div>

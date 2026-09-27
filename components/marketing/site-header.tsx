@@ -78,7 +78,7 @@ export function SiteHeader() {
               href={item.href}
               aria-current={isCurrent(item.href) ? 'page' : undefined}
               className={cn(
-                'focus-visible:focus-ring relative inline-flex h-full items-center text-sm font-medium text-muted transition hover:text-fg xl:text-base',
+                'focus-ring relative inline-flex h-full items-center text-sm font-medium text-muted transition hover:text-fg xl:text-base',
                 isCurrent(item.href) && 'text-brand-text',
               )}
             >
@@ -112,7 +112,7 @@ export function SiteHeader() {
             ref={menuButtonRef}
             type="button"
             disabled={!ready}
-            className="inline-flex items-center justify-center rounded-lg p-2 text-fg coarse:min-h-11 coarse:min-w-11 lg:hidden focus-visible:focus-ring"
+            className="inline-flex items-center justify-center rounded-lg p-2 text-fg coarse:min-h-11 coarse:min-w-11 lg:hidden focus-ring"
             onClick={() => setOpen((v) => !v)}
             aria-label={t('nav.toggleMenu')}
             aria-expanded={open}
@@ -132,7 +132,7 @@ export function SiteHeader() {
                 aria-current={isCurrent(item.href) ? 'page' : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  'focus-visible:focus-ring rounded-lg px-3 py-3 text-base text-fg hover:bg-elevated/70',
+                  'focus-ring rounded-lg px-3 py-3 text-base text-fg hover:bg-elevated/70',
                   isCurrent(item.href) && 'bg-brand/15 text-brand-text',
                 )}
               >
@@ -140,10 +140,10 @@ export function SiteHeader() {
               </Link>
             ))}
             <div className="mt-3 flex gap-2">
-              <Link href="/login" className="focus-visible:focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-border bg-surface px-3 py-3 text-sm font-semibold text-fg hover:bg-elevated" onClick={() => setOpen(false)}>
+              <Link href="/login" className="focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-border bg-surface px-3 py-3 text-sm font-semibold text-fg hover:bg-elevated" onClick={() => setOpen(false)}>
                 {t('marketing.logIn')}
               </Link>
-              <Link href="/welcome" className="focus-visible:focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-3 py-3 text-sm font-semibold text-brand-fg hover:brightness-110" onClick={() => setOpen(false)}>
+              <Link href="/welcome" className="focus-ring inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-violet-600 px-3 py-3 text-sm font-semibold text-brand-fg hover:brightness-110" onClick={() => setOpen(false)}>
                 {t('marketing.getStartedFree')}
               </Link>
             </div>

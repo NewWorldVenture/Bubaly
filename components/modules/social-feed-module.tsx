@@ -5,6 +5,7 @@
 // (All/Favorites/Family/Friends/Groups), and a right rail (Your Sources /
 // Activity / Quick Filters). 100% wired to Supabase via the server actions.
 import { useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Bookmark, Filter, Play, Star, Heart, Video,
@@ -218,13 +219,13 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
                     // Degrade quietly (the link already opened) but never silently:
-                    // a bare `.then()` made an unread item stay unread with no trace.
-                    if (!item.isRead) {
-                      void markReadAction({ id: item.id, read: true }).then(
-                        () => router.refresh(),
-                        (err: unknown) => console.error('[social-feed] mark read failed', err),
-                      );
-                    }
+                    // the refresh shows the server's truth either way, so a refused
+                    // mark-read is a smaller answer — logged, not dropped — and a
+                    // bare `.then()` had let a rejection leave an unread item unread
+                    // with no trace. Audit C1-S9-74.
+                    if (!item.isRead) void markReadAction({ id: item.id, read: true })
+                      .then((res) => { if (!res.ok) console.warn('[social-feed] mark-read refused', res.error); router.refresh(); })
+                      .catch((error: unknown) => console.error('[social-feed] mark read failed', error));
                   }} />
               ))}
             </div>
@@ -370,6 +371,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
 function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; sources: FeedSource[]; busy: string | null; onRemove: (id: string) => void }) {
   const tr = useTranslations();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const own = sources.filter((s) => s.platform === platform);
   return (
     <div className="relative">
@@ -377,6 +379,12 @@ function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; s
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
+        // `onMouseLeave` is a mouse-only convenience and stays one: it is not a
+        // click handler, so the rule flags the element rather than the gesture.
+        // The KEYBOARD path was missing entirely and is the real fix —
+        // `useDismissOnEscape` above. A pointer that never enters the menu
+        // cannot leave it.
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions
         <div className="absolute right-0 top-7 z-10 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg" onMouseLeave={() => setOpen(false)}>
           {own.map((s) => (
             <button key={s.id} type="button" disabled={busy === `rm-${s.id}`} onClick={() => { onRemove(s.id); setOpen(false); }}

@@ -3,6 +3,7 @@
 // claim, fails closed when any source cannot be read.
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -124,7 +125,7 @@ function healthyReplies(): Record<string, Reply> {
   };
 }
 
-const render = async () => renderToStaticMarkup(await NeedsYouPage());
+const render = async () => renderTranslated(await NeedsYouPage());
 
 beforeEach(() => {
   vi.resetAllMocks();

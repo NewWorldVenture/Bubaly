@@ -10,6 +10,7 @@ import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -23,16 +24,32 @@ export default async function MarketplaceStorePage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
 
-  const { data: store } = await sb
+  // A refused read left `store` null, which is the same state as "you have not
+  // opened a store yet" — so a family WITH a store was shown the create-a-store
+  // path, and creating one collides on (family_id, member_id). Audit C1-S9-45.
+  const { data: store, error: storeError } = await sb
     .from('marketplace_stores')
     .select('id, name, tagline, description, emoji')
     .eq('family_id', familyId)
     .eq('member_id', selfId)
     .maybeSingle();
 
+  if (storeError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('marketplaceStore.couldNotLoadYourStore')} />
+      </div>
+    );
+  }
+
   const [{ count: followers }, { data: reviews }, { data: myListings }] = await Promise.all([
+    // The BRANCH is settled, not the ternary: settle(cond ? a : b) does not
+    // typecheck, because Promise<A> | Promise<B> is not PromiseLike<A | B>.
+    // Two of this batch's three reads were already settled and this one was
+    // not, which is the same mixed batch the other pages had — one unreachable
+    // table costing the page rather than costing its own number.
     store
-      ? sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id)
+      ? settle(sb.from('marketplace_follows').select('id', { count: 'exact', head: true }).eq('store_id', store.id))
       : Promise.resolve({ count: 0 } as { count: number | null }),
     settle(sb.from('marketplace_reviews').select('rating').eq('family_id', familyId).eq('reviewee_member', selfId).limit(500)),
     settle(sb.from('marketplace_listings')

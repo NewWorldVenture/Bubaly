@@ -176,6 +176,11 @@ describe('saving a discovered recipe into the vault', () => {
 
     const result = await saveDiscoveredRecipe({ provider: 'themealdb', sourceRecipeId: '52772' });
     expect(result.ok).toBe(false);
-    expect(result.ok ? '' : result.error).toContain('permission denied');
+    // Reported, and in the family's words: the action describes a database
+    // error rather than repeating it (tests/the-database-does-not-talk-to-the-
+    // browser.test.ts), so the refusal reads as a permission sentence and the
+    // Postgres text stays in the log.
+    expect(result.ok ? '' : result.error).toMatch(/permission/);
+    expect(result.ok ? '' : result.error).not.toContain('permission denied');
   });
 });

@@ -9,7 +9,7 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
-import { dayKeyInTz } from '@/lib/services/scope';
+import { dayKeyInTz, addDaysToDayKey, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -54,10 +54,17 @@ export default async function Page() {
   let organizerMoments: OrganizerMoment[] = [];
   try {
     const now = new Date();
-    const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
+    const tz = ctx.active.family.timezone || 'UTC';
+    const todayIso = dayKeyInTz(now, tz);
     const in21 = new Date(now.getTime() + 21 * DAY).toISOString();
-    const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);
+    // `todayIso` above already asks for the family's day; this pair did not, so
+    // one expression resolved "today" in the household's zone and the next
+    // resolved "tomorrow" in the host's. Tomorrow's bounds come from the day
+    // key, which also keeps them on a real local midnight across the 23- and
+    // 25-hour DST days — `+ DAY` would not.
+    const tomorrowBounds = zonedDayBoundsMs(addDaysToDayKey(todayIso, 1), tz);
+    const tomorrowStart = new Date(tomorrowBounds.start);
+    const tomorrowEnd = new Date(tomorrowBounds.end);
 
     const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),
@@ -94,10 +101,13 @@ export default async function Page() {
 
     // Log today's active moments (insert-only so a prior engaged/dismissed wins).
     if (live.length > 0) {
-      await supabase.from('moment_activations').upsert(
+      // Best-effort — the band renders either way — but its result was discarded
+      // whole, so a failing log was invisible. Logged now. Audit C1-S9-70.
+      const { error: activationError } = await supabase.from('moment_activations').upsert(
         live.map((m) => ({ family_id: familyId, moment_key: m.key, as_of_date: todayIso, status: 'active', reason: m.reason, priority: m.priority, created_by: ctx.user.id })),
         { onConflict: 'family_id,moment_key,as_of_date', ignoreDuplicates: true },
       );
+      if (activationError) console.error('[moments] activation log failed', { familyId, error: activationError.message });
     }
     organizerMoments = live.map((m) => ({ key: m.key, label: m.label, blurb: m.blurb, reason: m.reason, capabilities: m.capabilities }));
   } catch { /* organizing band is best-effort */ }

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll } from 'vitest';
+import { afterEach, describe, expect, it, beforeAll, vi } from 'vitest';
 import {
   encryptSecret, decryptSecret, encryptNullable, decryptNullable, hasEncryptionKey,
 } from '@/lib/sync/crypto';
@@ -47,5 +47,40 @@ describe('token encryption (AES-256-GCM)', () => {
 
   it('reports key presence', () => {
     expect(hasEncryptionKey()).toBe(true);
+  });
+});
+
+describe('a placeholder is not a key (C3-S5-06)', () => {
+  // beforeAll above sets the process-wide key; stubEnv is undone per test so
+  // the rest of the file keeps it.
+  afterEach(() => vi.unstubAllEnvs());
+
+  /**
+   * The SHA-256 fallback accepted any string, so SYNC_TOKEN_KEY=changeme
+   * produced a valid AES key with the entropy of the word "changeme" —
+   * encrypting fine, decrypting fine, warning nobody. The OAuth callbacks
+   * already had a fail-closed path gated on hasEncryptionKey(); it tested
+   * presence, so a placeholder walked past it.
+   */
+  it('refuses a short value instead of hashing it into a working key', () => {
+    vi.stubEnv('SYNC_TOKEN_KEY', 'changeme');
+    expect(hasEncryptionKey()).toBe(false);
+    expect(() => encryptSecret('x')).toThrow(/too short/);
+  });
+
+  it('still accepts the documented forms and a long passphrase', () => {
+    vi.stubEnv('SYNC_TOKEN_KEY', 'a'.repeat(64));            // hex
+    expect(hasEncryptionKey()).toBe(true);
+    vi.stubEnv('SYNC_TOKEN_KEY', Buffer.alloc(32, 7).toString('base64'));
+    expect(hasEncryptionKey()).toBe(true);
+    vi.stubEnv('SYNC_TOKEN_KEY', 'correct horse battery staple correct');
+    expect(hasEncryptionKey()).toBe(true);
+    expect(decryptSecret(encryptSecret('round trip'))).toBe('round trip');
+  });
+
+  it('an unset key is still unset, not short', () => {
+    vi.stubEnv('SYNC_TOKEN_KEY', '');
+    expect(hasEncryptionKey()).toBe(false);
+    expect(() => encryptSecret('x')).toThrow(/not set/);
   });
 });

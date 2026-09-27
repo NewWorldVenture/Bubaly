@@ -147,6 +147,9 @@ describe('resetMemberTraits', () => {
       if (call.table === 'family_digital_twin_profiles' && call.kind === 'select') {
         return { data: PROFILE({ autopilot_traits: LEARNED, notes_from_parent: 'Prefers mornings', focus: 'homework' }), error: null };
       }
+      // The reset asks `.select()` (C1-S9-65); a real client answers a matched
+      // update with the row, never `data: null`.
+      if (call.table === 'family_digital_twin_profiles' && call.kind === 'update') return { data: [{ member_id: 'member-2' }], error: null };
       return { data: null, error: null };
     });
     const res = await resetMemberTraits(scopeWith(db), 'member-2');
@@ -155,6 +158,19 @@ describe('resetMemberTraits', () => {
     const update = calls.find((c) => c.table === 'family_digital_twin_profiles' && c.kind === 'update');
     expect(update?.payload).toMatchObject({ metadata: { notes_from_parent: 'Prefers mornings', focus: 'homework' } });
     expect((update?.payload as { metadata: Record<string, unknown> }).metadata).not.toHaveProperty('autopilot_traits');
+  });
+
+  it('does not report a reset that matched no profile (C1-S9-65)', async () => {
+    // A reset is a privacy control; `{ cleared: true }` over a profile that
+    // still holds what Bubaly inferred is the wrong answer.
+    const { db } = makeDb((call) => {
+      if (call.table === 'family_digital_twin_profiles' && call.kind === 'select') {
+        return { data: PROFILE({ autopilot_traits: LEARNED }), error: null };
+      }
+      return { data: [], error: null };
+    });
+    const res = await resetMemberTraits(scopeWith(db), 'member-2');
+    expect(res.ok).toBe(false);
   });
 
   it('scopes both the read and the write to this family AND this member', async () => {
@@ -257,7 +273,7 @@ describe('resetMemberTraitsAction', () => {
   it('clears one member’s learned traits and keeps the rest of their profile', async () => {
     const calls = wire((call) => (call.table === 'family_digital_twin_profiles' && call.kind === 'select'
       ? { data: PROFILE({ autopilot_traits: LEARNED, focus: 'homework' }), error: null }
-      : { data: null, error: null }));
+      : call.kind === 'update' ? { data: [{ member_id: 'member-2' }], error: null } : { data: null, error: null }));
     const res = await resetMemberTraitsAction({ memberId: 'member-2' });
     expect(res).toEqual({ ok: true });
 

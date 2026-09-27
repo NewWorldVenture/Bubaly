@@ -13,8 +13,26 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { nativePushConfigured, sendNativePush } from '@/lib/server/native-push';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
+
+/**
+ * How long a notification that reached NOBODY keeps being retried before it is
+ * given up on and stamped.
+ *
+ * Restored after a merge that took main's `push.ts` wholesale. main's rule —
+ * `if (r.failed > 0 || r.skipped > 0) continue;` — is kept exactly as its
+ * retry CONDITION (it is the more generous one: a partial delivery is retried
+ * rather than written off), but it had no age bound at all, so one permanently
+ * dead endpoint kept the row pending and re-buzzed the healthy devices on every
+ * scan, for ever, with nothing in the logs ever saying the notification had not
+ * been delivered. The scan is two-hourly, so this window is roughly a dozen
+ * attempts before the row is stamped and the failure is logged at error level.
+ */
+export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = {
@@ -51,7 +69,58 @@ function ensureVapid(): boolean {
 }
 
 /** Private transport: callers must first resolve the recipient's push consent. */
-async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload): Promise<PushResult> {
+/**
+ * Which devices one notification has already reached (migration 0440).
+ *
+ * `pushed_at` stamps a notification only when EVERY device succeeded, so a
+ * partial failure used to re-send to all of them on the next run. With a
+ * receipt per device, a retry reaches only the devices that missed it. Nothing
+ * is claimed ahead of a send, so a worker dying mid-batch loses nothing; the
+ * worst case is a receipt write failing after a real send, which reaches that
+ * ONE device once more.
+ *
+ * `enabled` is shared across the batch and turns off when the table does not
+ * exist yet — a database the operator has not migrated keeps today's
+ * behaviour rather than failing every push.
+ */
+type DeliveryReceipts = { notificationId: string; delivered: Set<string>; store: { enabled: boolean } };
+
+async function recordDelivery(supabase: DB, receipts: DeliveryReceipts | undefined, deviceId: string): Promise<void> {
+  if (!receipts) return;
+  receipts.delivered.add(deviceId);
+  if (!receipts.store.enabled) return;
+  const { error } = await supabase.from('push_deliveries')
+    .upsert({ notification_id: receipts.notificationId, device_id: deviceId }, { onConflict: 'notification_id,device_id', ignoreDuplicates: true });
+  if (!error) return;
+  if (isMissingRelationError(error)) { receipts.store.enabled = false; return; }
+  // The send happened; only its record did not. A retry may reach this one
+  // device again — the at-least-once side of the trade, never a lost push.
+  console.error('[push] delivery receipt write failed', { notificationId: receipts.notificationId, deviceId, error });
+}
+
+/** Devices already reached, per notification, for one dispatch batch. */
+async function deliveredDevices(supabase: DB, notificationIds: string[]): Promise<{ byNotification: Map<string, Set<string>>; store: { enabled: boolean } }> {
+  const byNotification = new Map<string, Set<string>>();
+  const store = { enabled: true };
+  if (notificationIds.length === 0) return { byNotification, store };
+  const { data, error } = await supabase.from('push_deliveries')
+    .select('notification_id, device_id').in('notification_id', notificationIds);
+  if (error) {
+    if (isMissingRelationError(error)) { store.enabled = false; return { byNotification, store }; }
+    // Not knowing who was reached is not "nobody was": sending now would buzz
+    // every device that already has it. The rows stay pending for the next run.
+    console.error('[push] delivery receipt read failed', { error });
+    throw new Error('Push receipt read failed.');
+  }
+  for (const row of data ?? []) {
+    const set = byNotification.get(row.notification_id) ?? new Set<string>();
+    set.add(row.device_id);
+    byNotification.set(row.notification_id, set);
+  }
+  return { byNotification, store };
+}
+
+async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload, receipts?: DeliveryReceipts): Promise<PushResult> {
   const result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
@@ -69,9 +138,21 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
   const body = JSON.stringify({ title: payload.title, body: payload.body ?? '', url: payload.url ?? '/dashboard' });
 
   for (const d of devices) {
+    // Already reached on an earlier, partially failed run: not a second buzz.
+    if (receipts?.delivered.has(d.id)) continue;
     try {
       if (d.provider === 'webpush') {
         if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
+        // Re-checked HERE and not only at registration: the endpoint is read
+        // back out of a table, so the row outlives the check that admitted it,
+        // and the DNS answer that made it safe can change underneath it. The
+        // result is cached per hostname, so a family's real push host costs one
+        // lookup every five minutes, not one per notification. Audit C3-S5-03.
+        if (!(await isDeliverablePushEndpoint(d.endpoint))) {
+          console.error('[push] endpoint no longer resolves somewhere we will POST to', { deviceId: d.id });
+          result.skipped++;
+          continue;
+        }
         try {
           await webpush.sendNotification(
             { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
@@ -79,6 +160,7 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
             { timeout: 15_000 },
           );
           result.sent++;
+          await recordDelivery(supabase, receipts, d.id);
         } catch (err: unknown) {
           const status = (err as { statusCode?: number }).statusCode;
           if (status === 404 || status === 410) {
@@ -89,6 +171,14 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
             // endpoint that never gets pruned is retried on every notification
             // from here on, spending a send each time and reporting itself
             // cleaned up each time.
+            // Rows deliberately not checked — and this rests on an invariant
+            // worth stating: every caller passes the SERVICE ROLE (checked under
+            // C1-S9-68: the push test route, the marketing admin, both crons and
+            // notification generation). There, zero rows means the device row is
+            // already gone, which is what `pruned` promises. A caller passing a
+            // user's client would break that — `push_devices_delete` is
+            // owner-only — and the dead endpoint would be "pruned" forever.
+            // Audit C1-S9-68.
             const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
             if (pruneError) {
               console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
@@ -103,9 +193,11 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
       } else if (d.provider === 'fcm' || d.provider === 'apns') {
         if (!d.token) { result.skipped++; continue; }
         const outcome = await sendNativePush(d.provider, d.token, payload);
-        if (outcome === 'sent') result.sent++;
+        if (outcome === 'sent') { result.sent++; await recordDelivery(supabase, receipts, d.id); }
         else if (outcome === 'unconfigured') result.skipped++;
         else if (outcome === 'unregistered') {
+          // As above: service role, so zero rows means already gone.
+          // Audit C1-S9-68.
           const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
           if (pruneError) result.failed++;
           else result.pruned++;
@@ -141,10 +233,10 @@ async function blockedPushRecipients(supabase: DB, userIds: string[]): Promise<S
 }
 
 /** Private fanout for a batch whose permission reads have already succeeded. */
-async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload): Promise<PushResult> {
+async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload, receipts?: DeliveryReceipts): Promise<PushResult> {
   const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const uid of [...new Set(userIds)]) {
-    const r = await sendPushDevicesToUser(supabase, uid, payload);
+    const r = await sendPushDevicesToUser(supabase, uid, payload, receipts);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
   }
   return totals;
@@ -191,9 +283,10 @@ function parsePushCursor(value: unknown): PushCursor | null {
  * haven't been resolved yet (pushed_at is null), then stamp successful or
  * deliberately withheld notifications. Whole-family notifications fan out to every
  * active member. Call after the notification engine runs (cron + on-demand).
- * Failed or unconfigured delivery stays pending for retry. Partial delivery or
- * an acknowledgement failure can repeat a successful send; this column alone
- * does not provide a per-device delivery receipt or a distributed worker claim.
+ * Failed or unconfigured delivery stays pending for retry. A retry reaches only
+ * the devices with no receipt in push_deliveries (0440), so a partial failure no
+ * longer re-sends to the devices that succeeded; an acknowledgement failure after
+ * a real send can still reach that one device again.
  * A service-only app_settings cursor advances through stable created_at/id
  * pages, then wraps, so permanently failing devices cannot monopolize the
  * oldest batch. Global and family-scoped scans keep separate progress. The
@@ -312,6 +405,9 @@ export async function dispatchPendingPushes(
     else for (const id of await membersOf(n.family_id)) candidates.add(id);
   }
   const pushBlocked = await blockedPushRecipients(supabase, [...candidates]);
+  // Read before any send, like the consent reads above: a failure here sends
+  // nothing rather than re-sending to devices that already have it.
+  const receipts = await deliveredDevices(supabase, rows.map((n) => n.id));
 
   const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const n of rows) {
@@ -320,12 +416,43 @@ export async function dispatchPendingPushes(
     // Still stamped below even when everyone was filtered out: the notification
     // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
-    const r = await sendPermittedPushes(supabase, recipients, { title: n.title, body: n.body, url });
+    const r = await sendPermittedPushes(supabase, recipients, { title: n.title, body: n.body, url }, {
+      notificationId: n.id,
+      delivered: receipts.byNotification.get(n.id) ?? new Set<string>(),
+      store: receipts.store,
+    });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
     totals.withheld += addressed.length - recipients.length;
     // Missing credentials/invalid registration are not intentional opt-outs.
-    // Keep the row pending so a later healthy run can deliver it.
-    if (r.failed > 0 || r.skipped > 0) continue;
+    // Keep the row pending so a later healthy run can deliver it — but only
+    // inside the retry window, so a permanently broken endpoint cannot hold the
+    // row pending for ever (and re-buzz the devices that DID receive it on
+    // every scan). A row whose date is unreadable is treated as brand new
+    // rather than expired: the cost of the first is one extra attempt, of the
+    // second a silently dropped notification.
+    const incomplete = r.failed > 0 || r.skipped > 0;
+    const createdMs = new Date(n.created_at ?? '').getTime();
+    const ageMs = Number.isNaN(createdMs) ? 0 : (opts.now ?? new Date()).getTime() - createdMs;
+    // The window bounds genuine delivery FAILURES only. A `skipped` row was not
+    // refused by a provider — it is missing VAPID/FCM/APNs configuration, or a
+    // device with no credentials, and that is an operator problem which gets
+    // repaired; a dead endpoint does not. Expiring those too would silently
+    // drop every notification raised during a misconfiguration, and nothing is
+    // being sent meanwhile, so none of them can be buzzing anyone twice.
+    const expired = r.failed > 0 && ageMs >= PUSH_RETRY_WINDOW_MS;
+    if (incomplete && !expired) {
+      console.warn('[push] delivery incomplete; leaving pushed_at null to retry', {
+        notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
+      });
+      continue;
+    }
+    if (incomplete) {
+      console.error('[push] giving up after the retry window; notification never fully delivered', {
+        notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
+      });
+    }
+    // Rows deliberately not checked: service role, and a notification deleted
+    // since the scan is not pushed again. Audit C1-S9-68.
     const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
     if (stampError) {
       totals.failed++;

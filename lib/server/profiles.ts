@@ -40,6 +40,8 @@ export async function saveUserProfile(
   }
 
   // Keep the user's family display name(s) in sync with their first name.
+  // Rows deliberately not checked: someone who has not joined a family yet has
+  // no membership rows, and zero is the right answer for them. Audit C1-S9-68.
   const { error: memberError } = await svc
     .from('family_members')
     .update({ display_name: input.firstName.trim() })

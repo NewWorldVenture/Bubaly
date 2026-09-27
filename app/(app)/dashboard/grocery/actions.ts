@@ -272,7 +272,18 @@ export async function recordShoppingTripAction(input: {
     // means the family will do this again, and a purchase recorded now would
     // be recorded twice. The caller shows those names and keeps the amount in
     // the form.
-    if (amount !== null && amount > 0
+    //
+    // And a call that found ANY line already claimed by a concurrent put-away
+    // (a double tap, a second phone) does not own this shop. Purchases carry no
+    // idempotency key, so two racing calls cannot agree on which one charges:
+    // when they split the lines, each would have charged the full amount. So
+    // neither does, and each says so — a purchase the family adds by hand once,
+    // never one recorded twice without anyone seeing. Audit C1-S9-88.
+    const concurrent = trip.data.alreadyClaimed.length > 0;
+    if (amount !== null && amount > 0 && concurrent) {
+      purchaseError = t('actions.anotherPutAwayWasRunning');
+    }
+    if (amount !== null && amount > 0 && !concurrent
       && trip.data.pantryFailed.length === 0 && trip.data.clearFailed.length === 0) {
       const merchant = input.merchant?.trim() || null;
       const purchase = await createTransaction(scope, {

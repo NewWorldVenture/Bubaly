@@ -328,6 +328,10 @@ export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuin
     return;
   }
 
+  // Rows deliberately not checked: `existing` was read just above, so zero rows
+  // means the mirror row was deleted in between — there is nothing left to
+  // mirror, and throwing would have Stripe retry an event nothing can apply.
+  // Audit C1-S9-64.
   const { error } = await supabase
     .from('stripe_issuing_cards')
     .update(cardMirrorFromStripe(card))

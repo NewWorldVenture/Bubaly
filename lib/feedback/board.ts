@@ -3,6 +3,8 @@
 // label/colour lookups, the roadmap pipeline, and the ranking/toggle helpers the
 // server page and client components share. No Supabase, no React — just data.
 
+import { feedbackAttachmentPathFromUrl } from '@/lib/storage/feedback-attachment-url';
+
 export type FeedbackStatus = 'under_review' | 'planned' | 'in_progress' | 'shipped' | 'declined';
 export type FeedbackCategory =
   | 'calendar' | 'tasks' | 'meals' | 'chores' | 'finance'
@@ -162,7 +164,16 @@ export function normalizeIdea(draft: IdeaDraft): { ok: false; error: string } | 
     return { ok: false, error: 'That’s a lot of detail — please trim it down a little.' };
   }
 
+  // The attachment is shown to the super admin, whose browser fetches it. A
+  // free-text URL let any signed-in user point that fetch at a server of their
+  // choosing — a beacon that reports when an admin looked, and from where. The
+  // uploader only ever produces this project's own feedback-attachments URL, so
+  // that is the only thing accepted here; the admin view re-checks on render,
+  // because RLS lets a row be inserted without passing through this function.
   const image = (draft.imageUrl ?? '').trim();
+  if (image && !feedbackAttachmentPathFromUrl(image, process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+    return { ok: false, error: 'Attach the screenshot with the upload button rather than a link.' };
+  }
   return {
     ok: true,
     value: {

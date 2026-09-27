@@ -159,6 +159,7 @@ declare
   child_mid  uuid;
   ctl_mid    uuid;
   red        uuid;
+  chore      uuid;
   ctl_q3     uuid;
   ctl_q4     uuid;
   blocked    boolean;
@@ -175,6 +176,12 @@ begin
   values (fam, parent_uid, 'Parent', 'parent', true) returning id into parent_mid;
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (fam, child_uid, 'Child', 'child', true) returning id into child_mid;
+  -- The child has EARNED the 100 points step 6 spends. Since 0439 a reward
+  -- cannot be approved with points that do not exist, and this probe is about
+  -- WHO decides, not whether the child can pay — reward-balance-check.sql is.
+  insert into public.chores (family_id, title) values (fam, 'Dishes') returning id into chore;
+  insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
+  values (fam, chore, child_mid, 'approved', 100);
 
   -- ── The negative control's own household ─────────────────────────────────
   -- A SECOND family in which this SAME child is a manager, so
@@ -190,6 +197,13 @@ begin
     on conflict do nothing;
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (ctl_fam, child_uid, 'Child (a manager here)', 'parent', true) returning id into ctl_mid;
+  -- The control's redemptions must be PAYABLE, for the same reason as above:
+  -- since 0439 an unpayable one is refused by the balance guard, and a control
+  -- refused for that reason proves nothing about 0295's manager gate. Enough
+  -- for every leg the control runs (0a's approved redemption, q3 and q4).
+  insert into public.chores (family_id, title) values (ctl_fam, 'Control chores') returning id into chore;
+  insert into public.chore_assignments (family_id, chore_id, member_id, status, points_awarded)
+  values (ctl_fam, chore, ctl_mid, 'approved', 1000);
 
   -- ── As the child ─────────────────────────────────────────────────────────
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
@@ -397,18 +411,22 @@ begin
     stale := stale || 'public.reward_redemption_decision_guard() no longer raises 42501 on (''approved'',''rejected'',''fulfilled'') unless public.can_manage_family(new.family_id)'::text;
   end if;
 
-  -- 7c. Every trigger on the table, and what it calls. Exactly the three in
-  --     the header.
+  -- 7c. Every trigger on the table, and what it calls. The three in the
+  --     header, plus 0439's balance guard. That one cannot be what refused
+  --     checks 1, 3 and 4: it raises 23514, not the 42501 they assert, and it
+  --     fires after the decision guard by name (`zz_`), so a non-manager's
+  --     decision is refused before a balance is ever summed.
   select count(*) into n
     from pg_trigger t
    where t.tgrelid = 'public.reward_redemptions'::regclass
      and not t.tgisinternal
      and (t.tgname, t.tgfoid) not in (
-       ('trg_reward_redemption_cost_guard',     'public.reward_redemption_cost_guard()'::regprocedure),
-       ('trg_reward_redemption_decision_guard', 'public.reward_redemption_decision_guard()'::regprocedure),
-       ('trg_set_updated_at',                   'public.set_updated_at()'::regprocedure));
+       ('trg_reward_redemption_cost_guard',       'public.reward_redemption_cost_guard()'::regprocedure),
+       ('trg_reward_redemption_decision_guard',   'public.reward_redemption_decision_guard()'::regprocedure),
+       ('trg_reward_redemption_zz_balance_guard', 'public.reward_redemption_balance_guard()'::regprocedure),
+       ('trg_set_updated_at',                     'public.set_updated_at()'::regprocedure));
   if n <> 0 or (select count(*) from pg_trigger t
-                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 3 then
+                 where t.tgrelid = 'public.reward_redemptions'::regclass and not t.tgisinternal) <> 4 then
     stale := stale || format('public.reward_redemptions carries a trigger the header does not name (%s)',
       (select string_agg(t.tgname || ' -> ' || t.tgfoid::regprocedure::text, ', ' order by t.tgname)
          from pg_trigger t
