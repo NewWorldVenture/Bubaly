@@ -118,8 +118,14 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
           </div>
         </div>
         {!githubConfigured && (
-          <p className="mb-2 flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
-            <Github className="h-3.5 w-3.5 shrink-0" /> {t('feedbackAdmin.githubTrackerIsDarkSet')} <code>GITHUB_TOKEN</code> + <code>GITHUB_FEEDBACK_REPO</code> {t('feedbackAdmin.toMirrorBugsAmpIdeasNotifications')}
+          <p className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+            {/* One span, so the sentence wraps as a sentence: loose in the flex
+                row, each run of text and each <code> was its own item, and the
+                row ran 58px past a phone's edge. Audit C1-S9-99. */}
+            <Github className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words">
+              {t('feedbackAdmin.githubTrackerIsDarkSet')} <code className="break-all">GITHUB_TOKEN</code> + <code className="break-all">GITHUB_FEEDBACK_REPO</code> {t('feedbackAdmin.toMirrorBugsAmpIdeasNotifications')}
+            </span>
           </p>
         )}
         {notifications.length === 0 ? (

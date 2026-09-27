@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseSuggestedAmounts, clampGiftAmountCents, isValidOccasion, giftPath, occasionLabel,
+  parseSuggestedAmounts, clampGiftAmountCents, isValidOccasion, giftPath, occasionLabelKey,
   GIFT_MIN_CENTS, GIFT_MAX_CENTS,
 } from '@/lib/wallet/gift';
 
@@ -40,7 +40,7 @@ describe('isValidOccasion / giftPath / occasionLabel', () => {
     expect(giftPath('abc123')).toBe('/gift/abc123');
   });
   it('labels occasions with a fallback', () => {
-    expect(occasionLabel('birthday')).toContain('Birthday');
-    expect(occasionLabel(null)).toBe('Gift');
+    expect(occasionLabelKey('birthday')).toBe('gift.occasionBirthday');
+    expect(occasionLabelKey(null)).toBe('gift.occasionGift');
   });
 });

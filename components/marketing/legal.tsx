@@ -51,7 +51,12 @@ export async function LegalPage({
       {/* Hero */}
       <Section className="pb-0 pt-20 text-center">
         <span className="inline-flex items-center rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-brand-text">{t('legal.legal')}</span>
-        <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>
+        {/* hyphens-auto reads <html lang> (the reader's locale): "Datenschutzerklärung"
+            and "Nutzungsbedingungen" are single words wider than a phone at
+            this size, and ran /privacy and /terms 59px and 68px sideways in
+            German. break-words is the fallback where a language has no
+            hyphenation dictionary. Audit C1-S9-108. */}
+        <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-bold tracking-tight [overflow-wrap:anywhere] hyphens-auto sm:text-5xl">{title}</h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">{summary}</p>
         <p className="mt-4 text-sm text-muted">{t('legal.lastUpdated', { date: updated })}</p>
       </Section>

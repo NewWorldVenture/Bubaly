@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef } from 'react';
+import { useId, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -38,9 +38,18 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
-  useDialogBehavior(dialogRef, open, { onClose });
+  const hydrated = useHydrated();
+  const shown = open && hydrated;
+  useDialogBehavior(dialogRef, shown, { onClose });
 
-  if (!open || typeof document === 'undefined') return null;
+  // Not `typeof document === 'undefined'`: that is false on the client's FIRST
+  // render too, so a modal that starts open (/dashboard/vacations/new opens
+  // "New trip" on arrival) rendered nothing on the server and a portal during
+  // hydration — a mismatch React answers by throwing the whole tree away and
+  // re-rendering it on the client. useHydrated is false on the server AND
+  // during hydration, then true, so the portal appears one commit later
+  // instead of breaking hydration. Audit C1-S9-96.
+  if (!shown) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">
@@ -85,4 +94,15 @@ export function Modal({
     </div>,
     document.body,
   );
+}
+
+const noop = () => () => {};
+
+/**
+ * False on the server and during hydration, true once the client has taken
+ * over. React reads the SERVER snapshot while hydrating, which is what makes
+ * this safe where a `typeof window` check is not.
+ */
+export function useHydrated(): boolean {
+  return useSyncExternalStore(noop, () => true, () => false);
 }

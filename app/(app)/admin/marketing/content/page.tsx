@@ -39,7 +39,7 @@ export default async function ContentPage() {
   const { data: posts } = postsResult;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-4">
         <div>
           <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>
@@ -116,7 +116,7 @@ export default async function ContentPage() {
               {(posts ?? []).map((p) => (
                 <Card key={p.slug} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <a href={`/blog/${p.slug}`} target="_blank" rel="noreferrer" className="truncate font-medium hover:underline">{p.title}</a>
+                    <a href={`/blog/${p.slug}`} target="_blank" rel="noreferrer" className="block truncate font-medium hover:underline">{p.title}</a>
                     <p className="text-xs text-muted">{p.category}{p.published_at ? ` · ${fmtDate(p.published_at)}` : ''}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

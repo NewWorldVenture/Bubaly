@@ -1,5 +1,23 @@
 # Final Production Audit
 
+## Current page-fix integration and verified media coverage — 2026-09-27
+
+**Current production is verified main a6dcd18e.** PR600 merged at17:17:56UTC as `a6dcd18e4309cdd02204aa874bd1c1aaff8fa61a`, matching reviewed5b treebc7c9b5. Anonymous public acceptance at17:25:42–48UTC passes exact build revision, unchanged worker hash, hydrated email/phone controls without submission, protected meals307, nativev6 install/offline200 and core health; zero page errors, failed requests or suppressed writes. The same full native wrapper passes1/1 in4.9s. Receipts: `Temp/bubaly-sw-production-a6dcd18e-20260927.json` and `Temp/bubaly-native-production-a6dcd18e-20260927.log`. This is deployed revision/worker proof, not an authenticated private-provider image journey.
+
+**Three media regression records now close as FIXED + PASS.** PR599 CI[36335077710](https://github.com/NewWorldVenture/Bubaly/actions/runs/36335077710) completes all four jobs: clean1,775/1,775 E2E in12.8m; Web20,735 in each of three zones across1,623files, build247, strict types and lint. Tested564cc64f, reviewed e3dcf4203 and published e70 share treec6f3cd6b. Terminal receipt: `Temp/bubaly-e3-ci36335077710-terminal-20260927.json`. Together with the retained original REDs, local full gates, current-hook11/11 browser proof and exact deployed acceptance, this closes SUPPORT-302F04E15861, SUPPORT-BC0F2BFDBFD6 and SUPPORT-4CE6A54076E4 as coverage obligations. These are not three additional product workflows. **SEC-001 remains FAIL** for its broader bucket/privacy/provider scope; no Storage RLS bypass or private production-byte proof is claimed.
+
+**Earlier flakes remain recorded.** PR595 all four jobs succeeded, with1,770 passed plus one flaky weekly-meal case (1,771 total,19.3m); its initial120s timeout passed the automatic retry. PR596 CI36334661999 succeeded with1,769 passed plus two flaky cases (1,771 total,14.5m): weekly-meal timeout and actual React#418 on `/dashboard/sleep`, both retry PASS. A cleanup/context-close stack alone does not establish the meal root cause. The sleep route is now OPEN and UI-ROUTE-0238 IN PROGRESS, while its older surface checks and all eight Claude OWNER findings remain preserved. Page totals are44 CLEAN,345 FIXED LIVE/re-crawl pending, one OPEN and eight OWNER. CLEAN records route/surface checks, not a complete workflow. The separate framework candidate and its synthetic renderer proof do not establish the cause of every observed page failure.
+
+**Combined585/598 repairs are local; complete acceptance is pending.** Incoming Claude page/localization/control fixes and claims are preserved. The collaborative P10 caller-label repair passes22/22 focused checks; restoring only old caller labels makes6/22 fail. An independent AST check finds all38 actual withAiRequest callsites use fixed labels, while actual JSON/SSE tests retain original provider prompts/conversations. Receipt: `Temp/bubaly-pr585-p10-review-20260927/{receipt,actual-call-ast}.json`. The locally adopted role helper accepts the route's authenticated client, and the gate retains598 outage503 semantics; actual GET/role-helper/SDK tests exercise mixed bearer/cookie principals and normal controls. Modal now uses shown=open&&hydrated for both effects and rendering; initially-open and later-open actual browser controls pass. These repairs are not attributed to live a6.
+
+The combined focused units pass230/230 across17files in3.02s, and browser checks pass44/44 in7.0s (Modal2, display31, media11). Windows audit-script/test portability corrections and the393-page/398-row register check pass. Receipts: `Temp/bubaly-585-598-focused-unit-final-20260927.log`, `Temp/bubaly-585-598-focused-browser-20260927.log` and `Temp/bubaly-585-598-private-source-20260927.json`. Catalogue three-way reconciliation preserves every main key and adds218 keys per locale, retaining Portuguese geocerca (`Temp/bubaly-598-catalog-three-way-20260927.json`). Weekly-meal failure-only phase diagnostics preserve the original error. Canonical full-source gates, hosted CI and deployment of this combined integration remain pending. Later heads585ceb97afac (additional principal-test work) and598bd71dbcaf (inbox/reminders localization) are deferred to the next reconciliation; this batch does not close every open PR. Shared sidebar/command-bar source stays exactly at a6 under the existing navigation constraint; proposed navigation changes remain deferred. The framework upgrade is a separate branch and is not included here.
+
+Register B has **14,213 items:13,871 NOT STARTED,327 IN PROGRESS,10 FIXED + PASS,four BLOCKED and one FAIL**. All14,187 prior IDs remain;26 newly integrated source/test/tool paths are IN PROGRESS. Five repaired source rows and the sleep observation move to IN PROGRESS; only the three specified media coverage rows close. Audit-signoff completion is0.07%, not a product-development estimate. Current a6 health is coreOK/degraded with six missing feature settings: CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY and APNS_PRIVATE_KEY. Production migration, auth and physical-device obligations remain open. **PRODUCTION READY: NO.**
+
+## Retained pre-integration checkpoints
+
+The dated statements below preserve earlier pending states, failed attempts and source-specific evidence; the current checkpoint above supersedes their current-state wording.
+
 ## Current parser release and page-audit integration — 2026-09-27
 
 **Parser repair merged and verified live.** PR599 merged at 17:00:41 UTC as main `e70be8306571430169e69496c634cda97c069dc3`, tree `c6f3cd6b`, identical to reviewed head `e3dcf42031ffbb04669d9129139d5ddfc47f8180`. Its canonical local source `b2a8206733cc5b62b398082e4f2585f45dda69a3` passes **20,735/20,735 UTC tests across 1,623 files**, build 247, generated-route strict types and lint with 15 existing warnings. All 5,194 paths/modes were checked before and after; the source mapping differs from the reviewed release only in the five audit documents. Receipt: `Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json`. These local full-source gates are distinct from hosted CI and deployment. Exact e70 public acceptance is now verified below; PR595/599 terminal hosted evidence remains pending. The previous verified main576 receipts remain historical proof of that revision.
@@ -74,7 +92,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > **Two independent audits are recorded in this file and NEITHER subsumes the
 > other.** Session A (this register, 841 items, `C#-S#-##` findings) is a
 > source-and-migration audit run without production credentials. Session B
-> (Register B, 14,187 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
+> (Register B, 14,213 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
 > 921 IDs from A, 684 from B, 1,602 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
@@ -221,6 +239,30 @@ out through this sandbox's proxy answered 200 on a retry). Rendering and contras
 posts is the parallel session's work (#588, #590).
 
 PR596 preserves Claude's reported 44 public/auth/marketing page re-crawls on e14, including the script scope and retry caveats; these are route/surface checks, not full workflow acceptance. PR597 preserves eight intermittent hydration findings as OWNER, with its instrumented 7-of-819 baseline and 0-of-273 experiment attributed to Claude. The replay mechanism is source-plausible, but this integration did not independently rerun those counts or patch framework dependencies. Intermittent failures remain recorded even where separate page crawls were clean.
+
+### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
+
+Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
+recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+theirs to update; the findings are listed here rather than edited under someone else's claim.
+
+| Route(s) | Lane | Finding → fix |
+|---|---|---|
+| `/dashboard/calendar` | C | second realtime reader of one table threw; shared channel → `C1-S9-94` (ported to main as `854d8dd7`) |
+| `/dashboard/autopilot`, `/dashboard/briefing` | C | "100% / All clear" shown over a refused scan; a refusal's reason replaced by generic English → `C1-S9-98` (composes with main's preview-only open: an explicit Re-scan now works for a super admin, and an unscanned preview says so) |
+| `/admin/admins`, `/admin/support-tickets` | B | Invite Admin, New Ticket, Export and "Assign agent" had no handler → `C1-S9-105`; the Settings tab showed "Require 2FA" and "session timeout" ON, neither enforced → `C1-S9-106` (owner decision recorded) |
+| `/admin/users`, `/admin/content`, `/admin/marketing/content`, `/admin/settings`, `/admin/feedback` | B | overflow at 390 px (implicit grid column; a wrapping notice; an inline truncate) → `C1-S9-99` |
+| `/dashboard/sports`, `/dashboard/school` | E | overflow at 390 px and English stat tiles → `C1-S9-99`; dead "Ask AI", dead row menus, sports tabs that switched nothing, English tab/day/due labels → `C1-S9-105` |
+| `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`, `/dashboard/recipes`, `/dashboard/social/settings` | C/D/E | overflow at 390 px → `C1-S9-99` (`PageHeader` now wraps a module's action row) |
+| `/guardian`, `/display`, `/marketplace/community` | F | overflow at 390 px → `C1-S9-99` |
+| `/dashboard/vacations/new` | C | dialog open on arrival failed hydration → `C1-S9-96` (Modal waits for hydration; main opens the dialog after mount — both hold) |
+| every in-app not-found | — | English in every locale → `C1-S9-97` (main's `199a94b5` did the same; merged) |
+| `/wallet/**`, parent gift screen | F | occasion labels English → `C1-S9-104` |
+| `/login`, `/signup`, `/kid-login`, `/auth/recovery`, `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/pay/[handle]`, `/reviews`, `/s/[slug]` | A | browser-tab title English in every locale → `C1-S9-100`; `/join`'s missing-token error English → `C1-S9-100` |
+| `/reviews/new` | A | "Review us on …" buttons and star labels English → `C1-S9-100` |
+| `/gift/[token]` | A | tab title, occasion label and "a child"/"a family" English → `C1-S9-100`, `C1-S9-104` (composes with main's dead-link card) |
+| `/blog`, `/blog/[slug]` | A | "copy link" copied the host, not the canonical URL → `C1-S9-95`; save button's labels and subscribe failure English → `C1-S9-103` |
 
 ### Every page
 
@@ -484,7 +526,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 | `/dashboard/settings` | PAGE-238 UI-ROUTE-0235 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/setup` | PAGE-239 UI-ROUTE-0236 | E | → /login | intermittent #418 | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; one #418 (hydration) in the second sweep, clean in the first — intermittent, cause not found yet; the CI sweep will name it if it recurs | 🔒 OWNER |
 | `/dashboard/signups` | PAGE-240 UI-ROUTE-0237 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
-| `/dashboard/sleep` | PAGE-241 UI-ROUTE-0238 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
+| `/dashboard/sleep` | PAGE-241 UI-ROUTE-0238 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; independent CI36334661999: signed-in /sleep React#418, automatic retry PASS; cause unproven | 🔴 OPEN — independent CI596 React#418; retry passed |
 | `/dashboard/social` | PAGE-253 UI-ROUTE-0250 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/social-feed` | PAGE-242 UI-ROUTE-0239 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b` | 🔧 FIXED, LIVE — re-crawl pending |
 | `/dashboard/social/accounts` | PAGE-244 UI-ROUTE-0241 | E | → /login | clean | clean | axe color-contrast: avatar initials (phone) → `b0d9e10b`; axe link-name: the top bar logo link (phone) → `b0d9e10b`; axe scrollable-region-focusable (phone) → `98bcbd0b` | 🔧 FIXED, LIVE — re-crawl pending |
@@ -650,24 +692,24 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 *Different scheme and granularity from the block above; see Register B below.*
 
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27 (e70 parser live/public+native acceptance and local full gates pass; hosted/page-integration gates pending)
+- Last Updated: 2026-09-27 (a6 production verified;599 hosted clean1775; media coverage closed;585/598 combined full gates pending)
 - Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-10, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
-- Total Audit Items: 14187 — all 14,186 reconciled IDs retained, plus catalogue-test SUPPORT-2D36C3920F6A. The existing media-test SUPPORT-302F04E15861 / SUPPORT-BC0F2BFDBFD6 / SUPPORT-4CE6A54076E4 records remain IN PROGRESS. The prior reconciliation retained all 14,180 incoming IDs, restored COMPONENT-0337E00DA6ED and added both worker fixture IDs; no record was removed.
-- Not Started: 13877
-- In Progress: 298
+- Total Audit Items: 14213 — all14,187 prior IDs retained plus26 integrated source/test/tool paths. Three media regression records close on exact599 hosted/deployed proof; broader SEC-001 remainsFAIL.
+- Not Started: 13871
+- In Progress: 327
 - Passed: 0
-- Fixed + Passed: 7 (AUTHZ-002, AUTHZ-003, AUTHZ-005, SEC-005, SUPPORT-98FD1D4C44AD, SUPPORT-1A08672F87F3, SUPPORT-827E4294FC10). The worker read/write boundary and both regression fixtures now have corrected hosted and exact deployed acceptance; their earlier failed checkpoints remain recorded.
+- Fixed + Passed: 10 (AUTHZ-002, AUTHZ-003, AUTHZ-005, SEC-005; three worker and three media coverage records). Exact scoped hosted/deployment evidence and all earlier failed checkpoints are retained; no additional product workflows are implied.
 - Status normalization: MAIN-F-C07, MAIN-F-C09 and MAIN-F-C10 now use IN PROGRESS, matching their pending integrated retests. Their original CLOSED / MITIGATED / MOSTLY MITIGATED verdicts remain verbatim in their Notes and evidence.
 - Blocked: 4
 - Failed: 1 (SEC-001). Repository fixes and replayed-policy checks for AUTHZ-003 and AUTHZ-005 remain recorded as FIXED + PASS with their explicit production-migration limitation. No deployed-policy verification is inferred.
-- Overall Completion: **0.05%** (7 recorded closures / 14,187 rows). Four production-credential rows retain BLOCKED status, but receive no completion credit here until their required full-investigation evidence is reconciled. This is an audit-signoff measure, not a product-development percentage.
+- Overall Completion: **0.07%** (10 recorded closures / 14,213 rows). Four credential/provider rows remain BLOCKED without completion credit. This is audit signoff, not a product-development percentage.
 
 > **On these counts, plainly.** *Total Audit Items* is the Codex cycle's
 > enumeration of the whole target space — every route, table, policy, component
 > and flow it intends to reach — not a count of work anyone has done. *Overall
-> Completion: 0.05%* is therefore a statement about that denominator and says
+> Completion: 0.07%* is therefore a statement about that denominator and says
 > almost nothing about the state of the product: the same tree passes 351/351
 > migration replays, 64/64 RLS boundary probes — with a runner that now counts a
 > skipped probe as a skip rather than a pass — and every CI job, the E2E suite
@@ -975,6 +1017,15 @@ head 92340315):
   this pass could NOT reach — authenticated journeys, live providers, deployed
   database policy, and a browser audit of the deployed site — is stated as such
   in each section rather than left to look verified.
+
+## Page Audit Register — see "Page Audit — every page on www.bubaly.com"
+
+The per-page register is the **Every page** table in *Page Audit — every page on
+www.bubaly.com* (lanes A–F, claim protocol there). A second register kept by
+Claude-1 in `docs/audit/pages/` was retired on 2026-09-27 so the site has one
+answer per page (`C1-S9-107`); its findings are in that table and in the
+`C1-S9-93`…`C1-S9-106` entries. `node scripts/page-audit-register.mjs` checks
+that every `page.tsx` has exactly one row there.
 
 ## Status Legend
 - ⬜ NOT STARTED
@@ -2651,7 +2702,7 @@ not read the same on this page.*
 | UI-ROUTE-0235 | UI | /dashboard/settings | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0236 | UI | /dashboard/setup | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0237 | UI | /dashboard/signups | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| UI-ROUTE-0238 | UI | /dashboard/sleep | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| UI-ROUTE-0238 | UI | /dashboard/sleep | 🔄 IN PROGRESS | Medium | Pending | None | Pending | Independent PR596 CI36334661999 recorded actual React#418 on /dashboard/sleep at every-page-signed-in.spec.ts137; automatic retry passed. This remains an OPEN runtime observation, distinct from eight Claude OWNER routes; no proven shared cause or repair. Framework candidate is separate and unshipped. |
 | UI-ROUTE-0239 | UI | /dashboard/social-feed | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0240 | UI | /dashboard/social/accounts/connect | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | UI-ROUTE-0241 | UI | /dashboard/social/accounts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -3541,7 +3592,7 @@ not read the same on this page.*
 | COMPONENT-35C7499C08E4 | COMPONENT | components/ui/partial-read-banner.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-358DE3CE51FC | COMPONENT | components/ui/otp-input.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-8B4C0C14B72F | CONTROL | input at line 90 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-DA7D449CE911 | COMPONENT | components/ui/modal.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-DA7D449CE911 | COMPONENT | components/ui/modal.tsx | 🔄 IN PROGRESS | Medium | Pending | None | Pending | Actual initially-open SSR/hydration reproduction loses focus/trap/Escape/scroll effects; later-open control passes. Adopted shown=open&&hydrated for hook and rendered portal; both retained actual-browser controls pass within44/44. Full combined gates pending. |
 | CONTROL-B490DF5B47B7 | CONTROL | div at line 77 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-B30EAF9E077A | CONTROL | button at line 104 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-C2F62FB0CB5E | COMPONENT | components/ui/input.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4351,7 +4402,7 @@ not read the same on this page.*
 | COMPONENT-022AA709A0F6 | COMPONENT | components/analytics/thirty-minute-summary.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-372218C5495C | COMPONENT | components/analytics/activation-beacon.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-01395221D70E | COMPONENT | components/app/icons/all-services-icon.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-B7223D20600D | COMPONENT | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-B7223D20600D | COMPONENT | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | CONTROL-37141CDAC209 | CONTROL | Modal at line 212 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-F89B6AD574D4 | CONTROL | button at line 218 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-9C63831D8C88 | CONTROL | button at line 225 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -4366,7 +4417,7 @@ not read the same on this page.*
 | CONTROL-0038209CF754 | CONTROL | AllServicesModal at line 431 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | COMPONENT-F2E9C28A56D7 | COMPONENT | components/app/display-comfort.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-FF52E27D6224 | CONTROL | button at line 60 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| COMPONENT-093F84B7919A | COMPONENT | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| COMPONENT-093F84B7919A | COMPONENT | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | CONTROL-10E0D346A43D | CONTROL | div at line 195 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-07ECE0524409 | CONTROL | div at line 196 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CONTROL-69D6C60F8A7F | CONTROL | input at line 205 | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -9975,8 +10026,8 @@ not read the same on this page.*
 | NAV-020558D6F17E | NAV | components/admin/admin-shell.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-C6ED2A08959B | NAV | components/app/android-back-handler.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-964DB28121C0 | NAV | components/app/app-shell.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| NAV-093F84B7919A | NAV | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| NAV-B7223D20600D | NAV | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| NAV-093F84B7919A | NAV | components/app/command-bar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
+| NAV-B7223D20600D | NAV | components/app/free-tier-sidebar.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Scope2026-09-27: incoming585 sidebar retry/598 command-bar hydration changes and dependent sidebar retry tests deferred under the existing no-shared-navigation constraint; exact a6 source retained. This row is not closed. |
 | NAV-49FBD7A8773D | NAV | components/app/nav-shared.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-7161F322C749 | NAV | components/app/page-header.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | NAV-D23B16B54832 | NAV | components/app/sidebar-account.tsx | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11961,7 +12012,7 @@ not read the same on this page.*
 | LIBRARY-21A3E2A5EA8B | LIBRARY | lib/ai/family-settings.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1F68BB3C881F | LIBRARY | lib/ai/insights.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-942F73D13D40 | LIBRARY | lib/ai/models.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-3059BA1B2D06 | LIBRARY | lib/ai/observability.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-3059BA1B2D06 | LIBRARY | lib/ai/observability.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Feature request text is a non-sensitive fixed label. Independent AST reads38 actual withAiRequest calls in e52 and finds fixed literal/translation keys throughout. JSON/SSE tests preserve original provider prompt/conversation and exclude typed text from ledger;22/22PASS with6 desired old-label failures. Full combined gates pending. |
 | LIBRARY-D8D63D724C8A | LIBRARY | lib/ai/planner/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1680A4B78C99 | LIBRARY | lib/ai/planner/prompts.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-DBAA1ED4DD65 | LIBRARY | lib/ai/planner/purchase-advice.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12002,7 +12053,7 @@ not read the same on this page.*
 | LIBRARY-AF8B4AD9F792 | LIBRARY | lib/ai/runs/history.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-90AFDF8B9163 | LIBRARY | lib/ai/runs/intake.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-94047634BAF6 | LIBRARY | lib/ai/runs/states.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-3E7235F73734 | LIBRARY | lib/ai/runs/store.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-3E7235F73734 | LIBRARY | lib/ai/runs/store.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Incoming585 service-backed feature ledger exposed a raw request-text persistence risk under family-readable SELECT policy. Adopted Claude711b15c3 fixed caller labels, preserving concierge and original provider/conversation content. Independent22/22 focusedPASS; old-label source makes6/22 fail. No executed private disclosure claim; full combined gates pending. |
 | LIBRARY-09CABD29FE6C | LIBRARY | lib/ai/runs/verify.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E96A16B28418 | LIBRARY | lib/ai/safety/untrusted.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-BECB53B99364 | LIBRARY | lib/ai/schema-to-json.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -12548,7 +12599,7 @@ not read the same on this page.*
 | LIBRARY-A6243E0F741C | LIBRARY | lib/stripe/treasury.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D1B2BB4C2762 | LIBRARY | lib/stripe/webhook.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-A1F48E30688A | LIBRARY | lib/stripe.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-8A99E8D3C1AA | LIBRARY | lib/supabase/auth.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-8A99E8D3C1AA | LIBRARY | lib/supabase/auth.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Actual AI GET/installed SDK reproduces bearerB plus adminCookieA inheriting the wrong role and adminBearer without cookies being denied. Optional authenticatedClient now binds role lookup to the verified route client; default cookie-only callers preserved. Focused principal tests pass; full combined gates pending. No cross-family RLS or model-spend claim. |
 | LIBRARY-4490BB78F96E | LIBRARY | lib/supabase/bearer.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-854EA21AB06D | LIBRARY | lib/supabase/chunked-in.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E7335A071B71 | LIBRARY | lib/supabase/client.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -16477,7 +16528,7 @@ not read the same on this page.*
 | LIBRARY-F20B6F450427 | LIBRARY | lib/server/feature-entitlement.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-D0ECED67194D | LIBRARY | lib/server/list-all-auth-users.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-64F69170410E | LIBRARY | lib/server/public-media-fetch.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
-| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-FFBEB4E7287F | LIBRARY | lib/server/route-feature-gate.ts | 🔄 IN PROGRESS | High | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). Route gate now passes its authenticated db to isSuperAdmin and retains598 outage503 semantics. Synthetic actual GET/role-helper/SDK desired mixed-principal RED and repaired controls retained. Full combined gates pending. |
 | LIBRARY-FDF0D5E2DE2D | LIBRARY | lib/server/secret-equals.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-7AD57457138A | LIBRARY | lib/services/activity/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-73C1D11D203C | LIBRARY | lib/services/ai-settings/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
@@ -16598,12 +16649,38 @@ not read the same on this page.*
 | SUPPORT-1A08672F87F3 | SUPPORT | tests/e2e/service-worker-cache.spec.ts | 🛠 FIXED + PASS | Critical | 72/72 controlled cache cases within combined85/85 (72+13) pass with real Chromium CacheStorage, current logout and actual worker handlers; final fixture9b12ce5a5df67d9fb0da26dee9ed3149c859bde6. | Regression fixture covers shared cache reads and writes, activation, public shell and separately owned publisher downloads. | Combined65719886:85/85 in3.8s, Temp/bubaly-sw-combined-browser-65719886-20260927.log; full strict types/lint pass after preliminary header-union errors were corrected. Native correction hosted acceptance remains pending. | Added2026-09-27 using the SHA-256 canonical-path convention. This row inventories regression coverage, not another completed product workflow. Remains IN PROGRESS; see docs/final-audit/service-worker-private-cache-cycle.md. e14 production native wrapper1/1 in4.3s and exact public revision/worker checks PASS16:23UTC; corrected hosted CI36332783206 pending, so this row remains IN PROGRESS. Current closure2026-09-27: corrected850 CI36332783206 all4SUCCESS, E2E1764/1764 at16:47:07UTC; candidate/tested/e14 share tree52e0d1e. Exact e14 public/native wrapper1/1 deployedPASS independently confirmed. Earlier pending/failure statements in this row are retained historical checkpoints; this scoped worker/coverage record is now FIXED+PASS. No bucket/privacy or extra product-workflow closure. |
 | SUPPORT-827E4294FC10 | SUPPORT | tests/e2e/service-worker-native.spec.ts | 🛠 FIXED + PASS | Critical | Original hosted native case on59f03f0f2 reached its nativev6 controls then failed at iframe navigation; E2E1369/1370 in run36331147265. Corrected fixture507a6cd109def62f6053ff1ebd82f8a701b9ca7d uses a final top-level navigation with page-target CDP scripts disabled. | Real hosted Next worker/public resources and synthetic private-cache controls. Final top-level navigation respects unchanged DENY/frame-ancestors headers; no iframe, account or provider action. | Supplemental native Chromium supplied exactv6 workerSHAe9b19ada5f708e880d56b7902f223d704e8b04662af8db3ae9265c33c9feeb5b once; real public install/icon and final200/fromServiceWorker exact offline body pass. Temp/bubaly-sw-native-v6-top-level-20260927.json. Corrected complete hosted case remains pending; no fullcase/deployment PASS. Final delta878a17b full generated-route types/lint15 and discovery1/1 PASS (not runtime); final-native-fixture-receipt.json. | Added2026-09-27 using the SHA-256 canonical-path convention. Fixture coverage is separate from product-workflow completion. IN PROGRESS; exact source/proof limitations in worker cycle. e14 production native wrapper1/1 in4.3s and exact public revision/worker checks PASS16:23UTC; corrected hosted CI36332783206 pending, so this row remains IN PROGRESS. Current closure2026-09-27: corrected850 CI36332783206 all4SUCCESS, E2E1764/1764 at16:47:07UTC; candidate/tested/e14 share tree52e0d1e. Exact e14 public/native wrapper1/1 deployedPASS independently confirmed. Earlier pending/failure statements in this row are retained historical checkpoints; this scoped worker/coverage record is now FIXED+PASS. No bucket/privacy or extra product-workflow closure. |
 
-| SUPPORT-302F04E15861 | SUPPORT | tests/family-media-owner-boundary.test.ts | 🔄 IN PROGRESS | Critical | 19 owner/inflight cases included in isolated local33/33; actual cookie parsing, rotation, logout/new-session boundaries and both A/B settlement orders. | New regression coverage for existing SEC-001/Q59 and media-helper IDs; no new product finding. | Matching prototype types/lint pass; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Local follow-up after deployed e14; not production authorization proof. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
-| SUPPORT-BC0F2BFDBFD6 | SUPPORT | tests/media-session-gap.test.ts | 🔄 IN PROGRESS | Critical | Actual cache-session/media modules: original observer-gap desired RED, active-switch control; both pass with local ownership repair inside33/33. | Retains the Q59 observer-gap regression and active-switch control. | Supplemental actual React/SDK browser2+2 passes against matching one-module overlay; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Coverage for SEC-001, not another finding or completed workflow; e14 does not deploy this repair. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
+| SUPPORT-302F04E15861 | SUPPORT | tests/family-media-owner-boundary.test.ts | 🛠 FIXED + PASS | Critical | 19 owner/inflight cases included in isolated local33/33; actual cookie parsing, rotation, logout/new-session boundaries and both A/B settlement orders. | New regression coverage for existing SEC-001/Q59 and media-helper IDs; no new product finding. | Matching prototype types/lint pass; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Local follow-up after deployed e14; not production authorization proof. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
+| SUPPORT-BC0F2BFDBFD6 | SUPPORT | tests/media-session-gap.test.ts | 🛠 FIXED + PASS | Critical | Actual cache-session/media modules: original observer-gap desired RED, active-switch control; both pass with local ownership repair inside33/33. | Retains the Q59 observer-gap regression and active-switch control. | Supplemental actual React/SDK browser2+2 passes against matching one-module overlay; integrated release gates/deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule. Coverage for SEC-001, not another finding or completed workflow; e14 does not deploy this repair. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
 
-| SUPPORT-4CE6A54076E4 | SUPPORT | tests/e2e/family-media-session-ownership.spec.ts | 🔄 IN PROGRESS | Critical | Seven actual React/media-hook/cache-session/browser-adapter/installed-SDK cases: four two-tab ownership cases and three FamilyMediaImg Node SSR/Chromium hydration controls; only synthetic auth/Storage/image transport. | Retains observer-gap, active-switch and both held A/B signing settlement orders for existing SEC-001/Q59. | 7/7PASS in2.6s, fixturee169fe97; valid-cookie hydration warning reproduced then fixed, absent/external and immediate cached SPA controls pass; strict fixture types/lint pass and collector registration guard37/37PASS. Full integrated gates and media deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule; no server, provider operation or private production image. Test coverage is not another product finding. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. |
+| SUPPORT-4CE6A54076E4 | SUPPORT | tests/e2e/family-media-session-ownership.spec.ts | 🛠 FIXED + PASS | Critical | Seven actual React/media-hook/cache-session/browser-adapter/installed-SDK cases: four two-tab ownership cases and three FamilyMediaImg Node SSR/Chromium hydration controls; only synthetic auth/Storage/image transport. | Retains observer-gap, active-switch and both held A/B signing settlement orders for existing SEC-001/Q59. | 7/7PASS in2.6s, fixturee169fe97; valid-cookie hydration warning reproduced then fixed, absent/external and immediate cached SPA controls pass; strict fixture types/lint pass and collector registration guard37/37PASS. Full integrated gates and media deployment pending. | Added2026-09-27 by canonical-path SHA-256 rule; no server, provider operation or private production image. Test coverage is not another product finding. Current2026-09-27: final hydration-aware98d5229 localUTC20722/1623files,146focused,build247/types/lint15PASS; retained browser7/7 and display25/25PASS. Source merged57664cfc, new hosted/deployment pending; row remains IN PROGRESS. Final receipt linux-q59-final/final-gates-receipt.json. Exact main576 public/native deployed acceptancePASS16:50:52-59UTC; full native wrapper1/1PASS2.2s, unchanged507 assertions plus revision/hash guards. No authenticated private-provider image proof; PR595 hosted stillpending. Closure2026-09-27: PR599 CI36335077710 all4SUCCESS; tested564cc64f and reviewed e3/published e70 share treec6f3cd6b. Clean1775/1775 E2E, Web20735 in each3zones/1623files, build247/types/lintPASS. Current media browser11/11 and exact e70/a6 public/native deployment checks pass. FIXED+PASS applies to retained regression coverage only; broader SEC-001 remainsFAIL and no live private-provider image workflow is claimed. Earlier pending statements are historical. |
 
 | SUPPORT-2D36C3920F6A | SUPPORT | tests/a-catalogue-says-each-key-once.test.ts | 🔄 IN PROGRESS | Medium | Source reviewed: every catalogue, duplicate-key detection and retained locator failure wording; incoming PR596 regression guard. | Canonical-path SHA-256 inventory registration; no additional product finding. | Incoming combined verification pending; no independent PASS claimed. | Added2026-09-27 while integrating PR596/597 after main e70. Existing permanent IDs/statuses and both audit registers preserved. |
+| API-AE3E5F465E18 | API | GET /api/admin/support-tickets/export | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| COMPONENT-409DF839B3FA | COMPONENT | components/admin/invite-admin-button.tsx | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| COMPONENT-28394844D064 | COMPONENT | components/admin/new-ticket-button.tsx | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| LIBRARY-03B2D9086BBF | LIBRARY | lib/admin/tickets-csv.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-E0C1FED5665F | SUPPORT | public/favicon.ico | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-2765D38F06C7 | SUPPORT | scripts/page-audit-crawl.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-414B63EEB699 | SUPPORT | scripts/page-audit-register.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-EFB584DC8A2A | SUPPORT | scripts/page-audit-report.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F62199809359 | SUPPORT | scripts/page-audit-session.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-720EE19CBB3B | SUPPORT | scripts/page-audit-static.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-0A28BAE100C1 | SUPPORT | scripts/page-audit.mjs | 🔄 IN PROGRESS | Medium | Incoming audit tooling retained; Windows URL/path portability corrected. Page-register CLI verifies393 source pages against398 register rows. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-A2ADFB8F4A9D | SUPPORT | tests/a-browser-asking-for-favicon-ico-gets-one.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-A5666D922659 | SUPPORT | tests/a-button-does-something.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-2ED2B5AF211B | SUPPORT | tests/a-first-visit-with-two-events-records-both.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-20C466C244F0 | SUPPORT | tests/a-missing-record-is-reported-in-the-familys-language.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-85AFB505BF41 | SUPPORT | tests/a-modal-open-on-arrival-hydrates.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-334EEE32AD63 | SUPPORT | tests/a-page-fits-a-phone.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F6D57400196B | SUPPORT | tests/a-public-page-reads-in-the-readers-language.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-0FAF944BB694 | SUPPORT | tests/a-route-plan-override-uses-the-authenticated-principal.test.ts | 🔄 IN PROGRESS | Medium | Actual AI GET, role helper and installed SDK with synthetic transport: role override must use the already authenticated principal; cookie-only and same-principal controls retained. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-52C1B1C18BF1 | SUPPORT | tests/a-super-admin-page-and-its-endpoint-agree.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-908F8BF42734 | SUPPORT | tests/an-ai-feature-request-is-recorded-not-refused.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-DFBBA1A4E6A0 | SUPPORT | tests/an-ai-request-row-never-carries-what-was-typed.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-5147D781341F | SUPPORT | tests/e2e/modal-hydration.spec.ts | 🔄 IN PROGRESS | Medium | Actual React SSR/hydrateRoot and Modal/dialog behavior; initially-open and later-open controls retain focus, Tab/Escape and scroll restoration. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-F81D1A92AB0C | SUPPORT | tests/every-page-is-in-the-page-register.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-31CE72104105 | SUPPORT | tests/no-catalogue-defines-a-key-twice.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
+| SUPPORT-D1BFE4A72EF8 | SUPPORT | tests/two-widgets-on-one-table-do-not-share-a-channel.test.ts | 🔄 IN PROGRESS | Medium | New source/coverage inventory; combined integration is not yet published or fully accepted. | Integrate reviewed585/598 fixes with matching regression coverage. | Combined focused unit230/230 and browser44/44 pass; these are suite scopes, not a claim that every new source has a full workflow test. Canonical full gates and hosted acceptance pending. | Added2026-09-27 by canonical path hash; API hashes route:method. No extra product-workflow completion. |
 
 ## Inventory and evidence rules
 
@@ -45236,6 +45313,573 @@ document-migration, version, catalogue-key and i18n-integrity guards green
 
 **Status:** DONE (integration). Nothing here is applied to production; `B1` is
 unchanged.
+
+---
+
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-93 — every page on bubaly.com, one row each: the page audit register
+
+**File/path:** `scripts/page-audit-register.mjs`, `docs/audit/pages/*.md` (13
+lane files and the protocol), `scripts/page-audit-crawl.mjs`,
+`scripts/page-audit-session.mjs`, `scripts/page-audit-static.mjs`,
+`tests/every-page-is-in-the-page-register.test.ts`.
+
+**Problem.** Nothing listed the pages. 398 `page.tsx` files, and no record of
+which had been looked at, by whom, or what was found. A page nobody listed is a
+page nobody audited, and it goes missing without anyone noticing.
+
+**Fix.**
+- **Register.** Every page is one row in exactly one of 13 lane files, each
+  with a claim table so Claude and Codex workers can audit at the same time
+  without colliding. The "Page Audit Register" section of this file is
+  generated from them; lane holders never hand-edit it.
+- **Guard.** The test fails when a page is added or deleted without its row,
+  when a status is not one the protocol defines, when the OTHER lane gains a
+  page, or when the roll-up is hand-edited.
+- **Crawl** (`page-audit-crawl.mjs`). Drives Chromium over every route, or
+  every sitemap URL, at 390 px. Per page it records:
+  - status and redirect
+  - console and page errors
+  - failed same-origin requests
+  - raw catalogue keys
+  - the error boundary
+  - the not-found copy
+  - horizontal overflow
+- **Session** (`page-audit-session.mjs`). Signs a disposable account in
+  through the real login form and onboarding. It refuses any Supabase that
+  isn't local.
+- **Static read** (`page-audit-static.mjs`). Follows each page's imports and
+  counts hardcoded copy with the repo's own scanner.
+
+**Evidence** (local production build, local Supabase with all migrations):
+
+| Crawl | Result |
+|---|---|
+| Anonymous, 398 routes | No 5xx. No error boundary. No raw keys. Every signed-in route redirects to `/login`. |
+| Sitemap, 1,063 URLs (14 static, 1,049 blog posts) | Only environmental noise: the sandbox cannot reach external image hosts, and the tracking beacons rate-limit a crawl by IP by design. |
+| Signed in as a parent, 398 routes | 35 routes flagged: `C1-S9-94`–`C1-S9-99` and `C1-S9-102`. |
+
+The live-site half is on main as `scripts/audit-live-pages.mjs` (#588, another
+session): all 354 signed-in routes send a signed-out visitor to `/login` on
+production, and 16 blog hero ids that answer 404 were retired.
+
+**Status:** DONE (instrument).
+- PUBLIC and AUTH are claimed by Claude-1; the other lanes are FREE for any
+  worker.
+- Not yet crawled:
+  - as a child
+  - as a parent who is not a super administrator (a super administrator
+    passes every tier gate, so tier redirects were not exercised)
+  - dynamic routes with real ids
+  - CMS pages whose table is empty locally (`/features/[slug]` and siblings)
+
+---
+
+### `[CLAUDE-1][HIGH][REALTIME]` C1-S9-94 — two readers of one table crashed the calendar
+
+**File/path:** `lib/realtime/own-channel.ts` (new);
+`lib/hooks/use-realtime-query.ts`; eight modules that subscribe to
+`postgres_changes`.
+
+**Problem.** `/dashboard/calendar` threw `cannot add postgres_changes callbacks
+for realtime:calendar_events:<family> after subscribe()`, and its section fell
+to the error boundary.
+
+**Evidence.**
+- The browser client is a singleton, and realtime-js `channel(topic)` returns
+  the existing channel when one with that topic is already open.
+- The calendar mounts two `useRealtimeQuery('calendar_events')` readers. The
+  second received the first's already-subscribed channel.
+- Whichever reader unmounted first also removed the channel from under the
+  other, which then stopped updating without any sign.
+
+**Fix.** Every `postgres_changes` subscription goes through `ownChannel()`,
+which gives it a topic of its own. For `postgres_changes` the topic is only a
+label; the server filters on the table and filter passed to `.on()`. Presence
+stays on its shared topic, because presence works by meeting on that topic.
+
+**Guards.**
+- `tests/two-readers-of-one-table-do-not-share-a-channel.test.ts`:
+  - a fake that behaves like realtime-js (dedupes by topic, refuses `.on`
+    after `.subscribe`)
+  - a negative control proving the fake reproduces the crash
+  - a scan requiring `ownChannel` for every `postgres_changes` channel in
+    `app/`, `components/` and `lib/`
+- Follow-up: eight browser fixtures list the modules they load, and each now
+  lists `own-channel.ts`. The module-graph guard caught this. The ten fixture
+  specs pass locally (218 tests).
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][MARKETING]` C1-S9-95 — the blog's "copy link" copied whatever host you were on
+
+**File/path:** `app/(marketing)/blog/[slug]/share-buttons.tsx`.
+
+**Problem.** The copy button wrote `window.location.href` to the clipboard, so
+a reader on a preview deployment, `www.` or a tracking-tagged URL shared that
+address. The page's other share buttons already used the canonical URL.
+
+**Fix.** It copies `canonicalUrl('/blog/<slug>')`, the same value the other
+buttons use.
+
+**Guard.** `tests/blog-share-buttons.test.ts`: no `window.location` in the
+source (comments stripped), and the clipboard receives the canonical URL.
+Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][HYDRATION]` C1-S9-96 — a dialog open on arrival failed hydration
+
+**File/path:** `components/ui/modal.tsx`, `components/app/command-bar.tsx`.
+
+**Problem.** Pages that open a dialog on arrival logged a React hydration
+error: `/dashboard/vacations/new` and share links with a dialog in the URL.
+The portal was gated on `typeof document !== 'undefined'`, which is false on
+the server and true on the client's first render, so the two trees differed.
+
+**Fix.** `useHydrated()` is a `useSyncExternalStore` whose server snapshot is
+`false`. React reads that server snapshot during hydration too, so the first
+client render matches the server, and the dialog appears on the next render.
+The command bar uses the same gate.
+
+**Guard.** `tests/a-modal-open-on-arrival-hydrates.test.ts`:
+- `renderToString` renders the server markup
+- no portal is gated on a `typeof document/window` check
+- both files pin the gate
+
+Checked red against the old code. `tests/a-dialog-does-not-steal-the-caret.test.ts`
+(from main) models `useSyncExternalStore` as a client render after hydration,
+and its assertions are unchanged.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-97 — "we couldn't find that" was English in every locale
+
+**File/path:** `components/app/app-not-found.tsx`;
+`app/(app)/dashboard/not-found.tsx`; `app/(app)/wallet/not-found.tsx`.
+
+**Problem.** The signed-in app's not-found screen took its title, description
+and button labels as English defaults.
+
+**Fix.** It reads `appNotFound.*` (four keys, seven base catalogues). The
+callers pass only what differs.
+
+**Guard.** `tests/a-missing-record-is-reported-in-the-familys-language.test.ts`
+renders the screen in German. Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][AI]` C1-S9-98 — a scan that never ran was shown as an all-clear
+
+**File/path:**
+- `components/modules/autopilot-module.tsx`
+- `lib/server/route-feature-gate.ts`
+- `app/api/autopilot/scan/route.ts`
+- `lib/briefing/cache-isolation.ts`
+- `components/modules/briefing-module.tsx`
+
+**Problem.**
+- **Autopilot.** Signed in as a super administrator whose family is on the
+  free plan, `/dashboard/autopilot` said **"100% probability the day runs
+  smoothly"**, **0** risk alerts and **All clear**, while `POST
+  /api/autopilot/scan` had answered 403. The forecast is computed from open
+  suggestions. A refused scan leaves none, so the page presented "no data" as
+  "no risk".
+- **Briefing.** `/dashboard/briefing` said "Failed to generate briefing" in
+  English. The route had written a precise refusal in the reader's language:
+  wait, needs a plan, or try again. The client replaced it with one generic
+  string.
+
+**Root cause of the 403.** `requireFeature` lets a super administrator onto
+every feature page to preview it. F16 records the same choice for the family
+write path. None of the endpoints behind those pages allowed it.
+
+**Fix.**
+- **Route gates.** `refuseUnlessEntitled` and the on-demand scan let a super
+  administrator through, and only check for one after the family has been
+  refused, so entitled requests pay nothing extra. If the account can't be
+  read, they answer 503. The nightly cron still runs each family on its real
+  plan.
+- **Autopilot screen.**
+  - The forecast, the risk count and the all-clear wait for a scan that ran.
+  - Before the first scan finishes, the forecast shows "—" and "Scanning your
+    family…".
+  - After a failed scan, the forecast shows "—" and "No forecast — the scan
+    didn't run", and the list is replaced by an error with a retry.
+- **Briefing.**
+  - The session keeps the route's reason.
+  - Its two fallback strings are exported constants that the module
+    translates when it renders (`briefing.failedToGenerateBriefing`, new
+    `briefing.couldNotReadGeneratedBriefing`).
+
+**Guards** (each checked red against the old code):
+- `tests/route-plan-gate.test.ts`: a super admin passes below the tier; an
+  unreadable account gives 503.
+- `tests/autopilot-plan-gate.test.ts`: preview runs the scan; the cron does
+  not use the bypass.
+- `tests/autopilot-resolution-ui.test.ts`: no forecast after a 403, a 500 or
+  before the first scan; a forecast after a clean scan.
+- `tests/briefing-cache-isolation.test.ts`: the reasons for a 429, 403 and 503
+  are kept, and the fallback is the translatable constant.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MOBILE]` C1-S9-99 — seventeen pages scrolled sideways on a phone; one catalogue key said less than it was written to
+
+**File/path:** (17 routes)
+- `components/app/page-header.tsx`
+- six admin pages
+- `app/(app)/guardian/page.tsx`
+- `app/(app)/dashboard/social/settings/page.tsx`
+- `components/modules/{behavior,outcomes-launcher,sports,school}-module.tsx`
+- `components/marketplace/community-module.tsx`
+- `components/admin/feedback-admin.tsx`
+- `components/display/display-grid.tsx`
+- the seven base catalogues
+
+**Problem.** At 390 px, 17 routes had horizontal overflow. It ranged from 8 px
+on `/dashboard/sports` to 647 px on `/admin/support-tickets`:
+- `/admin/admins`, `/admin/content`, `/admin/feedback`,
+  `/admin/marketing/content`, `/admin/settings`, `/admin/support-tickets`,
+  `/admin/users`
+- `/marketplace/community`, `/dashboard/social/settings`, `/guardian`,
+  `/display`
+- `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`,
+  `/dashboard/recipes`, `/dashboard/school`, `/dashboard/sports`
+
+**Evidence.** The crawl's overflow figure, then a DOM bisection (hide each
+subtree until the page stops overflowing) for each route. Four causes:
+
+1. **A responsive grid with no mobile column count** (admin, social settings,
+   community, outcomes). With no template below the breakpoint, the single
+   column is an implicit `auto` track, and an auto track is never narrower
+   than its content's min-content, so a table or a filter row widened the
+   page. Fix: `grid-cols-1`, which is `minmax(0,1fr)`, and `minmax(0,1fr)` in
+   the lg templates.
+2. **A row of controls that could not wrap** (photos, recipes, behavior,
+   guardian, display). `PageHeader` wrapped its own slot, but the modules pass
+   in a row of buttons that did not wrap (31 call sites). The header now wraps
+   that row too. Behavior, guardian and display wrap their own rows.
+3. **A column tile laid out as a row** (sports, school). `.stat-card` is a
+   flex row, and these tiles are meant to stack. They now stack. Their labels
+   were also hardcoded English; 13 keys were added.
+4. **Text that could not wrap**:
+   - The GitHub notice on `/admin/feedback` sat loose in a flex row, so each
+     text run and `<code>` was its own item. It is now one wrapping sentence.
+   - A `truncate` on an inline link did nothing; the link is now a block.
+
+**Measured after the fix:** 0 px on all 17, with the same probe.
+
+**Found alongside.** All seven catalogues defined `actions.couldNotSaveThatPlace`,
+`couldNotDeleteThatPlace` and `couldNotUpdateThatGeofence` twice. The
+duplicates came from a Sep 26 commit on main. `JSON.parse` keeps the last copy,
+so the geofence failure lost the sentence it was written to say, "The alert
+setting has not changed". The later copies were removed.
+
+**Guards.**
+- `tests/a-page-fits-a-phone.test.ts` pins each cause:
+  - the nine grids
+  - the header's wrap
+  - every stacked stat tile being a column
+  - the notice and the block link
+  - a ratchet: responsive grids with no base column count may not exceed 330
+- `tests/no-catalogue-defines-a-key-twice.test.ts` scans lines, not the parsed
+  object. It was red on main's catalogues.
+
+**Status:** FIXED for the 17 routes. The ratchet's 330 remaining grids are
+`C1-S9-99a`, OPEN LOW: none overflows today, but any of them will once a long
+name or a table lands in it. The crawl measures them.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-100 — the public and sign-in pages' own words
+
+**File/path:**
+- 13 `page.tsx` files: `/login`, `/signup`, `/kid-login`, `/auth/recovery`,
+  `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/gift/[token]`,
+  `/pay/[handle]`, `/reviews`, `/reviews/new`, `/s/[slug]`
+- `components/auth/join-invite.tsx`
+- `app/reviews/new/review-form.tsx`
+
+**Problem.** The i18n gate covers `app/(marketing)`, and these pages are
+outside it. They carried:
+- a browser-tab title in English
+- the join link's "This invite link is missing its token."
+- the review page's "Review us on {platform}" buttons and English star labels
+
+**Fix.**
+- The titles come from `generateMetadata` and catalogue keys
+  (`pageTitle.*`, `authCallback.title`, `kidLogin.kidSignIn`).
+- The invite error reads `joinInvite.missingToken`.
+- Each review button is one whole sentence per platform, because "on the App
+  Store" and "on Google" take different words in German or French.
+- The star labels read `reviewsNewReviewForm.oneStar` and `reviewsNewReviewForm.nStars`, inside the scope the page ships to the browser.
+- 21 keys in seven catalogues.
+
+**Not changed, and why.** Three strings are written by the server into rows
+or emails with no reader locale:
+- the gift notification (`app/gift/actions.ts`)
+- the onboarding welcome email subject
+- the "[Imported during onboarding]" event note
+
+All three are `I18N-001`, which belongs to the owner.
+
+The scanner flags two TypeScript type fragments in `recovery-form.tsx` and
+`callback-completion.tsx`. They aren't copy.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][I18N]` C1-S9-101 — the signed-in app's pages carry 2,765 hardcoded English strings
+
+**File/path:** 596 files under `app/` and `components/`. Per page:
+`node scripts/page-audit-static.mjs`.
+
+**Problem.** The i18n gate declares these surfaces translated, and they are
+clean:
+- the marketing site
+- the app chrome (`components/app`)
+- the language control
+- Guardian's safety vocabulary
+
+Nothing gates the modules those pages render. Measured with the repo's own
+scanner, through each page's imports:
+
+| Lane | Pages | With no hardcoded copy | Strings |
+|---|---|---|---|
+| ADMIN | 80 | 3 | 534 |
+| DASH-A-F | 70 | 9 | 532 |
+| DASH-N-Z | 56 | 1 | 443 |
+| MONEY | 24 | 1 | 411 |
+| DASH-G-M | 31 | 0 | 267 |
+| HOME | 17 | 4 | 227 |
+| TRAVEL | 23 | 1 | 191 |
+| FAMILY | 16 | 0 | 124 |
+| MARKETPLACE | 20 | 0 | 65 |
+| SOCIAL | 16 | 0 | 49 |
+
+**Impact.** A family in any of the ten non-English locales gets a translated
+shell around English headings, buttons, empty states and errors. The previous
+finding (`C1-S9-100`) and the stat tiles in `C1-S9-99` are instances.
+
+**Fix path.** It is per page, which is what the lanes are for. The lane holder:
+1. lifts each string into `en-US.json` and the six other base catalogues
+2. adds the module's directory to `GATED_SURFACES` in `scripts/i18n-scan.mjs`
+   once it scans clean
+
+Adding a surface to the gate is a promise; the gate itself says so.
+
+**Status:** OPEN. A page row cannot be PASS while its own files carry
+hardcoded copy.
+
+---
+
+### `[CLAUDE-1][LOW][ROUTING]` C1-S9-102 — a missing record under `app/(app)` answers 200
+
+**File/path:** `app/(app)/loading.tsx`; every `notFound()` under `app/(app)`.
+
+**Problem.**
+- **What was seen.** Crawled with a placeholder id, nine dynamic routes showed
+  the correct not-found screen, answered HTTP **200**, and logged React
+  #419.
+- **Why.** `app/(app)/loading.tsx` wraps the segment in a Suspense boundary,
+  and the response has already started streaming (status 200) when the page
+  calls `notFound()`. The not-found UI then arrives as a client render.
+
+**Impact.** Low. These pages sit behind a sign-in and are `noindex`, so no
+crawler is misled. A person sees the right screen.
+
+**Fix path.** Resolve the record before the boundary. Or accept this, as
+Next.js documents it.
+
+**Status:** OPEN (LOW). This is framework behaviour and no screen is wrong. It
+is recorded so the #419 in the logs has a known cause.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-103 — the blog's save and subscribe controls answered in English
+
+**File/path:** `components/blog/heart-button.tsx`, `components/blog/subscribe-form.tsx`, `lib/i18n/scopes.ts`, `scripts/i18n-scan.mjs`.
+
+**Problem.** Found while reading the PUBLIC lane's forms. Every blog post's save button had four English labels ("Save this article", "Sign in to save this article" and two more). The subscribe form's failure message, "Something went wrong — try again in a moment.", was English on a translated blog. `components/blog` sat outside every gated i18n surface. The scanner also misses a literal in a ternary or a `setMessage('…')` argument, so the static read under-counts. `C1-S9-101`'s 2,765 is a floor, not a ceiling.
+
+**Fix.** Five keys in seven catalogues. The save button's keys use a `blogHeartButton` prefix, which is added to the marketing client scope. `components/blog` is now a gated surface (`marketing-blog-components`).
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-104 — a gift's occasion and its fallback names were English on every locale
+
+**File/path:** `lib/wallet/gift.ts`, `app/gift/[token]/page.tsx`, `components/wallet/gift-view.tsx`, `tests/wallet-gift.test.ts`.
+
+**Problem.** Found while reading the PUBLIC lane. `occasionLabel()` returned English ("🎂 Birthday", "Gift"). Both the public `/gift/[token]` page and the parent's gift screen (including its occasion picker) printed it. The public page also fell back to "a child" and "a family" when a name was unknown.
+
+**Fix.** It is now `occasionLabelKey()`, which returns a catalogue key that each caller renders with its own `t`. The fallbacks read `gift.aChild`, `gift.aFamily` and `gift.child`. That is eight keys in seven catalogues. The unit test pins the keys.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CONTROLS]` C1-S9-105 — buttons that did nothing when pressed
+
+**File/path:**
+- `app/(app)/admin/admins/page.tsx`
+- `app/(app)/admin/support-tickets/{page,actions}.ts(x)`
+- `components/admin/{invite-admin-button,new-ticket-button,ticket-row-actions}.tsx`
+- `app/api/admin/support-tickets/export/route.ts`, `lib/admin/tickets-csv.ts`
+- `components/modules/{sports,school}-module.tsx`
+
+**Problem.** Found while reading the pages the crawl had flagged. None of these could be seen by a crawl, because each one looked like a control and had no handler:
+- **`/admin/admins`: "Invite Admin".** `inviteAdminAction` existed and nothing called it.
+- **`/admin/support-tickets`: "Export" and "New Ticket".** `createTicketAction` existed and nothing called it. The row menu's "Assign agent" had neither a handler nor an action.
+- **`/dashboard/sports` and `/dashboard/school`: "Ask AI"** in each sidebar.
+- **The same two pages: a "more options" button on every table row**, with no menu behind it.
+- **The sports tab bar:** the six tabs changed only their own highlight. Messages and Resources had nothing behind them at all.
+
+**Fix.**
+- **Invite Admin and New Ticket** open a form that calls their existing action and shows the action's own refusal.
+- **Export** downloads a CSV from a new super-admin route:
+  - a failed read is a 502, not an empty file
+  - the export is audit-logged
+  - a cell starting `=` `+` `-` `@` is written as text, so a ticket subject can't become a spreadsheet formula
+- **"Assign agent"** is now "Assign to me", backed by a new `assignTicketToMeAction`.
+- **Ask AI** opens the page's AI insight, as the header icon already did.
+- **Each row's "more options"** is now a delete: confirmed first, and read back afterwards.
+- **The sports tabs** each show their own sections. The two empty tabs are gone.
+- **School's tab labels and weekday names** are now translated (weekdays via `Intl`), and "3 days left" comes from `Intl.RelativeTimeFormat`.
+- About 40 keys in seven catalogues.
+
+**Guard.** `tests/a-button-does-something.test.ts` scans every page and component for a `<button>` or `<Button>` with no onClick, type, formAction or asChild that isn't inside a `<form>`, `<Link>` or `<a>`. The scan strips comments first. A self-test proves it catches the original patterns and passes the legitimate ones. The CSV injection guard has its own unit cases.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SECURITY]` C1-S9-106 — the admin console claimed security policies it does not enforce
+
+**File/path:** `app/(app)/admin/admins/page.tsx` (Settings tab); `app/(app)/admin/layout.tsx`.
+
+**Problem.** The Settings tab of `/admin/admins` showed four switches:
+- "Require 2FA for all admins" (**on**)
+- "Admin session timeout — auto-logout after 8 hours" (**on**)
+- "IP allowlist" (off)
+- "Audit all admin actions" (**on**)
+
+They were hardcoded and did nothing when pressed. The code checks the three "on" claims as follows:
+- The admin layout checks only `isSuperAdmin()`; nothing requires a second factor for the console.
+- No admin session times out.
+- About 12 of the 35 admin page directories write an audit record.
+
+An operator reading this page to learn the console's security was told it had protections it does not have.
+
+**Fix.** The switches are replaced by four read-only statements of what is enforced today: two-step sign-in not required, no idle timeout, no IP allowlist, audit log partial. The intro says these aren't settings yet. All of it is translated.
+
+**Owner decision (OPEN).** Whether the admin console should *require* two-step sign-in (`requireAal2` exists and guards money, document and trust pages) and an idle timeout. Either is a product and security choice. It is recorded here and not decided by the audit.
+
+**Status:** FIXED (the page tells the truth). The policy gap is OPEN for the owner.
+
+---
+
+### `[CLAUDE-1][INFO][COORDINATION]` C1-S9-107 — one page register, not two
+
+**File/path:** `scripts/page-audit-register.mjs`; `tests/every-page-is-in-the-page-register.test.ts`; `docs/audit/pages/` (removed); `components/modules/autopilot-module.tsx`.
+
+**Problem.** Two sessions built a per-page register for the same instruction at the same time:
+- Claude-1's lane files in `docs/audit/pages/`, rolled up into this file.
+- session_01KP9rt5's **Every page** table (lanes A–F), merged to main in #591.
+
+Two registers means two answers to "what state is this page in". The second one also had no guard that it was complete.
+
+**Fix.**
+- **One register.** Main's table is the register. Claude-1's lane files and roll-up are removed.
+- **Guard re-pointed.** The completeness guard now reads that table: every `page.tsx` has exactly one row, and no row appears twice. The script still lists routes for the crawl and static tools.
+- **Lane A.** Claude-1 did not take lane A, which session_01TRY21 claimed (#594) while this was being merged. Its findings are in the hand-off table with the others.
+- **Lanes A–F.** All are claimed by other sessions, so Claude-1's fixes on their pages are listed in a hand-off table above the register rather than edited into someone else's rows.
+
+**Found in the merge.** Main's preview mode skips the automatic scan on open. My `C1-S9-98` forecast would then have shown "Scanning your family…" forever, because no scan ever starts. An unscanned preview now says so and offers Re-scan, which works for a super admin because the route lets them through (`C1-S9-98`). The two changes hold together.
+
+**Status:** DONE.
+
+---
+
+### `[CLAUDE-1][MEDIUM][I18N]` C1-S9-108 — public pages a German reader met in English, and two titles that ran off a phone
+
+**File/path:**
+- `components/marketing/cta.tsx`, `components/marketing/legal.tsx`
+- `app/(marketing)/ai/page.tsx`, `app/(marketing)/privacy/page.tsx`
+- `app/reviews/new/page.tsx`
+- seven catalogues
+
+**Problem.** Found by rendering every page in German with `scripts/page-audit-crawl.mjs --locale de-DE`, which reports visible text containing two or more English function words. The i18n gate had called these surfaces clean because the copy sat where it does not look:
+- **Closing call to action.** Every marketing page that used it with its defaults (`/`, `/faq`, `/privacy`, `/terms`, `/cookies`, `/acceptable-use`) ended on an English paragraph. The defaults lived in a parameter list.
+- **`/ai`.** Its call-to-action subtitle was an English JSX attribute.
+- **`/privacy`.** Two paragraphs of the policy were English literals inside an array of catalogue keys.
+- **`/reviews/new`.** When no custom copy was saved, the review request fell back to English defaults.
+- **Two legal titles.** At 390 px in German, "Datenschutzerklärung" and "Nutzungsbedingungen" are single words wider than the screen. They pushed `/privacy` 59 px and `/terms` 68 px sideways.
+
+**Fix.**
+- The CTA defaults are catalogue keys, and so is the `/ai` subtitle.
+- The two privacy paragraphs are keys, in the policy's formal register.
+- The review page falls back to translated defaults.
+- The legal title hyphenates by the page's `lang` and breaks as a fallback. 0 px overflow on all four legal pages in German.
+- Eight keys in seven catalogues.
+- `tests/a-public-page-reads-in-the-readers-language.test.ts` pins each fix.
+
+**Not fixed here (OPEN, content).** Some text is database content, not interface copy:
+- **FAQ answers.** The FAQ blocks on `/`, `/ai` and the other public pages come from `marketing_aeo_questions`. Migration `0279` translates only some of them, so the rest render in English. `scripts/translate-aeo-questions.mjs` exists for this and needs a translation run.
+- **Blog posts.** They are English articles. That is a content decision, not a defect in a page.
+
+**Status:** FIXED (interface copy and overflow). The AEO question translations are OPEN, as content.
+
+---
+
+### `[CLAUDE-1][MEDIUM][BILLING]` C1-S9-109 — the billing page's plan buttons, statuses and categories were English, and "Payment & invoices" failed silently
+
+**File/path:** `components/modules/billing-module.tsx`; seven catalogues.
+
+**Problem.**
+- **English on the page where a family chooses what to pay for** (`/dashboard/billing`, part of the `C1-S9-101` burn-down), in every locale:
+  - the plan-choice button ("Current plan", "Choose Family+", "Switch billing to annual")
+  - the subscription status badge, the plan names and descriptions, and the feature lists
+  - the six tab labels and the four stat labels
+  - the fifteen spending categories
+- **"Payment & invoices" did nothing when it failed.** It read the portal route's JSON, found no `url`, and stopped. Each refusal the route words for the reader was dropped: not a parent, no billing account, or billing unavailable.
+
+**Fix.**
+- **Labels.** Status, plan, tier and tab text are catalogue keys, in fields named `labelKey` and `nameKey` so the raw-key guard can tell them from copy. Tab ids are no longer labels.
+- **Categories.** Categories stay stored as the English word, because it is data and existing rows hold it. They are shown through `categoryLabel()`, and a family's own category shows as they typed it.
+- **Portal.** A portal failure now toasts the route's own reason, or a translated fallback.
+- About 70 keys in seven catalogues; plan names stay brand names.
+
+**Status:** FIXED. `billing-module` goes from 65 to 19 scanner findings. The 19 left are the stored category values (data, not copy) and four type-alias fragments the scanner misreads.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CHORES]` C1-S9-110 — chores showed English in every locale, and a template wrote English into the family's chore
+
+**File/path:** `components/modules/chores-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/chores` (part of the `C1-S9-101` burn-down) showed English in every locale: the status badges, the tab labels, the approval toast, and every "N pts".
+- **The ten chore templates held English copy.** Picking one wrote that English title and description into the family's new chore, so the chore stayed English for everyone who saw it.
+
+**Fix.**
+- Status and tab labels are catalogue keys (`labelKey`).
+- Templates hold `titleKey` and `descriptionKey`. Each is worded when it is shown and again when it is picked, so the chore is created in the picker's language.
+- 33 keys added to seven catalogues.
+
+**Status:** FIXED. Scanner findings for `chores-module` drop from 36 to 3, and those 3 are type-alias fragments.
 
 ---
 

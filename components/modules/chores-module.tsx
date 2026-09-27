@@ -43,13 +43,13 @@ type Assignment = Tables<'chore_assignments'> & { chore: Chore | null };
 
 type Tab = 'mine' | 'all' | 'completed' | 'approvals' | 'store';
 
-const STATUS_META: Record<string, { label: string; cls: string; icon: typeof Circle }> = {
-  todo: { label: 'To Do', cls: 'text-muted border-border', icon: Circle },
-  in_progress: { label: 'In Progress', cls: 'text-blue-400 border-blue-500/40 bg-blue-500/10', icon: Clock },
-  submitted: { label: 'Submitted', cls: 'text-amber-400 border-amber-500/40 bg-amber-500/10', icon: Clock },
-  approved: { label: 'Completed', cls: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10', icon: CheckCircle2 },
-  done: { label: 'Completed', cls: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10', icon: CheckCircle2 },
-  rejected: { label: 'Needs Redo', cls: 'text-rose-400 border-rose-500/40 bg-rose-500/10', icon: Circle },
+const STATUS_META: Record<string, { labelKey: string; cls: string; icon: typeof Circle }> = {
+  todo: { labelKey: 'choresModule.status.todo', cls: 'text-muted border-border', icon: Circle },
+  in_progress: { labelKey: 'choresModule.status.inProgress', cls: 'text-blue-400 border-blue-500/40 bg-blue-500/10', icon: Clock },
+  submitted: { labelKey: 'choresModule.status.submitted', cls: 'text-amber-400 border-amber-500/40 bg-amber-500/10', icon: Clock },
+  approved: { labelKey: 'choresModule.status.completed', cls: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10', icon: CheckCircle2 },
+  done: { labelKey: 'choresModule.status.completed', cls: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10', icon: CheckCircle2 },
+  rejected: { labelKey: 'choresModule.status.needsRedo', cls: 'text-rose-400 border-rose-500/40 bg-rose-500/10', icon: Circle },
 };
 
 const DUE_TONE: Record<string, string> = {
@@ -180,7 +180,7 @@ export function ChoresModule() {
     setBusy(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    success(`Approved! +${a.chore?.points ?? 0} pts`); void refresh();
+    success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 })); void refresh();
   }
 
   async function payChore(a: Assignment) {
@@ -232,14 +232,14 @@ export function ChoresModule() {
   // The rewards read matters too: it is what the redemption list is priced
   // from, so losing it shows a child nothing to spend their points on.
   const readError = error || rewardsError;
-  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load chores'} onRetry={() => { void refresh(); void refreshRewards(); }} />;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : tr('choresModule.failedToLoadChores')} onRetry={() => { void refresh(); void refreshRewards(); }} />;
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
-    { key: 'mine', label: 'My Chores' },
-    { key: 'all', label: 'All Chores' },
-    { key: 'completed', label: 'Completed', count: completedRows.length },
-    { key: 'approvals', label: 'Approvals', count: pendingApprovals.length },
-    { key: 'store', label: 'Chore Store' },
+    { key: 'mine', label: tr('choresModule.tab.mine') },
+    { key: 'all', label: tr('choresModule.tab.all') },
+    { key: 'completed', label: tr('choresModule.tab.completed'), count: completedRows.length },
+    { key: 'approvals', label: tr('choresModule.tab.approvals'), count: pendingApprovals.length },
+    { key: 'store', label: tr('choresModule.tab.store') },
   ];
 
   return (
@@ -296,7 +296,7 @@ export function ChoresModule() {
                   <Avatar name={m.display_name} color={m.color} size={28} />
                   <span className="leading-tight">
                     <span className="block text-sm font-medium">{m.display_name}</span>
-                    <span className="block text-[11px] text-muted">{pointsMap.get(m.id) ?? 0} pts</span>
+                    <span className="block text-[11px] text-muted">{tr('choresModule.nPts', { count: pointsMap.get(m.id) ?? 0 })}</span>
                   </span>
                 </button>
               ))}
@@ -345,7 +345,7 @@ export function ChoresModule() {
                       <div className="text-sm font-medium">{a.chore?.title ?? 'Chore'}</div>
                       <div className="text-xs text-muted" suppressHydrationWarning>{m?.display_name ?? 'Someone'} {tr('chores.submitted')} {timeAgo(a.submitted_at)}</div>
                     </div>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts</span>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><Star className="h-3.5 w-3.5 fill-emerald-400" /> {tr('choresModule.nPts', { count: a.chore?.points ?? 0 })}</span>
                     {manager && (
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setStatus(a, 'rejected')} disabled={busy === a.id}>{tr('chores.redo')}</Button>
@@ -422,7 +422,7 @@ export function ChoresModule() {
                 <span className="w-5 text-center text-sm">{RANK_MEDALS[e.rank - 1] ?? <span className="text-xs font-semibold text-muted">{e.rank}</span>}</span>
                 <Avatar name={e.member.display_name} color={e.member.color} size={26} />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.member.display_name}</span>
-                <span className="text-sm font-semibold text-fg">{e.points} pts</span>
+                <span className="text-sm font-semibold text-fg">{tr('choresModule.nPts', { count: e.points })}</span>
               </div>
             ))}
             {earners.length === 0 && <p className="text-xs text-muted">{tr('chores.noPointsEarnedYet')}</p>}
@@ -465,7 +465,7 @@ export function ChoresModule() {
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-elevated">
                   <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress.pct}%` }} />
                 </div>
-                <span className="shrink-0 text-[11px] text-muted">{progress.points} / {progress.cost} pts</span>
+                <span className="shrink-0 text-[11px] text-muted">{tr('choresModule.pointsOfCost', { points: progress.points, cost: progress.cost })}</span>
               </div>
               <div className="mt-3 flex items-center gap-2 text-xs">
                 <Gift className="h-4 w-4 text-brand-text" />
@@ -614,7 +614,7 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
       <div className={cn('text-xs font-medium', DUE_TONE[due.tone])}>{due.label}</div>
       {/* Reward */}
       <div className="flex items-center gap-1 text-sm font-semibold text-emerald-400">
-        <Star className="h-3.5 w-3.5 fill-emerald-400" /> {a.chore?.points ?? 0} pts
+        <Star className="h-3.5 w-3.5 fill-emerald-400" /> {tr('choresModule.nPts', { count: a.chore?.points ?? 0 })}
       </div>
       {/* Status */}
       <div>
@@ -623,7 +623,7 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
           disabled={!!busy || done || !nextStatus}
           className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition',
             status.cls, nextStatus && !done && 'hover:bg-elevated cursor-pointer', busy === a.id && 'animate-pulse')}>
-          <StatusIcon className="h-3.5 w-3.5" /> {status.label}
+          <StatusIcon className="h-3.5 w-3.5" /> {tr(status.labelKey)}
         </button>
       </div>
       {/* Kebab */}
@@ -695,6 +695,7 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 }
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
+  const tr = useTranslations();
   const locale = useLocale();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
@@ -703,7 +704,7 @@ function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_m
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
         <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : 'Done'}</div>
       </div>
-      <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {a.points_awarded ?? a.chore?.points ?? 0} pts</span>
+      <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {tr('choresModule.nPts', { count: a.points_awarded ?? a.chore?.points ?? 0 })}</span>
     </div>
   );
 }
@@ -714,17 +715,19 @@ type ChoreDraft = {
   priority: 'low' | 'medium' | 'high'; recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'; due_at: string; icon: string;
 };
 
-const CHORE_TEMPLATES: { icon: string; title: string; description: string; points: number; recurrence: ChoreDraft['recurrence'] }[] = [
-  { icon: '🛏️', title: 'Make Bed', description: 'Make your bed and tidy up', points: 10, recurrence: 'daily' },
-  { icon: '🍽️', title: 'Clean Dishes', description: 'Load or unload the dishwasher', points: 15, recurrence: 'daily' },
-  { icon: '🗑️', title: 'Take Out Trash', description: 'Take the trash to the curb', points: 10, recurrence: 'daily' },
-  { icon: '📖', title: 'Homework Time', description: 'Complete 30 min of homework', points: 20, recurrence: 'daily' },
-  { icon: '🐾', title: 'Feed the Pet', description: 'Give food and fresh water', points: 10, recurrence: 'daily' },
-  { icon: '🧹', title: 'Vacuum Living Room', description: 'Vacuum floors and rug', points: 25, recurrence: 'weekly' },
-  { icon: '🍴', title: 'Set the Table', description: 'Set the table for dinner', points: 15, recurrence: 'weekly' },
-  { icon: '🧺', title: 'Laundry', description: 'Wash, dry, and fold clothes', points: 30, recurrence: 'weekly' },
-  { icon: '🪴', title: 'Water Plants', description: 'Water all indoor plants', points: 10, recurrence: 'weekly' },
-  { icon: '🚿', title: 'Clean Bathroom', description: 'Wipe surfaces and mirror', points: 20, recurrence: 'weekly' },
+// Keys, worded when shown and when picked: a template becomes the chore's own
+// title and description, which should be in the family's language. C1-S9-110.
+const CHORE_TEMPLATES: { icon: string; titleKey: string; descriptionKey: string; points: number; recurrence: ChoreDraft['recurrence'] }[] = [
+  { icon: '🛏️', titleKey: 'choresModule.template.makeBed.title', descriptionKey: 'choresModule.template.makeBed.description', points: 10, recurrence: 'daily' },
+  { icon: '🍽️', titleKey: 'choresModule.template.cleanDishes.title', descriptionKey: 'choresModule.template.cleanDishes.description', points: 15, recurrence: 'daily' },
+  { icon: '🗑️', titleKey: 'choresModule.template.takeOutTrash.title', descriptionKey: 'choresModule.template.takeOutTrash.description', points: 10, recurrence: 'daily' },
+  { icon: '📖', titleKey: 'choresModule.template.homeworkTime.title', descriptionKey: 'choresModule.template.homeworkTime.description', points: 20, recurrence: 'daily' },
+  { icon: '🐾', titleKey: 'choresModule.template.feedThePet.title', descriptionKey: 'choresModule.template.feedThePet.description', points: 10, recurrence: 'daily' },
+  { icon: '🧹', titleKey: 'choresModule.template.vacuumLivingRoom.title', descriptionKey: 'choresModule.template.vacuumLivingRoom.description', points: 25, recurrence: 'weekly' },
+  { icon: '🍴', titleKey: 'choresModule.template.setTheTable.title', descriptionKey: 'choresModule.template.setTheTable.description', points: 15, recurrence: 'weekly' },
+  { icon: '🧺', titleKey: 'choresModule.template.laundry.title', descriptionKey: 'choresModule.template.laundry.description', points: 30, recurrence: 'weekly' },
+  { icon: '🪴', titleKey: 'choresModule.template.waterPlants.title', descriptionKey: 'choresModule.template.waterPlants.description', points: 10, recurrence: 'weekly' },
+  { icon: '🚿', titleKey: 'choresModule.template.cleanBathroom.title', descriptionKey: 'choresModule.template.cleanBathroom.description', points: 20, recurrence: 'weekly' },
 ];
 
 function TemplatesModal({ onClose, onPick }: { onClose: () => void; onPick: (t: Partial<ChoreDraft>) => void }) {
@@ -734,14 +737,14 @@ function TemplatesModal({ onClose, onPick }: { onClose: () => void; onPick: (t: 
       <p className="mb-3 text-sm text-muted">{tr('chores.pickAStartingPointYouCan')}</p>
       <div className="grid max-h-[60vh] gap-2 overflow-y-auto sm:grid-cols-2">
         {CHORE_TEMPLATES.map((t) => (
-          <button key={t.title} onClick={() => onPick({ title: t.title, description: t.description, points: t.points, recurrence: t.recurrence, icon: t.icon })}
+          <button key={t.titleKey} onClick={() => onPick({ title: tr(t.titleKey), description: tr(t.descriptionKey), points: t.points, recurrence: t.recurrence, icon: t.icon })}
             className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 p-3 text-left transition hover:border-brand/50 hover:bg-elevated/40">
             <span className="text-2xl">{t.icon}</span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{t.title}</span>
-              <span className="block truncate text-xs text-muted">{t.description}</span>
+              <span className="block truncate text-sm font-medium">{tr(t.titleKey)}</span>
+              <span className="block truncate text-xs text-muted">{tr(t.descriptionKey)}</span>
             </span>
-            <span className="ml-auto shrink-0 text-xs font-semibold text-emerald-400">{t.points} pts</span>
+            <span className="ml-auto shrink-0 text-xs font-semibold text-emerald-400">{tr('choresModule.nPts', { count: t.points })}</span>
           </button>
         ))}
       </div>

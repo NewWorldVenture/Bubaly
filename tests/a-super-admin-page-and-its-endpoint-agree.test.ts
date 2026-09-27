@@ -42,10 +42,11 @@ describe('a feature endpoint and the page in front of it', () => {
     expect(h.superAdmin).not.toHaveBeenCalled();
   });
 
-  it('treats a failed super-admin lookup as a refusal, never as access', async () => {
+  it('reports a failed super-admin lookup as unavailable without granting access', async () => {
     h.superAdmin.mockRejectedValue(new Error('auth unavailable'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await refuseUnlessEntitled(db, 'fam', ['/dashboard/autopilot']);
-    expect(res?.status).toBe(403);
+    expect(res?.status).toBe(503);
+    expect(await res?.json()).toMatchObject({ code: 'unavailable' });
   });
 });

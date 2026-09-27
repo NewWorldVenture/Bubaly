@@ -2,38 +2,38 @@
 
 ## Codex integration — 2026-09-27
 
-PARSER MERGED: PR599 -> main e70be8306571430169e69496c634cda97c069dc3
-at17:00:41UTC, exact reviewed e3dcf4203 treec6f3cd6b.
-FINAL LOCAL: b2a82067 UTC20,735/1,623files, build247, full strict types,
-lint15existingwarnings PASS; 5,194paths/modes checked before and after.
-Targeted parser46/46 and actual media browser11/11PASS; old-parser RED retained.
-LIVE: exact e70 public revision/worker-hash probe PASS17:05:26–32UTC;
-Vercel dpl_rKx8CoDq5su4ZJw5iJCFhbLysGmb and GH6695169383 SUCCESS.
-Email/phone hydration, meals307, nativev6 install/offline200/corehealth PASS;
-zero errors/failedrequests/suppressedwrites. Same full507 native wrapper1/1PASS7.0s.
-PR595 Web passed/E2E pending; PR599 hosted and combined integration PENDING.
-WORKER CLOSED: corrected850 CI36332783206 all4SUCCESS/E2E1764/1764;
-exact deployed e14/576 native acceptance PASS. Three worker rows stay FIXED+PASS.
-MEDIA/SEC-001: broader privacy/provider scope stays FAIL; three media test rowsIP.
-No live private-provider image journey or Storage RLS-bypass claim.
-PAGE INTEGRATION: preserve596's44 reported CLEAN routes and597's8 OWNER
-hydration findings. Claude's819/273-load experiment is attributed, not independently
-rerun here; page CLEAN is surface verification, not completed workflow acceptance.
-Combined source verification PENDING. No dependency/framework patch.
-PENDING PR REVIEWS:585 raw feature-ledger prompt persistence source concern;
-598 initial-open Modal effects fail actual SSR/browser control, minimal candidate passes.
-Root comments5857889463/5857903464; neither pending PR is shipped in e70.
-INVENTORY:14,187=13,877NOTSTARTED+298INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
-New SUPPORT-2D36C3920F6A catalogue regression testIP; all14,186 prior IDs/statuses kept.
-HEALTH: verified e70 coreOK/degraded; same six missing feature settings:
+LIVE: main a6dcd18e (PR600,17:17:56UTC) exact public acceptance PASS17:25:42–48UTC;
+native wrapper1/1PASS4.9s. No auth submission or private-provider image journey.
+MEDIA COVERAGE CLOSED:599 CI36335077710 all4SUCCESS, clean1775/1775 E2E12.8m;
+Web20735 each3zones/1623files,build247/types/lintPASS. Same tested/reviewed/e70tree.
+Three media fixture rows now FIXED+PASS; prior three worker closures remain.
+SEC-001 staysFAIL for broader bucket/privacy/provider scope.
+HISTORICAL FLAKES:595=1770pass+1flaky;596=1769pass+2flaky (both1771total).
+Weekly meal timeout retries passed; cleanup stack is not a root cause.
+596 actual /sleep React#418 retry passed; route OPEN/UI-ROUTE-0238 IN PROGRESS.
+PAGE BOARD:44CLEAN+345FIXED LIVE/recrawl pending+1OPEN+8ClaudeOWNER=398.
+CLEAN is surface verification; Claude experiments remain attributed.
+LOCAL COMBINED585/598: P10 fixed labels preserve provider/conversation input,
+22/22 targetedPASS and original-label6/22RED;38 actual AST callsites fixed.
+Authenticated-principal gate and initial-open Modal repairs adopted locally.
+Focused230/230units17files;44/44browser (2modal+31display+11media) PASS.
+Main-key-preserving catalogue merge adds218/locale; register393pages/398rowsPASS.
+Failure-only weekly-meal diagnostics retained. Full canonical/hosted/release PENDING.
+Later585ceb97afac/598bd71dbcaf changes deferred to next batch; open PRs not all closed.
+Shared sidebar/command-bar source remains a6; proposed changes deferred.
+Framework upgrade remains a separate branch; not shipped with this checkpoint.
+INVENTORY:14213=13871NOTSTARTED+327INPROGRESS+10FIXEDPASS+4BLOCKED+1FAIL.
+All14187 prior IDs retained;26 new source/test/tool recordsIP. Completion0.07%.
+HEALTH: exact a6 coreOK/degraded; six missing feature settings:
 CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
 GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
-RECEIPTS: Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json;
-Temp/bubaly-encoded-browser-retained-receipt-20260927.json;
-Temp/bubaly-pr585-pr598-integration-map-current-20260927.json;
-Temp/bubaly-sw-production-e70be830-20260927.json;
-Temp/bubaly-native-production-e70be830-20260927.log.
-PRODUCTION READY:NO. Auth/migration/physical-device obligations remain open.
+RECEIPTS: Temp/bubaly-e3-ci36335077710-terminal-20260927.json;
+Temp/bubaly-sw-production-a6dcd18e-20260927.json;
+Temp/bubaly-native-production-a6dcd18e-20260927.log;
+Temp/bubaly-pr585-p10-review-20260927/receipt.json;
+Temp/bubaly-585-598-focused-unit-final-20260927.log;
+Temp/bubaly-585-598-focused-browser-20260927.log.
+PRODUCTION READY:NO. Auth/migration/device obligations remain open.
 
 > Two sessions ran this board. Both sections are kept.
 

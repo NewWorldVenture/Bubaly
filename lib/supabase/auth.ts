@@ -73,8 +73,10 @@ export async function getUser() {
  * super_admins allowlist, independent of family membership). Unlike family roles,
  * this grants oversight of the whole site, not a single household — use sparingly.
  */
-export async function isSuperAdmin(): Promise<boolean> {
-  const supabase = await createServer();
+export async function isSuperAdmin(authenticatedClient?: Awaited<ReturnType<typeof createServer>>): Promise<boolean> {
+  // Route handlers may authenticate a bearer token ahead of browser cookies.
+  // The override must use that same authenticated principal.
+  const supabase = authenticatedClient ?? await createServer();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) {
     if (!isSessionMissing(authError)) console.error('[auth] super-admin user lookup failed', authError);
