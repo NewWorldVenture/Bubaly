@@ -34,17 +34,26 @@ let read: Read;
 let upserts: { row: Record<string, unknown>; options: unknown }[];
 
 // Chainable PostgREST stub: select().eq().maybeSingle() resolves the configured
-// read; upsert() records the row it would have written.
+// read. The action now writes through mergeNotificationPrefs (SRV-001 l7): a
+// compare-and-set update when the row exists, an insert when it does not.
+// Either one is recorded, in the shape these assertions read, as the row it
+// would have written.
+function write(row: Record<string, unknown>, kind: string) {
+  const chain: Record<string, unknown> = {};
+  Object.assign(chain, {
+    eq: () => chain, is: () => chain, select: () => chain,
+    maybeSingle: async () => { upserts.push({ row, options: kind }); return { data: { user_id: 'user-1' }, error: null }; },
+  });
+  return chain;
+}
 function from(_table: string) {
   const query: Record<string, unknown> = {};
   Object.assign(query, {
     select: () => query,
     eq: () => query,
     maybeSingle: async () => read,
-    upsert: async (row: Record<string, unknown>, options: unknown) => {
-      upserts.push({ row, options });
-      return { data: null, error: null };
-    },
+    update: (row: Record<string, unknown>) => write(row, 'update'),
+    insert: (row: Record<string, unknown>) => write(row, 'insert'),
   });
   return query;
 }
@@ -52,7 +61,7 @@ function from(_table: string) {
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  read = { data: { notification_prefs: { ...OTHER_PREFS } }, error: null };
+  read = { data: { notification_prefs: { ...OTHER_PREFS }, updated_at: '2026-09-27T10:00:00Z' }, error: null };
   upserts = [];
   mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1', email: 'parent@example.com' } });
   mocks.createServer.mockResolvedValue({ from });

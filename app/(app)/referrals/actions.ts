@@ -13,6 +13,7 @@ import {
   recordReferralEmailInvite, rollbackReferralEmailInvite, type ApplyFailureCode, type ApplyResult,
 } from '@/lib/referrals/server';
 import { REFERRAL_EMAIL_POLICY, REFERRAL_HOME_CARD_DISMISSED_KEY, referralLink } from '@/lib/referrals/core';
+import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
 
 /**
  * The catalogue key for each way applying a code can fail. `applyReferralCode`
@@ -105,21 +106,13 @@ export async function dismissReferralHomeCardAction(): Promise<{ ok: true } | { 
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: row, error: readError } = await supabase
-    .from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
-  if (readError) {
-    console.error('[referrals/home-card] preferences read failed', readError);
-    return { ok: false, reason: t('referralActions.couldNotSaveYourPreference') };
-  }
-  const prefs = (row?.notification_prefs as Record<string, unknown> | null) ?? {};
-  const merged = { ...prefs, [REFERRAL_HOME_CARD_DISMISSED_KEY]: new Date().toISOString() };
-  const { data: saved, error } = await supabase
-    .from('user_preferences')
-    .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' })
-    .select('user_id')
-    .maybeSingle();
-  if (error || !saved) {
-    console.error('[referrals/home-card] preferences write failed', error);
+  // Only the dismissal key changes, with a compare-and-set (SRV-001 l7).
+  const dismissedAt = new Date().toISOString();
+  const saved = await mergeNotificationPrefs(supabase, ctx.user.id,
+    (prefs) => ({ ...prefs, [REFERRAL_HOME_CARD_DISMISSED_KEY]: dismissedAt }));
+  if (!saved.ok) {
+    if (saved.reason === 'read_failed') console.error('[referrals/home-card] preferences read failed', saved.error);
+    else console.error('[referrals/home-card] preferences write failed', saved.error ?? saved.reason);
     return { ok: false, reason: t('referralActions.couldNotSaveYourPreference') };
   }
   revalidatePath('/home');
