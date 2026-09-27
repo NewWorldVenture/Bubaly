@@ -13,7 +13,8 @@
 // route with dynamic segments filled by an id that matches nothing.
 // Summarise with `python3 scripts/page-audit/summarize.py out.jsonl`.
 //
-// Env: BASE, VIEWPORTS=phone,desktop, NO_AXE=1, APPEND=1,
+// Env: BASE, VIEWPORTS=phone,desktop, NO_AXE=1, APPEND=1, STORAGE_STATE (a
+// Playwright storage-state file, for a signed-in crawl of a local stack),
 // PW_CHROMIUM_PATH (a system Chromium), CHROMIUM_ARGS (space-separated extra
 // launch flags, e.g. a proxy CA pin in a sandbox).
 import { createRequire } from 'node:module';
@@ -37,7 +38,11 @@ for (const p of paths) for (const v of VIEWPORTS) queue.push({ path: p, vp: v })
 
 async function audit({ path, vp }) {
   const sz = SIZES[vp];
-  const ctx = await browser.newContext({ viewport: { width: sz.width, height: sz.height }, isMobile: !!sz.isMobile, hasTouch: !!sz.hasTouch, ignoreHTTPSErrors: false });
+  const ctx = await browser.newContext({
+    viewport: { width: sz.width, height: sz.height }, isMobile: !!sz.isMobile, hasTouch: !!sz.hasTouch, ignoreHTTPSErrors: false,
+    // A signed-in crawl (of a LOCAL stack): a Playwright storage state file.
+    ...(process.env.STORAGE_STATE ? { storageState: process.env.STORAGE_STATE } : {}),
+  });
   const page = await ctx.newPage();
   const consoleErrors = [], pageErrors = [], failed = [], badResponses = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)); });
