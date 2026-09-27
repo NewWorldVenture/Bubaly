@@ -51,3 +51,11 @@ describe('lint fails on a warning (MAIN-F-D14)', () => {
     expect(ci).toMatch(/- name: Lint\s+run: npm run lint\b/);
   });
 });
+
+describe('the mobile app\'s dependencies are audited (MAIN-F-C10)', () => {
+  it('the mobile CI job runs npm audit on production dependencies', () => {
+    const mobileJob = ci.slice(ci.indexOf('\n  mobile:'), ci.indexOf('\n  database:'));
+    expect(mobileJob).toContain('working-directory: mobile');
+    expect(mobileJob).toMatch(/run: npm audit --omit=dev --audit-level=(high|moderate|critical)\b/);
+  });
+});
