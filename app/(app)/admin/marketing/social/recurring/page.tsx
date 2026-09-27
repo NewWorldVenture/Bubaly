@@ -75,7 +75,7 @@ export default async function RecurringAdsPage() {
         <Card><p className="text-xs text-muted">Platforms ready</p><p className="text-2xl font-bold">{readyCount}<span className="text-base text-muted">/{PLATFORMS.length}</span></p></Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {rows.length === 0 ? (
             <EmptyState icon={Repeat} title="No recurring campaigns yet" description="Create one on the right. It will post on its own from then on." />

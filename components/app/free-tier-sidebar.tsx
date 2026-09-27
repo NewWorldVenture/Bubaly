@@ -35,6 +35,7 @@ import { resolveItems, NavEntry, AiAssistantNavButton } from './nav-shared';
 import { SidebarAccount } from './sidebar-account';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { navLabel } from '@/lib/i18n/nav-label';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 /**
  * Live unread-messages count for the sidebar badge. Seeds from the server
@@ -58,8 +59,7 @@ function useLiveUnread(initial: number, familyId: string, userId: string): numbe
         .neq('sender_id', userId).not('read_by', 'cs', `{${userId}}`);
       if (active && typeof c === 'number') setCount(c);
     };
-    const channel = supabase
-      .channel(`unread-msgs:${familyId}:${channelId}`)
+    const channel = ownChannel(supabase, `unread-msgs:${familyId}:${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_messages', filter: `family_id=eq.${familyId}` }, () => { void refetch(); })
       .subscribe();
     const onVis = () => { if (document.visibilityState === 'visible') void refetch(); };

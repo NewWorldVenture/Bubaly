@@ -119,8 +119,10 @@ describe('complete onboarding telemetry', () => {
 describe('rendered timing reports', () => {
   it('requires admin access before reading either telemetry source', async () => {
     state.admin = false;
-    await expect(AuditPage()).rejects.toThrow('NOT_FOUND');
-    await expect(FunnelPage()).rejects.toThrow('NOT_FOUND');
+    // A non-admin gets the not-found card, rendered in place (page audit: a
+    // thrown notFound() inside the app's streamed boundary was React #419).
+    expect(await AuditPage()).toMatchObject({ type: expect.objectContaining({ name: 'AppNotFound' }), props: { backHref: '/admin' } });
+    expect(await FunnelPage()).toMatchObject({ type: expect.objectContaining({ name: 'AppNotFound' }), props: { backHref: '/dashboard' } });
     expect(createServiceClient).not.toHaveBeenCalled();
   });
 

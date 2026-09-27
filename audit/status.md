@@ -1,5 +1,40 @@
 # Status board
 
+## Codex integration — 2026-09-27
+
+PARSER MERGED: PR599 -> main e70be8306571430169e69496c634cda97c069dc3
+at17:00:41UTC, exact reviewed e3dcf4203 treec6f3cd6b.
+FINAL LOCAL: b2a82067 UTC20,735/1,623files, build247, full strict types,
+lint15existingwarnings PASS; 5,194paths/modes checked before and after.
+Targeted parser46/46 and actual media browser11/11PASS; old-parser RED retained.
+LIVE: exact e70 public revision/worker-hash probe PASS17:05:26–32UTC;
+Vercel dpl_rKx8CoDq5su4ZJw5iJCFhbLysGmb and GH6695169383 SUCCESS.
+Email/phone hydration, meals307, nativev6 install/offline200/corehealth PASS;
+zero errors/failedrequests/suppressedwrites. Same full507 native wrapper1/1PASS7.0s.
+PR595 Web passed/E2E pending; PR599 hosted and combined integration PENDING.
+WORKER CLOSED: corrected850 CI36332783206 all4SUCCESS/E2E1764/1764;
+exact deployed e14/576 native acceptance PASS. Three worker rows stay FIXED+PASS.
+MEDIA/SEC-001: broader privacy/provider scope stays FAIL; three media test rowsIP.
+No live private-provider image journey or Storage RLS-bypass claim.
+PAGE INTEGRATION: preserve596's44 reported CLEAN routes and597's8 OWNER
+hydration findings. Claude's819/273-load experiment is attributed, not independently
+rerun here; page CLEAN is surface verification, not completed workflow acceptance.
+Combined source verification PENDING. No dependency/framework patch.
+PENDING PR REVIEWS:585 raw feature-ledger prompt persistence source concern;
+598 initial-open Modal effects fail actual SSR/browser control, minimal candidate passes.
+Root comments5857889463/5857903464; neither pending PR is shipped in e70.
+INVENTORY:14,187=13,877NOTSTARTED+298INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
+New SUPPORT-2D36C3920F6A catalogue regression testIP; all14,186 prior IDs/statuses kept.
+HEALTH: verified e70 coreOK/degraded; same six missing feature settings:
+CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
+GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
+RECEIPTS: Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json;
+Temp/bubaly-encoded-browser-retained-receipt-20260927.json;
+Temp/bubaly-pr585-pr598-integration-map-current-20260927.json;
+Temp/bubaly-sw-production-e70be830-20260927.json;
+Temp/bubaly-native-production-e70be830-20260927.log.
+PRODUCTION READY:NO. Auth/migration/physical-device obligations remain open.
+
 > Two sessions ran this board. Both sections are kept.
 
 ---
@@ -2330,3 +2365,31 @@ LAST-UPDATE: 2026-09-20
 CURRENT: the owner asked for #548 to merge to main; GitHub refused (base moved: #556 landed). main merged into the branch: 95 conflicting files, resolved as main's readback + wroteNoRows() spelling with this branch's family scope + describeActionError(). No migration renumbering (main 0406–0418 < this PR's 0426–0443); next free 0444. 0426's assertion narrowed to auth.uid() membership reads (main's 0416 journal insert policy is a row-integrity check, not membership). Five tables main narrowed now in the gated list with scoped writes; social_account_tokens left it (0406: service-role only).
 VERIFIED: tsc clean · lint 0 (15/15, budget 17→15) · vitest 20,407/20,410 (3 = container Node 22) · replay 423/423 · probes 150/150 twice. RECORD: finalaudit.md Q73.
 OPEN: audit/claude-2.md, claude-3.md, claude-4.md conflict (append-only on both sides) — left for the owner under the concurrency protocol; the merge commit waits on that decision.
+
+## Historical local observation retained during reconciliation
+
+The following is the September 19 checkpoint as written then. Current status is above.
+
+### Retained local checkpoint — 2026-09-19
+
+CURRENT: SEC-001 worker private-image cache repair IN PROGRESS.
+BASELINE: main75a1f3c6, tree2f4cb2f980b1a92c4313d3af4ea7fe514630a648.
+VERIFIED: dpl_6KZy5vXVRZSQW5zF4qckk8pZQdbW, GitHubProduction6546108247.
+Public build/auth/phone readiness pass at21:51 UTC; no auth action or SMS dispatch.
+PHONE CI:75a1 run35471471192 remains active; disposable phone acceptance pending.
+Prior2a5 E2E1,293/1,296: three phone cases fail before code entry; repaired
+signout and six callbacks pass by complete enabled-matrix inference.
+The CI-only provider/hook repair is published; product config/SQL unchanged.
+SW RED: Actual worker handlers/Chromium CacheStorage/production logout preserve
+synthetic A private,no-store image and deliver it to B offline after logout.
+No native worker registration, real optimizer or private production content.
+REPAIR: Implementation and exact regression evidence pending; no cache/privacy PASS.
+SUPPORT-98FD1D4C44AD remains IN PROGRESS; SEC-001 remains FAIL.
+INVENTORY: All14,038 IDs/statuses retained.13,842 NOT STARTED,192 IN PROGRESS,
+1 FIXED+PASS,3 FAIL (0.01%). AUTH-001/002/003 remain open; narrowSEC-005 closed.
+NEXT: Complete bounded worker-cache repair, verify and record exact source gates.
+Separate physical-device, production SMS, private-bucket and database obligations remain open.
+RECORD: docs/final-audit/service-worker-private-cache-cycle.md.
+PHONE HISTORY: docs/final-audit/auth-phone-ownership-cycle.md.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:53:24.045Z

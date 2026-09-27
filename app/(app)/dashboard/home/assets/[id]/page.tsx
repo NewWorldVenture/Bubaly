@@ -10,7 +10,6 @@
 // added to the sidebar.
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import {
   ArrowLeft, CalendarClock, FileText, Hammer, Home, Package, Shield, Wrench,
 } from 'lucide-react';
@@ -22,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,7 +82,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
 
   const result = await loadAssetDetail(supabase, { familyId: ctx.active.familyId, assetId: id });
 
-  if (result.status === 'not_found') notFound();
+  if (result.status === 'not_found') return <AppNotFound backHref="/dashboard/home" />;
 
   if (result.status === 'error') {
     // The reason is already in the server log (`[home/asset-detail] … read

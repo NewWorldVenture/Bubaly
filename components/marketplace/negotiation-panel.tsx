@@ -22,6 +22,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { useMoneyUnit } from '@/components/marketplace/money-unit';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 /**
  * An offer, to the cent, in the READER's notation. This used to be a module-level
@@ -61,7 +62,7 @@ export function NegotiationPanel({
     // they are, this channel would never fire; do not hold the slot.
     if (!isRealtimePublished('marketplace_negotiation_rounds')) return;
     const sb = createClient();
-    const ch = sb.channel(`negotiation:${listingId}`)
+    const ch = ownChannel(sb, `negotiation:${listingId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_negotiation_rounds', filter: `listing_id=eq.${listingId}` }, () => router.refresh())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_negotiations', filter: `listing_id=eq.${listingId}` }, () => router.refresh())
       .subscribe();

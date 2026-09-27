@@ -101,7 +101,8 @@ export function AdminWalletClient({ stats, flags, audit }: { stats: Stats; flags
                   </div>
                   {flag.description && <div className="mt-0.5 text-[11px] text-muted">{flag.description}</div>}
                 </div>
-                <button onClick={() => toggle(flag)} disabled={busyKey === flag.key}
+                <button type="button" role="switch" aria-checked={flag.enabled} aria-label={flag.key}
+                  onClick={() => toggle(flag)} disabled={busyKey === flag.key}
                   className={cn('relative h-6 w-11 flex-shrink-0 rounded-full transition disabled:opacity-50',
                     flag.enabled ? (isStripe ? 'bg-amber-500' : 'bg-brand') : 'bg-elevated')}>
                   <div className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', flag.enabled ? 'left-[22px]' : 'left-0.5')} />

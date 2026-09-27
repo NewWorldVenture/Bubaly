@@ -28,7 +28,7 @@ export function FilterForm({
 
 export function FilterSelect({ name, label, defaultValue, options }: {
   name: string;
-  /** What the filter is about. Required: an unnamed select is announced as just "combo box" (MAIN-F-D03). */
+  /** What the filter is about, as the select's accessible name. Required: an unnamed select is announced as just "combo box" (MAIN-F-D03), and its first option ("All …") is not a name. */
   label: string;
   defaultValue?: string;
   options: { value: string; label: string }[];

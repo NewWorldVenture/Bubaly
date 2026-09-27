@@ -18,12 +18,13 @@
 //
 //   BASE_URL=https://www.bubaly.com node scripts/audit-live-pages.mjs \
 //     [--json out.json] [--jsonl progress.jsonl] [--max 3000] [--concurrency 6]
-//     [--only public|app] [--filter /blog] [--axe]
+//     [--only public|app] [--filter /blog] [--axe] [--paths list.txt]
+//     [--cookies cookies.json]   (signed-in audit, e.g. against a local stack)
 //
 // Through an HTTPS proxy, Chromium is pointed at HTTPS_PROXY and verifies TLS
 // against the system NSS store; nothing here turns certificate checks off.
 
-import { appendFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -43,6 +44,13 @@ const CONCURRENCY = Number(arg('concurrency', '6'));
 const ONLY = arg('only', 'all');
 const FILTER = arg('filter', '');
 const JSON_OUT = arg('json', '');
+// A file of paths, one per line, audited exactly (no seeds, no link-following):
+// how a flaky result is re-checked on its own, quietly, before it is believed.
+const PATHS = arg('paths', '');
+// A cookie file from scripts/crawl-login.mjs. With it, the signed-in routes are
+// audited AS that member — each must render for them, not bounce to /login —
+// with the same console, request, text and --axe checks the public pages get.
+const COOKIES = arg('cookies', '');
 // One JSON object per line as each page finishes, so a long run can be read
 // (or resumed from) before it ends.
 const JSONL_OUT = arg('jsonl', '');
@@ -148,7 +156,7 @@ async function audit(context, path, kind) {
       const hit = pattern.exec(body);
       if (hit) result.markers.push(`${what}: "${body.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).replace(/\s+/g, ' ')}"`);
     }
-    if (kind === 'public' && AXE) {
+    if ((kind === 'public' || COOKIES) && AXE) {
       const axe = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
       result.a11y = axe.violations
         .filter((v) => v.impact === 'serious' || v.impact === 'critical')
@@ -172,7 +180,11 @@ async function audit(context, path, kind) {
 /** What makes a result a failure, as sentences. Empty means it passed. */
 function problems(r) {
   const out = [];
-  if (r.kind === 'app') {
+  if (r.kind === 'app' && COOKIES) {
+    if (r.status === null || r.status >= 400) out.push(`status ${r.status}`);
+    if (r.finalPath === '/login') out.push('a signed-in member was sent to /login');
+    if (!r.title) out.push('no <title>');
+  } else if (r.kind === 'app') {
     if (r.status === null || r.status >= 500) out.push(`status ${r.status}`);
     if (r.finalPath !== '/login') out.push(`signed-out visitor ended on ${r.finalPath}, not /login`);
   } else {
@@ -190,6 +202,7 @@ function problems(r) {
 }
 
 const all = routes();
+const skippedDynamic = [];
 const queue = [];
 const seen = new Set();
 const enqueue = (path, kind) => {
@@ -198,31 +211,42 @@ const enqueue = (path, kind) => {
   queue.push({ path, kind });
 };
 
-if (ONLY !== 'app') {
+if (PATHS) {
+  for (const line of readFileSync(PATHS, 'utf8').split('\n')) {
+    const path = line.trim();
+    if (path) enqueue(path.replace(/^app:/, ''), path.startsWith('app:') ? 'app' : 'public');
+  }
+} else if (ONLY !== 'app') {
   for (const r of all) {
     if (r.group === '(app)') continue;
     if (!r.pattern.split('/').some(isDynamic)) enqueue(r.pattern, 'public');
   }
   for (const loc of await sitemapUrls()) enqueue(sameSite(loc), 'public');
 }
-if (ONLY !== 'public') {
+if (!PATHS && ONLY !== 'public') {
   for (const r of all) {
     if (r.group !== '(app)') continue;
+    // Signed in, a made-up id is a real 404 for a real member; those routes need
+    // seeded ids (crawl-authenticated-routes --ids) and are counted, not guessed.
+    if (COOKIES && r.pattern.split('/').some(isDynamic)) { skippedDynamic.push(r.pattern); continue; }
     enqueue(r.pattern.split('/').map((s) => (isDynamic(s) ? PLACEHOLDER_ID : s)).join('/') || '/', 'app');
   }
 }
 
-const proxy = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined;
+// A local target is reached directly; only a remote one goes through the proxy.
+const local = ['localhost', '127.0.0.1'].includes(BASE.hostname);
+const proxy = process.env.HTTPS_PROXY && !local ? { server: process.env.HTTPS_PROXY } : undefined;
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH || undefined, proxy });
 const results = [];
 let done = 0;
 async function worker() {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  if (COOKIES) await context.addCookies(JSON.parse(readFileSync(COOKIES, 'utf8')));
   while (queue.length && results.length < MAX) {
     const job = queue.shift();
     const r = await audit(context, job.path, job.kind);
     // Follow what a visitor can click to, so a page no sitemap lists is still seen.
-    if (job.kind === 'public' && ONLY !== 'app') for (const link of r.links) enqueue(link, 'public');
+    if (job.kind === 'public' && ONLY !== 'app' && !PATHS) for (const link of r.links) enqueue(link, 'public');
     delete r.links;
     r.problems = problems(r);
     results.push(r);
@@ -239,5 +263,6 @@ results.sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.pa
 const failing = results.filter((r) => r.problems.length);
 if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify({ base: BASE.origin, at: new Date().toISOString(), results }, null, 2));
 console.log(`${results.length} pages audited on ${BASE.origin}: ${results.length - failing.length} clean, ${failing.length} with problems`);
+if (skippedDynamic.length) console.log(`  ${skippedDynamic.length} signed-in routes with an id segment skipped (no seeded id)`);
 for (const r of failing) console.log(`  ${r.kind.padEnd(6)} ${r.path}  —  ${r.problems.join(' | ')}`);
 process.exitCode = failing.length ? 1 : 0;

@@ -491,7 +491,7 @@ export function SchoolModule() {
                                 {new Intl.NumberFormat(undefined, { style: 'currency', currency: verdict.currency }).format(verdict.amount_cents / 100)}
                               </span>
                             )}
-                            <span className="text-muted/60">{fmtTimeAgo(row.occurred_at)}</span>
+                            <span suppressHydrationWarning className="text-muted">{fmtTimeAgo(row.occurred_at)}</span>
                           </div>
                         </div>
                         {row.ai_handled ? (
@@ -548,7 +548,7 @@ export function SchoolModule() {
                               </div>
                             </td>
                             <td className="px-4 py-3.5">
-                              {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted/60">All</span>}
+                              {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted">All</span>}
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
@@ -697,7 +697,7 @@ export function SchoolModule() {
                       <div>
                         <p className="text-sm font-semibold">{a.title}</p>
                         {a.notes && <p className="mt-0.5 text-xs leading-5 text-muted">{a.notes}</p>}
-                        <p className="mt-1 text-xs text-muted/60">{fmtTimeAgo(a.starts_at)}</p>
+                        <p suppressHydrationWarning className="mt-1 text-xs text-muted">{fmtTimeAgo(a.starts_at)}</p>
                       </div>
                     </div>
                   ))}
@@ -727,7 +727,7 @@ export function SchoolModule() {
                     <div>
                       <p className="text-sm font-semibold">{e.title}</p>
                       <p className="text-xs text-muted">{d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-                      {e.notes && <p className="text-xs text-muted/60">{e.notes}</p>}
+                      {e.notes && <p className="text-xs text-muted">{e.notes}</p>}
                     </div>
                   </div>
                 );
@@ -738,7 +738,7 @@ export function SchoolModule() {
 
         {/* Grade Summary */}
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
-          <h2 className="mb-4 font-semibold">{tr('school.gradeSummary')} <span className="text-xs text-muted/60">{tr('school.thisTerm')}</span></h2>
+          <h2 className="mb-4 font-semibold">{tr('school.gradeSummary')} <span className="text-xs text-muted">{tr('school.thisTerm')}</span></h2>
           {grades.length === 0 ? (
             <p className="text-sm text-muted">{tr('school.noGradesRecordedYet')}</p>
           ) : (

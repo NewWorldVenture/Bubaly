@@ -381,7 +381,7 @@ function TreeBranch({
           <span className="text-sm font-medium">{node.name}</span>
           <span className="ml-2 text-xs text-muted">{relationshipLabel(node.relationship)}</span>
           {lifespan(node) && <span className="ml-2 text-xs text-muted">· {lifespan(node)}</span>}
-          {node.death_year != null && <span className="ml-1 text-xs text-muted/50">†</span>}
+          {node.death_year != null && <span className="ml-1 text-xs text-muted">†</span>}
         </div>
 
         {hasChildren && (

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import {
   ArrowLeft, Tag, MapPin, Star, ShieldCheck, Clock, Package, Gift, HelpCircle,
   ShoppingBag, Repeat, HandHeart, Store as StoreIcon, AlertTriangle,
@@ -29,6 +28,7 @@ import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
+import { AppNotFound } from '@/components/app/app-not-found';
 import type { Database } from '@/lib/database.types';
 
 type ListingRow = Pick<Database['public']['Tables']['marketplace_listings']['Row'],
@@ -76,7 +76,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     reportRead('Listing', listingError);
     return <ErrorState message={t('item.couldNotLoadThisListing')} />;
   }
-  if (!listing) notFound();
+  if (!listing) return <AppNotFound backHref="/marketplace" />;
 
   const isAuctionListing = listing.sale_format === 'auction';
   const { data: bidRows, error: bidsError } = isAuctionListing

@@ -11,7 +11,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 const TIERS: { tier: FeatureTier; icon: typeof Power; on: string }[] = [
   { tier: 'off', icon: Power, on: 'bg-slate-600 text-white' },
-  { tier: 'free', icon: Gift, on: 'bg-emerald-600 text-white' },
+  { tier: 'free', icon: Gift, on: 'bg-emerald-700 text-white' },
   { tier: 'basic', icon: Star, on: 'bg-blue-600 text-white' },
   { tier: 'plus', icon: Crown, on: 'bg-violet-600 text-white' },
 ];

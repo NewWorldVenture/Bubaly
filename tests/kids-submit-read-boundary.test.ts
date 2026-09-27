@@ -14,12 +14,12 @@ describe('kids submit-proof page throws on read error (never 404 a live chore)',
   it('captures + throws on the assignment read error before notFound()', () => {
     expect(page).toContain('data: assignment, error: assignmentError');
     expect(page).toContain('if (assignmentError) throw new Error(');
-    expect(at(page, 'if (assignmentError) throw')).toBeLessThan(at(page, 'if (!assignment) notFound();'));
+    expect(at(page, 'if (assignmentError) throw')).toBeLessThan(at(page, 'if (!assignment) return <AppNotFound backHref="/kids" />;'));
   });
 
   it('captures + throws on the chore read error before notFound()', () => {
     expect(page).toContain('data: chore, error: choreError');
     expect(page).toContain('if (choreError) throw new Error(');
-    expect(at(page, 'if (choreError) throw')).toBeLessThan(at(page, 'if (!chore) notFound();'));
+    expect(at(page, 'if (choreError) throw')).toBeLessThan(at(page, 'if (!chore) return <AppNotFound backHref="/kids" />;'));
   });
 });

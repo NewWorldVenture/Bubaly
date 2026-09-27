@@ -210,13 +210,16 @@ export function WatchlistModule() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('watchlist.status')}>
-        {[{ value: 'want', label: 'Want to watch' }, { value: 'watching', label: 'Watching' }, { value: 'watched', label: 'Watched' }, { value: 'skipped', label: 'Skipped' }, { value: 'all', label: 'All' }].map((t) => (
-          <button key={t.value} role="tab" aria-selected={statusTab === t.value} onClick={() => setStatusTab(t.value as WatchStatus | 'all')}
-            className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', statusTab === t.value ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-            {t.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* The tablist holds only its tabs; the kind filter and the count sit beside it. */}
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tr('watchlist.status')}>
+          {[{ value: 'want', label: 'Want to watch' }, { value: 'watching', label: 'Watching' }, { value: 'watched', label: 'Watched' }, { value: 'skipped', label: 'Skipped' }, { value: 'all', label: 'All' }].map((t) => (
+            <button key={t.value} role="tab" aria-selected={statusTab === t.value} onClick={() => setStatusTab(t.value as WatchStatus | 'all')}
+              className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', statusTab === t.value ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
         <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as WatchKind | 'all')} aria-label={tr('watchlist.kind')} className="w-auto">
           <option value="all">{tr('watchlist.allKinds')}</option>
           {WATCH_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
-import { notFound } from 'next/navigation';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
@@ -9,6 +8,7 @@ import { balanceFromLedger, bucketBalances, normalizeSplit, type LedgerEntry, ty
 import { ChildDetailView } from '@/components/wallet/child-detail-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -28,7 +28,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     console.error('[wallet-child] Child wallet read failed', childWalletError);
     return <ErrorState message={tr('children.couldNotLoadThisChild')} />;
   }
-  if (!cw) notFound();
+  if (!cw) return <AppNotFound title={tr('notFound.thatWalletIsnTHere')} description={tr('notFound.thisChildWalletMayHave')} backHref="/wallet" backLabel={tr('appNotFound.backToWallet')} />;
 
   const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('family_members').select('display_name, color').eq('id', cw.member_id).maybeSingle(),

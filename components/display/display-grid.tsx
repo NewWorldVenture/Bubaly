@@ -304,7 +304,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       return (
         <div className="flex h-full flex-col">
           <p className="text-4xl font-black text-white">{data.grocery.count}<span className="ml-1.5 text-base font-normal text-white/50">items</span></p>
-          <ul className="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto text-sm text-white/60 scrollbar-none">
+          <ul className="mt-2 space-y-1 text-sm text-white/60">
             {data.grocery.items.slice(0, tileListLimit(size, 4)).map((g) => <li key={g.id} className="truncate">• {g.name}</li>)}
             {data.grocery.count === 0 && <li>{tr('displayGrid.listIsEmpty')}</li>}
           </ul>
@@ -313,7 +313,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
 
     case 'members':
       return (
-        <div className="flex max-h-full flex-wrap gap-4 overflow-y-auto">
+        <div className="flex flex-wrap gap-4">
           {data.members.map((m) => (
             <div key={m.id} className="flex flex-col items-center gap-1.5">
               <Avatar name={m.display_name} color={m.color} size={52} />
@@ -356,7 +356,7 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
 }
 
 function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
-  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/40"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
+  return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/60"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
 }
 
 
@@ -829,14 +829,24 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
               )}
               {/* Body flexes to fill the tile; list widgets scroll (scrollbar
                   hidden) as a safety net so nothing is ever hard-clipped, while
-                  the size-aware widgets above keep content fitting by design. */}
-              <div className={cn(tile.widget === 'featured' || tile.widget === 'service' ? 'h-full' : 'min-h-0 flex-1 overflow-y-auto scrollbar-none')}>
+                  the size-aware widgets above keep content fitting by design.
+                  A tile that can scroll is a named region the keyboard can
+                  reach (axe scrollable-region-focusable, desktop width). */}
+              {tile.widget === 'featured' || tile.widget === 'service' ? (
+              <div className="h-full">
                 <WidgetBoundary label={tile.widget} fallback={KIOSK_FALLBACK}>
                   {tile.widget === 'service'
                     ? <ServiceTile href={tile.href ?? '/dashboard'} />
                     : <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} settings={settings} />}
                 </WidgetBoundary>
               </div>
+              ) : (
+              <div role="region" tabIndex={0} aria-label={labelOf(tile.widget as WidgetKey)} className="min-h-0 flex-1 overflow-y-auto scrollbar-none rounded-xl focus-ring">
+                <WidgetBoundary label={tile.widget} fallback={KIOSK_FALLBACK}>
+                  <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} settings={settings} />
+                </WidgetBoundary>
+              </div>
+              )}
 
               {editing && (
                 <div className="absolute inset-0 flex flex-col justify-between bg-black/75 p-3 backdrop-blur-sm">
@@ -885,9 +895,9 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
 
         {/* Footer band (padded clear of the hints ticker; hidden on the kiosk
             fit so the grid gets the full viewport — the pencil still edits) */}
-        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/40', !editing && 'lg:hidden')}>
+        <p className={cn('mb-12 mt-6 flex items-center justify-center gap-2 text-center text-xs text-white/60', !editing && 'lg:hidden')}>
           <Sparkles className="h-3.5 w-3.5" /> {data.familyName} {tr('displayGrid.bubalyKitchenDisplay')}
-          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/60 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
+          {!editing && <button onClick={() => setEditing(true)} className="ml-1 inline-flex items-center gap-1 text-white/80 hover:text-white">{tr('displayGrid.customize')} <ArrowRight className="h-3 w-3" /></button>}
         </p>
       </div>
 

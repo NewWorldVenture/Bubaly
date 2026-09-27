@@ -22,6 +22,7 @@ import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { useMoneyUnit } from '@/components/marketplace/money-unit';
 import { RESERVE_VIEW_COLUMNS, readWithReserveView } from '@/lib/marketplace/reserve-view';
 import type { Database } from '@/lib/database.types';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Bid = { id: string; bidder_family_id: string; amount_cents: number; status: string; created_at: string; is_auto: boolean };
 
@@ -80,7 +81,7 @@ export function AuctionPanel({
   };
   useEffect(() => {
     const sb = createClient();
-    const ch = sb.channel(`auction:${listingId}`)
+    const ch = ownChannel(sb, `auction:${listingId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_bids', filter: `listing_id=eq.${listingId}` }, () => refetch.current())
       .subscribe();
     return () => { void sb.removeChannel(ch); };

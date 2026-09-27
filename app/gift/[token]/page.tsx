@@ -39,6 +39,23 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   }
 
   const active = !!link && link.is_active;
+  // A dead link says so and nothing else. It used to keep the live page's
+  // header — "Send a gift to a child · Gift · a family" — above the "no longer
+  // active" note, so a made-up or retired token read like a gift page with
+  // its names blanked out (page audit, 2026-09-27). /pay/[handle] already
+  // answers this way.
+  if (!active) {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-6 px-4 py-10 text-center">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
+        <h1 className="text-2xl font-bold">{t('pay.noActiveGiftLink')}</h1>
+        <p className="rounded-2xl border border-border bg-surface/40 p-6 text-sm text-muted">
+          {t('gift.thisGiftLinkIsNoLonger')}
+        </p>
+        <p className="max-w-xs text-[11px] text-muted">{t('gift.bubalyIsNotABank')}</p>
+      </div>
+    );
+  }
   let childName = 'a child';
   let familyName = 'a family';
   // An inactive capability must not disclose the household or child it used
@@ -64,17 +81,11 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
         {link?.message && <p className="mt-3 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">“{link.message}”</p>}
       </div>
 
-      {active ? (
-        <PublicGiftForm
-          token={token}
-          suggestedCents={(link!.suggested_cents && link!.suggested_cents.length > 0) ? link!.suggested_cents : DEFAULT_SUGGESTED_CENTS}
-          childName={childName}
-        />
-      ) : (
-        <p className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-          {t('gift.thisGiftLinkIsNoLonger')}
-        </p>
-      )}
+      <PublicGiftForm
+        token={token}
+        suggestedCents={(link!.suggested_cents && link!.suggested_cents.length > 0) ? link!.suggested_cents : DEFAULT_SUGGESTED_CENTS}
+        childName={childName}
+      />
 
       <p className="max-w-xs text-center text-[11px] text-muted">{t('gift.bubalyIsNotABank')}</p>
     </div>

@@ -62,7 +62,7 @@ export default async function AeoPage() {
 
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">{t('aeo.answerEngineOptimizationPreparesYour')}</div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <Card><p className="text-xs text-muted">{t('adminMarketingAeo.questions')}</p><p className="text-2xl font-bold">{total.toLocaleString()}</p></Card>
@@ -113,7 +113,7 @@ export default async function AeoPage() {
           <h2 className="mb-3 font-semibold">{t('adminMarketingAeo.addAQuestion')}</h2>
           <form action={addAeoQuestion} className="space-y-3 text-sm">
             <input name="question" required placeholder={t('adminMarketingAeo.whatIsTheBestFamilyOrganizer')} className={inputCls} />
-            <select aria-label={t('fieldName.questionPattern')} name="pattern" className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
+            <select name="pattern" aria-label={t('aeo.pattern')} className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
             <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
             <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
             <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />

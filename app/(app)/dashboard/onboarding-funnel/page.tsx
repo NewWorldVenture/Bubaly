@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 import { Activity, CheckCircle2, Timer, TrendingDown, Rocket, Zap, CalendarCheck, Sun } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -13,6 +12,7 @@ import { summarizeActivation, type ActivationEventLike } from '@/lib/analytics/a
 import { loadActivationEvents, loadOnboardingEvents } from '@/lib/analytics/onboarding-server';
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
 export default async function OnboardingFunnelPage() {
   await requireUserContext();
   // Cross-user pre-family telemetry — admin-only, read via the service role.
-  if (!(await isSuperAdmin())) notFound();
+  if (!(await isSuperAdmin())) return <AppNotFound backHref="/dashboard" />;
   const t = await getTranslations();
 
   const supabase = createServiceClient();

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import type { Tables } from '@/lib/database.types';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Subscription = Tables<'subscriptions'>;
 type Owner = { familyId: string; userId: string };
@@ -59,7 +60,7 @@ export function useBillingSubscription(familyId: string, userId: string) {
     if (!isRealtimePublished('subscriptions')) return;
     if (!familyId || !userId) return;
     const sb = createClient();
-    const channel = sb.channel(`subscription:${familyId}`)
+    const channel = ownChannel(sb, `subscription:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `family_id=eq.${familyId}` }, () => { void reload(); })
       .subscribe();
     return () => { void sb.removeChannel(channel); };

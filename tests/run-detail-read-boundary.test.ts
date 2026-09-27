@@ -49,7 +49,7 @@ describe('run detail read boundary', () => {
   it('loads through the family-scoped loader with the caller client and 404s on a miss', () => {
     expect(page).toContain("import { loadRunDetail, toRunView } from '@/lib/ai/runs/detail';");
     expect(page).toContain('loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role })');
-    expect(page).toContain('if (!detail.data) notFound();');
+    expect(page).toContain('if (!detail.data) return <AppNotFound backHref="/dashboard/concierge/runs" />;');
     expect(page).toContain('if (!detail.ok) return <RunUnavailable message={detail.error} />;');
     expect(page).toContain('const view = toRunView(detail.data, familyId, manager);');
     // Never the service client: a cross-family id must be "not found", not data.

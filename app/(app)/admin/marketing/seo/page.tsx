@@ -151,7 +151,7 @@ export default async function SeoPage() {
             label: 'Tracked keywords',
             count: keywordTotal,
             panel: (
-              <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <Card>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h2 className="font-semibold">{t('adminMarketingSeo.trackedKeywords')}</h2>

@@ -191,7 +191,9 @@ export default async function FamilyDisplayPage() {
           <NeedList needs={DEDICATED_NEEDS} label={t('marketingDisplay.needsDedicated')} t={t} />
         </div>
 
-        <div className="mt-8 overflow-x-auto">
+        {/* Scrolls sideways on a phone, so a keyboard must be able to reach it
+            (axe scrollable-region-focusable). */}
+        <div role="region" tabIndex={0} aria-label={t('marketingDisplay.compareTitle')} className="focus-ring mt-8 overflow-x-auto">
           <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border">

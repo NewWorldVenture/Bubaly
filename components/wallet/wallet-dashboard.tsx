@@ -265,7 +265,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{t.description || t.type.replace(/_/g, ' ')}</p>
-                  <p className="text-[11px] text-muted">{t.childName ? `${t.childName} · ` : ''}{fmtRelative(t.created_at)}{t.status !== 'completed' ? ` · ${t.status.replace(/_/g, ' ')}` : ''}</p>
+                  <p suppressHydrationWarning className="text-[11px] text-muted">{t.childName ? `${t.childName} · ` : ''}{fmtRelative(t.created_at)}{t.status !== 'completed' ? ` · ${t.status.replace(/_/g, ' ')}` : ''}</p>
                 </div>
                 <span className={cn('text-sm font-semibold', t.direction === 'credit' ? 'text-emerald-400' : 'text-rose-400')}>
                   {t.direction === 'credit' ? '+' : '−'}{formatCents(t.amount_cents)}
@@ -418,7 +418,7 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
         <p className="truncate text-sm font-medium">
           {isAllowanceReq ? 'Allowance request' : (approval.note || 'Spend request')}
         </p>
-        <p className="text-[11px] text-muted">
+        <p suppressHydrationWarning className="text-[11px] text-muted">
           {approval.childName ? `${approval.childName} · ` : ''}
           {isAllowanceReq && approval.note ? `${approval.note} · ` : ''}
           {fmtRelative(approval.created_at)}

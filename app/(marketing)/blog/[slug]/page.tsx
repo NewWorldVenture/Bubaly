@@ -169,7 +169,7 @@ export default async function BlogPostPage({ params }: Params) {
           <span className="truncate text-white/60">{post.title}</span>
         </nav>
 
-        <div className="grid gap-10 lg:grid-cols-[1fr_280px]">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_280px]">
           {/* Main article */}
           <article className="min-w-0">
             {/* Hero photo */}

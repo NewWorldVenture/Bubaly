@@ -182,7 +182,7 @@ export function LifeEventsModule({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{f.label}</p>
                     <p className="mt-0.5 text-sm text-muted">{f.value}</p>
-                    {f.notes && <p className="mt-1 text-xs text-muted/80">{f.notes}</p>}
+                    {f.notes && <p className="mt-1 text-xs text-muted">{f.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                     <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
@@ -271,7 +271,7 @@ export function LifeEventsModule({
                   <ChevronRight className="ml-auto h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-text" />
                 </div>
                 <p className="mt-2 text-xs text-muted">{t.description}</p>
-                <p className="mt-2 text-[11px] text-muted/70">{t.items.length} {tr('lifeEvents.guidedSteps')}</p>
+                <p className="mt-2 text-[11px] text-muted">{t.items.length} {tr('lifeEvents.guidedSteps')}</p>
               </button>
             );
           })}

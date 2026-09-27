@@ -7,6 +7,7 @@ import type { Tables, DashboardView } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { AuthenticatedCacheBoundary } from '@/lib/offline/cache-scope';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 export type FamilyOption = { familyId: string; name: string };
 
@@ -93,8 +94,7 @@ function AppProviderState({ value, initialMembers, children }: AppProviderProps)
     // socket that can never fire on every screen is the dishonest half.
     if (!isRealtimePublished('family_members')) return;
     const supabase = createClient();
-    const channel = supabase
-      .channel(`members:${value.familyId}`)
+    const channel = ownChannel(supabase, `members:${value.familyId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'family_members', filter: `family_id=eq.${value.familyId}` },

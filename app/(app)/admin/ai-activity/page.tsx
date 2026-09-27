@@ -108,11 +108,11 @@ export default async function AdminAIActivityPage({ searchParams }: Params) {
       <Card>
         <FilterForm action="/admin/ai-activity" hidden={{ family: sp.family }}>
           <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('aiActivity.searchByFeatureOrError')} />
-          <FilterSelect label={t('fieldName.status')} name="status" defaultValue={sp.status} options={[
+          <FilterSelect name="status" label={t('aiActivity.status')} defaultValue={sp.status} options={[
             { value: '', label: 'All statuses' },
             ...AI_REQUEST_STATES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') })),
           ]} />
-          <FilterSelect label={t('fieldName.feature')} name="feature" defaultValue={sp.feature} options={[
+          <FilterSelect name="feature" label={t('aiActivity.feature')} defaultValue={sp.feature} options={[
             { value: '', label: 'All features' },
             ...featureOptions.map((f) => ({ value: f, label: f })),
           ]} />

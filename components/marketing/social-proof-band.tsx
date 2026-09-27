@@ -43,7 +43,12 @@ export async function SocialProofBand() {
       )}
 
       {testimonials.length > 0 && (
-        <ul className="-mx-5 mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
+        <ul
+          // A phone scrolls this row sideways; a keyboard has to be able to
+          // reach it to scroll it too (axe scrollable-region-focusable).
+          tabIndex={0}
+          aria-label={t('socialProof.title')}
+          className="focus-ring -mx-5 mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
           {testimonials.map((item) => (
             <li key={item.id} className="w-[85%] shrink-0 snap-start sm:w-auto">
               <figure className="showcase-card flex h-full flex-col p-5">

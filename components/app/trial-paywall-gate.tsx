@@ -88,11 +88,11 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
           <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
-          <span className="text-muted/40">·</span>
+          <span className="text-muted">·</span>
           <SignOutForm className="contents">
             {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>}
           </SignOutForm>
-          <span className="text-muted/40">·</span>
+          <span className="text-muted">·</span>
           <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
             {t('trialPaywallGate.closeAccount')}
           </button>

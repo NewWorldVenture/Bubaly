@@ -244,7 +244,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingOnYourScheduleToday')}</p>
+              <p className="mt-2 text-sm text-muted">{tr('personalDashboard.nothingOnYourScheduleToday')}</p>
             </div>
           )}
         </div>
@@ -281,7 +281,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-              <p className="mt-2 text-sm text-muted/60">{isKid ? 'No chores — nice work!' : 'All caught up!'}</p>
+              <p className="mt-2 text-sm text-muted">{isKid ? 'No chores — nice work!' : 'All caught up!'}</p>
             </div>
           )}
         </div>
@@ -315,7 +315,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-                <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingWaitingOnYou')}</p>
+                <p className="mt-2 text-sm text-muted">{tr('personalDashboard.nothingWaitingOnYou')}</p>
               </div>
             )}
           </div>
@@ -347,7 +347,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                 })}
               </ul>
             ) : (
-              <p className="py-6 text-center text-sm text-muted/60">{tr('personalDashboard.noRewardsSetUpYet')}</p>
+              <p className="py-6 text-center text-sm text-muted">{tr('personalDashboard.noRewardsSetUpYet')}</p>
             )}
           </div>
         ) : (
@@ -379,7 +379,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Calendar className="h-8 w-8 text-muted/30" />
-                <p className="mt-2 text-sm text-muted/60">{tr('personalDashboard.nothingComingUp')}</p>
+                <p className="mt-2 text-sm text-muted">{tr('personalDashboard.nothingComingUp')}</p>
               </div>
             )}
           </div>

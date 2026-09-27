@@ -274,7 +274,7 @@ export default async function MarketplaceHomePage() {
           </div>
           {picks.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface/40 p-6 text-center text-sm text-muted">
-              {t('marketplace.nothingOnTheBoardYet')} <Link href={`${BASE}/browse?post=1`} className="text-brand-text hover:underline">{t('marketplace.postTheFirstItem')}</Link>.
+              {t('marketplace.nothingOnTheBoardYet')} <Link href={`${BASE}/browse?post=1`} className="text-brand-text underline hover:decoration-2">{t('marketplace.postTheFirstItem')}</Link>.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
@@ -394,7 +394,7 @@ export default async function MarketplaceHomePage() {
           </div>
           {creators.length === 0 ? (
             <p className="mt-2 text-xs text-muted">
-              {t('marketplace.noStorefrontsYet')} <Link href={`${BASE}/store`} className="text-brand-text hover:underline">{t('marketplace.openTheFirstOne')}</Link>.
+              {t('marketplace.noStorefrontsYet')} <Link href={`${BASE}/store`} className="text-brand-text underline hover:decoration-2">{t('marketplace.openTheFirstOne')}</Link>.
             </p>
           ) : (
             <ul className="mt-2 space-y-2.5">

@@ -396,7 +396,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <Link href="/home" className="lg:hidden">
+          <Link href="/home" aria-label={t('nav.home')} className="lg:hidden">
             <LogoMark className="h-8 w-14 sm:h-9 sm:w-16" variant="home" />
           </Link>
           <div className="flex-1" />

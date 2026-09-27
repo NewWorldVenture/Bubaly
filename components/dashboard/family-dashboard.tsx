@@ -248,7 +248,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.nothingScheduledToday')}</p>
+              <p className="mt-2 text-sm text-muted">{tr('familyDashboard.nothingScheduledToday')}</p>
             </div>
           )}
           <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
@@ -285,7 +285,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Calendar className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.noUpcomingEvents')}</p>
+              <p className="mt-2 text-sm text-muted">{tr('familyDashboard.noUpcomingEvents')}</p>
             </div>
           )}
           <Link href="/dashboard/calendar" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
@@ -421,7 +421,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <ShoppingCart className="h-8 w-8 text-muted/30" />
-              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.groceryListIsEmpty')}</p>
+              <p className="mt-2 text-sm text-muted">{tr('familyDashboard.groceryListIsEmpty')}</p>
               <Link href="/dashboard/grocery" className="mt-2 text-xs font-semibold text-brand-text">{tr('familyDashboard.addItems')}</Link>
             </div>
           )}
@@ -467,7 +467,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-8 w-8 text-emerald-400/30" />
-              <p className="mt-2 text-sm text-muted/60">{tr('familyDashboard.allCaughtUp')}</p>
+              <p className="mt-2 text-sm text-muted">{tr('familyDashboard.allCaughtUp')}</p>
             </div>
           )}
           <Link href="/dashboard/chores" className="mt-4 flex items-center gap-1 text-xs text-muted hover:text-fg/80">
@@ -489,7 +489,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{e.title} added to calendar</p>
-                  <p className="text-xs text-muted/60">{tr('familyDashboard.today')}</p>
+                  <p className="text-xs text-muted">{tr('familyDashboard.today')}</p>
                 </div>
               </li>
             ))}
@@ -498,12 +498,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                 <Avatar name={m.display_name} color={m.color} size={32} className="shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{m.display_name} is a member</p>
-                  <p className="text-xs text-muted/60">{tr('familyDashboard.recently')}</p>
+                  <p className="text-xs text-muted">{tr('familyDashboard.recently')}</p>
                 </div>
               </li>
             ))}
             {((todayEvents?.length ?? 0) === 0 && (members?.length ?? 0) === 0) && (
-              <li className="py-6 text-center text-sm text-muted/60">{tr('familyDashboard.noRecentActivity')}</li>
+              <li className="py-6 text-center text-sm text-muted">{tr('familyDashboard.noRecentActivity')}</li>
             )}
           </ul>
         </div>

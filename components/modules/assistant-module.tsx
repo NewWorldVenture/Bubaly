@@ -499,7 +499,7 @@ export function AssistantModule() {
       {/* Docked input bar */}
       <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
         <Composer variant="bar" {...composerProps} />
-        <p className="mt-3 text-center text-xs text-muted/60">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
+        <p className="mt-3 text-center text-xs text-muted">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
       </div>
     </>
   );
@@ -602,7 +602,7 @@ export function AssistantModule() {
               </>
             )}
           </div>
-          <button type="button" onClick={newChat} className="focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
+          <button type="button" onClick={newChat} aria-label={t('assistant.newChat')} className="focus-ring coarse:min-h-11 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/40 px-3 py-1.5 text-sm font-semibold text-fg transition hover:bg-elevated">
             <Plus className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">{t('assistant.newChat')}</span>
           </button>
         </div>

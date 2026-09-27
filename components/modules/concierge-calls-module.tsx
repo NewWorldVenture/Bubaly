@@ -32,6 +32,7 @@ import {
 } from '@/app/(app)/dashboard/concierge-calls/actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 type Call = Tables<'concierge_calls'>;
 
@@ -66,7 +67,7 @@ export function ConciergeCallsModule({ familyId, initialCalls }: { familyId: str
     // A refresh started for the previous family (or before unmount) must not
     // replace this family's list when it lands (MAIN-F-D09).
     let active = true;
-    const ch = supabase.channel(`concierge_calls:${familyId}`)
+    const ch = ownChannel(supabase, `concierge_calls:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'concierge_calls', filter: `family_id=eq.${familyId}` },
         async () => {
           const { data, error } = await supabase.from('concierge_calls').select('*')

@@ -116,7 +116,8 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
             className="h-10 w-full rounded-xl border border-border bg-bg pl-9 pr-3 text-sm"
           />
         </div>
-        <select aria-label={tr('fieldName.filterByTrustLevel')}
+        <select
+          aria-label={tr('contactList.trustLevel')}
           value={filterTrust}
           onChange={(e) => setFilterTrust(e.target.value as TrustLevel | 'all')}
           className="h-10 rounded-xl border border-border bg-bg px-3 text-sm"

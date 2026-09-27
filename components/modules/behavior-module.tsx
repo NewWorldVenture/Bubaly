@@ -150,7 +150,7 @@ export function BehaviorModule() {
         <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> {tr('behavior.behaviorParentingInsights')}</h3>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
-            <Select aria-label={tr('fieldName.filterByMember')} value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9">
+            <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label={tr('behavior.child')} className="h-9">
               <option value="all">{tr('behavior.allKids')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </Select>
