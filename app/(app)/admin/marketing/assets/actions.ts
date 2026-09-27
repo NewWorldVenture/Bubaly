@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { assetKindFromMime, buildAssetPath, isAssetKind, parseTags, type AssetKind } from '@/lib/marketing/assets';
+import { refuseInput } from '@/lib/actions/refusal';
 
 const BUCKET = 'marketing-assets';
 const MAX_BYTES = 50 * 1024 * 1024; // matches the bucket file_size_limit
@@ -18,7 +19,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return;
-  if (file.size > MAX_BYTES) throw new Error('Asset exceeds the 50 MB upload limit.');
+  if (file.size > MAX_BYTES) refuseInput('Asset exceeds the 50 MB upload limit.');
 
   // Explicit kind wins; otherwise infer from the file's MIME type.
   const explicit = s(formData, 'kind');
@@ -27,7 +28,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   const license = s(formData, 'license') ?? 'original';
   const { data: duplicate } = await supabase.from('marketing_assets').select('id, name').eq('content_hash', contentHash).is('deleted_at', null).maybeSingle();
-  if (duplicate) throw new Error(`This file is already in the Asset Library as "${duplicate.name}". Choose the existing asset instead of uploading a duplicate.`);
+  if (duplicate) refuseInput(`This file is already in the Asset Library as "${duplicate.name}". Choose the existing asset instead of uploading a duplicate.`, 'duplicate');
 
   const id = crypto.randomUUID();
   const name = s(formData, 'name') ?? file.name;
