@@ -340,7 +340,10 @@ describe('Supabase migration filename safety', () => {
     // 0398_onboarding_resumes_only_your_own_family.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0331 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0399');
+    // 0399_decided_concierge_runs_leave_needs_you.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0332 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0400');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
