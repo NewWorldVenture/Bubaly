@@ -36,21 +36,21 @@ type Gift_ = Tables<'relationship_gift_ideas'>;
 type Profile = Tables<'relationship_profile'>;
 type Wish = Tables<'wishlist_items'>;
 
-const KIND_META: Record<RelationshipDateKind, { label: string; icon: typeof Heart; cls: string }> = {
-  anniversary: { label: 'Anniversary', icon: Heart, cls: 'text-rose-300 bg-rose-500/10 border-rose-500/30' },
-  birthday: { label: 'Birthday', icon: Cake, cls: 'text-amber-300 bg-amber-500/10 border-amber-500/30' },
-  first_date: { label: 'First date', icon: Sparkles, cls: 'text-fuchsia-300 bg-fuchsia-500/10 border-fuchsia-500/30' },
-  date_night: { label: 'Date night', icon: Wine, cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' },
-  milestone: { label: 'Milestone', icon: Star, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
-  custom: { label: 'Date', icon: CalendarDays, cls: 'text-slate-300 bg-slate-500/10 border-slate-500/30' },
+const KIND_META: Record<RelationshipDateKind, { labelKey: string; icon: typeof Heart; cls: string }> = {
+  anniversary: { labelKey: 'relationshipModule.kind.anniversary', icon: Heart, cls: 'text-rose-300 bg-rose-500/10 border-rose-500/30' },
+  birthday: { labelKey: 'relationshipModule.kind.birthday', icon: Cake, cls: 'text-amber-300 bg-amber-500/10 border-amber-500/30' },
+  first_date: { labelKey: 'relationshipModule.kind.firstDate', icon: Sparkles, cls: 'text-fuchsia-300 bg-fuchsia-500/10 border-fuchsia-500/30' },
+  date_night: { labelKey: 'relationshipModule.kind.dateNight', icon: Wine, cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' },
+  milestone: { labelKey: 'relationshipModule.kind.milestone', icon: Star, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
+  custom: { labelKey: 'relationshipModule.kind.custom', icon: CalendarDays, cls: 'text-slate-300 bg-slate-500/10 border-slate-500/30' },
 };
 
-const GIFT_STATUS: { value: RelationshipGiftStatus; label: string }[] = [
-  { value: 'idea', label: '💡 Idea' },
-  { value: 'saved', label: '🔖 Saved' },
-  { value: 'ordered', label: '📦 Ordered' },
-  { value: 'purchased', label: '✅ Purchased' },
-  { value: 'given', label: '🎁 Given' },
+const GIFT_STATUS: { value: RelationshipGiftStatus; labelKey: string }[] = [
+  { value: 'idea', labelKey: 'relationshipModule.giftStatus.idea' },
+  { value: 'saved', labelKey: 'relationshipModule.giftStatus.saved' },
+  { value: 'ordered', labelKey: 'relationshipModule.giftStatus.ordered' },
+  { value: 'purchased', labelKey: 'relationshipModule.giftStatus.purchased' },
+  { value: 'given', labelKey: 'relationshipModule.giftStatus.given' },
 ];
 
 const RECURRING_KINDS: RelationshipDateKind[] = ['anniversary', 'birthday', 'first_date'];
@@ -331,7 +331,7 @@ export function RelationshipModule() {
 
   if (dl) return <SkeletonList count={5} />;
   const readError = de || giftsError || profileError || wishesError;
-  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : 'Failed to load'} />;
+  if (readError) return <ErrorState message={typeof readError === 'string' ? readError : t('relationshipModule.failedToLoad')} />;
 
   return (
     <div>
@@ -429,7 +429,7 @@ export function RelationshipModule() {
                 <div key={u.id} className={cn('flex flex-col rounded-2xl border bg-surface/50 p-4', due ? 'border-brand/40' : 'border-border')}>
                   <div className="flex items-start justify-between gap-2">
                     <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide', meta.cls)}>
-                      <Icon className="h-3 w-3" /> {meta.label}
+                      <Icon className="h-3 w-3" /> {t(meta.labelKey)}
                     </span>
                     <div className="flex items-center gap-1">
                       <button onClick={() => toggleCalendar(raw)} aria-label={raw.calendar_event_id ? 'Remove from calendar' : 'Add to calendar'}
@@ -489,7 +489,7 @@ export function RelationshipModule() {
                   <button key={f} onClick={() => setGiftFilter(f)}
                     className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                       giftFilter === f ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg')}>
-                    {f === 'all' ? 'All' : GIFT_STATUS.find((s) => s.value === f)?.label}
+                    {f === 'all' ? t('relationshipModule.giftStatus.all') : t(GIFT_STATUS.find((s) => s.value === f)?.labelKey ?? f)}
                   </button>
                 ))}
               </div>
@@ -520,10 +520,10 @@ export function RelationshipModule() {
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'
-                    ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-300"><Check className="h-3.5 w-3.5" />{GIFT_STATUS.find((s) => s.value === g.status)?.label}</span>
+                    ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-300"><Check className="h-3.5 w-3.5" />{t(GIFT_STATUS.find((s) => s.value === g.status)?.labelKey ?? g.status)}</span>
                     : <ShoppingBag className="h-3.5 w-3.5 text-muted" />}
                   <Select aria-label={t('relationship.giftStatus')} value={g.status} onChange={(e) => setGiftStatus(g, e.target.value as RelationshipGiftStatus)} className="ml-auto h-7 w-auto text-xs">
-                    {GIFT_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    {GIFT_STATUS.map((s) => <option key={s.value} value={s.value}>{t(s.labelKey)}</option>)}
                   </Select>
                 </div>
               </div>
@@ -543,7 +543,7 @@ export function RelationshipModule() {
                 const kind = e.target.value as RelationshipDateKind;
                 setDateForm((f) => ({ ...f, kind, recursAnnually: RECURRING_KINDS.includes(kind) }));
               }}>
-                {(Object.keys(KIND_META) as RelationshipDateKind[]).map((k) => <option key={k} value={k}>{KIND_META[k].label}</option>)}
+                {(Object.keys(KIND_META) as RelationshipDateKind[]).map((k) => <option key={k} value={k}>{t(KIND_META[k].labelKey)}</option>)}
               </Select>
             )}
           </Field>

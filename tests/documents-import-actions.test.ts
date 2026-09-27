@@ -11,8 +11,9 @@ describe('documents import action contract', () => {
   });
 
   it('keeps the supported local document actions available', () => {
-    expect(documentsView).toContain("label: 'Upload Files'");
-    expect(documentsView).toContain("label: 'Create New Folder'");
-    expect(documentsView).toContain("label: 'Scan Document'");
+    // Worded from the catalogue (audit C1-S9-120); the three actions stay.
+    expect(documentsView).toContain("label: tr('documentsModule.action.uploadFiles')");
+    expect(documentsView).toContain("label: tr('documentsModule.action.createNewFolder')");
+    expect(documentsView).toContain("label: tr('documentsModule.action.scanDocument')");
   });
 });

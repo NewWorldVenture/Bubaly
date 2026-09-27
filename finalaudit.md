@@ -46033,6 +46033,25 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][LOW][DOCUMENTS/RELATIONSHIP]` C1-S9-120 — documents filters and actions, and relationship dates and gift statuses, were English in every locale
+
+**File/path:** `components/modules/documents-module.tsx`, `components/modules/relationship-module.tsx`, `tests/documents-import-actions.test.ts`, `tests/i18n-ungated-surface-ratchet.test.ts`; seven catalogues.
+
+**Problem.** The following were English in every locale:
+- On `/dashboard/documents`: the type filter, the sort options, the storage legend and the three quick actions.
+- On `/dashboard/relationship`: the date kinds, the gift statuses and the load-failure fallback.
+
+**Fix.**
+- These labels now come from catalogue keys (`labelKey`).
+- The documents test pins the translated calls for the three actions.
+- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`.
+
+**Status:** FIXED.
+- `documents-module`: scanner findings drop from 15 to 0.
+- `relationship-module`: scanner findings drop from 15 to 3, all type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
