@@ -50056,6 +50056,23 @@ error boundary. Two text flags, neither a defect: `offline.access` on
 `ai_requests` row, which that diagnostic page lists by design (rows that exist
 at all only since P-10).
 
+### Production, again — every public page on the day's last deploy
+
+Re-crawled after #585 and #604 reached production (`9c7e4947`) and the other
+sessions' merges with them: the 1,063 sitemap pages plus the routes the
+sitemap omits, 1,404 loads at 1280 px. **No page is flagged for anything the
+site did.** 23 loads saw a 502 on a prefetch, `/api/mkt/track` or
+`/api/blog/save`, every one answered by this sandbox's egress proxy
+(`server=-`, no `x-vercel-id`); re-loaded one at a time, 21 were clean and
+the other was a 502 on the same `/api/blog/save` URL, which `curl` then got
+200 from Vercel three times running (`server: Vercel`, `iad1`). The last is
+`/resources/benchmarks`, 404 by design. No `ChunkLoadError` on production.
+
+The chunk `29335` watch item was chased once more on the local stack: the
+three pages it hit, six loads at a time for 15 rounds (90 loads) and 35
+serial loads, with every failed or aborted chunk request logged — none. It
+stays a watch item, local-only so far.
+
 ### Every route (first pass)
 
 `where` is what was crawled: `prod` against www.bubaly.com, `local` against
