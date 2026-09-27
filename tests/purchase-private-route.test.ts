@@ -46,7 +46,7 @@ describe('private purchase destination', () => {
 
   it('hides a non-owner result and shows a recoverable storage failure separately', async () => {
     fakes.load.mockResolvedValue({ ok: false, code: 'denied', error: 'Private' });
-    await expect(page()).rejects.toThrow('NOT_FOUND');
+    expect(await page()).toMatchObject({ type: expect.objectContaining({ name: 'AppNotFound' }), props: { backHref: '/dashboard/assistant' } });
     fakes.load.mockResolvedValue({ ok: false, code: 'db_error', error: 'Internal storage detail' });
     const html = renderToStaticMarkup(await page());
     expect(html).toContain('role="alert"');

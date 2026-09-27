@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useSyncExternalStore } from 'react';
+import { useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -15,8 +15,6 @@ import { useTranslations } from '@/components/i18n/locale-provider';
  *  component's chrome too — and eleven overlays that could not (a camera
  *  viewfinder, a command palette, three full-screen gates) declared
  *  `aria-modal="true"` and implemented none of it. */
-const noSubscription = () => () => {};
-
 export function Modal({
   open,
   onClose,
@@ -41,14 +39,8 @@ export function Modal({
   const descId = useId();
 
   useDialogBehavior(dialogRef, open, { onClose });
-  // False on the server AND during hydration, true from the first client
-  // render after it. `typeof document` was true on the client's first render
-  // too, so a modal that was open when the page was served (/dashboard/
-  // vacations/new opens "New trip") hydrated a portal where the server had
-  // rendered nothing: React #418, and the tree re-rendered on the client.
-  const hydrated = useSyncExternalStore(noSubscription, () => true, () => false);
 
-  if (!open || !hydrated) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4">
