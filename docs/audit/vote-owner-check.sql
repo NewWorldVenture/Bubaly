@@ -12,7 +12,7 @@ declare
   uPar uuid := '00000000-0000-4000-8000-00000000ee2a';
   uA uuid := '00000000-0000-4000-8000-00000000ee2b';
   uB uuid := '00000000-0000-4000-8000-00000000ee2c';
-  mA uuid; mB uuid; poll uuid; opt1 uuid; opt2 uuid; bVote uuid; title uuid; bWatch uuid;
+  mA uuid; mB uuid; poll uuid; opt1 uuid; opt2 uuid; poll2 uuid; opt3 uuid; bVote uuid; title uuid; bWatch uuid;
   n int; failures int := 0;
 begin
   delete from public.families where id = fam;
@@ -26,6 +26,14 @@ begin
   insert into public.family_poll_options (family_id, poll_id, label) values (fam, poll, 'Pizza') returning id into opt1;
   insert into public.family_poll_options (family_id, poll_id, label) values (fam, poll, 'Tacos') returning id into opt2;
   insert into public.family_poll_votes (family_id, poll_id, option_id, member_id) values (fam, poll, opt2, mB) returning id into bVote;
+  -- The forged vote goes into a SECOND poll that B has not voted in. In the first
+  -- one B already holds a vote, and a single-choice poll takes one vote per member
+  -- (0390's trigger, BEFORE INSERT, so ahead of RLS's WITH CHECK): the forgery
+  -- would be refused there with 23505 by the single-choice rule, which this probe
+  -- would misread as "reached the unique index". Here ownership is the only rule
+  -- that can refuse it, which is the rule this probe exists to measure.
+  insert into public.family_polls (family_id, question) values (fam, 'Beach or hills?') returning id into poll2;
+  insert into public.family_poll_options (family_id, poll_id, label) values (fam, poll2, 'Beach') returning id into opt3;
   insert into public.watchlist_titles (family_id, title) values (fam, 'Movie') returning id into title;
   insert into public.watchlist_votes (family_id, title_id, member_id, vote) values (fam, title, mB, 'down') returning id into bWatch;
 
@@ -33,7 +41,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', uA, 'role', 'authenticated')::text, true);
   set local role authenticated;
   begin
-    insert into public.family_poll_votes (family_id, poll_id, option_id, member_id) values (fam, poll, opt1, mB);
+    insert into public.family_poll_votes (family_id, poll_id, option_id, member_id) values (fam, poll2, opt3, mB);
     raise warning 'BREACH: a member voted as a sibling'; failures := failures + 1;
   exception when insufficient_privilege or unique_violation then
     if sqlstate = '23505' then raise warning 'BREACH: a member voted as a sibling (reached the unique index)'; failures := failures + 1; end if;
