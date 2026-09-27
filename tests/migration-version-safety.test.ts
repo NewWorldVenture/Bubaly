@@ -461,8 +461,10 @@ describe('Supabase migration filename safety', () => {
     // four more the same way on the first merge (numbered 0364, 0368, 0376 and
     // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
     // those never took a number in this range, and the numbers they held then
-    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
-    expect(audit.nextVersion).toBe('0444');
+    // are main's now. 0444 and 0445 were the rest of this PR's range, unused;
+    // 0444 is now the circle search-path fix (pgcrypto lives in `extensions`
+    // on Supabase), so the next free number is 0445.
+    expect(audit.nextVersion).toBe('0445');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

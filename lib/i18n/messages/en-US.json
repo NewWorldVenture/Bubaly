@@ -4508,6 +4508,7 @@
   "dashboardSocialSettings.saveSettings": "Save settings",
   "dashboardSocialSettings.signatureAppendedOnSupportedPlatforms": "Signature (appended on supported platforms)",
   "dashboardSocialSettings.workspaceSettings": "Workspace settings",
+  "dashboardSocialSettings.yourRoleCantChangeAccess": "Only an owner can change who has access.",
   "dashboardSocialSettings.yourRoleCantChangeSettings": "Your role can’t change settings.",
   "dashboardSync.basedOnEachProvidersRealPublic": "Based on each provider’s real public API. Where two-way sync isn’t possible we say so plainly rather than pretend.",
   "dashboardSync.connectAnAccount": "Connect an account",

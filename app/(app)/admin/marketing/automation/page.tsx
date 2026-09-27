@@ -66,9 +66,13 @@ export default async function AutomationPage() {
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted">{tr('adminMarketingAutomation.actionsInOrder')}</p>
             <div className="flex flex-wrap gap-2">
-              {ACTIONS.map((a) => (
+              {/* A workflow needs at least one action, and the action refuses
+                  an empty one by throwing, which lands on the section's error
+                  page. The first action starts ticked, so the ordinary path
+                  cannot submit an empty workflow; unticking it is a choice. */}
+              {ACTIONS.map((a, i) => (
                 <label key={a} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs">
-                  <input type="checkbox" name="actions" value={a} /> {a.replace(/_/g, ' ')}
+                  <input type="checkbox" name="actions" value={a} defaultChecked={i === 0} /> {a.replace(/_/g, ' ')}
                 </label>
               ))}
             </div>
