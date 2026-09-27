@@ -109,7 +109,7 @@ export function KidLoginForm() {
               inputMode="numeric" type={showPin ? 'text' : 'password'} placeholder="••••"
               className="h-12 w-full rounded-xl border border-border bg-bg px-12 text-center text-lg tracking-[0.5em] focus-ring"
             />
-            <button type="button" disabled={!ready || loading} onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+            <button type="button" disabled={!ready || loading} onClick={() => setShowPin((v) => !v)} aria-label={showPin ? t('kidLogin.hidePin') : t('kidLogin.showPin')}
               className="focus-ring absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
               {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
