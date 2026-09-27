@@ -230,7 +230,7 @@ export function SportsModule() {
                             </div>
                           </td>
                           <td className="px-4 py-3.5">
-                            {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted/60">&mdash;</span>}
+                            {member ? <div className="flex items-center gap-2"><Avatar name={member.display_name} color={member.color} size={28} /><span>{firstName(member.display_name)}</span></div> : <span className="text-muted">&mdash;</span>}
                           </td>
                           <td className="px-4 py-3.5"><span className="text-fg">{e.sport || 'Sports'}</span></td>
                           <td className="px-4 py-3.5">

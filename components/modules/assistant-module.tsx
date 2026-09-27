@@ -499,7 +499,7 @@ export function AssistantModule() {
       {/* Docked input bar */}
       <div className="mt-4 pb-[env(safe-area-inset-bottom)]">
         <Composer variant="bar" {...composerProps} />
-        <p className="mt-3 text-center text-xs text-muted/60">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
+        <p className="mt-3 text-center text-xs text-muted">{t('assistant.aiCanMakeMistakesPleaseDouble')}</p>
       </div>
     </>
   );

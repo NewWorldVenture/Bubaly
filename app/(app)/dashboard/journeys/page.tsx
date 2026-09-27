@@ -84,7 +84,7 @@ export default async function JourneysPage() {
         ) : rows.length === 0 ? (
           <MiniEmpty icon={Activity} text={t('journeys.noJourneyEventsYetUse')} />
         ) : (
-          <div className="overflow-x-auto">
+          <div role="region" tabIndex={0} aria-label={t('dashboardJourneys.perJourneyMedians')} className="focus-ring overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">

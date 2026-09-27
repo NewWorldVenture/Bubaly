@@ -257,7 +257,7 @@ export function NavigationChoices() {
         </Button>
       </div>
 
-      <p className="mb-4 text-xs text-muted/80">
+      <p className="mb-4 text-xs text-muted">
         {t('navigationChoices.aiAssistantSettingsAndHelpAmp')}
       </p>
 
@@ -374,7 +374,7 @@ export function NavigationChoices() {
       {/* Add picker (top-level) */}
       {adding && available.length > 0 && (
         <div className="mt-3 rounded-xl border border-border bg-surface/30 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted/70">{t('navigationChoices.addToSidebar')}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('navigationChoices.addToSidebar')}</p>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {available.map((item) => (
               <button key={item.href} type="button" onClick={() => add(item.href)} disabled={saving || keys.length >= MAX_SIDEBAR_NAV}

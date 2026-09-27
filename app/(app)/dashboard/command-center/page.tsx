@@ -227,7 +227,7 @@ export default async function CommandCenterPage() {
                   <span className="w-32 shrink-0 text-xs text-muted">{fmtDate(e.starts_at)} · {e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.title}</span>
                   {inConflict && <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-400">{t('commandCenter.conflict')}</span>}
-                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted/60">{t('commandCenter.unassigned')}</span>}
+                  {who ? <Avatar name={who.display_name} color={who.color} size={24} /> : <span className="shrink-0 text-[11px] text-muted">{t('commandCenter.unassigned')}</span>}
                 </li>
               );
             })}

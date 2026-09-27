@@ -341,7 +341,7 @@ function IdeaCard({ idea, voted, onVote, isSuperAdmin, onStatus }: {
             <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 hover:text-brand-text">
               <MessageCircle className="h-3.5 w-3.5" /> {idea.comment_count} {idea.comment_count === 1 ? 'comment' : 'comments'}
             </button>
-            <span className="text-muted/70">{t('feedbackFeedbackBoard.by')} {idea.author_name}</span>
+            <span className="text-muted">{t('feedbackFeedbackBoard.by')} {idea.author_name}</span>
             {isSuperAdmin && <span className="ml-auto"><StatusControl idea={idea} onChanged={onStatus} /></span>}
           </div>
           {open && <CommentThread ideaId={idea.id} />}

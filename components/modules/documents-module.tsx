@@ -422,7 +422,7 @@ export function DocumentsModule() {
             <div className="py-14 text-center">
               <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-surface/40"><File className="h-8 w-8 text-muted/60" /></div>
               <p className="font-semibold text-muted">{hasFilters ? 'No files match your filters' : 'No files yet'}</p>
-              <p className="mt-1 text-sm text-muted/60">{hasFilters ? 'Try clearing the search or filters.' : 'Upload your first file to get started.'}</p>
+              <p className="mt-1 text-sm text-muted">{hasFilters ? 'Try clearing the search or filters.' : 'Upload your first file to get started.'}</p>
               {!hasFilters && <Button onClick={() => setOpen(true)} className="mt-5"><Plus className="h-4 w-4" /> {tr('documents.uploadFile')}</Button>}
             </div>
           ) : view === 'list' ? (
@@ -662,9 +662,9 @@ export function DocumentsModule() {
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (
-              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted/60">{fmtSize(file.size)} {tr('documents.clickToChange')}</p></>
+              <><p className="text-sm font-semibold">{file.name}</p><p className="mt-1 text-xs text-muted">{fmtSize(file.size)} {tr('documents.clickToChange')}</p></>
             ) : (
-              <><p className="text-sm font-semibold text-muted">{tr('documents.dragAmpDropAFileHere')}</p><p className="mt-1 text-xs text-muted/60">{tr('documents.pdfImagesDocsVideoUpTo')} {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">{tr('documents.browseFiles')}</span></>
+              <><p className="text-sm font-semibold text-muted">{tr('documents.dragAmpDropAFileHere')}</p><p className="mt-1 text-xs text-muted">{tr('documents.pdfImagesDocsVideoUpTo')} {DOCUMENT_MAX_MB} MB</p><span className="mt-4 inline-block rounded-lg border border-border px-4 py-2 text-xs font-semibold">{tr('documents.browseFiles')}</span></>
             )}
           </div>
           <Field label={tr('documents.fileName')}>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={tr('documents.eGPassportEmmaPdf')} />}</Field>

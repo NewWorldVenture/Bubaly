@@ -629,7 +629,7 @@ export function HealthModule() {
                     {weeklyBars.map(({ day, pct }) => (
                       <div key={day} className="flex flex-1 flex-col items-center gap-1">
                         <div className="w-full rounded-sm bg-gradient-to-t from-violet-600 to-blue-400 opacity-80" style={{ height: `${Math.max(pct, 2)}%` }} />
-                        <span className="text-[9px] text-muted/60">{day}</span>
+                        <span className="text-[9px] text-muted">{day}</span>
                       </div>
                     ))}
                   </div>
@@ -699,7 +699,7 @@ export function HealthModule() {
                       </div>
                       <div className="text-right shrink-0">
                         {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories.toLocaleString(locale)} {tr('healthDashboard.unitCalories')}</p> : null}
-                        <p className="text-xs text-muted/60">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
+                        <p className="text-xs text-muted">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
                       </div>
                     </div>
                   );
@@ -811,7 +811,7 @@ export function HealthModule() {
                     <div>
                       <p className="text-sm font-semibold">{a.title}</p>
                       {member && <p className="text-xs text-muted">{member.display_name}</p>}
-                      {a.notes && <p className="text-xs text-muted/60">{a.notes}</p>}
+                      {a.notes && <p className="text-xs text-muted">{a.notes}</p>}
                     </div>
                   </div>
                 );

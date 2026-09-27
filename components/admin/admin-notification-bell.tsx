@@ -128,7 +128,7 @@ export function AdminNotificationBell({ notifications, pendingInviteCount }: {
                       <div className="flex items-center gap-2">
                         <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.label}</span>
                         {!n.is_read && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
-                        <span className="ml-auto text-[11px] text-muted/60" suppressHydrationWarning>{timeAgo(n.created_at)}</span>
+                        <span className="ml-auto text-[11px] text-muted" suppressHydrationWarning>{timeAgo(n.created_at)}</span>
                       </div>
                       <p className="mt-0.5 text-sm font-semibold text-fg">{n.title}</p>
                       {n.body && <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-muted">{n.body}</p>}

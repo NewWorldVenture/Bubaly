@@ -272,7 +272,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                               <span className="text-xs">{ticket.assigned_agent_name}</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted/60 italic">{tr('supportTickets.unassigned')}</span>
+                            <span className="text-xs text-muted italic">{tr('supportTickets.unassigned')}</span>
                           )}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted whitespace-nowrap">
@@ -391,7 +391,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
                       {/* @ts-expect-error dynamic icon */}
                       <Icon className="h-4 w-4" /> {label}
                     </span>
-                    <span className="text-muted/50">›</span>
+                    <span className="text-muted">›</span>
                   </a>
                 </li>
               ))}

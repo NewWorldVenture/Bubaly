@@ -171,6 +171,12 @@ describe('an icon-only link or button', () => {
     }
   });
 
+  it("names the recipe finder's back arrow (found by the re-crawl)", () => {
+    const src = read('app/(app)/dashboard/recipes/discover/discover-client.tsx');
+    const tag = openingTag(src, src.indexOf('<Link href="/dashboard/recipes"'));
+    expect(tag).toMatch(/\saria-label=\{t\('/);
+  });
+
   it("names the assistant's New chat button, whose text is hidden on a phone", () => {
     const src = read('components/modules/assistant-module.tsx');
     const tag = enclosingTag(src, src.indexOf('onClick={newChat}'), ['button']);
@@ -186,6 +192,8 @@ describe('a table in a sideways-scrolling box', () => {
     ['app/(app)/dashboard/social/accounts/page.tsx', 'dashboardSocialAccounts.whatEachPlatformSupports'],
     ['app/(app)/dashboard/sync/page.tsx', 'dashboardSync.whatEachProviderSupports'],
     ['app/(app)/family/permissions/page.tsx', 'familyPermissions.permissionMatrix'],
+    // Found by the re-crawl on the build with the first fixes.
+    ['app/(app)/dashboard/journeys/page.tsx', 'dashboardJourneys.perJourneyMedians'],
   ];
 
   it.each(REGIONS)('%s: is a named, focusable region', (file, key) => {
