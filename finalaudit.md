@@ -48478,7 +48478,7 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a) | 🔄 B6a claimed 2026-09-27 15:45; B6b open, claimable | — |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); B6b open, claimable | 2026-09-27 17:30 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half open, claimable | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
@@ -48711,6 +48711,30 @@ teen should see `/dashboard/trust` and the wallet's activation page at all is a
 product question (both are read-only there, and every write behind them is
 refused by the manager checks recorded in the AUTHZ units); it is left for B6,
 which clicks the controls.
+
+### B6a — the interaction pass (every tab, dialog and button, clicked)
+
+`page-audit.mjs --interact` against the local stack, as the Family+ parent, on
+all 278 family routes: every tab, `<summary>`, and button inside `<main>` (up
+to 40 a page), never a form submit and never a control labelled like a
+delete, payment, send or approval. **1,187 clicks; 268 routes clean; 10
+flagged, all explained:**
+
+| Route(s) | What the crawler saw | What it was |
+| --- | --- | --- |
+| `/dashboard/journeys` | 404 on `/favicon.ico` | **P-09**, fixed: the site had no `/favicon.ico` |
+| (server log, many pages) | `ai_requests` insert refused by RLS, 17× | **P-10**, fixed: no AI feature request was ever recorded |
+| `/home`, `/dashboard` (via `/auth/complete`, `/auth/step-up`, `/onboarding`), `/dashboard/assistant` | `[ai/requests] submit failed` / `[assistant] request failed: Failed to fetch` | the crawler's own reload aborting a request it had just started; the same click left alone answers 202 in 0.7 s |
+| `/dashboard/habits` | 400 from `/api/ai/habits` | the AI coach with no habits yet answers "add a habit first", shown as a toast |
+| `/dashboard/relationship` | 502 from `/api/ai/relationship` | the local stack's stub AI provider returns text the digest cannot parse; the route answers its "could not generate" message |
+| `/signup` | 400 + 404 after "Continue with Google" | Google sign-in is not configured on the local stack |
+| `/resources/benchmarks`, `/dashboard/knowledge/seed` | 404 | by design (unpublished; super-admin only), recorded above |
+
+Verified on a rebuild of `e52ec95a`: `/favicon.ico` answers 200
+`image/x-icon`; one message to the assistant containing a synthetic private
+phrase filed `feature | chat.assistant | Assistant chat | completed` in
+`ai_requests` (there had been no feature row before), no `ai_requests` row
+contains the phrase, and the member's own conversation holds it as sent.
 
 ### Every route (first pass)
 
