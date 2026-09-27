@@ -213,7 +213,7 @@ export function RemindersModule() {
       // adds the family filter and a length check this had neither of.
       const result = await snoozeReminderAction(id, mins);
       if (!result.ok) throw new Error(result.error);
-      success(`Snoozed for ${mins < 60 ? mins + ' min' : mins / 60 + ' hr'}`);
+      success(mins < 60 ? tr('reminders.snoozedForMinutes', { count: mins }) : tr('reminders.snoozedForHours', { count: mins / 60 }));
       void refresh();
     });
   }

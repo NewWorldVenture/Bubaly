@@ -173,7 +173,7 @@ export function TripMemoriesModule() {
             <Field label={t('tripMemories.photoOptional')}>
               {(id) => <input id={id} type="file" accept="image/*" onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
-                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`); e.target.value = ''; return; }
+                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(t('tripMemories.fileTooLarge', { name: f.name, max: DOCUMENT_MAX_MB })); e.target.value = ''; return; }
                 setForm({ ...form, file: f });
               }} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
             </Field>

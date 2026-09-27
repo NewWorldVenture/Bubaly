@@ -34,7 +34,7 @@ function CreateRow({ member }: { member: AccessMember }) {
     const res = await createChildLoginAction({ memberId: member.id, username: normalizeUsername(username), pin });
     setBusy(false);
     if (!res.ok) { toastError(res.error); return; }
-    success(`Login created for ${member.display_name}`);
+    success(t('childAccessManager.loginCreatedFor', { name: member.display_name }));
     router.refresh();
   }
 
