@@ -12,10 +12,10 @@ import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const QUICK_ACTIONS = [
-  { href: '/dashboard/calendar', label: 'Add Event', icon: Calendar, tint: 'bg-violet-500/15 text-violet-300' },
-  { href: '/dashboard/todos', label: 'Add Task', icon: CheckCircle2, tint: 'bg-emerald-500/15 text-emerald-300' },
-  { href: '/dashboard/expenses', label: 'Add Expense', icon: Receipt, tint: 'bg-amber-500/15 text-amber-300' },
-  { href: '/dashboard/messages', label: 'Send Message', icon: MessageSquare, tint: 'bg-blue-500/15 text-blue-300' },
+  { href: '/dashboard/calendar', label: 'Add Event', labelKey: 'servicesHub.addEvent', icon: Calendar, tint: 'bg-violet-500/15 text-violet-300' },
+  { href: '/dashboard/todos', label: 'Add Task', labelKey: 'servicesHub.addTask', icon: CheckCircle2, tint: 'bg-emerald-500/15 text-emerald-300' },
+  { href: '/dashboard/expenses', label: 'Add Expense', labelKey: 'servicesHub.addExpense', icon: Receipt, tint: 'bg-amber-500/15 text-amber-300' },
+  { href: '/dashboard/messages', label: 'Send Message', labelKey: 'servicesHub.sendMessage', icon: MessageSquare, tint: 'bg-blue-500/15 text-blue-300' },
 ];
 
 export function ServicesHub() {
@@ -46,8 +46,8 @@ export function ServicesHub() {
                   <Icon className="h-6 w-6" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-base font-bold leading-tight">{cat.label}</h2>
-                  <p className="mt-0.5 text-xs leading-snug text-muted">{cat.description}</p>
+                  <h2 className="text-base font-bold leading-tight">{t(cat.labelKey)}</h2>
+                  <p className="mt-0.5 text-xs leading-snug text-muted">{t(cat.descriptionKey)}</p>
                 </div>
               </div>
               <div className="mt-auto flex items-center justify-between">
@@ -95,7 +95,7 @@ export function ServicesHub() {
                 <span className={cn('grid h-10 w-10 place-items-center rounded-xl', qa.tint)}>
                   <Icon className="h-5 w-5" />
                 </span>
-                <span className="text-[11px] font-medium leading-tight text-muted">{qa.label}</span>
+                <span className="text-[11px] font-medium leading-tight text-muted">{t(qa.labelKey)}</span>
               </Link>
             );
           })}
