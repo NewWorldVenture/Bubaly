@@ -179,7 +179,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {greeting}, {ctx.active.family.name}! <span>👋</span>
+            {greeting} <span>👋</span>
           </h1>
           <p className="mt-1 text-sm text-muted">{tr('familyDashboard.heresWhatsHappeningWithYourFamily')}</p>
         </div>
@@ -188,22 +188,22 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel="View calendar" />
-        <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel="View tasks" />
-        <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel="View chores" />
-        <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel="View all" />
-        <StatCard href="/dashboard/reminders" label={tr('familyDashboard.overdueAlerts')} value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel="View reminders" />
-        <StatCard href="/dashboard/messages" label={tr('familyDashboard.unreadMessages')} value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel="Open messages" />
+        <StatCard href="/dashboard/calendar" label={tr('familyDashboard.eventsToday')} value={todayEvents?.length ?? 0} icon={Calendar} bg="bg-violet-600" linkLabel={tr('familyDashboard.cta.viewCalendar')} />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.openTasks')} value={openChores ?? 0} icon={CheckCircle2} bg="bg-emerald-600" linkLabel={tr('familyDashboard.cta.viewTasks')} />
+        <StatCard href="/dashboard/chores" label={tr('familyDashboard.dueToday')} value={dueTodayCount ?? 0} icon={ListChecks} bg="bg-orange-500" linkLabel={tr('familyDashboard.cta.viewChores')} />
+        <StatCard href="/dashboard/settings#members" label={tr('familyDashboard.birthdaysSoon')} value={birthdayCount} icon={Cake} bg="bg-rose-500" linkLabel={tr('familyDashboard.cta.viewAll')} />
+        <StatCard href="/dashboard/reminders" label={tr('familyDashboard.overdueAlerts')} value={overdueReminders?.length ?? 0} icon={Bell} bg="bg-amber-500" linkLabel={tr('familyDashboard.cta.viewReminders')} />
+        <StatCard href="/dashboard/messages" label={tr('familyDashboard.unreadMessages')} value={unreadMessages ?? 0} icon={MessageCircle} bg="bg-blue-600" linkLabel={tr('familyDashboard.cta.openMessages')} />
       </div>
 
       {/* AI tools */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
-          { href: '/dashboard/inbox', label: 'Magic Import', desc: 'Paste anything → organized', icon: Wand2, bg: 'bg-violet-600' },
-          { href: '/dashboard/scan', label: 'Scan Flyer', desc: 'Photo → calendar', icon: ScanLine, bg: 'bg-blue-600' },
-          { href: '/dashboard/briefing', label: 'Daily Briefing', desc: "Today at a glance", icon: Sun, bg: 'bg-amber-500' },
-          { href: '/dashboard/assistant', label: 'AI Assistant', desc: 'Ask anything', icon: Sparkles, bg: 'bg-emerald-600' },
-          { href: '/display', label: 'Kitchen Display', desc: 'Full-screen kiosk', icon: Monitor, bg: 'bg-rose-500' },
+          { href: '/dashboard/inbox', label: tr('familyDashboard.tool.magicImport.label'), desc: tr('familyDashboard.tool.magicImport.desc'), icon: Wand2, bg: 'bg-violet-600' },
+          { href: '/dashboard/scan', label: tr('familyDashboard.tool.scanFlyer.label'), desc: tr('familyDashboard.tool.scanFlyer.desc'), icon: ScanLine, bg: 'bg-blue-600' },
+          { href: '/dashboard/briefing', label: tr('familyDashboard.tool.dailyBriefing.label'), desc: tr('familyDashboard.tool.dailyBriefing.desc'), icon: Sun, bg: 'bg-amber-500' },
+          { href: '/dashboard/assistant', label: tr('familyDashboard.tool.aiAssistant.label'), desc: tr('familyDashboard.tool.aiAssistant.desc'), icon: Sparkles, bg: 'bg-emerald-600' },
+          { href: '/display', label: tr('familyDashboard.tool.kitchenDisplay.label'), desc: tr('familyDashboard.tool.kitchenDisplay.desc'), icon: Monitor, bg: 'bg-rose-500' },
         ].map((t) => (
           <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:bg-elevated">
             <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl', t.bg)}>
@@ -302,7 +302,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
           </div>
           <p className="mb-4 text-sm text-fg/70">
-            {suggestions.length > 0 ? 'Here are some suggestions for your family:' : 'Everything looks on track. Ask the assistant anything.'}
+            {suggestions.length > 0 ? tr('familyDashboard.suggestionsIntro') : tr('familyDashboard.allOnTrack')}
           </p>
           {suggestions.length > 0 && (
             <div className="space-y-2.5">
@@ -382,9 +382,9 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
             </div>
             <div className="space-y-3">
               {[
-                { color: 'bg-violet-500', label: 'Completed', val: done },
-                { color: 'bg-yellow-400', label: 'In Progress', val: Math.max(0, total - done - (openChores ?? 0)) },
-                { color: 'bg-elevated', label: 'Remaining', val: openChores ?? 0 },
+                { color: 'bg-violet-500', label: tr('familyDashboard.completed'), val: done },
+                { color: 'bg-yellow-400', label: tr('familyDashboard.progress.inProgress'), val: Math.max(0, total - done - (openChores ?? 0)) },
+                { color: 'bg-elevated', label: tr('familyDashboard.progress.remaining'), val: openChores ?? 0 },
               ].map(({ color, label, val }) => (
                 <div key={label} className="flex items-center gap-3">
                   <div className={cn('h-3 w-3 rounded-full', color)} />

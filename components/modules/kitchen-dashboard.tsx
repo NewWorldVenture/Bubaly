@@ -385,12 +385,9 @@ function AddLeftoverModal({ onClose }: { onClose: () => void }) {
 
 // ─── AI Family Chef ───────────────────────────────────────────────────────────
 
-const CHEF_PROMPTS = [
-  'Plan quick dinners this week under $150',
-  'Use what we already have in the pantry',
-  'We have soccer Tuesday — keep dinners under 30 minutes',
-  'Healthy lunches the kids will actually eat',
-];
+// Suggested asks for the chef, in the reader's language: tapping one sends it
+// as the reader's own message (audit C1-S9-131).
+const CHEF_PROMPT_KEYS = ['kitchenDashboard.chefPrompt.quickDinners', 'kitchenDashboard.chefPrompt.usePantry', 'kitchenDashboard.chefPrompt.soccerTuesday', 'kitchenDashboard.chefPrompt.healthyLunches'];
 
 function ChefModal({ onClose }: { onClose: () => void }) {
   const i18nT = useTranslations();
@@ -427,7 +424,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         {!reply && (
           <div className="flex flex-wrap gap-1.5">
-            {CHEF_PROMPTS.map((p) => (
+            {CHEF_PROMPT_KEYS.map((key) => tr(key)).map((p) => (
               <button key={p} type="button" onClick={() => ask(p)} disabled={loading}
                 className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted hover:border-brand/40 hover:text-brand-text transition disabled:opacity-50">
                 {p}

@@ -7,8 +7,10 @@
 //
 // Rendered here with React's real server renderer while this process runs in
 // America/New_York, standing in for a browser in that zone: the hydration-safe
-// formatter still draws the UTC text, and the plain one (the control) draws the
-// local text a server in UTC would not have sent.
+// formatter still draws the UTC text, and the zone-less formatter (the control)
+// draws the local text a server in UTC would not have sent. `useFormat()` now
+// binds UTC for the server and hydrating renders too (#607), so it is held to
+// the same first-render text.
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
@@ -21,9 +23,11 @@ beforeAll(() => { savedTz = process.env.TZ; process.env.TZ = 'America/New_York';
 afterAll(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; });
 
 const { useFormat, useHydrationSafeFormat } = await import('@/components/i18n/use-format');
+const { createFormat } = await import('@/lib/utils/format');
 
 function Safe() { return createElement('span', null, useHydrationSafeFormat().fmtDateTime(ISO)); }
-function Plain() { return createElement('span', null, useFormat().fmtDateTime(ISO)); }
+function Bound() { return createElement('span', null, useFormat().fmtDateTime(ISO)); }
+function Plain() { return createElement('span', null, createFormat('en-US', (key: string) => key).fmtDateTime(ISO)); }
 
 describe('a date on the first render', () => {
   it('this process really is in New York (the control that makes the next two mean something)', () => {
@@ -37,10 +41,17 @@ describe('a date on the first render', () => {
     expect(html).not.toMatch(/8:30|20:30/);
   });
 
-  it('would have been the local text through plain useFormat (why the hook exists)', () => {
+  it('would have been the local text through a zone-less formatter (why the hook exists)', () => {
     const html = renderToString(createElement(Plain));
     expect(html).toMatch(/13/);
     expect(html).toMatch(/8:30|20:30/);
+  });
+
+  it('is the UTC text through useFormat as well', () => {
+    const html = renderToString(createElement(Bound));
+    expect(html).toMatch(/14/);
+    expect(html).toMatch(/12:30|0:30|00:30/);
+    expect(html).not.toMatch(/8:30|20:30/);
   });
 
   it('switches to the reader\'s zone only once hydration is done', () => {

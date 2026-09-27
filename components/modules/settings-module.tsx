@@ -41,13 +41,13 @@ import type { MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SETTINGS_TABS = [
-  { id: 'profile', label: 'Profile', labelKey: 'settingsModule.tabProfile', icon: User },
-  { id: 'family', label: 'Family', labelKey: 'settingsModule.tabFamily', icon: Users },
-  { id: 'ai', label: 'Bubaly AI', labelKey: 'settingsModule.tabAi', icon: Bot },
-  { id: 'navigation', label: 'Navigation Choices', labelKey: 'settingsModule.tabNavigation', icon: Compass },
-  { id: 'calendar', label: 'Calendar', labelKey: 'settingsModule.tabCalendar', icon: RefreshCw },
-  { id: 'security', label: 'Security', labelKey: 'settingsModule.tabSecurity', icon: Lock },
-  { id: 'privacy', label: 'Privacy', labelKey: 'settingsModule.tabPrivacy', icon: FileJson },
+  { id: 'profile', labelKey: 'settingsModule.tabProfile', icon: User },
+  { id: 'family', labelKey: 'settingsModule.tabFamily', icon: Users },
+  { id: 'ai', labelKey: 'settingsModule.tabAi', icon: Bot },
+  { id: 'navigation', labelKey: 'settingsModule.tabNavigation', icon: Compass },
+  { id: 'calendar', labelKey: 'settingsModule.tabCalendar', icon: RefreshCw },
+  { id: 'security', labelKey: 'settingsModule.tabSecurity', icon: Lock },
+  { id: 'privacy', labelKey: 'settingsModule.tabPrivacy', icon: FileJson },
 ] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 

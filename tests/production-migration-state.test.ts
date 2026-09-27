@@ -69,6 +69,41 @@ describe('production schema and migration history audit', () => {
     expect(audit).not.toContain('db push');
     expect(audit).not.toContain('migration repair');
   });
+
+  it('defaults production verification to read-only, including dependency pushes', () => {
+    const workflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
+    expect(workflow).toMatch(/workflow_dispatch:\s+inputs:\s+apply:\s+description: [^\n]+\s+type: boolean\s+default: false/);
+    // Retain automatic verification when dependencies or migration sources change.
+    expect(workflow).toContain("- 'package.json'");
+    expect(workflow).toContain("- 'package-lock.json'");
+    expect(workflow).toContain("- 'supabase/migrations/**'");
+    expect(workflow).toContain('cancel-in-progress: false');
+    expect(workflow).toContain('environment: production');
+    expect(workflow).not.toContain('continue-on-error: true');
+  });
+
+  it('requires a successful explicit manual apply for every production mutation step', () => {
+    const workflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
+    const steps = workflow.split(/^      - /m).slice(1);
+    const writes = steps.filter(step => /(?:^        run: |^          )(?:supabase (?:db push|migration (?:repair|up))|(?:npm run|node) [^\n]*--apply|psql\b)/m.test(step));
+    expect(writes.map(step => step.match(/^name: (.+)/)?.[1])).toEqual([
+      'Apply ordered migrations',
+      'Backfill and enforce media provenance',
+      'Backfill canonical marketing pages',
+      'Backfill blog image provenance',
+      'Reconcile canonical SEO and AEO coverage',
+    ]);
+    for (const step of writes) {
+      // The typed boolean excludes omitted/false inputs, event check excludes
+      // pushes, and success() retains the ledger/failure/cancellation boundary.
+      expect(step.match(/^        if: (.+)$/m)?.[1].trim()).toBe(
+        "success() && github.event_name == 'workflow_dispatch' && inputs.apply == true",
+      );
+    }
+    const verification = steps.filter(step => /^name: (?:Audit|Verify|Report|Link)/.test(step));
+    expect(verification).toHaveLength(10);
+    for (const step of verification) expect(step).not.toMatch(/^        if:/m);
+  });
 });
 
 // Every other policy in the snapshot is reported as md5(qual)/md5(with_check).

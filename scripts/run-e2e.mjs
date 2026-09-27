@@ -75,7 +75,7 @@ async function stopServer(server) {
 }
 
 if (process.env.PLAYWRIGHT_SKIP_BUILD !== '1') {
-  const buildStatus = run('node_modules/next/dist/bin/next', ['build']);
+  const buildStatus = run('node_modules/next/dist/bin/next', ['build', '--webpack']);
   if (buildStatus !== 0) process.exit(buildStatus);
 }
 
