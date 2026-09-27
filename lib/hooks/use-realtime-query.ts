@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type SetStateAction } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type SetStateAction } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { cacheIdentity, cacheKey, getCacheGeneration, readPartitionedCache, subscribeCacheInvalidation, writePartitionedCache } from '@/lib/offline/cache';
@@ -59,6 +59,7 @@ export function useRealtimeQuery<T>({
   deps?: unknown[];
 }) {
   const key = cacheKey(table, familyId, deps);
+  const channelId = useId();
   const authScope = useAuthenticatedCacheScope();
   const queryIdentity = authScope?.partition && authScope.familyId === familyId
     ? cacheIdentity(authScope.partition, table, familyId, deps) : null;
@@ -182,8 +183,17 @@ export function useRealtimeQuery<T>({
     if (!spec) return;
     if (scope.authScope && (!isAuthenticatedCacheScopeCurrent(scope.authScope) || scope.authScope.familyId !== familyId)) return;
     const supabase = createClient();
+    // The topic is per HOOK, not per table. realtime-js hands back the channel
+    // already open under a topic instead of a new one, so two widgets on one
+    // page reading the same table (the calendar and its busyness heatmap) got
+    // the SAME channel: the second `.on()` landed after the first
+    // `.subscribe()` and threw "cannot add postgres_changes callbacks … after
+    // subscribe()", which took /dashboard/calendar down to its error screen,
+    // and the first to unmount removed the other's subscription. The filter,
+    // not the topic, decides which rows arrive, so a unique topic changes
+    // nothing else.
     const channel = supabase
-      .channel(spec.name)
+      .channel(`${spec.name}:${channelId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table, filter: spec.filter },
@@ -191,7 +201,7 @@ export function useRealtimeQuery<T>({
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [table, familyId, refresh, scope]);
+  }, [table, familyId, refresh, scope, channelId]);
 
   // Effects run after render. Mask an old owner's state on the first render
   // of a new key, including an A -> B -> A switch before requests finish.
