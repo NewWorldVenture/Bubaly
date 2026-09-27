@@ -70,7 +70,7 @@ export function HandledTodayTile({ handled, onRetry }: { handled?: HandledToday;
         <span className="ml-1.5 text-base font-normal text-white/50">{t('displayHandled.finishedToday')}</span>
       </p>
       {items.length ? (
-        <ul className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto text-sm scrollbar-none">
+        <ul className="mt-2 space-y-1.5 text-sm">
           {items.map((item) => (
             <li key={item.key} className="flex items-start gap-2">
               <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden />

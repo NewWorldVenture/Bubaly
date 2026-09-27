@@ -2,48 +2,38 @@
 
 ## Codex integration — 2026-09-27
 
-WORKER CLOSED: Corrected850 CI36332783206 all4SUCCESS; E2E1764/1764,
-no failures/flakes/skips reported, finished16:47:07UTC. Web20701x3zones,
-build247/types/lintPASS. Exact candidate/tested/e14 tree52e0d1e matches.
-Separate e14 public+native deployed acceptancePASS; native wrapper1/1 in4.3s.
-Only SUPPORT-98FD1D4C44AD/1A08672F87F3/827E4294FC10 become FIXED+PASS;
-the two fixtures are coverage, not two additional product workflows.
-MEDIA MAIN: PR595 merged57664cfc69e43bdd35b921edde69aa20cfc609ad16:47:39UTC,
-exact b78ff026 tree29a6087. 595 hosted acceptance PENDING.
-LIVE: Exact576 public build/worker guards PASS16:50:52–59UTC, hydrated
-email/phone controls, protected meals307, v6 install/offline200, corehealthOK.
-Zero page errors/failed requests/suppressed writes; six missing features remain.
-Complete native production wrapper1/1PASS2.2s, same507 assertions/guards.
-No authenticated private-provider image journey executed.
-FINAL LOCAL: Source98d5229 UTC20722/1623files, focused146/10files,
-build247/full strict types/lint15existingwarningsPASS; all5194paths mapped,
-5189 non-audit blobs/modes exactly b78. Media7/7 (4ownership+3hydration),
-display25/25 and collector guard37/37PASS. Synthetic transport/build only.
-FAILURES RETAINED: Old native iframe1369/1370; media20,721PASS/1FAIL missing
-display loader import; actual valid-cookie SSR/hydration warning, now fixed.
-SEC-001FAIL: Bucket/privacy/provider scope remains open. New family%2Dmedia
-classification bypass reproduced with actual FamilyMediaImg/SDK: raw synthetic
-A capability renders underB without B signing; canonical control denied.
-No live provider/private data or Storage RLS-bypass claim. Existing finding only.
-PARSER LOCAL:147fa9a once-decodes route/bucket; oldparser12FAIL/34PASS,
-new46/46focusedPASS. Existing browser fixture now11/11PASS3.2s (fournew
-canonical/encoded x Aallow/Bdeny controls). Initial stale-hook7PASS/4FAIL
-private attempt preserved;13 actual source hashes verify corrected rerun.
-Final whole-source gates and parser publication PENDING;576 not yet fixed.
-Calibrated browserRED: currenthook+oldparser canonical2PASS/encoded2FAIL;
-final11PASS receipt:bubaly-encoded-browser-retained-receipt-20260927.json.
-Native576 derived receipt preserves exact wrapper/log hashes and scope.
-INVENTORY:14186=13877NOTSTARTED+297INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
-Three media test rows remainIP; no ID removed. Claude593 page statuses and
-mainf03 laneA claim preserved; auth/device/migration scope remains separate.
-HEALTH: Verified576 degraded/coreOK (same as earlier e14), six missing features:
+PARSER MERGED: PR599 -> main e70be8306571430169e69496c634cda97c069dc3
+at17:00:41UTC, exact reviewed e3dcf4203 treec6f3cd6b.
+FINAL LOCAL: b2a82067 UTC20,735/1,623files, build247, full strict types,
+lint15existingwarnings PASS; 5,194paths/modes checked before and after.
+Targeted parser46/46 and actual media browser11/11PASS; old-parser RED retained.
+LIVE: exact e70 public revision/worker-hash probe PASS17:05:26–32UTC;
+Vercel dpl_rKx8CoDq5su4ZJw5iJCFhbLysGmb and GH6695169383 SUCCESS.
+Email/phone hydration, meals307, nativev6 install/offline200/corehealth PASS;
+zero errors/failedrequests/suppressedwrites. Same full507 native wrapper1/1PASS7.0s.
+PR595 Web passed/E2E pending; PR599 hosted and combined integration PENDING.
+WORKER CLOSED: corrected850 CI36332783206 all4SUCCESS/E2E1764/1764;
+exact deployed e14/576 native acceptance PASS. Three worker rows stay FIXED+PASS.
+MEDIA/SEC-001: broader privacy/provider scope stays FAIL; three media test rowsIP.
+No live private-provider image journey or Storage RLS-bypass claim.
+PAGE INTEGRATION: preserve596's44 reported CLEAN routes and597's8 OWNER
+hydration findings. Claude's819/273-load experiment is attributed, not independently
+rerun here; page CLEAN is surface verification, not completed workflow acceptance.
+Combined source verification PENDING. No dependency/framework patch.
+PENDING PR REVIEWS:585 raw feature-ledger prompt persistence source concern;
+598 initial-open Modal effects fail actual SSR/browser control, minimal candidate passes.
+Root comments5857889463/5857903464; neither pending PR is shipped in e70.
+INVENTORY:14,187=13,877NOTSTARTED+298INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
+New SUPPORT-2D36C3920F6A catalogue regression testIP; all14,186 prior IDs/statuses kept.
+HEALTH: verified e70 coreOK/degraded; same six missing feature settings:
 CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
 GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
-RECEIPTS: Temp/bubaly-850-ci36332783206-terminal-20260927.json;
-Temp/bubaly-sw-reconcile-20260927/linux-q59-final/final-gates-receipt.json;
-Temp/bubaly-media-encoded-bucket-20260927.json.
-NEXT: Verify595 hosted CI; retain scoped parser follow-up.
-PRODUCTION READY:NO. No source/SQL/provider changes in this documentation update.
+RECEIPTS: Temp/bubaly-sw-reconcile-20260927/linux-q60-final/final-gates-receipt.json;
+Temp/bubaly-encoded-browser-retained-receipt-20260927.json;
+Temp/bubaly-pr585-pr598-integration-map-current-20260927.json;
+Temp/bubaly-sw-production-e70be830-20260927.json;
+Temp/bubaly-native-production-e70be830-20260927.log.
+PRODUCTION READY:NO. Auth/migration/physical-device obligations remain open.
 
 > Two sessions ran this board. Both sections are kept.
 
