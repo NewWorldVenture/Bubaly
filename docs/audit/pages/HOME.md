@@ -6,7 +6,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-05**. Protocol: docs/audit/pag
 
 | Agent | Claimed (UTC) | Heartbeat (UTC) | State |
 |---|---|---|---|
-| — | — | — | FREE |
+| Claude-1 (session c1fd8263) | 2026-09-27 12:55 | 2026-09-27 12:55 | FREE |
 
 ## Pages
 
@@ -22,7 +22,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-05**. Protocol: docs/audit/pag
 | `/dashboard/home/service` | `app/(app)/dashboard/home/service/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/home/warranties` | `app/(app)/dashboard/home/warranties/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard` | `app/(app)/dashboard/page.tsx` | UNAUDITED | — | — |  |
-| `/display` | `app/(app)/display/page.tsx` | UNAUDITED | — | — |  |
+| `/display` | `app/(app)/display/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 12px overflow (clock/weather row did not wrap). Remaining: 22 hardcoded string(s) in its own files — C1-S9-101. |
 | `/display/setup` | `app/(app)/display/setup/page.tsx` | UNAUDITED | — | — |  |
 | `/feedback` | `app/(app)/feedback/page.tsx` | UNAUDITED | — | — |  |
 | `/home` | `app/(app)/home/page.tsx` | UNAUDITED | — | — |  |

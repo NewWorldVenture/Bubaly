@@ -381,71 +381,71 @@ of the same tree (`next build && next start`) and a local Supabase.
 
 | Lane | Pages | UNAUDITED | IN PROGRESS | PASS | FIXED | OPEN | BLOCKED |
 |---|---|---|---|---|---|---|---|
-| [PUBLIC](docs/audit/pages/PUBLIC.md) | 36 | 36 | 0 | 0 | 0 | 0 | 0 |
-| [AUTH](docs/audit/pages/AUTH.md) | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
-| [ADMIN](docs/audit/pages/ADMIN.md) | 80 | 80 | 0 | 0 | 0 | 0 | 0 |
-| [MARKETPLACE](docs/audit/pages/MARKETPLACE.md) | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
+| [PUBLIC](docs/audit/pages/PUBLIC.md) | 36 | 0 | 28 | 0 | 8 | 0 | 0 |
+| [AUTH](docs/audit/pages/AUTH.md) | 9 | 0 | 3 | 0 | 6 | 0 | 0 |
+| [ADMIN](docs/audit/pages/ADMIN.md) | 80 | 73 | 0 | 0 | 7 | 0 | 0 |
+| [MARKETPLACE](docs/audit/pages/MARKETPLACE.md) | 20 | 19 | 0 | 0 | 1 | 0 | 0 |
 | [MONEY](docs/audit/pages/MONEY.md) | 24 | 24 | 0 | 0 | 0 | 0 | 0 |
-| [TRAVEL](docs/audit/pages/TRAVEL.md) | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
-| [SOCIAL](docs/audit/pages/SOCIAL.md) | 16 | 16 | 0 | 0 | 0 | 0 | 0 |
-| [FAMILY](docs/audit/pages/FAMILY.md) | 16 | 16 | 0 | 0 | 0 | 0 | 0 |
-| [HOME](docs/audit/pages/HOME.md) | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
-| [DASH-A-F](docs/audit/pages/DASH-A-F.md) | 70 | 70 | 0 | 0 | 0 | 0 | 0 |
+| [TRAVEL](docs/audit/pages/TRAVEL.md) | 23 | 22 | 0 | 0 | 1 | 0 | 0 |
+| [SOCIAL](docs/audit/pages/SOCIAL.md) | 16 | 15 | 0 | 0 | 1 | 0 | 0 |
+| [FAMILY](docs/audit/pages/FAMILY.md) | 16 | 15 | 0 | 0 | 1 | 0 | 0 |
+| [HOME](docs/audit/pages/HOME.md) | 17 | 16 | 0 | 0 | 1 | 0 | 0 |
+| [DASH-A-F](docs/audit/pages/DASH-A-F.md) | 70 | 66 | 0 | 0 | 4 | 0 | 0 |
 | [DASH-G-M](docs/audit/pages/DASH-G-M.md) | 31 | 31 | 0 | 0 | 0 | 0 | 0 |
-| [DASH-N-Z](docs/audit/pages/DASH-N-Z.md) | 56 | 56 | 0 | 0 | 0 | 0 | 0 |
+| [DASH-N-Z](docs/audit/pages/DASH-N-Z.md) | 56 | 51 | 0 | 0 | 5 | 0 | 0 |
 | [OTHER](docs/audit/pages/OTHER.md) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Total** | **398** | **398** | **0** | **0** | **0** | **0** | **0** |
+| **Total** | **398** | **332** | **31** | **0** | **35** | **0** | **0** |
 
 <details><summary>Every page, with its status</summary>
 
 | Lane | Route | Status | Checked (UTC) | By | Notes |
 |---|---|---|---|---|---|
-| PUBLIC | `/acceptable-use` | UNAUDITED | — | — |  |
-| PUBLIC | `/ai` | UNAUDITED | — | — |  |
-| PUBLIC | `/alternatives/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/audiences/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/blog/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/blog` | UNAUDITED | — | — |  |
-| PUBLIC | `/compare/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/contact` | UNAUDITED | — | — |  |
-| PUBLIC | `/cookies` | UNAUDITED | — | — |  |
-| PUBLIC | `/customers/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/f/[id]` | UNAUDITED | — | — |  |
-| PUBLIC | `/family-display` | UNAUDITED | — | — |  |
-| PUBLIC | `/faq` | UNAUDITED | — | — |  |
-| PUBLIC | `/features/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/features` | UNAUDITED | — | — |  |
-| PUBLIC | `/glossary/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/guides/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/how-it-works` | UNAUDITED | — | — |  |
-| PUBLIC | `/lp/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/mobile` | UNAUDITED | — | — |  |
-| PUBLIC | `/p/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/` | UNAUDITED | — | — |  |
-| PUBLIC | `/pricing` | UNAUDITED | — | — |  |
-| PUBLIC | `/privacy` | UNAUDITED | — | — |  |
-| PUBLIC | `/questions/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/resources/[slug]` | UNAUDITED | — | — |  |
-| PUBLIC | `/resources/benchmarks` | UNAUDITED | — | — |  |
-| PUBLIC | `/security` | UNAUDITED | — | — |  |
-| PUBLIC | `/terms` | UNAUDITED | — | — |  |
-| PUBLIC | `/gift/[token]` | UNAUDITED | — | — |  |
-| PUBLIC | `/join` | UNAUDITED | — | — |  |
-| PUBLIC | `/offline` | UNAUDITED | — | — |  |
-| PUBLIC | `/pay/[handle]` | UNAUDITED | — | — |  |
-| PUBLIC | `/reviews/new` | UNAUDITED | — | — |  |
-| PUBLIC | `/reviews` | UNAUDITED | — | — |  |
-| PUBLIC | `/s/[slug]` | UNAUDITED | — | — |  |
-| AUTH | `/auth/step-up` | UNAUDITED | — | — |  |
-| AUTH | `/auth/complete` | UNAUDITED | — | — |  |
-| AUTH | `/auth/recovery` | UNAUDITED | — | — |  |
-| AUTH | `/auth/signout/complete` | UNAUDITED | — | — |  |
-| AUTH | `/kid-login` | UNAUDITED | — | — |  |
-| AUTH | `/login` | UNAUDITED | — | — |  |
-| AUTH | `/signup` | UNAUDITED | — | — |  |
-| AUTH | `/welcome` | UNAUDITED | — | — |  |
-| AUTH | `/onboarding` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/admins` | UNAUDITED | — | — |  |
+| PUBLIC | `/acceptable-use` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/ai` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/alternatives/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/audiences/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/blog/[slug]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-95 @ 5bf0112f: copy-link copied window.location, not the canonical URL. |
+| PUBLIC | `/blog` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/compare/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/contact` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/cookies` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/customers/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/f/[id]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/family-display` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/faq` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/features/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/features` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/glossary/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/guides/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/how-it-works` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/lp/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/mobile` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/p/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/pricing` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/privacy` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/questions/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/resources/[slug]` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): placeholder id only → 404; needs a published row to exercise. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/resources/benchmarks` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 404, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/security` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/terms` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| PUBLIC | `/gift/[token]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
+| PUBLIC | `/join` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title and invite error. |
+| PUBLIC | `/offline` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| PUBLIC | `/pay/[handle]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| PUBLIC | `/reviews/new` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title, review buttons and star labels. |
+| PUBLIC | `/reviews` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| PUBLIC | `/s/[slug]` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| AUTH | `/auth/step-up` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| AUTH | `/auth/complete` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 3 hardcoded string(s) in its own files — C1-S9-101. |
+| AUTH | `/auth/recovery` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
+| AUTH | `/auth/signout/complete` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| AUTH | `/kid-login` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| AUTH | `/login` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
+| AUTH | `/signup` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-100 @ dd78be77: English tab title. |
+| AUTH | `/welcome` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200, no page errors, no raw keys, no overflow. Static: no hardcoded copy. Read pending. |
+| AUTH | `/onboarding` | IN PROGRESS | 2026-09-27 12:55 | Claude-1 | Anonymous crawl (local prod build): 200 → /login?redirect=%2Fonboarding, no page errors, no raw keys, no overflow. Static: 2 flagged string(s) — see C1-S9-100 (not copy / I18N-001). Read pending. |
+| ADMIN | `/admin/admins` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 74 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/ai-activity` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/ai` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/audit-logs` | UNAUDITED | — | — |  |
@@ -453,8 +453,8 @@ of the same tree (`next build && next start`) and a local Supabase.
 | ADMIN | `/admin/backup` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/benchmarks` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/billing` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/content` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/feedback` | UNAUDITED | — | — |  |
+| ADMIN | `/admin/content` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 10 hardcoded string(s) in its own files — C1-S9-101. |
+| ADMIN | `/admin/feedback` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 58px overflow (GitHub notice as loose flex items). Remaining: 8 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/integrations` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/ads` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/aeo` | UNAUDITED | — | — |  |
@@ -468,7 +468,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | ADMIN | `/admin/marketing/campaigns/new` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/campaigns` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/competitive` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/marketing/content` | UNAUDITED | — | — |  |
+| ADMIN | `/admin/marketing/content` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/marketing/crm` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/customers` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/marketing/email` | UNAUDITED | — | — |  |
@@ -508,7 +508,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | ADMIN | `/admin/reports` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/security` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/services` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/settings` | UNAUDITED | — | — |  |
+| ADMIN | `/admin/settings` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/settings/social-links` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/social/audit` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/social` | UNAUDITED | — | — |  |
@@ -516,20 +516,20 @@ of the same tree (`next build && next start`) and a local Supabase.
 | ADMIN | `/admin/social/usage` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/stripe` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/subscriptions` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/support-tickets` | UNAUDITED | — | — |  |
+| ADMIN | `/admin/support-tickets` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 35 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/support` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/sync` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/system` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/tier-features` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/tiers` | UNAUDITED | — | — |  |
-| ADMIN | `/admin/users` | UNAUDITED | — | — |  |
+| ADMIN | `/admin/users` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 20 hardcoded string(s) in its own files — C1-S9-101. |
 | ADMIN | `/admin/wallet` | UNAUDITED | — | — |  |
 | ADMIN | `/admin/wallet/reconciliation` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/alerts` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/auctions` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/browse` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/collections` | UNAUDITED | — | — |  |
-| MARKETPLACE | `/marketplace/community` | UNAUDITED | — | — |  |
+| MARKETPLACE | `/marketplace/community` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 16px overflow (implicit grid column sized to the input). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
 | MARKETPLACE | `/marketplace/creators/[id]` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/creators` | UNAUDITED | — | — |  |
 | MARKETPLACE | `/marketplace/deals` | UNAUDITED | — | — |  |
@@ -588,7 +588,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | TRAVEL | `/dashboard/vacations/[id]/travel` | UNAUDITED | — | — |  |
 | TRAVEL | `/dashboard/vacations/[id]/weather` | UNAUDITED | — | — |  |
 | TRAVEL | `/dashboard/vacations/calendar` | UNAUDITED | — | — |  |
-| TRAVEL | `/dashboard/vacations/new` | UNAUDITED | — | — |  |
+| TRAVEL | `/dashboard/vacations/new` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-96 @ 48df75c0: dialog open on arrival failed hydration; useHydrated gate. Remaining: 3 hardcoded string(s) in its own files — C1-S9-101. |
 | TRAVEL | `/dashboard/vacations` | UNAUDITED | — | — |  |
 | TRAVEL | `/dashboard/vacations/reports` | UNAUDITED | — | — |  |
 | TRAVEL | `/dashboard/weekend` | UNAUDITED | — | — |  |
@@ -607,7 +607,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | SOCIAL | `/dashboard/social/posts` | UNAUDITED | — | — |  |
 | SOCIAL | `/dashboard/social/published` | UNAUDITED | — | — |  |
 | SOCIAL | `/dashboard/social/scheduled` | UNAUDITED | — | — |  |
-| SOCIAL | `/dashboard/social/settings` | UNAUDITED | — | — |  |
+| SOCIAL | `/dashboard/social/settings` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 55px overflow (implicit grid column). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
 | FAMILY | `/dashboard/family/check-in` | UNAUDITED | — | — |  |
 | FAMILY | `/dashboard/family/driving-safety` | UNAUDITED | — | — |  |
 | FAMILY | `/dashboard/family/find-phone` | UNAUDITED | — | — |  |
@@ -621,7 +621,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | FAMILY | `/family/settings` | UNAUDITED | — | — |  |
 | FAMILY | `/guardian/contacts` | UNAUDITED | — | — |  |
 | FAMILY | `/guardian/history` | UNAUDITED | — | — |  |
-| FAMILY | `/guardian` | UNAUDITED | — | — |  |
+| FAMILY | `/guardian` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 53px overflow (header links did not wrap). Remaining: 26 hardcoded string(s) in its own files — C1-S9-101. |
 | FAMILY | `/guardian/rules` | UNAUDITED | — | — |  |
 | FAMILY | `/guardian/settings` | UNAUDITED | — | — |  |
 | HOME | `/capture/link` | UNAUDITED | — | — |  |
@@ -634,7 +634,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | HOME | `/dashboard/home/service` | UNAUDITED | — | — |  |
 | HOME | `/dashboard/home/warranties` | UNAUDITED | — | — |  |
 | HOME | `/dashboard` | UNAUDITED | — | — |  |
-| HOME | `/display` | UNAUDITED | — | — |  |
+| HOME | `/display` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 12px overflow (clock/weather row did not wrap). Remaining: 22 hardcoded string(s) in its own files — C1-S9-101. |
 | HOME | `/display/setup` | UNAUDITED | — | — |  |
 | HOME | `/feedback` | UNAUDITED | — | — |  |
 | HOME | `/home` | UNAUDITED | — | — |  |
@@ -658,12 +658,12 @@ of the same tree (`next build && next start`) and a local Supabase.
 | DASH-A-F | `/dashboard/auto/vehicles` | UNAUDITED | — | — |  |
 | DASH-A-F | `/dashboard/autonomous-family-management` | UNAUDITED | — | — |  |
 | DASH-A-F | `/dashboard/autopay` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/autopilot` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/behavior` | UNAUDITED | — | — |  |
+| DASH-A-F | `/dashboard/autopilot` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: showed 100%/All clear over a refused scan; forecast waits for a scan that ran; super-admin preview reaches the API. Remaining: 4 hardcoded string(s) in its own files — C1-S9-101. |
+| DASH-A-F | `/dashboard/behavior` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 30px overflow at 390px (filter row did not wrap). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-A-F | `/dashboard/binder` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/briefing` | UNAUDITED | — | — |  |
+| DASH-A-F | `/dashboard/briefing` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: route reason (429/403/503) was replaced by generic English; kept and translated. Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-A-F | `/dashboard/budgets` | UNAUDITED | — | — |  |
-| DASH-A-F | `/dashboard/calendar` | UNAUDITED | — | — |  |
+| DASH-A-F | `/dashboard/calendar` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-94 @ 5bf0112f: second realtime reader of calendar_events crashed its section (shared channel); ownChannel. Remaining: 28 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-A-F | `/dashboard/calm` | UNAUDITED | — | — |  |
 | DASH-A-F | `/dashboard/care` | UNAUDITED | — | — |  |
 | DASH-A-F | `/dashboard/career` | UNAUDITED | — | — |  |
@@ -748,13 +748,13 @@ of the same tree (`next build && next start`) and a local Supabase.
 | DASH-N-Z | `/dashboard/notifications` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/nutrition` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/onboarding-funnel` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/outcomes` | UNAUDITED | — | — |  |
+| DASH-N-Z | `/dashboard/outcomes` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 43px overflow (implicit grid column). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-N-Z | `/dashboard/pantry` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/paperwork` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/passwords` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/payments` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/pets` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/photos` | UNAUDITED | — | — |  |
+| DASH-N-Z | `/dashboard/photos` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (PageHeader action row did not wrap). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-N-Z | `/dashboard/planning` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/playbook` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/prep-plans` | UNAUDITED | — | — |  |
@@ -763,7 +763,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | DASH-N-Z | `/dashboard/readiness` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/reasoning` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/recipes/discover` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/recipes` | UNAUDITED | — | — |  |
+| DASH-N-Z | `/dashboard/recipes` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (PageHeader action row did not wrap). Remaining: 21 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-N-Z | `/dashboard/recipes/vote` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/relationship` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/reminders` | UNAUDITED | — | — |  |
@@ -771,7 +771,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | DASH-N-Z | `/dashboard/rewards` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/rides` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/scan` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/school` | UNAUDITED | — | — |  |
+| DASH-N-Z | `/dashboard/school` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (stacked stat tiles laid out as a row) and English tile labels. Remaining: 16 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-N-Z | `/dashboard/screen-time` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/search` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/security` | UNAUDITED | — | — |  |
@@ -780,7 +780,7 @@ of the same tree (`next build && next start`) and a local Supabase.
 | DASH-N-Z | `/dashboard/signups` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/sleep` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/social-feed` | UNAUDITED | — | — |  |
-| DASH-N-Z | `/dashboard/sports` | UNAUDITED | — | — |  |
+| DASH-N-Z | `/dashboard/sports` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow (stacked stat tiles laid out as a row) and English tile labels. Remaining: 13 hardcoded string(s) in its own files — C1-S9-101. |
 | DASH-N-Z | `/dashboard/sync/accounts/[provider]` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/sync/accounts` | UNAUDITED | — | — |  |
 | DASH-N-Z | `/dashboard/sync/conflicts` | UNAUDITED | — | — |  |
@@ -45050,6 +45050,397 @@ document-migration, version, catalogue-key and i18n-integrity guards green
 
 **Status:** DONE (integration). Nothing here is applied to production; `B1` is
 unchanged.
+
+---
+
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-93 — every page on bubaly.com, one row each: the page audit register
+
+**File/path:** `scripts/page-audit-register.mjs`, `docs/audit/pages/*.md` (13
+lane files and the protocol), `scripts/page-audit-crawl.mjs`,
+`scripts/page-audit-session.mjs`, `scripts/page-audit-static.mjs`,
+`tests/every-page-is-in-the-page-register.test.ts`.
+
+**Problem.** Nothing listed the pages. 398 `page.tsx` files, and no record of
+which had been looked at, by whom, or what was found. A page nobody listed is a
+page nobody audited, and it goes missing without anyone noticing.
+
+**Fix.**
+- **Register.** Every page is one row in exactly one of 13 lane files, each
+  with a claim table so Claude and Codex workers can audit at the same time
+  without colliding. The "Page Audit Register" section of this file is
+  generated from them; lane holders never hand-edit it.
+- **Guard.** The test fails when a page is added or deleted without its row,
+  when a status is not one the protocol defines, when the OTHER lane gains a
+  page, or when the roll-up is hand-edited.
+- **Crawl** (`page-audit-crawl.mjs`). Drives Chromium over every route, or
+  every sitemap URL, at 390 px. Per page it records:
+  - status and redirect
+  - console and page errors
+  - failed same-origin requests
+  - raw catalogue keys
+  - the error boundary
+  - the not-found copy
+  - horizontal overflow
+- **Session** (`page-audit-session.mjs`). Signs a disposable account in
+  through the real login form and onboarding. It refuses any Supabase that
+  isn't local.
+- **Static read** (`page-audit-static.mjs`). Follows each page's imports and
+  counts hardcoded copy with the repo's own scanner.
+
+**Evidence** (local production build, local Supabase with all migrations):
+
+| Crawl | Result |
+|---|---|
+| Anonymous, 398 routes | No 5xx. No error boundary. No raw keys. Every signed-in route redirects to `/login`. |
+| Sitemap, 1,063 URLs (14 static, 1,049 blog posts) | Only environmental noise: the sandbox cannot reach external image hosts, and the tracking beacons rate-limit a crawl by IP by design. |
+| Signed in as a parent, 398 routes | 35 routes flagged: `C1-S9-94`–`C1-S9-99` and `C1-S9-102`. |
+
+The live-site half is on main as `scripts/audit-live-pages.mjs` (#588, another
+session): all 354 signed-in routes send a signed-out visitor to `/login` on
+production, and 16 blog hero ids that answer 404 were retired.
+
+**Status:** DONE (instrument).
+- PUBLIC and AUTH are claimed by Claude-1; the other lanes are FREE for any
+  worker.
+- Not yet crawled:
+  - as a child
+  - as a parent who is not a super administrator (a super administrator
+    passes every tier gate, so tier redirects were not exercised)
+  - dynamic routes with real ids
+  - CMS pages whose table is empty locally (`/features/[slug]` and siblings)
+
+---
+
+### `[CLAUDE-1][HIGH][REALTIME]` C1-S9-94 — two readers of one table crashed the calendar
+
+**File/path:** `lib/realtime/own-channel.ts` (new);
+`lib/hooks/use-realtime-query.ts`; eight modules that subscribe to
+`postgres_changes`.
+
+**Problem.** `/dashboard/calendar` threw `cannot add postgres_changes callbacks
+for realtime:calendar_events:<family> after subscribe()`, and its section fell
+to the error boundary.
+
+**Evidence.**
+- The browser client is a singleton, and realtime-js `channel(topic)` returns
+  the existing channel when one with that topic is already open.
+- The calendar mounts two `useRealtimeQuery('calendar_events')` readers. The
+  second received the first's already-subscribed channel.
+- Whichever reader unmounted first also removed the channel from under the
+  other, which then stopped updating without any sign.
+
+**Fix.** Every `postgres_changes` subscription goes through `ownChannel()`,
+which gives it a topic of its own. For `postgres_changes` the topic is only a
+label; the server filters on the table and filter passed to `.on()`. Presence
+stays on its shared topic, because presence works by meeting on that topic.
+
+**Guards.**
+- `tests/two-readers-of-one-table-do-not-share-a-channel.test.ts`:
+  - a fake that behaves like realtime-js (dedupes by topic, refuses `.on`
+    after `.subscribe`)
+  - a negative control proving the fake reproduces the crash
+  - a scan requiring `ownChannel` for every `postgres_changes` channel in
+    `app/`, `components/` and `lib/`
+- Follow-up: eight browser fixtures list the modules they load, and each now
+  lists `own-channel.ts`. The module-graph guard caught this. The ten fixture
+  specs pass locally (218 tests).
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][MARKETING]` C1-S9-95 — the blog's "copy link" copied whatever host you were on
+
+**File/path:** `app/(marketing)/blog/[slug]/share-buttons.tsx`.
+
+**Problem.** The copy button wrote `window.location.href` to the clipboard, so
+a reader on a preview deployment, `www.` or a tracking-tagged URL shared that
+address. The page's other share buttons already used the canonical URL.
+
+**Fix.** It copies `canonicalUrl('/blog/<slug>')`, the same value the other
+buttons use.
+
+**Guard.** `tests/blog-share-buttons.test.ts`: no `window.location` in the
+source (comments stripped), and the clipboard receives the canonical URL.
+Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][HYDRATION]` C1-S9-96 — a dialog open on arrival failed hydration
+
+**File/path:** `components/ui/modal.tsx`, `components/app/command-bar.tsx`.
+
+**Problem.** Pages that open a dialog on arrival logged a React hydration
+error: `/dashboard/vacations/new` and share links with a dialog in the URL.
+The portal was gated on `typeof document !== 'undefined'`, which is false on
+the server and true on the client's first render, so the two trees differed.
+
+**Fix.** `useHydrated()` is a `useSyncExternalStore` whose server snapshot is
+`false`. React reads that server snapshot during hydration too, so the first
+client render matches the server, and the dialog appears on the next render.
+The command bar uses the same gate.
+
+**Guard.** `tests/a-modal-open-on-arrival-hydrates.test.ts`:
+- `renderToString` renders the server markup
+- no portal is gated on a `typeof document/window` check
+- both files pin the gate
+
+Checked red against the old code. `tests/a-dialog-does-not-steal-the-caret.test.ts`
+(from main) models `useSyncExternalStore` as a client render after hydration,
+and its assertions are unchanged.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-97 — "we couldn't find that" was English in every locale
+
+**File/path:** `components/app/app-not-found.tsx`;
+`app/(app)/dashboard/not-found.tsx`; `app/(app)/wallet/not-found.tsx`.
+
+**Problem.** The signed-in app's not-found screen took its title, description
+and button labels as English defaults.
+
+**Fix.** It reads `appNotFound.*` (four keys, seven base catalogues). The
+callers pass only what differs.
+
+**Guard.** `tests/a-missing-record-is-reported-in-the-familys-language.test.ts`
+renders the screen in German. Checked red against the old code.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][AI]` C1-S9-98 — a scan that never ran was shown as an all-clear
+
+**File/path:**
+- `components/modules/autopilot-module.tsx`
+- `lib/server/route-feature-gate.ts`
+- `app/api/autopilot/scan/route.ts`
+- `lib/briefing/cache-isolation.ts`
+- `components/modules/briefing-module.tsx`
+
+**Problem.**
+- **Autopilot.** Signed in as a super administrator whose family is on the
+  free plan, `/dashboard/autopilot` said **"100% probability the day runs
+  smoothly"**, **0** risk alerts and **All clear**, while `POST
+  /api/autopilot/scan` had answered 403. The forecast is computed from open
+  suggestions. A refused scan leaves none, so the page presented "no data" as
+  "no risk".
+- **Briefing.** `/dashboard/briefing` said "Failed to generate briefing" in
+  English. The route had written a precise refusal in the reader's language:
+  wait, needs a plan, or try again. The client replaced it with one generic
+  string.
+
+**Root cause of the 403.** `requireFeature` lets a super administrator onto
+every feature page to preview it. F16 records the same choice for the family
+write path. None of the endpoints behind those pages allowed it.
+
+**Fix.**
+- **Route gates.** `refuseUnlessEntitled` and the on-demand scan let a super
+  administrator through, and only check for one after the family has been
+  refused, so entitled requests pay nothing extra. If the account can't be
+  read, they answer 503. The nightly cron still runs each family on its real
+  plan.
+- **Autopilot screen.**
+  - The forecast, the risk count and the all-clear wait for a scan that ran.
+  - Before the first scan finishes, the forecast shows "—" and "Scanning your
+    family…".
+  - After a failed scan, the forecast shows "—" and "No forecast — the scan
+    didn't run", and the list is replaced by an error with a retry.
+- **Briefing.**
+  - The session keeps the route's reason.
+  - Its two fallback strings are exported constants that the module
+    translates when it renders (`briefing.failedToGenerateBriefing`, new
+    `briefing.couldNotReadGeneratedBriefing`).
+
+**Guards** (each checked red against the old code):
+- `tests/route-plan-gate.test.ts`: a super admin passes below the tier; an
+  unreadable account gives 503.
+- `tests/autopilot-plan-gate.test.ts`: preview runs the scan; the cron does
+  not use the bypass.
+- `tests/autopilot-resolution-ui.test.ts`: no forecast after a 403, a 500 or
+  before the first scan; a forecast after a clean scan.
+- `tests/briefing-cache-isolation.test.ts`: the reasons for a 429, 403 and 503
+  are kept, and the fallback is the translatable constant.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MOBILE]` C1-S9-99 — seventeen pages scrolled sideways on a phone; one catalogue key said less than it was written to
+
+**File/path:** (17 routes)
+- `components/app/page-header.tsx`
+- six admin pages
+- `app/(app)/guardian/page.tsx`
+- `app/(app)/dashboard/social/settings/page.tsx`
+- `components/modules/{behavior,outcomes-launcher,sports,school}-module.tsx`
+- `components/marketplace/community-module.tsx`
+- `components/admin/feedback-admin.tsx`
+- `components/display/display-grid.tsx`
+- the seven base catalogues
+
+**Problem.** At 390 px, 17 routes had horizontal overflow. It ranged from 8 px
+on `/dashboard/sports` to 647 px on `/admin/support-tickets`:
+- `/admin/admins`, `/admin/content`, `/admin/feedback`,
+  `/admin/marketing/content`, `/admin/settings`, `/admin/support-tickets`,
+  `/admin/users`
+- `/marketplace/community`, `/dashboard/social/settings`, `/guardian`,
+  `/display`
+- `/dashboard/behavior`, `/dashboard/outcomes`, `/dashboard/photos`,
+  `/dashboard/recipes`, `/dashboard/school`, `/dashboard/sports`
+
+**Evidence.** The crawl's overflow figure, then a DOM bisection (hide each
+subtree until the page stops overflowing) for each route. Four causes:
+
+1. **A responsive grid with no mobile column count** (admin, social settings,
+   community, outcomes). With no template below the breakpoint, the single
+   column is an implicit `auto` track, and an auto track is never narrower
+   than its content's min-content, so a table or a filter row widened the
+   page. Fix: `grid-cols-1`, which is `minmax(0,1fr)`, and `minmax(0,1fr)` in
+   the lg templates.
+2. **A row of controls that could not wrap** (photos, recipes, behavior,
+   guardian, display). `PageHeader` wrapped its own slot, but the modules pass
+   in a row of buttons that did not wrap (31 call sites). The header now wraps
+   that row too. Behavior, guardian and display wrap their own rows.
+3. **A column tile laid out as a row** (sports, school). `.stat-card` is a
+   flex row, and these tiles are meant to stack. They now stack. Their labels
+   were also hardcoded English; 13 keys were added.
+4. **Text that could not wrap**:
+   - The GitHub notice on `/admin/feedback` sat loose in a flex row, so each
+     text run and `<code>` was its own item. It is now one wrapping sentence.
+   - A `truncate` on an inline link did nothing; the link is now a block.
+
+**Measured after the fix:** 0 px on all 17, with the same probe.
+
+**Found alongside.** All seven catalogues defined `actions.couldNotSaveThatPlace`,
+`couldNotDeleteThatPlace` and `couldNotUpdateThatGeofence` twice. The
+duplicates came from a Sep 26 commit on main. `JSON.parse` keeps the last copy,
+so the geofence failure lost the sentence it was written to say, "The alert
+setting has not changed". The later copies were removed.
+
+**Guards.**
+- `tests/a-page-fits-a-phone.test.ts` pins each cause:
+  - the nine grids
+  - the header's wrap
+  - every stacked stat tile being a column
+  - the notice and the block link
+  - a ratchet: responsive grids with no base column count may not exceed 330
+- `tests/no-catalogue-defines-a-key-twice.test.ts` scans lines, not the parsed
+  object. It was red on main's catalogues.
+
+**Status:** FIXED for the 17 routes. The ratchet's 330 remaining grids are
+`C1-S9-99a`, OPEN LOW: none overflows today, but any of them will once a long
+name or a table lands in it. The crawl measures them.
+
+---
+
+### `[CLAUDE-1][LOW][I18N]` C1-S9-100 — the public and sign-in pages' own words
+
+**File/path:**
+- 13 `page.tsx` files: `/login`, `/signup`, `/kid-login`, `/auth/recovery`,
+  `/auth/complete`, `/auth/step-up`, `/join`, `/offline`, `/gift/[token]`,
+  `/pay/[handle]`, `/reviews`, `/reviews/new`, `/s/[slug]`
+- `components/auth/join-invite.tsx`
+- `app/reviews/new/review-form.tsx`
+
+**Problem.** The i18n gate covers `app/(marketing)`, and these pages are
+outside it. They carried:
+- a browser-tab title in English
+- the join link's "This invite link is missing its token."
+- the review page's "Review us on {platform}" buttons and English star labels
+
+**Fix.**
+- The titles come from `generateMetadata` and catalogue keys
+  (`pageTitle.*`, `authCallback.title`, `kidLogin.kidSignIn`).
+- The invite error reads `joinInvite.missingToken`.
+- Each review button is one whole sentence per platform, because "on the App
+  Store" and "on Google" take different words in German or French.
+- The star labels read `reviewsNewReviewForm.oneStar` and `reviewsNewReviewForm.nStars`, inside the scope the page ships to the browser.
+- 21 keys in seven catalogues.
+
+**Not changed, and why.** Three strings are written by the server into rows
+or emails with no reader locale:
+- the gift notification (`app/gift/actions.ts`)
+- the onboarding welcome email subject
+- the "[Imported during onboarding]" event note
+
+All three are `I18N-001`, which belongs to the owner.
+
+The scanner flags two TypeScript type fragments in `recovery-form.tsx` and
+`callback-completion.tsx`. They aren't copy.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][HIGH][I18N]` C1-S9-101 — the signed-in app's pages carry 2,765 hardcoded English strings
+
+**File/path:** 596 files under `app/` and `components/`. Per page:
+`node scripts/page-audit-static.mjs`.
+
+**Problem.** The i18n gate declares these surfaces translated, and they are
+clean:
+- the marketing site
+- the app chrome (`components/app`)
+- the language control
+- Guardian's safety vocabulary
+
+Nothing gates the modules those pages render. Measured with the repo's own
+scanner, through each page's imports:
+
+| Lane | Pages | With no hardcoded copy | Strings |
+|---|---|---|---|
+| ADMIN | 80 | 3 | 534 |
+| DASH-A-F | 70 | 9 | 532 |
+| DASH-N-Z | 56 | 1 | 443 |
+| MONEY | 24 | 1 | 411 |
+| DASH-G-M | 31 | 0 | 267 |
+| HOME | 17 | 4 | 227 |
+| TRAVEL | 23 | 1 | 191 |
+| FAMILY | 16 | 0 | 124 |
+| MARKETPLACE | 20 | 0 | 65 |
+| SOCIAL | 16 | 0 | 49 |
+
+**Impact.** A family in any of the ten non-English locales gets a translated
+shell around English headings, buttons, empty states and errors. The previous
+finding (`C1-S9-100`) and the stat tiles in `C1-S9-99` are instances.
+
+**Fix path.** It is per page, which is what the lanes are for. The lane holder:
+1. lifts each string into `en-US.json` and the six other base catalogues
+2. adds the module's directory to `GATED_SURFACES` in `scripts/i18n-scan.mjs`
+   once it scans clean
+
+Adding a surface to the gate is a promise; the gate itself says so.
+
+**Status:** OPEN. A page row cannot be PASS while its own files carry
+hardcoded copy.
+
+---
+
+### `[CLAUDE-1][LOW][ROUTING]` C1-S9-102 — a missing record under `app/(app)` answers 200
+
+**File/path:** `app/(app)/loading.tsx`; every `notFound()` under `app/(app)`.
+
+**Problem.**
+- **What was seen.** Crawled with a placeholder id, nine dynamic routes showed
+  the correct not-found screen, answered HTTP **200**, and logged React
+  #419.
+- **Why.** `app/(app)/loading.tsx` wraps the segment in a Suspense boundary,
+  and the response has already started streaming (status 200) when the page
+  calls `notFound()`. The not-found UI then arrives as a client render.
+
+**Impact.** Low. These pages sit behind a sign-in and are `noindex`, so no
+crawler is misled. A person sees the right screen.
+
+**Fix path.** Resolve the record before the boundary. Or accept this, as
+Next.js documents it.
+
+**Status:** OPEN (LOW). This is framework behaviour and no screen is wrong. It
+is recorded so the #419 in the logs has a known cause.
 
 ---
 

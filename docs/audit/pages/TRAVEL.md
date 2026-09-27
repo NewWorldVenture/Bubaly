@@ -6,7 +6,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-13**. Protocol: docs/audit/pag
 
 | Agent | Claimed (UTC) | Heartbeat (UTC) | State |
 |---|---|---|---|
-| — | — | — | FREE |
+| Claude-1 (session c1fd8263) | 2026-09-27 12:55 | 2026-09-27 12:55 | FREE |
 
 ## Pages
 
@@ -31,7 +31,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-13**. Protocol: docs/audit/pag
 | `/dashboard/vacations/[id]/travel` | `app/(app)/dashboard/vacations/[id]/travel/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/vacations/[id]/weather` | `app/(app)/dashboard/vacations/[id]/weather/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/vacations/calendar` | `app/(app)/dashboard/vacations/calendar/page.tsx` | UNAUDITED | — | — |  |
-| `/dashboard/vacations/new` | `app/(app)/dashboard/vacations/new/page.tsx` | UNAUDITED | — | — |  |
+| `/dashboard/vacations/new` | `app/(app)/dashboard/vacations/new/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-96 @ 48df75c0: dialog open on arrival failed hydration; useHydrated gate. Remaining: 3 hardcoded string(s) in its own files — C1-S9-101. |
 | `/dashboard/vacations` | `app/(app)/dashboard/vacations/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/vacations/reports` | `app/(app)/dashboard/vacations/reports/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/weekend` | `app/(app)/dashboard/weekend/page.tsx` | UNAUDITED | — | — |  |

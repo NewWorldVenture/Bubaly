@@ -6,7 +6,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-05..A-11**. Protocol: docs/aud
 
 | Agent | Claimed (UTC) | Heartbeat (UTC) | State |
 |---|---|---|---|
-| — | — | — | FREE |
+| Claude-1 (session c1fd8263) | 2026-09-27 12:55 | 2026-09-27 12:55 | FREE |
 
 ## Pages
 
@@ -29,12 +29,12 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-05..A-11**. Protocol: docs/aud
 | `/dashboard/auto/vehicles` | `app/(app)/dashboard/auto/vehicles/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/autonomous-family-management` | `app/(app)/dashboard/autonomous-family-management/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/autopay` | `app/(app)/dashboard/autopay/page.tsx` | UNAUDITED | — | — |  |
-| `/dashboard/autopilot` | `app/(app)/dashboard/autopilot/page.tsx` | UNAUDITED | — | — |  |
-| `/dashboard/behavior` | `app/(app)/dashboard/behavior/page.tsx` | UNAUDITED | — | — |  |
+| `/dashboard/autopilot` | `app/(app)/dashboard/autopilot/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: showed 100%/All clear over a refused scan; forecast waits for a scan that ran; super-admin preview reaches the API. Remaining: 4 hardcoded string(s) in its own files — C1-S9-101. |
+| `/dashboard/behavior` | `app/(app)/dashboard/behavior/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 30px overflow at 390px (filter row did not wrap). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
 | `/dashboard/binder` | `app/(app)/dashboard/binder/page.tsx` | UNAUDITED | — | — |  |
-| `/dashboard/briefing` | `app/(app)/dashboard/briefing/page.tsx` | UNAUDITED | — | — |  |
+| `/dashboard/briefing` | `app/(app)/dashboard/briefing/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-98 @ ac1d06df: route reason (429/403/503) was replaced by generic English; kept and translated. Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
 | `/dashboard/budgets` | `app/(app)/dashboard/budgets/page.tsx` | UNAUDITED | — | — |  |
-| `/dashboard/calendar` | `app/(app)/dashboard/calendar/page.tsx` | UNAUDITED | — | — |  |
+| `/dashboard/calendar` | `app/(app)/dashboard/calendar/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-94 @ 5bf0112f: second realtime reader of calendar_events crashed its section (shared channel); ownChannel. Remaining: 28 hardcoded string(s) in its own files — C1-S9-101. |
 | `/dashboard/calm` | `app/(app)/dashboard/calm/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/care` | `app/(app)/dashboard/care/page.tsx` | UNAUDITED | — | — |  |
 | `/dashboard/career` | `app/(app)/dashboard/career/page.tsx` | UNAUDITED | — | — |  |

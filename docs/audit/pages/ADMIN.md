@@ -6,13 +6,13 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-17**. Protocol: docs/audit/pag
 
 | Agent | Claimed (UTC) | Heartbeat (UTC) | State |
 |---|---|---|---|
-| — | — | — | FREE |
+| Claude-1 (session c1fd8263) | 2026-09-27 12:55 | 2026-09-27 12:55 | FREE |
 
 ## Pages
 
 | Route | Source | Status | Checked (UTC) | By | Notes |
 |---|---|---|---|---|---|
-| `/admin/admins` | `app/(app)/admin/admins/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/admins` | `app/(app)/admin/admins/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 74 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/ai-activity` | `app/(app)/admin/ai-activity/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/ai` | `app/(app)/admin/ai/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/audit-logs` | `app/(app)/admin/audit-logs/page.tsx` | UNAUDITED | — | — |  |
@@ -20,8 +20,8 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-17**. Protocol: docs/audit/pag
 | `/admin/backup` | `app/(app)/admin/backup/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/benchmarks` | `app/(app)/admin/benchmarks/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/billing` | `app/(app)/admin/billing/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/content` | `app/(app)/admin/content/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/feedback` | `app/(app)/admin/feedback/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/content` | `app/(app)/admin/content/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 10 hardcoded string(s) in its own files — C1-S9-101. |
+| `/admin/feedback` | `app/(app)/admin/feedback/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 58px overflow (GitHub notice as loose flex items). Remaining: 8 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/integrations` | `app/(app)/admin/integrations/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/ads` | `app/(app)/admin/marketing/ads/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/aeo` | `app/(app)/admin/marketing/aeo/page.tsx` | UNAUDITED | — | — |  |
@@ -35,7 +35,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-17**. Protocol: docs/audit/pag
 | `/admin/marketing/campaigns/new` | `app/(app)/admin/marketing/campaigns/new/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/campaigns` | `app/(app)/admin/marketing/campaigns/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/competitive` | `app/(app)/admin/marketing/competitive/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/marketing/content` | `app/(app)/admin/marketing/content/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/marketing/content` | `app/(app)/admin/marketing/content/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 2 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/marketing/crm` | `app/(app)/admin/marketing/crm/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/customers` | `app/(app)/admin/marketing/customers/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/marketing/email` | `app/(app)/admin/marketing/email/page.tsx` | UNAUDITED | — | — |  |
@@ -75,7 +75,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-17**. Protocol: docs/audit/pag
 | `/admin/reports` | `app/(app)/admin/reports/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/security` | `app/(app)/admin/security/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/services` | `app/(app)/admin/services/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/settings` | `app/(app)/admin/settings/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/settings` | `app/(app)/admin/settings/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 23 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/settings/social-links` | `app/(app)/admin/settings/social-links/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/social/audit` | `app/(app)/admin/social/audit/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/social` | `app/(app)/admin/social/page.tsx` | UNAUDITED | — | — |  |
@@ -83,12 +83,12 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-17**. Protocol: docs/audit/pag
 | `/admin/social/usage` | `app/(app)/admin/social/usage/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/stripe` | `app/(app)/admin/stripe/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/subscriptions` | `app/(app)/admin/subscriptions/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/support-tickets` | `app/(app)/admin/support-tickets/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/support-tickets` | `app/(app)/admin/support-tickets/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 35 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/support` | `app/(app)/admin/support/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/sync` | `app/(app)/admin/sync/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/system` | `app/(app)/admin/system/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/tier-features` | `app/(app)/admin/tier-features/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/tiers` | `app/(app)/admin/tiers/page.tsx` | UNAUDITED | — | — |  |
-| `/admin/users` | `app/(app)/admin/users/page.tsx` | UNAUDITED | — | — |  |
+| `/admin/users` | `app/(app)/admin/users/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: overflow at 390px (implicit auto grid column sized to a table/filter row). Remaining: 20 hardcoded string(s) in its own files — C1-S9-101. |
 | `/admin/wallet` | `app/(app)/admin/wallet/page.tsx` | UNAUDITED | — | — |  |
 | `/admin/wallet/reconciliation` | `app/(app)/admin/wallet/reconciliation/page.tsx` | UNAUDITED | — | — |  |

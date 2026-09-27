@@ -6,7 +6,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-14**. Protocol: docs/audit/pag
 
 | Agent | Claimed (UTC) | Heartbeat (UTC) | State |
 |---|---|---|---|
-| — | — | — | FREE |
+| Claude-1 (session c1fd8263) | 2026-09-27 12:55 | 2026-09-27 12:55 | FREE |
 
 ## Pages
 
@@ -16,7 +16,7 @@ Owning unit (docs/audit/COORDINATION.md §2): **A-14**. Protocol: docs/audit/pag
 | `/marketplace/auctions` | `app/(app)/marketplace/auctions/page.tsx` | UNAUDITED | — | — |  |
 | `/marketplace/browse` | `app/(app)/marketplace/browse/page.tsx` | UNAUDITED | — | — |  |
 | `/marketplace/collections` | `app/(app)/marketplace/collections/page.tsx` | UNAUDITED | — | — |  |
-| `/marketplace/community` | `app/(app)/marketplace/community/page.tsx` | UNAUDITED | — | — |  |
+| `/marketplace/community` | `app/(app)/marketplace/community/page.tsx` | FIXED | 2026-09-27 12:55 | Claude-1 | C1-S9-99 @ dd0e92be: 16px overflow (implicit grid column sized to the input). Remaining: 1 hardcoded string(s) in its own files — C1-S9-101. |
 | `/marketplace/creators/[id]` | `app/(app)/marketplace/creators/[id]/page.tsx` | UNAUDITED | — | — |  |
 | `/marketplace/creators` | `app/(app)/marketplace/creators/page.tsx` | UNAUDITED | — | — |  |
 | `/marketplace/deals` | `app/(app)/marketplace/deals/page.tsx` | UNAUDITED | — | — |  |
