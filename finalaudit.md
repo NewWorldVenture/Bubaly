@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27T02:02:00Z
+- Last Updated: 2026-09-27T07:57:00Z
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**.
 - Total Audit Items: 14075 — **+4 in Pass BU**: SEC-007 (raised by the review of the SEC-006 fix) and SEC-008 (raised by the SEC-007 fix), each re-read against its routes before being recorded; SEC-009 (an opt-out a family set comes back on whenever the settings read fails — found by the `m35` fixer, re-read at every call site); and I18N-010 (a `t()` key no catalogue carries — found by three separate reviewers, measured tree-wide, fixed with a guard). **+33 the pass before**: SEC-006, TIME-010, SRV-001, TIME-009, CONC-001, DOC-002, AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005, METRIC-001, SPEC-001, SPEC-002, IMPORT-001, AUTH-004, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-009, AUDIT-010, TIME-001, TIME-002, TIME-003, TIME-004, TIME-005, TIME-006, TIME-007, TIME-008, AUDIT-011
 - Not Started: 13838
@@ -31452,6 +31452,64 @@ here rather than half-fixed.
 - `trust-activity-tab` already guards it explicitly ("A failed read renders the
   retryable error state, never an empty ledger"); `trust-sharing-section` and
   `paperwork-module`'s AI draft path check `res.ok`.
+
+## PORT-001 · The logged-in-pages audit branch, re-applied onto main one fix at a time
+
+*Recorded 2026-09-27 by session 01DXw2nu25BjyRfA6Fg3YiMS, on `claude/port-to-main-7q6vtf`. Not counted in the master-ledger totals above, like the C1-K sections.*
+
+**Why a port and not a merge.** `claude/logged-in-pages-supabase-7q6vtf` and `main` grew apart for weeks. Its twenty-four migrations reused versions main had already given to other files, so merged as-is the production workflow would have skipped them as "already applied". Several fixes on each side closed the same hole differently: the branch's `0319` against main's `0335`, its `0320` against main's `0319`, its `0330` against main's `0318`/`0345`. The merge came to 437 conflict hunks. The owner chose to port instead: start from main, re-apply only what main does not already have, one source commit at a time, each with its own verification, and number the migrations after main's highest.
+
+**Method, per commit.**
+- Apply the commit's diff to main's tree with a three-way merge.
+- Where main already fixed the same finding, keep main's version and carry over only the remainder. Each commit message says which half came from where.
+- Renumber any new migration after main's highest, and check it first against main's `0342`–`0388` and the open PRs (#548, #556, #583).
+- Replay it on a Postgres 16 harness built from scratch, run its probes and tests, and typecheck.
+
+**Status at `3f704588c`+.** Fifty-five of the branch's 104 commits are handled (46 ported, 9 audit-only), and 49 remain. The tree is green:
+- tsc is clean and `next lint` reports 0 errors.
+- 19,306 tests pass in 1,501 files, in both America/Los_Angeles and UTC.
+- The harness replays 413 migrations with none failing.
+- 131 of 132 probes pass. `plpgsql-bodies-resolve` is skipped locally for want of `plpgsql_check`, which CI installs.
+- The shared anchor family is unchanged by a full probe run.
+
+**Migrations `0389`–`0402`, all unapplied.** Each has an entry in `docs/PENDING_PROD_MIGRATIONS.md` under "Ported from the audit branch", with a deploy-order table. None gates a deploy.
+
+| Now | Was | Finding | On main |
+|---|---|---|---|
+| `0389` | `0318` | a sharing circle could never be created (definer search_path missed `extensions`) | carried whole |
+| `0390` | `0321` | an investment order could be rejected but never approved (42804) | carried whole |
+| `0391` | `0322` | a single-choice poll took every choice | carried whole; main's vote-owner probe forges its sibling vote in a second poll |
+| `0392` | `0323` | a family timezone typo silently meant Greenwich | carried whole; the probe asks the server which legacy zones it can resolve |
+| `0393` | `0324` | stored OAuth tokens answered client reads | policy-free, so it and #556's equivalent can land in either order |
+| `0394` | `0325` | feedback screenshots readable by URL | reduced to the bucket flag; main's `0369` had scoped the read policy |
+| `0395` | `0326` | step-up MFA guarded a redirect, not the data | reuses main's `session_cleared_step_up()` from `0382` |
+| `0396` | `0327` | a sibling could file a chore dispute in another child's name | reduced to `chore_disputes`; main's `0375` covers submissions |
+| `0397` | `0328` | a proxy bid's ceiling was readable by rival bidders | carried; the app reads through a fallback so it works before and after |
+| `0398` | `0330` | any member could write Guardian call history | reduced to `guardian_communications`; main's `0318`/`0345` cover the rest |
+| `0399` | `0331` | a stranger could onboard into another family as its parent (critical) | carried whole |
+| `0400` | `0332` | decided concierge runs stayed on Needs-you | backfill only; main's code already writes `state` |
+| `0401` | `0333` | two server-only functions were callable with the anon key | carried; main revoked them from PUBLIC only |
+| `0402` | `0334` | no auction could ever close | carried whole |
+
+The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
+
+**Found by the port itself** (on main, not on the branch):
+- The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
+- The page-boundary ratchet found two `invest_holdings` pagers ordered by `asset_id` alone.
+- The select-naming ratchet found a fourth unnamed `<select>` main had added to the marketing platform page.
+- SEC-023's ratchet found six more raw `error.message` returns in server actions.
+- Three main tests and two main probes were pinning the old behaviour, such as the raw database text as the family-facing message.
+- Harness fidelity (TEST-012): the bootstrap's `auth.uid()`/`auth.role()` stubs now read the JSON claims the way Supabase's do, and new functions get Supabase's default grants. That exposed four probe assumptions, all corrected in the probes.
+
+**Deploy safety.** Main deploys the app on merge, while no migration from `0318` on has reached production (F-001).
+- `0397`'s code read two columns only the migration creates, so it would have broken every marketplace read in production. `lib/marketplace/reserve-view.ts` now falls back to the pre-migration column on 42703 only, held by `tests/a-reserve-read-works-before-and-after-0397.test.ts`.
+- Every other ported change was checked for the same dependency.
+
+**Coordination.**
+- #556 carries its own fix for the OAuth token store (`0393` here) and needs renumbering: its versions `0361`–`0370` are taken on main.
+- #548's push-receipt and email-counter migrations overlap two later commits in this port. They will be checked when those commits come up.
+
+**Remaining.** The 49 unported commits, including SEC-001 (family-media private), PUSH-003, EMAIL-002 and the i18n and a11y passes, then a PR from `claude/port-to-main-7q6vtf` to `main` for the owner. PRODUCTION READY stays **NO**: nothing here changes F-001.
 
 # Final Regression — 2026-09-20, branch `claude/roadmap-implementation-ld8bon`
 
