@@ -39,7 +39,7 @@ export default async function ContentPage() {
   const { data: posts } = postsResult;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-4">
         <div>
           <h2 className="mb-2 font-semibold">{t('adminMarketingContent.contentPipeline')}</h2>

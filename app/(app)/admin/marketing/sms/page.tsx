@@ -38,7 +38,7 @@ export default async function SmsPage() {
         <span>{t('sms.draftsOnly')}</span>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           {(sms ?? []).length === 0 ? (
             <EmptyState icon={MessageSquare} title={t('adminMarketingSms.noSmsCampaignsYet')} description={t('sms.draftYourFirstMessageOn')} />

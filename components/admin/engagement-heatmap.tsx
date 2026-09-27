@@ -21,7 +21,7 @@ export async function EngagementHeatmap({ timestamps }: { timestamps: string[] }
   const fmtHour = (h: number) => (h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_220px]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
       <div className="overflow-x-auto">
         <div className="min-w-[640px]">
           <div className="grid" style={{ gridTemplateColumns: '40px repeat(24, 1fr)' }}>

@@ -62,7 +62,7 @@ export default async function AeoPage() {
 
       <div className="rounded-2xl border border-border bg-surface/30 p-4 text-sm text-muted">{t('aeo.answerEngineOptimizationPreparesYour')}</div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <Card><p className="text-xs text-muted">{t('adminMarketingAeo.questions')}</p><p className="text-2xl font-bold">{total.toLocaleString()}</p></Card>

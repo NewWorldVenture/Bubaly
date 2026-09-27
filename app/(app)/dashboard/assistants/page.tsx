@@ -61,7 +61,7 @@ export default async function AssistantsPage() {
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {links.length === 0 ? (
             <EmptyState icon={Speaker} title="No assistants connected"

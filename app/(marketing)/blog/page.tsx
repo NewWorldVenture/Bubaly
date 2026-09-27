@@ -238,7 +238,7 @@ export default async function BlogPage({ searchParams }: Props) {
       </Container>
 
       <Container className="py-10">
-        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           {/* Main content */}
           <div>
             {/* Active category header */}

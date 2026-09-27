@@ -156,7 +156,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
       {showAdd && <AddSourcePanel busy={busy} onClose={() => setShowAdd(false)} onAdd={(p, name, handle, cat) => run('add', () => addSourceAction({ platform: p, displayName: name, handle, category: cat }), 'Source added').then(() => setShowAdd(false))} />}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ── Main feed column ── */}
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface/40 p-3">

@@ -117,8 +117,22 @@ export function normalizeBody(raw: unknown): BlogBlock[] {
 // uploads (*.supabase.co) pass through untouched.
 const UNVERIFIED_IMAGE_HOSTS = ['loremflickr.com'];
 
-function freeLicensedImage(url: string | null | undefined): string | undefined {
+// Hero photos that no longer exist at their source. Lorem Picsum has no image
+// under these ids (it answers 404), so /_next/image answered 404 for every card
+// and hero that used one: a broken image and a console error on the article
+// and on every page that lists it as related. Found by the 2026-09-27 page
+// audit (finalaudit.md, "Page audit — every page"); each id re-checked by hand.
+// Dropped to `undefined` like an unverified host, so <BlogCover> draws the
+// cover instead. This is read-side on purpose: it is live the moment it ships,
+// where a data fix waits on the production migration ledger (F-001).
+export const RETIRED_HERO_IMAGE_URLS: ReadonlySet<string> = new Set(
+  [138, 148, 150, 245, 246, 262, 489, 601, 624, 632, 636, 720, 843, 850, 963, 968]
+    .map((id) => `https://picsum.photos/id/${id}/1600/900`),
+);
+
+export function freeLicensedImage(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
+  if (RETIRED_HERO_IMAGE_URLS.has(url)) return undefined;
   return UNVERIFIED_IMAGE_HOSTS.some((h) => url.includes(h)) ? undefined : url;
 }
 
