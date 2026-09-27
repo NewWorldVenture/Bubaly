@@ -17,7 +17,7 @@
 // Only a parent or adult can change any of this; a child sees the settings
 // read-only, which is deliberate — knowing what Bubaly may do is not the same
 // as being able to widen it.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Check, Loader2, Moon, ShieldCheck } from 'lucide-react';
 import { AI_CATEGORIES, type AICategory } from '@/lib/ai/categories';
 import type { AISettings } from '@/lib/ai/family-settings';
@@ -82,6 +82,11 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
+  // The load runs once, on mount. Its failure message reads the CURRENT
+  // translator through a ref rather than listing `t` as a dependency, which
+  // would re-run the load whenever the translator's identity changed.
+  const tRef = useRef(t);
+  tRef.current = t;
   useEffect(() => {
     let alive = true;
     // `{ ok: false }` was handled; a REJECTION was not, and left the skeleton
@@ -94,7 +99,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
       },
       (err: unknown) => {
         console.error('[ai-settings] load failed', err);
-        if (alive) setLoadError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+        if (alive) setLoadError(err instanceof Error && err.message ? err.message : tRef.current('globalError.somethingWentWrong'));
       },
     );
     return () => { alive = false; };

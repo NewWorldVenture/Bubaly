@@ -60,7 +60,7 @@ export default async function AdminSupportPage({ searchParams }: Params) {
       <Card>
         <FilterForm action="/admin/support" hidden={{}}>
           <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminSupport.searchByNameEmailOrMessage')} />
-          <FilterSelect name="status" defaultValue={statusFilter} options={[
+          <FilterSelect label={tr('fieldName.status')} name="status" defaultValue={statusFilter} options={[
             { value: '', label: 'All Statuses' },
             { value: 'open', label: 'Open' },
             { value: 'pending', label: 'Pending' },

@@ -72,7 +72,7 @@ export default async function AuditLogsPage({ searchParams }: Params) {
       <Card>
         <FilterForm action="/admin/audit-logs">
           <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('adminAuditLogs.searchLogsByActionResourceActor')} />
-          <FilterSelect name="action" defaultValue={actionFilter} options={[
+          <FilterSelect label={t('fieldName.action')} name="action" defaultValue={actionFilter} options={[
             { value: '', label: 'All Actions' },
             ...actions.map((a) => ({ value: a, label: a })),
           ]} />

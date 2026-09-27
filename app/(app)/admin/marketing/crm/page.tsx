@@ -71,10 +71,10 @@ export default async function CrmPage() {
           <input name="phone" type="tel" placeholder={t('adminMarketingCrm.phone')} className={inputCls} />
           <input name="company" placeholder={t('adminMarketingCrm.company')} className={inputCls} />
           <input name="lead_source" placeholder={t('adminMarketingCrm.leadSourceEGGoogle')} className={inputCls} />
-          <select name="lead_status" defaultValue="new" className={inputCls}>
+          <select aria-label={t('fieldName.leadStatus')} name="lead_status" defaultValue="new" className={inputCls}>
             {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select name="lifecycle_stage" defaultValue="lead" className={inputCls}>
+          <select aria-label={t('fieldName.lifecycleStage')} name="lifecycle_stage" defaultValue="lead" className={inputCls}>
             {LIFECYCLE_STAGES.map((s) => <option key={s} value={s}>{LIFECYCLE_LABELS[s]}</option>)}
           </select>
           <SubmitButton className={btnCls}>{t('adminMarketingCrm.addContact')}</SubmitButton>

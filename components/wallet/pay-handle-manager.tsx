@@ -90,7 +90,7 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
       {canManage && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-stretch gap-2">
-            <select value={target} onChange={(e) => setTarget(e.target.value)}
+            <select aria-label={t('fieldName.payIdFor')} value={target} onChange={(e) => setTarget(e.target.value)}
               className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               <option value="">{t('payHandleManager.wholeFamily')}</option>
               {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { detachedLabels, sourceFiles, unnamedIconButtons } from './helpers/jsx-a11y-scan';
+import { detachedLabels, sourceFiles, unnamedIconButtons, unnamedSelects } from './helpers/jsx-a11y-scan';
 
 // A11Y-002 counted the detached-label finding (MAIN-F-D02) as fixed because
 // `jsx-a11y/label-has-associated-control` reported a clean tree. The rule treats
@@ -23,6 +23,13 @@ describe('every control in the app has a name', () => {
   it('no icon-only button is unnamed (A11Y-003)', () => {
     const sites = files.flatMap((f) => unnamedIconButtons(f)).map((s) => `${s.file}:${s.line} ${s.what}`);
     expect(sites, 'give each an aria-label from the iconAction.* keys, or a visible label').toEqual([]);
+  });
+
+  it('no select is unnamed (MAIN-F-D03)', () => {
+    // An id counts only if a <label htmlFor> in the file, or the house Field
+    // wrapper, actually points at it; the old ratchet counted any id as a name.
+    const sites = files.flatMap((f) => unnamedSelects(f)).map((s) => `${s.file}:${s.line} ${s.what}`);
+    expect(sites, 'give each an aria-label from the fieldName.* keys, or a label that points at it').toEqual([]);
   });
 
   it('no <label> is attached to nothing (A11Y-002, MAIN-F-D02)', () => {
@@ -50,6 +57,18 @@ describe('the scanner sees what the lint rule does not', () => {
     expect(scan(`<button onClick={on}><Trash2 /></button>`).buttons).toBe(1);
     expect(scan(`<button onClick={on}>{on ? <Pin /> : <PinOff />}</button>`).buttons).toBe(1);
     expect(scan(`<button onClick={on}>\n  {on && <Check />}\n</button>`).buttons).toBe(1);
+  });
+
+  it('a select is named by a label that points at its id, not by the id alone', () => {
+    const selects = (body: string) => {
+      const file = join(dir, `s${Math.random().toString(36).slice(2)}.tsx`);
+      writeFileSync(file, `export function F({ tr }: any) {\n  return (<div>${body}</div>);\n}\n`);
+      return unnamedSelects(file).length;
+    };
+    expect(selects(`<select id="a" />`)).toBe(1);
+    expect(selects(`<label htmlFor="a">{tr('x')}</label><select id="a" />`)).toBe(0);
+    expect(selects(`<select aria-label={tr('fieldName.status')} />`)).toBe(0);
+    expect(selects(`<label><span>{tr('x')}</span><select /></label>`)).toBe(0);
   });
 
   it('a name from aria-label, title, visible text or a wrapping label counts', () => {

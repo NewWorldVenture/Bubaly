@@ -338,13 +338,13 @@ export function StudioForm({ accounts, defaultTimezone }: { accounts: AccountLit
           <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
             <Sparkles className="h-4 w-4 text-brand-text" /> {tr('studio.aiAssistant')}
           </h3>
-          <select value={aiKind} onChange={(e) => setAiKind(e.target.value as AiGenerationKind)} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
+          <select aria-label={tr('fieldName.contentType')} value={aiKind} onChange={(e) => setAiKind(e.target.value as AiGenerationKind)} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
             {AI_GENERATION_KINDS.map((k) => <option key={k} value={k}>{AI_KIND_LABELS[k]}</option>)}
           </select>
           <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder={tr('studio.topicOrInstruction')} className="mb-2 w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <div className="mb-2 flex gap-2">
             <input value={aiTone} onChange={(e) => setAiTone(e.target.value)} placeholder={tr('studio.tone')} className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
-            <select value={aiPlatform} onChange={(e) => setAiPlatform(e.target.value as SocialPlatform | '')} className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
+            <select aria-label={tr('fieldName.platform')} value={aiPlatform} onChange={(e) => setAiPlatform(e.target.value as SocialPlatform | '')} className="w-1/2 rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
               <option value="">{tr('studio.anyPlatform')}</option>
               {PLATFORMS.map((p) => <option key={p} value={p}>{PROVIDERS[p].label}</option>)}
             </select>

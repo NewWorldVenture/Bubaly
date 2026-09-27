@@ -66,9 +66,14 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       {url
-        ? <img src={url} alt={label} className="h-24 w-full object-cover" />
+        ? (
+          // A short-lived signed URL for a private object: next/image would
+          // proxy and cache it under the app's origin, which is the opposite of
+          // what signing it was for.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={label} className="h-24 w-full object-cover" />
+        )
         : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>
   );

@@ -179,11 +179,11 @@ export default async function AdminManagementPage({ searchParams }: Params) {
             <Card>
               <FilterForm action="/admin/admins" hidden={{ tab: 'users' }}>
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('admins.searchAdmins')} />
-                <FilterSelect name="role" defaultValue={roleFilter} options={[
+                <FilterSelect label={tr('fieldName.role')} name="role" defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
                   ...Object.entries(ROLE_META).map(([v, m]) => ({ value: v, label: m.label })),
                 ]} />
-                <FilterSelect name="status" defaultValue={statusFilter} options={[
+                <FilterSelect label={tr('fieldName.status')} name="status" defaultValue={statusFilter} options={[
                   { value: '', label: 'All Status' },
                   { value: 'active',   label: 'Active' },
                   { value: 'inactive', label: 'Inactive' },
