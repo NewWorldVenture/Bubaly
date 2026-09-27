@@ -97,7 +97,7 @@ export async function updatePlatformPage(formData: FormData): Promise<void> {
   revalidatePath('/admin/marketing/platform');
   revalidatePath(path);
   if (stored.path !== path) revalidatePath(stored.path);
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
   revalidatePath('/faq');
 }
 
@@ -120,7 +120,7 @@ export async function archivePlatformPage(formData: FormData): Promise<void> {
   revalidatePath(data.path);
   // Public AEO reads are cached for an hour under one tag; without this the
   // retired answers keep rendering long after the page is gone.
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
   revalidatePath('/faq');
 }
 

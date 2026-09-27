@@ -133,10 +133,10 @@ export function SecurityModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Open', value: stats.open, icon: '🚨', color: stats.open ? 'text-amber-400' : 'text-success' },
-          { label: 'Critical', value: stats.openCritical, icon: '🔴', color: stats.openCritical ? 'text-danger' : 'text-muted' },
-          { label: 'This week', value: weekCount, icon: '🗓️', color: 'text-brand-text' },
-          { label: 'Resolved', value: stats.total - stats.open, icon: '✅', color: 'text-success' },
+          { label: tr('securityModule.stat.open'), value: stats.open, icon: '🚨', color: stats.open ? 'text-amber-400' : 'text-success' },
+          { label: tr('securityModule.stat.critical'), value: stats.openCritical, icon: '🔴', color: stats.openCritical ? 'text-danger' : 'text-muted' },
+          { label: tr('securityModule.stat.thisWeek'), value: weekCount, icon: '🗓️', color: 'text-brand-text' },
+          { label: tr('securityModule.stat.resolved'), value: stats.total - stats.open, icon: '✅', color: 'text-success' },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>

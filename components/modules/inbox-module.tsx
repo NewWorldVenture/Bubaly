@@ -382,6 +382,18 @@ export function InboxModule() {
   );
 }
 
+function useCommunicationState<T>(communicationId: string, initialValue: T): [T, (value: React.SetStateAction<T>) => void] {
+  const [values, setValues] = useState<Map<string, T>>(() => new Map());
+  const value = values.has(communicationId) ? values.get(communicationId)! : initialValue;
+  return [value, update => setValues(previous => {
+    const before = previous.has(communicationId) ? previous.get(communicationId)! : initialValue;
+    const next = new Map(previous);
+    next.set(communicationId, typeof update === 'function'
+      ? (update as (value: T) => T)(before) : update);
+    return next;
+  })];
+}
+
 function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
@@ -393,12 +405,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;
   const actions = comm.action_items as string[];
 
-  const [draft, setDraft] = useState('');
-  const [drafting, setDrafting] = useState(false);
-  const [sendingReply, setSendingReply] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [addedItems, setAddedItems] = useState<Set<number>>(new Set());
-  const [busyItem, setBusyItem] = useState<number | null>(null);
+  const [draft, setDraft] = useCommunicationState(comm.id, '');
+  const [drafting, setDrafting] = useCommunicationState(comm.id, false);
+  const [sendingReply, setSendingReply] = useCommunicationState(comm.id, false);
+  const [copied, setCopied] = useCommunicationState(comm.id, false);
+  const [addedItems, setAddedItems] = useCommunicationState<Set<number>>(comm.id, new Set());
+  const [busyItem, setBusyItem] = useCommunicationState<number | null>(comm.id, null);
   // One submission id per action item, keyed by COMMUNICATION AND INDEX — not
   // index alone. `<CommDetail comm={selected} />` carries no `key`, so selecting
   // a different message reuses this instance and this ref; keyed by position,
@@ -429,7 +441,8 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       });
       const data = await res.json();
       if (!res.ok) { toastError(data.error ?? tr('inboxModule.couldNotDraftAReply')); return; }
-      setDraft((data.message ?? '').trim());
+      const generated = (data.message ?? '').trim();
+      setDraft(current => current === draft ? generated : current);
     } catch {
       toastError(tr('inboxModule.couldNotReachTheAi'));
     } finally {
@@ -474,7 +487,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }
     success(tr('inboxModule.replyLoggedToTheThread'));
-    setDraft('');
+    setDraft(current => current === draft ? '' : current);
     onRefresh();
   }
 

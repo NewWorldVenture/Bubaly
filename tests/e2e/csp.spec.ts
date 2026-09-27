@@ -1,5 +1,23 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { PUBLIC_ROUTES } from './public-routes';
+
+
+async function expectCspSafeRender(page: Page, path: string) {
+  const violations: string[] = [];
+  const recordViolation = (msg: { text(): string }) => {
+    if (/content security policy/i.test(msg.text())) violations.push(msg.text());
+  };
+  page.on('console', recordViolation);
+  try {
+    // Initial document resources must load; unrelated fetches and Next link
+    // prefetches need not become idle before a rendered page can be checked.
+    await page.goto(path, { waitUntil: 'load' });
+    await expect(page.locator('h1, h2').first()).toBeVisible();
+    expect(violations, violations.join('\n')).toEqual([]);
+  } finally {
+    page.off('console', recordViolation);
+  }
+}
 
 // Hardening: every response carries an enforced Content-Security-Policy, and no
 // public page trips it (a violation surfaces as a "Refused to ..." console error
@@ -23,13 +41,55 @@ test.describe('Content-Security-Policy', () => {
 
   for (const path of PUBLIC_ROUTES) {
     test(`no CSP violations while rendering ${path}`, async ({ page }) => {
-      const violations: string[] = [];
-      page.on('console', (msg) => {
-        if (/content security policy/i.test(msg.text())) violations.push(msg.text());
-      });
-      await page.goto(path, { waitUntil: 'networkidle' });
-      await expect(page.locator('h1, h2').first()).toBeVisible();
-      expect(violations, violations.join('\n')).toEqual([]);
+      await expectCspSafeRender(page, path);
     });
   }
+});
+
+// These controls use real Chromium navigation and enforced CSP headers. Only
+// document/resource transport is synthetic; no app server or provider is used.
+test.describe('CSP readiness boundary', () => {
+  test('checks a rendered page while an unrelated fetch remains pending', async ({ page }) => {
+    page.setDefaultNavigationTimeout(1_500);
+    let pending = 0;
+    let settled = 0;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route('https://csp-readiness.test/**', async route => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname === '/background') {
+        pending += 1;
+        await held;
+        settled += 1;
+        await route.fulfill({ status: 200, body: 'done' });
+      } else if (pathname === '/ready.js') {
+        await route.fulfill({ contentType: 'application/javascript', body: "void fetch('/background'); document.documentElement.dataset.ready = 'yes';" });
+      } else {
+        await route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; connect-src 'self'" }, body: '<!doctype html><h1>Ready</h1><script src="/ready.js" defer></script>' });
+      }
+    });
+    try {
+      await expectCspSafeRender(page, 'https://csp-readiness.test/ready');
+      await expect(page.locator('html')).toHaveAttribute('data-ready', 'yes');
+      expect(pending).toBe(1);
+      expect(settled).toBe(0);
+    } finally {
+      release();
+    }
+  });
+
+  test('still rejects an actual browser-enforced CSP violation', async ({ page }) => {
+    let forbiddenRequests = 0;
+    await page.route('https://csp-readiness.test/**', async route => {
+      if (new URL(route.request().url()).pathname === '/forbidden.js') {
+        forbiddenRequests += 1;
+        await route.fulfill({ contentType: 'application/javascript', body: 'window.forbiddenExecuted = true;' });
+      } else {
+        await route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'none'" }, body: '<!doctype html><h1>Ready</h1><script src="/forbidden.js"></script>' });
+      }
+    });
+    await expect(expectCspSafeRender(page, 'https://csp-readiness.test/blocked')).rejects.toThrow(/content security policy/i);
+    await expect(page.locator('h1')).toHaveText('Ready');
+    expect(forbiddenRequests).toBe(0);
+  });
 });
