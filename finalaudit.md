@@ -49390,7 +49390,7 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); 🔄 B6b claimed 2026-09-27 18:30 | 2026-09-27 17:30 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-17 found and fixed, P-18 open) | 2026-09-27 19:05 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
@@ -49628,6 +49628,79 @@ shrinkable span that may break (`[overflow-wrap:anywhere]`).
 - *`/dashboard/knowledge/seed`* is the knowledge-base seeding tool and is
   `notFound()` for everyone but a super administrator, by design; a family
   parent sees the not-found page (with the #419 above).
+
+**B6b — every form submitted (session_01TRY21ZKsFrfB3qtoP972A4, 2026-09-27).**
+`scripts/page-audit.mjs --submit`, local stack on `a5ad3045`, signed in as a
+Family+ parent who is also a super admin (a child in the household, so "for
+whom" selects have a choice). Every form in `<main>`, and every form an "Add /
+New / Create …" button opens, was filled with valid values in its empty fields
+and submitted by its own button — never a delete, payment, send or publish
+button. 350 routes, 155 with forms: 144 submissions saved or answered as
+designed, 22 skipped by that rule, 10 reported "invalid" by the first run (a
+saved form resets, and its required fields then read `:invalid`; the tool now
+checks validity before the click), and 15 errors, of which 7 were the tool's
+(a covered button; it now falls back to `requestSubmit`) and the rest are
+below. Re-run on the affected routes after the fixes: all save.
+
+**P-13 · High · Creating a marketplace circle has never worked on Supabase.**
+`/marketplace/community` → Create answered "Could not create the circle."
+`marketplace_create_circle` (0176, then 0314) pins `search_path = public` and
+calls pgcrypto's `gen_random_bytes`; Supabase, hosted and local, installs
+pgcrypto in `extensions`, so the call raised 42883 `function
+gen_random_bytes(integer) does not exist`. CI's replay is plain Postgres, where
+0001's `create extension pgcrypto` lands in `public`, so the 0314 probe (400
+circles) passed there. Production at `0176` carries the same pinned path.
+Fix: `0444_a_circle_can_be_created_where_pgcrypto_lives.sql` re-creates the
+function with `search_path = public, extensions`, body unchanged. Probe
+`docs/audit/circle-create-where-pgcrypto-lives-check.sql` moves pgcrypto into
+`extensions` inside a rolled-back transaction (control: `gen_random_bytes`
+must then NOT resolve from `public`) and creates a circle: red on the old
+function with the production error, green after 0444. Every other function
+that calls a pgcrypto function was checked: none else pins a path without
+`extensions`. **Not live until the operator's 0177 step lets 0178+ apply.**
+
+**P-14 · Medium · Social settings offered "Set" to people who may not grant roles.**
+`/dashboard/social/settings` enabled the access controls on
+`manage_settings`; `grantAccessAction` requires `manage_access`, which only a
+social *owner* holds (0348). A parent is a social admin by default, so the
+button worked and the action threw — a 500 and the section's error page. The
+controls now follow `manage_access`, with "Only an owner can change who has
+access." (7 catalogues). 🔒 **Owner decision, recorded here:** no household
+member is a social owner by default (parents default to admin since 0348), so
+no family can grant a social role from the app until an owner row exists.
+
+**P-15 · Low · A recipe photo that is not a URL requested a page.** A photo
+URL of plain text rendered as `<img src="Audit 6">`, a request for
+`/dashboard/Audit%206` (404) on every render of the card and the detail view.
+Photos render only through `safeWebLink` (http/https), and both recipe URL
+fields are `type="url"`.
+
+**P-16 · Low · Two URL fields let through what their action refuses by
+throwing.** `/dashboard/social/media-library` ("Asset URLs must use http or
+https") and `/admin/marketing/video` ("Enter a valid YouTube or Vimeo URL")
+took free text, and the refusal landed on the error page. Both are
+`type="url"` with the pattern the action accepts (the video one: youtube.com,
+youtu.be, vimeo.com, including subdomains; checked in both browser regex
+modes).
+
+**P-17 · Low · An automation workflow could be submitted with no action.**
+`/admin/marketing/automation` → the action throws "Choose at least one
+automation action." The first action now starts ticked. Tests for P-14 to
+P-17: `tests/a-form-a-page-offers-can-be-submitted.test.ts` (all four red
+with the fixes reverted).
+
+**P-18 · Medium · OPEN · The admin marketing console answers a refusal with
+its error page.** Its actions (`app/(app)/admin/marketing/actions.ts`: ten
+`throw new Error(…)` and `marketingActionFailure`) throw on an ordinary
+refusal — a name or slug already taken ("That already exists"), a value out
+of range, a missing choice — and a plain `<form action>` turns that into the
+section error page with a reference number; in production Next omits the
+message, so the admin is not told what to change. Seen here on
+`/admin/marketing/affiliates` and `/admin/marketing/landing-pages` (a second
+"Audit 1"). P-16 and P-17 remove the three cases a form can prevent; the rest
+needs the actions to return their refusal (`useActionState`, or a redirect
+carrying a catalogue-keyed notice), which touches every marketing form — a
+batch of its own, open for anyone to claim.
 
 ### Round 2 — the merged tree, after #588 and 339 other commits from main
 
