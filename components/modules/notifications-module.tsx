@@ -255,7 +255,7 @@ function NotificationSection({
               <div className="min-w-0 flex-1">
                 <p className={cn('text-sm', !n.is_read && 'font-semibold')}>{n.title}</p>
                 {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
-                <p className="mt-1 text-xs text-muted">{fmtRelative(n.created_at)}</p>
+                <p suppressHydrationWarning className="mt-1 text-xs text-muted">{fmtRelative(n.created_at)}</p>
               </div>
             </>
           );

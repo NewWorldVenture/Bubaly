@@ -490,7 +490,7 @@ export function SchoolModule() {
                                 {new Intl.NumberFormat(undefined, { style: 'currency', currency: verdict.currency }).format(verdict.amount_cents / 100)}
                               </span>
                             )}
-                            <span className="text-muted">{fmtTimeAgo(row.occurred_at)}</span>
+                            <span suppressHydrationWarning className="text-muted">{fmtTimeAgo(row.occurred_at)}</span>
                           </div>
                         </div>
                         {row.ai_handled ? (
@@ -696,7 +696,7 @@ export function SchoolModule() {
                       <div>
                         <p className="text-sm font-semibold">{a.title}</p>
                         {a.notes && <p className="mt-0.5 text-xs leading-5 text-muted">{a.notes}</p>}
-                        <p className="mt-1 text-xs text-muted">{fmtTimeAgo(a.starts_at)}</p>
+                        <p suppressHydrationWarning className="mt-1 text-xs text-muted">{fmtTimeAgo(a.starts_at)}</p>
                       </div>
                     </div>
                   ))}

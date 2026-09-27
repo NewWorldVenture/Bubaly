@@ -699,7 +699,7 @@ export function HealthModule() {
                       </div>
                       <div className="text-right shrink-0">
                         {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories.toLocaleString(locale)} {tr('healthDashboard.unitCalories')}</p> : null}
-                        <p className="text-xs text-muted">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
+                        <p suppressHydrationWarning className="text-xs text-muted">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
                       </div>
                     </div>
                   );

@@ -24,18 +24,40 @@ function clientComponents(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const RELATIVE_TIME_TEXT = /\{\s*(?:timeAgo|relativeTime)\(/;
+// Every helper in the app that turns a timestamp into words relative to now.
+const RELATIVE_TIME_TEXT = /\{\s*(?:timeAgo|relativeTime|relativeDate|fmtRelative|fmtTimeAgo\d*|formatRelativeTime)\(/g;
+
+/** The opening tag of the element whose text the call at `at` is. */
+function enclosingOpenTag(src: string, at: number): string {
+  let depth = 0;
+  for (let i = at; i >= 0; i--) {
+    if (src[i] !== '<') continue;
+    if (src[i + 1] === '/') { depth++; continue; }
+    if (!/[a-zA-Z]/.test(src[i + 1] ?? '')) continue;
+    const end = src.indexOf('>', i);
+    const tag = src.slice(i, end + 1);
+    if (tag.endsWith('/>')) continue;
+    if (depth === 0) return tag;
+    depth--;
+  }
+  return '';
+}
 
 describe('a relative time rendered by a client component', () => {
-  const sites = [...clientComponents('app'), ...clientComponents('components')].flatMap((file) =>
-    readFileSync(file, 'utf8').split('\n').flatMap((line, i) => (RELATIVE_TIME_TEXT.test(line) ? [{ file, line: i + 1, text: line.trim() }] : [])));
+  const sites = [...clientComponents('app'), ...clientComponents('components')].flatMap((file) => {
+    const src = readFileSync(file, 'utf8');
+    return [...src.matchAll(RELATIVE_TIME_TEXT)].map((m) => ({
+      file, line: src.slice(0, m.index).split('\n').length, tag: enclosingOpenTag(src, m.index!),
+    }));
+  });
 
   it('is found where the sweep found it', () => {
     expect(sites.some((s) => s.file === join('components', 'admin', 'admin-notifications-list.tsx'))).toBe(true);
+    expect(sites.length).toBeGreaterThan(15);
   });
 
   it('sits in an element that expects the server and the browser to differ', () => {
-    const bare = sites.filter((s) => !s.text.includes('suppressHydrationWarning')).map((s) => `${s.file}:${s.line}`);
+    const bare = sites.filter((s) => !s.tag.includes('suppressHydrationWarning')).map((s) => `${s.file}:${s.line} ${s.tag.slice(0, 60)}`);
     expect(bare).toEqual([]);
   });
 });

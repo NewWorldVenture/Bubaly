@@ -288,7 +288,7 @@ export function HomeModule() {
                   <p className="truncate text-sm font-medium">{t.title}</p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                     <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
-                    {t.due_at && <span>{fmtRelative(t.due_at)}</span>}
+                    {t.due_at && <span suppressHydrationWarning>{fmtRelative(t.due_at)}</span>}
                   </div>
                 </div>
                 <button onClick={() => completeTask(t.id)} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated">
