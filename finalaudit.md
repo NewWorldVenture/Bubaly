@@ -651,6 +651,7 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-27 (e70 parser live/public+native acceptance and local full gates pass; hosted/page-integration gates pending)
+- Page audit (every page on bubaly.com, shared by all bots): see **"Page audit — every page on bubaly.com"** at the end of this file — batches to claim, findings P-01…P-10, and a status row for all 398 routes.
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **Then #581 merged to `main` at `dcc0b42b` on 2026-09-27 01:41Z** (this branch's second tranche: migrations 0381–0387 unapplied and in the ledger, the remaining SRV-001 medium leads, AUTHZ-011, SEC-008, SEC-009, AUDIT-011's 39 re-controlled probes, money in the reader's locale from billing to the marketplace; merged with #579's 0344–0380 after a renumber). Every check was green on the head `3e0e5fc3` — E2E once re-run after the same phone-login durable-session hang `main` had shown on `7e54596d`, recorded on the PR. When it failed a third time (on #583's `fb033b8e`) it was root-caused rather than re-run: the login form's "Continue with phone" button rendered ENABLED from the server with no handler, and once hydrated its handler refused a not-yet-mounted form, so a tap in that window did nothing — the spec clicked right after `domcontentloaded` and waited 120 s for a phone field that never opened. It is a product defect, not only a test one (a family on a slow phone tapping the primary way in got nothing). The phone button, and the signup form's three entry buttons with the same shape, are now held disabled until the form mounts, as the email fieldset already was; `tests/e2e/login-readiness.spec.ts` pins it (red with the fix reverted: "Expected: disabled, Received: enabled"). Production answered `{"revision":"dcc0b42b…"}` at 01:46Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets (PROD-ENV). The owner's "Supabase production migrations" workflow ran on the push and will stop at 0177 as before (PROD-DB-0177). **Then #584 merged at `0306c985` on 2026-09-27 02:20Z** (another session's C1-K-56: a notification for someone else is written by Bubaly, not by a member; `0388` unapplied), and production answered `{"revision":"0306c985…"}` at 02:45Z, as that session recorded. **Then #556 merged at `2eb62151` on 2026-09-27 10:51Z** (the four-worker audit branch: its finding IDs, and migrations `0406`–`0418` less `0412`, `0413` and `0417`, all unapplied and in the ledger). This session closed it out: it merged `main` into the branch, renumbered its migrations out of the range `main` had taken, fixed `releaseNumber`, which still called a deadline wrapper `main` had renamed, and moved two ordering guards onto the shared source-order helper. Every check was green on its head `d99faef0`. Three of the branch's decisions were flagged on the PR for a reviewer and stay the owner's to confirm: `0416` changes who may read a journal entry that is not marked private (its owner, or a manager, per `main`'s 0364 rule, where before any family member could); the fallback phone number now needs a country code; and the behaviour-log policy question (`0417` stays dropped). Production answered `{"revision":"2eb62151…"}` at 11:00Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the same four unset secrets. `main`'s own CI on `2eb62151` finished with every job green except one E2E case: `phone-auth-http` "held genuine SMS verification cannot replace logout" timed out at 120 s, and on its retry (1,295 passed). It is the pre-hydration phone tap root-caused on #583 (`requestCode` presses "Continue with phone" right after load, and before hydration that tap did nothing). The fix, `1f52f00b`, is on #583 and not yet on `main`, so this red has its fix waiting in the open PR rather than an unknown cause. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**. **Then #548 merged to `main` at `338b6b12` on 2026-09-27 ~11:55Z** (another session's PR: member-write boundaries `0426`–`0443`, unapplied; recorded by that session in its own sections). Production answered `{"revision":"338b6b12…"}` at 12:02Z. **Then #588, #589 and #590 merged** (a parallel session's live page audit: 16 blog heroes that 404'd, the review page's seeder text, white on danger at 2.80:1), **and #583 merged to `main` at `06dd3f7e` on 2026-09-27 12:48Z** after every job was green on its head `370fc8a8` (Typecheck · Lint · Test · Build, E2E, Database, Mobile) — which also brings `main` the phone-login fix its E2E had been red on. `main`'s CI on `06dd3f7e` is green. Production answered `{"revision":"06dd3f7e…"}` at 13:02Z; `/api/health` database, auth and service-role ok, `status: degraded` on the unset feature secrets. See *Page Audit* above for the per-page state. **Then #591 merged to `main` at `7563462e769386ad5a3cea53e82337cdfc3d9294` on 2026-09-27 16:01:34Z.** Its source head `e798814125c41465158d762177589df10b1612f2` passed all four jobs in CI run `36329827922` (Web completed 15:54:07Z; E2E completed 15:57:45Z). Those checks cover that incoming source, not the combined #592 worker revision. The incoming page-audit sections and their recorded per-page outcomes are preserved below; exact deployed revision and combined-source gates remain to be verified.
 - Page-audit release record from PR #593 (merge timestamp reconciled to the GitHub event; its observed production time remains unchanged): **Then #591 merged to `main` at `7563462e` on 2026-09-27 16:01:34Z** (this session's page audit: the three-check ledger and every fix it found — titles, not-found paths, alias redirects, grid overflow, the calendar's realtime channel, relative-time hydration, and the signed-in phone pass: 0 axe violations on all 393 signed-in routes in the third crawl), after every job was green on its head `e7988141`. Production answered `{"revision":"7563462e…"}` at 16:06Z; `/api/health` database, auth and service-role **ok**, `status: degraded` on the unset feature secrets. The signed-out production re-crawl that would move its 358 rows from *fixed, live* to *clean* has not been run: the command was refused by this environment's permission check, and is left for the owner (see *Page Audit*).
 - Total Audit Items: 14187 — all 14,186 reconciled IDs retained, plus catalogue-test SUPPORT-2D36C3920F6A. The existing media-test SUPPORT-302F04E15861 / SUPPORT-BC0F2BFDBFD6 / SUPPORT-4CE6A54076E4 records remain IN PROGRESS. The prior reconciliation retained all 14,180 incoming IDs, restored COMPONENT-0337E00DA6ED and added both worker fixture IDs; no record was removed.
@@ -48279,6 +48280,12 @@ keeps its client; 2 of 4 fail with the service change reverted. Fresh replay
 pass (3 fail only on this container's Node 22). Inert in production until
 F-001, like every migration after 0177.
 
+Released: PR #584 merged to `main` as `0306c985` after every check passed on
+its head (Database replay and probes, unit, build and the full E2E matrix);
+`www.bubaly.com/api/build-info` served that revision at 2026-09-27T02:45Z. The
+application half (`notify()` and the generate route writing as the service
+role) is therefore live; 0388 waits on F-001 with the rest.
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
@@ -48469,3 +48476,695 @@ produced three files that passed 64 probes and were rejected on review.
 Pending. Not withheld for want of work on this branch — withheld because
 PROD-001 is a human action and SEC-001's bucket half, I18N-001 and the two
 Google client-secret rotations are the owner's.
+
+## Page audit — every page on bubaly.com (P-series, opened 2026-09-27)
+
+Every page the site serves, opened in a real browser and recorded here with
+what it did. Public pages are checked against production
+(`https://www.bubaly.com`); signed-in pages against a full local stack built
+from `main` (Supabase from `supabase/migrations`, `next build && next start`),
+because this audit has no production login and must not create data there.
+
+### How several bots share this (Claude and Codex)
+
+1. **Claim before you start.** Pick a batch from the table below, put your
+   session id in *Owner*, set *State* to `🔄 claimed <UTC time>`, and merge
+   that one-line change to `main` on its own before doing the work. A batch
+   with an owner is not yours; a claim with no commit touching the batch for
+   six hours may be taken over, noting whose it was.
+2. **Crawl with the shared tools.** `scripts/audit-live-pages.mjs` (#588)
+   sweeps a deployment signed out and follows links. `scripts/page-audit.mjs` (read-only) loads
+   each path in Chromium and records status, final URL, uncaught errors,
+   console errors, failing same-origin requests, `<h1>` count, horizontal
+   overflow, and text that should never render (`undefined`, `NaN`,
+   `[object Object]`, an error boundary, a raw i18n key).
+   `scripts/page-audit-report.mjs` turns its output into the rows below.
+   - Public, production: `node scripts/page-audit.mjs --base https://www.bubaly.com --sitemap --out prod.jsonl`
+     (add `--paths file` for routes the sitemap does not list, `--mobile` for 390 px).
+   - Signed in, local: `supabase start`, `next build && next start -p 3107`,
+     sign a test account in, save its Playwright storage state, then
+     `--base http://localhost:3107 --storage state.json`.
+3. **A page is ✅ PASS only when** the crawler found nothing at 1280 px *and*
+   at 390 px, and a person or bot looked at what rendered and saw nothing
+   wrong. A flag the crawler raised that is not a defect (a real OAuth scope
+   that looks like an i18n key, say) is recorded with the reason, not
+   silently dropped.
+4. **Fix before moving on.** A finding becomes a `P-NN` record under
+   *Findings*, is fixed in the same batch, is re-crawled clean, and only then
+   is the row marked `✅ FIXED`. Anything that cannot be fixed from code (an
+   operator step, an owner decision) is `⛔ BLOCKED` with the reason.
+5. **Ship often.** Small PRs, merged to `main` as each batch's fixes are
+   green, so production gets them the same day.
+
+### Batches — claim one before you start
+
+| Batch | Scope | Owner | State | Last run (UTC) |
+| --- | --- | --- | --- | --- |
+| B1 | Public marketing + legal pages, production (sitemap + routes the sitemap omits), 1280 and 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
+| B2 | Every blog article in the sitemap (1,049) and `/blog`, production, 1280 and 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
+| B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
+| B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
+| B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a) | 🔄 B6a claimed 2026-09-27 15:45; B6b open, claimable | — |
+| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
+| B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half open, claimable | 2026-09-27 12:55 |
+| B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
+| B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
+
+"First pass" is what the crawler measures: the page loads and renders
+without an error, a failing request, a broken layout or a missing heading,
+and someone looked at the result. It is not B6: a page can render perfectly
+and still have a button that does the wrong thing. B6–B8 and B10 are where
+the next bot should start.
+
+### Findings
+
+> **Reconciled with #591** (another session's page audit, merged to `main` at
+> `7563462e` while this one was open; its rows are in the release table near
+> the top of this file). Four findings here were found and fixed there too,
+> independently. Where both fixes touch the same code, `main`'s is kept:
+> P-03's per-subscription channel is #591's `ownChannel` (a port of #587's
+> C1-S9-94), and this branch's guard now asserts that instead. P-04's shared-`Modal` change is withdrawn: #591
+> had tried the same change and dropped it when an E2E journey timed out,
+> and fixed the vacations dialog at its call site, which this branch now
+> keeps. P-01 (grid columns) and P-05 (the super-admin preview) were fixed
+> at different layers — #591 at the page, this branch in the grid templates
+> and the endpoint gate — and the two merged cleanly and hold together: the full unit suite on the merged tree
+> passes (20,710 tests). #591 also fixed the not-found #419 that this section
+> calls framework behaviour below: a missing record in the app is now
+> answered, not thrown (`tests/a-missing-record-in-the-app-is-answered-not-thrown.test.ts`).
+
+**P-01 · Medium · A wide table widened the whole page (five admin pages).**
+`/admin/admins`, `/admin/content`, `/admin/marketing/content`,
+`/admin/support-tickets` and `/admin/users` overflowed a 1280 px viewport by
+118–417 px. Their tables already scroll inside `overflow-x-auto`, but the
+page grid's `1fr` column has an automatic minimum of its content's
+min-content width, so a 720 px table widened the column instead of
+scrolling. Every main+sidebar grid (`grid-cols-[1fr_Npx]`, 27 files) now
+uses `minmax(0,1fr)`. Re-crawled clean at 1280 and 390. Commit 46468cbd.
+
+**P-02 · Medium · Sixteen dead blog photos (27 of 1,063 sitemap pages).**
+*Found in parallel by session_01TRY21ZKsFrfB3qtoP972A4, whose identical fix
+merged first as #588 (with `scripts/audit-live-pages.mjs`, a signed-out
+sweep that also follows links and checks every signed-in route redirects to
+`/login`); this branch's copy of the fix was dropped at merge in favour of
+#588's, and the finding is recorded here once.*
+Lorem Picsum has no image under ids 138, 148, 150, 245, 246, 262, 489, 601,
+624, 632, 636, 720, 843, 850, 963 and 968; `/_next/image` answered 404 for
+every hero and related-article card using one. `freeLicensedImage`
+(`lib/blog/posts.ts`) drops them as it already dropped an unverified host,
+and `<BlogCover>` draws the cover. Read-side on purpose: it is live the
+moment it deploys, where a data fix would wait on F-001.
+`tests/blog-cover-free-images.test.ts` (#588). (Wikimedia hero URLs could not be checked from this sandbox — the
+host answers 429 to it — and production's own `/_next/image` requests for
+them all succeeded in both crawls.)
+
+**P-03 · High · `/dashboard/calendar` rendered its error screen.** The
+calendar and its busyness heatmap both subscribed to `calendar_events` under
+the topic `calendar_events:<family>`. realtime-js returns the channel
+already open under a topic, so the second `.on()` ran after the first
+`.subscribe()` and threw "cannot add `postgres_changes` callbacks … after
+`subscribe()`", which the page's error boundary caught; and the first
+widget to unmount removed the other's subscription. `useRealtimeQuery` now
+opens its channel under a per-hook topic (`useId`), as the sidebar's unread
+counter already did.
+`tests/two-widgets-on-one-table-do-not-share-a-channel.test.ts` pins the
+library behaviour and the fix. Commit 0ec8fa6c.
+
+**P-04 · Medium · `/dashboard/vacations/new` failed hydration on every
+load (React #418).** `Modal` returned `null` on the server but rendered its
+portal during hydration (`typeof document` is already defined then), so a
+dialog open at first paint mismatched and the whole route re-rendered on
+the client. `Modal` now waits for `useHydrated()` (a `useSyncExternalStore`
+flag: false on the server and during hydration) and hands the same flag to
+`useDialogBehavior`, so the focus trap attaches when the dialog actually
+appears. Commit 0ec8fa6c. **Withdrawn in favour of `main`'s fix.** #591 made
+the same `Modal`-wide change, withdrew it when CI's weekly-meal journey timed
+out on it, and fixed the route at its call site (the "New trip" dialog opens
+after mount). This branch now keeps `main`'s `Modal` untouched (and drops
+`useHydrated`), so the route is fixed once, the way CI accepted.
+
+**P-05 · Low · A super administrator's feature pages called endpoints that
+refused them.** `requireFeature`/`requirePlanLevel` let a super admin
+through; `refuseUnlessEntitled`, on the endpoints behind those pages, did
+not, so `/dashboard/autopilot` and `/dashboard/briefing` rendered and then
+got 403 from `/api/autopilot/scan` and `/api/ai/briefing` for a super admin
+whose own family is below Family+. The endpoint gate now asks the same
+question — only after the family was refused, and a lookup that fails
+stays a refusal. A real Family+ family was already served both (verified
+with a Family+ account: all 23 Family+ routes pass).
+`tests/a-super-admin-page-and-its-endpoint-agree.test.ts`. Commit 87fcdd53.
+
+**P-06 · Low · Seventeen routes had no `<h1>`, five had two.** Eleven
+single-use modules drew their page title as an `<h3>` (now an `<h1>`, same
+classes, so nothing moves on screen); the trip reports empty state dropped
+its heading; `/f/[id]` titled its form with an `<h2>`; the assistant (whose
+module also renders inside the AI orb), groceries and new-mission routes
+had no title heading and get a screen-reader `<h1>` from an existing
+catalogue key; five admin marketing pages repeated the section layout's
+`<h1>` and now use `<h2>`. The crawler waits up to 3 s for a heading before
+counting it, since many pages draw a skeleton first. Commit 3a3ec37b.
+
+**P-07 · Low · A redirect made the sidebar give up on the member's saved
+layout.** The sidebar's preference read is a server action; a client
+redirect landing while it is in flight (e.g. `/dashboard/vacations/<id>` →
+`/overview`) cancels it with a network `TypeError` while the sidebar stays
+mounted, so it logged "preference read failed" and closed its write gate
+on a read that never failed. A network `TypeError` is now retried twice
+(0.8 s, 1.6 s) before it is reported. Two cases added to
+`tests/a-sidebar-layout-we-could-not-read-is-not-one-we-may-overwrite.test.ts`.
+Commit 3a3ec37b.
+
+**P-08 · Medium · A visitor's first page could lose its analytics event to a
+503 (production).** `/api/mkt/track` read the visitor by `anonymous_id` and
+inserted it when absent. A first page that sends two events at once (the page
+view and the one beside it on `/ai`) ran both reads before either insert; the
+loser hit `mkt_visitors_anonymous_id_key` and answered 503 — a console error on
+the page and a lost touchpoint. Reproduced locally on every signed-in `/ai`
+load and on production in the locale pass (`/ai` es-MX, `/mobile` de-DE, both
+answered by `server: Vercel`). A unique violation (23505) now re-reads the row
+the other request created and records against it; any other create failure,
+or a winner that cannot be read back, is still a 503.
+`tests/a-first-visit-with-two-events-records-both.test.ts` (4 cases; the race
+case fails with the fix reverted).
+
+**P-09 · Low · `/favicon.ico` answered 404 (production).** Pages name their
+icons in `<head>` (`/icons/icon-32.png`, `/icons/icon-192.png`), but a browser
+still asks for `/favicon.ico` where there is no page to read them from, and
+link unfurlers and search engines ask for it first. `https://www.bubaly.com/favicon.ico`
+answered 404; the B6a interaction pass logged it as a console error on
+`/dashboard/journeys`. The middleware already skipped the path as if the file
+existed. `public/favicon.ico` now holds the brand icon at 16, 32 and 48 px
+(the existing PNGs, byte for byte). `tests/a-browser-asking-for-favicon-ico-gets-one.test.ts`
+(2 cases; fails with the file removed).
+
+**P-10 · High · No AI feature request was ever recorded, so the Free plan's
+AI allowance never counted the assistant.** Found by B6a: clicking through the
+signed-in pages logged `[ai/runs] failed to create the request` 17 times with
+`new row violates row-level security policy for table "ai_requests"`, and
+afterwards the local database (every migration applied) held 13 `concierge`
+rows and **no `feature` row at all**, although the crawl had used the
+assistant, the morning brief, the habit coach and the relationship helper.
+Migration `0255` lets a member insert an `ai_requests` row of kind
+`concierge` and no other ("feature, routine, trigger and handle_it requests
+are filed by server code"), but `createRequest` filed every kind on the
+caller's own client. `withAiRequest`, which every AI surface goes through,
+files `kind: 'feature'` — refused every time, logged, and carried on with no
+row. Two consequences: no assistant turn, brief or coach run left the record
+§33 promises; and `assertAIAccess` meters the Free plan's monthly AI requests
+by counting these rows (Pass L, L-03), so an assistant turn was never counted
+and the allowance could never be reached. `createRequest` now files a
+non-concierge request on the ledger client (`ledgerClient`, which the store
+already uses for every other ledger write), with the family and requester
+still taken from the verified scope; a concierge request stays on the
+member's client, where RLS checks it. No migration: the policy was right, the
+client was wrong. Production is at migration 0177 (PROD-DB-0177) and has none
+of these tables yet, so this takes effect when those migrations are applied.
+`tests/an-ai-feature-request-is-recorded-not-refused.test.ts` (5 cases; the
+feature case fails with the fix reverted); `tests/assistant-engine.test.ts`
+now routes the service client to its fake, so it still asserts the payload
+the turn asks for.
+**P-10, follow-up from review on #585: a filed row must not carry what was
+typed.** Once feature rows were recorded at all, `request_text` became
+readable by every active member of the family (0250's SELECT policy), and
+eight call sites handed `withAiRequest` a person's own words: the assistant's
+message (turn, stream and `/api/ai/chat`), the chef request, a marketplace
+question, a chore prompt, a post topic, a trip destination (and, milder, a
+chore title, an asset name, a trade). `AiRequestSpec.text` already said
+"keep it non-sensitive"; now every call site passes a fixed label ("Assistant
+turn", "Recipe from the AI chef", "Research a trip"), the model and the
+conversation still get the original text, and
+`tests/an-ai-request-row-never-carries-what-was-typed.test.ts` scans all 39
+call sites and fails on anything but a string literal or a catalogue string.
+`tests/assistant-engine.test.ts` passes a synthetic private phrase through the
+turn and the stream and asserts the model received it and the ledger row did
+not. No SQL change.
+
+**Not defects, recorded with the evidence.**
+- *502s on production.* 32 pages across both production crawls saw one
+  502 on a prefetch, an API call or an asset — a different one each time,
+  never the document. Re-crawled one at a time at both widths: 61 of 64
+  loads clean, the other 3 each a 502 on a different prefetch. 60 consecutive prefetches through `curl`:
+  all 200 with `server: Vercel`. The crawler now records who answered a
+  5xx, so the next run can tell a Vercel 502 from this sandbox's egress.
+- *Not-found under the app shell.* A missing id on a signed-in route shows
+  the correct not-found page with HTTP 200 and a React #419 in the console,
+  because `app/(app)/loading.tsx` has already streamed the shell when
+  `notFound()` throws. Next.js cannot change a status after streaming
+  starts; removing the loading shell would cost every signed-in page its
+  instant paint. Real ids render normally.
+- *`/capture` #418.* Seen once on the first crawl; 0 of 50 further loads
+  (production build and dev, Node 22 and 24) reproduced it. Watch.
+- *Node version.* The container's Node 22 produced stream-cancellation
+  server errors (and a #419 on a missing marketplace item) that Node 24.21
+  — the version `package.json` pins and production runs — does not. The
+  first local crawls ran on Node 22; every flag that could be Node-specific
+  (server stream errors, #419) was re-checked with the server on 24.21, and
+  the three unit tests that fail on Node 22 pass on 24.21.
+- *Missing tokens* (`/gift/…`, `/pay/…`, `/s/…`) answer a "this link is
+  not active" page with 200 and `noindex` — a deliberate soft answer for a
+  shared link, not a crawlable page.
+- *`/dashboard/knowledge/seed`* is the knowledge-base seeding tool and is
+  `notFound()` for everyone but a super administrator, by design; a family
+  parent sees the not-found page (with the #419 above).
+
+### Round 2 — the merged tree, after #588 and 339 other commits from main
+
+Re-crawled on `9c348703` (this branch merged with `main` at `19a24334`), local
+stack migrated to 0443, server on Node 24.21:
+
+| Pass | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| Family+ parent, every family route, 1280 px | 278 | 2 | `/ai` (P-08, fixed after this build) and `/resources/benchmarks` (404 by design) |
+| Family+ parent, every family route, 390 px (B10) | 278 | 2 | `/resources/benchmarks`; `/dashboard/knowledge/seed` super-admin-only (above) |
+| Super admin, every `/admin` route, 1280 + 390 px (B5, B10) | 78 × 2 | 1 × 2 | `/admin/social/providers` — the OAuth scope, above |
+| Id-based routes with seeded rows, 1280 + 390 px | 37 × 2 | 4 | all four are deliberately missing ids: the not-found page with #419, above |
+| Public pages in the ten other locales, production (B8, public half) | 41 × 10 | 12 | `/resources/benchmarks` × 10, and P-08 twice |
+| Teen in the Family+ household, every family route, 1280 px (B7) | 278 | 2 | `/resources/benchmarks` (404 by design); `/wallet/gift` once: a `ChunkLoadError` for a chunk the server does hold, caught by `app/global-error.tsx`. Not reproduced in 5 reloads, nor with that chunk request aborted on every load (the page stays server-rendered, no boundary); Next 15.5 turns a chunk failure during navigation into a hard navigation itself (`handleHardNavError`), and the boundary offers *Try again* and *Reload Bubaly*. Recorded as local-server load, not a defect |
+| Child in the Family+ household, every family route, 1280 px (B7) | 278 | 2 | `/resources/benchmarks`; `/acceptable-use` 503 from `/api/mkt/track` — P-08, which this build predates |
+
+Every family route has exactly one `<h1>` at both widths (P-06 holds), no
+route overflows at 390 px, and no page in any locale renders a raw
+catalogue key.
+
+Role views (B7): a teen and a child reach the same 277 routes a parent does, and
+only `/dashboard/family-access` sends them home. The pages that are role-aware
+render the member's view rather than redirecting, and the view is the right one
+where it was read side by side with the parent's: `/family/members` drops
+*Manage & invite*, `/dashboard/family-emergency` drops *Add contact*,
+`/dashboard/contact-center` drops *Assign*, and `/economy` shows "Ask a parent
+to set up your family's tokens" instead of the parent's *Manage* tab. Whether a
+teen should see `/dashboard/trust` and the wallet's activation page at all is a
+product question (both are read-only there, and every write behind them is
+refused by the manager checks recorded in the AUTHZ units); it is left for B6,
+which clicks the controls.
+
+### Every route (first pass)
+
+`where` is what was crawled: `prod` against www.bubaly.com, `local` against
+the full local stack; widths in px. Dynamic routes list how many concrete
+pages were loaded. ✅ FIXED rows are clean on the local re-crawl of the fix
+and reach production with the PR that carries the commit named in the
+finding.
+
+| Route | Where | Status | Notes |
+| --- | --- | --- | --- |
+| `/` | local + prod 1280/390 | ✅ PASS |  |
+| `/acceptable-use` | local + prod 1280/390 | ✅ PASS |  |
+| `/admin` | local + prod 1280/390 | ✅ PASS |  |
+| `/admin/admins` | local 1280/390 | ✅ FIXED | P-01 |
+| `/admin/ai` | local 1280 | ✅ PASS |  |
+| `/admin/ai-activity` | local 1280 | ✅ PASS |  |
+| `/admin/audit` | local 1280 | ✅ PASS |  |
+| `/admin/audit-logs` | local 1280 | ✅ PASS |  |
+| `/admin/backup` | local 1280 | ✅ PASS |  |
+| `/admin/benchmarks` | local 1280 | ✅ PASS |  |
+| `/admin/billing` | local 1280 | ✅ PASS |  |
+| `/admin/content` | local 1280/390 | ✅ FIXED | P-01 |
+| `/admin/feedback` | local 1280 | ✅ PASS |  |
+| `/admin/integrations` | local 1280 | ✅ PASS |  |
+| `/admin/marketing` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/ads` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/aeo` | local 1280 | ✅ FIXED | P-06 |
+| `/admin/marketing/affiliates` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/analytics` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/assets` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/assistant` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/audit` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/automation` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/campaigns` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/campaigns/[id]` | local 1280 | ✅ FIXED | P-06 |
+| `/admin/marketing/campaigns/new` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/competitive` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/content` | local 1280/390 | ✅ FIXED | P-01 |
+| `/admin/marketing/crm` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/customers` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/email` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/exit-intent` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/experiments` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/forms` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/funnels` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/health` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/intelligence` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/landing-pages` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/lead-scores` | local 1280 | ✅ FIXED | P-06 |
+| `/admin/marketing/leads` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/loyalty` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/personalization` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/pipeline` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/platform` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/proposals` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/push` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/referrals` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/reputation` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/reviews` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/segments` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/seo` | local 1280 | ✅ FIXED | P-06 |
+| `/admin/marketing/settings` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/sms` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/social` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/social/recurring` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/surveys` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/surveys/[id]` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/video` | local 1280 | ✅ PASS |  |
+| `/admin/marketing/visitor-intelligence` | local 1280 | ✅ FIXED | P-06 |
+| `/admin/marketplace/reports` | local 1280 | ✅ PASS |  |
+| `/admin/notifications` | local 1280 | ✅ PASS |  |
+| `/admin/onboarding` | local 1280 | ✅ PASS |  |
+| `/admin/reports` | local 1280 | ✅ PASS |  |
+| `/admin/security` | local 1280 | ✅ PASS |  |
+| `/admin/services` | local 1280 | ✅ PASS |  |
+| `/admin/settings` | local 1280 | ✅ PASS |  |
+| `/admin/settings/social-links` | local 1280 | ✅ PASS |  |
+| `/admin/social` | local 1280 | ✅ PASS |  |
+| `/admin/social/audit` | local 1280 | ✅ PASS |  |
+| `/admin/social/providers` | local 1280 | ✅ PASS | "offline.access" flagged as an i18n key is X's real OAuth scope, listed on purpose |
+| `/admin/social/usage` | local 1280 | ✅ PASS |  |
+| `/admin/stripe` | local 1280 | ✅ PASS |  |
+| `/admin/subscriptions` | local 1280/390 | ✅ PASS |  |
+| `/admin/support` | local 1280 | ✅ PASS |  |
+| `/admin/support-tickets` | local 1280/390 | ✅ FIXED | P-01 |
+| `/admin/sync` | local 1280 | ✅ PASS |  |
+| `/admin/system` | local 1280 | ✅ PASS |  |
+| `/admin/tier-features` | local 1280 | ✅ PASS |  |
+| `/admin/tiers` | local 1280 | ✅ PASS |  |
+| `/admin/users` | local 1280/390 | ✅ FIXED | P-01 |
+| `/admin/wallet` | local 1280 | ✅ PASS |  |
+| `/admin/wallet/reconciliation` | local 1280 | ✅ PASS |  |
+| `/ai` | local + prod 1280/390 | ✅ FIXED | P-08 (a 503 from /api/mkt/track, first-visit race; production, answered by Vercel) |
+| `/alternatives/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/audiences/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/auth/complete` | local + prod 1280/390 | ✅ PASS |  |
+| `/auth/recovery` | local + prod 1280/390 | ✅ PASS |  |
+| `/auth/signout/complete` | local + prod 1280/390 | ✅ PASS |  |
+| `/auth/step-up` | local 1280 | ✅ PASS |  |
+| `/blog` | local + prod 1280/390 | ✅ PASS |  |
+| `/blog/[slug]` | prod 1280/390 | ✅ FIXED | 1049 pages; P-02; a one-off 502 on a prefetch/asset, clean on re-check one at a time (see *502s on production* above); an unknown slug/id answers a real 404 page |
+| `/capture` | local 1280/390 | ✅ PASS |  |
+| `/capture/link` | local 1280 | ✅ PASS |  |
+| `/compare/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/contact` | local + prod 1280/390 | ✅ PASS |  |
+| `/cookies` | local + prod 1280/390 | ✅ PASS |  |
+| `/customers/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/dashboard` | local + prod 1280/390 | ✅ PASS |  |
+| `/dashboard/activity` | local 1280 | ✅ PASS |  |
+| `/dashboard/agents` | local 1280 | ✅ PASS |  |
+| `/dashboard/announcements` | local 1280 | ✅ PASS |  |
+| `/dashboard/app-store` | local 1280 | ✅ PASS |  |
+| `/dashboard/assistant` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/assistant/purchases/[approvalId]` | local 1280 | ✅ PASS | missing id → the not-found page under the (app) loading shell (HTTP 200 + React #419, Next streaming); real ids pass |
+| `/dashboard/assistants` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/accident` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/insurance` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/licenses` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/registration` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/rentals` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/service` | local 1280 | ✅ PASS |  |
+| `/dashboard/auto/vehicles` | local 1280 | ✅ PASS |  |
+| `/dashboard/autonomous-family-management` | local 1280 | ✅ PASS |  |
+| `/dashboard/autopay` | local 1280 | ✅ PASS |  |
+| `/dashboard/autopilot` | local 1280 | ✅ FIXED | P-05 |
+| `/dashboard/behavior` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/billing` | local 1280 | ✅ PASS |  |
+| `/dashboard/bills` | local 1280 | ✅ PASS |  |
+| `/dashboard/binder` | local 1280 | ✅ FIXED | P-06, P-07 |
+| `/dashboard/briefing` | local 1280 | ✅ FIXED | P-05 |
+| `/dashboard/budgets` | local 1280 | ✅ PASS |  |
+| `/dashboard/calendar` | local 1280/390 | ✅ FIXED | P-03 |
+| `/dashboard/calm` | local 1280 | ✅ PASS |  |
+| `/dashboard/care` | local 1280 | ✅ PASS |  |
+| `/dashboard/career` | local 1280 | ✅ PASS |  |
+| `/dashboard/celebrations` | local 1280 | ✅ PASS |  |
+| `/dashboard/chores` | local 1280 | ✅ PASS |  |
+| `/dashboard/closet` | local 1280 | ✅ PASS |  |
+| `/dashboard/command-center` | local 1280 | ✅ PASS |  |
+| `/dashboard/concierge` | local 1280 | ✅ PASS |  |
+| `/dashboard/concierge-calls` | local 1280 | ✅ PASS |  |
+| `/dashboard/concierge/runs` | local 1280 | ✅ PASS |  |
+| `/dashboard/concierge/runs/[id]` | local 1280 | ✅ PASS |  |
+| `/dashboard/conflicts` | local 1280 | ✅ PASS |  |
+| `/dashboard/connections` | local 1280 | ✅ PASS |  |
+| `/dashboard/contact-center` | local 1280 | ✅ PASS |  |
+| `/dashboard/contacts` | local 1280 | ✅ PASS |  |
+| `/dashboard/contacts/[id]` | local 1280 | ✅ PASS | 2 pages |
+| `/dashboard/decisions` | local 1280 | ✅ PASS |  |
+| `/dashboard/declutter` | local 1280 | ✅ PASS |  |
+| `/dashboard/dental` | local 1280 | ✅ PASS |  |
+| `/dashboard/devices` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/dining` | local 1280 | ✅ PASS |  |
+| `/dashboard/documents` | local 1280 | ✅ PASS |  |
+| `/dashboard/due` | local 1280 | ✅ PASS |  |
+| `/dashboard/expenses` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/experience` | local 1280 | ✅ PASS |  |
+| `/dashboard/family` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-access` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-ai-assistant` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/family-automation` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-cfo` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-coo` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-digital-twin` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-emergency` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-health` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-knowledge-graph` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-memory` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-operating-index` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-operations` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-school` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-signals` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-sports` | local 1280 | ✅ PASS |  |
+| `/dashboard/family-stress` | local 1280 | ✅ FIXED | P-07 |
+| `/dashboard/family-tree` | local 1280 | ✅ PASS |  |
+| `/dashboard/family/check-in` | local 1280 | ✅ PASS |  |
+| `/dashboard/family/driving-safety` | local 1280 | ✅ PASS |  |
+| `/dashboard/family/find-phone` | local 1280 | ✅ PASS |  |
+| `/dashboard/family/play-dates` | local 1280 | ✅ PASS |  |
+| `/dashboard/favorites` | local 1280 | ✅ PASS |  |
+| `/dashboard/files/cloud` | local 1280 | ✅ PASS |  |
+| `/dashboard/files/shared` | local 1280 | ✅ PASS |  |
+| `/dashboard/files/vault` | local 1280 | ✅ PASS |  |
+| `/dashboard/focus` | local 1280 | ✅ PASS |  |
+| `/dashboard/food` | local 1280 | ✅ PASS |  |
+| `/dashboard/fridge-chef` | local 1280 | ✅ PASS |  |
+| `/dashboard/front-desk` | local 1280 | ✅ PASS |  |
+| `/dashboard/goals` | local 1280 | ✅ PASS |  |
+| `/dashboard/grandparent-portal` | local 1280 | ✅ PASS |  |
+| `/dashboard/graph` | local 1280 | ✅ PASS |  |
+| `/dashboard/grocery` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/habits` | local 1280 | ✅ PASS |  |
+| `/dashboard/health` | local 1280 | ✅ PASS |  |
+| `/dashboard/home` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/assets/[id]` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/diagnose` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/maintenance` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/pros` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/service` | local 1280 | ✅ PASS |  |
+| `/dashboard/home/warranties` | local 1280 | ✅ PASS |  |
+| `/dashboard/homework` | local 1280 | ✅ PASS |  |
+| `/dashboard/inbox` | local 1280 | ✅ PASS |  |
+| `/dashboard/independence` | local 1280 | ✅ PASS |  |
+| `/dashboard/insurance` | local 1280 | ✅ PASS |  |
+| `/dashboard/intelligence` | local 1280 | ✅ PASS |  |
+| `/dashboard/inventory` | local 1280 | ✅ PASS |  |
+| `/dashboard/journal` | local 1280 | ✅ PASS |  |
+| `/dashboard/journeys` | local 1280 | ✅ PASS |  |
+| `/dashboard/kitchen` | local 1280 | ✅ PASS |  |
+| `/dashboard/knowledge` | local 1280 | ✅ PASS |  |
+| `/dashboard/knowledge/seed` | local 1280 | ✅ PASS |  |
+| `/dashboard/language` | local 1280 | ✅ PASS |  |
+| `/dashboard/library` | local 1280 | ✅ PASS |  |
+| `/dashboard/life-events` | local 1280 | ✅ PASS |  |
+| `/dashboard/locator` | local 1280 | ✅ PASS |  |
+| `/dashboard/meals` | local 1280 | ✅ PASS |  |
+| `/dashboard/medical` | local 1280 | ✅ PASS |  |
+| `/dashboard/medications` | local 1280 | ✅ PASS |  |
+| `/dashboard/memories` | local 1280 | ✅ PASS |  |
+| `/dashboard/memories/create` | local 1280 | ✅ PASS |  |
+| `/dashboard/messages` | local 1280 | ✅ PASS |  |
+| `/dashboard/migrate` | local 1280 | ✅ PASS |  |
+| `/dashboard/moments` | local 1280 | ✅ PASS |  |
+| `/dashboard/money-timeline` | local 1280 | ✅ PASS |  |
+| `/dashboard/more` | local 1280 | ✅ PASS |  |
+| `/dashboard/moving` | local 1280 | ✅ PASS |  |
+| `/dashboard/needs-you` | local 1280 | ✅ PASS |  |
+| `/dashboard/next-best-actions` | local 1280 | ✅ PASS |  |
+| `/dashboard/notes` | local 1280 | ✅ PASS |  |
+| `/dashboard/notifications` | local 1280 | ✅ PASS |  |
+| `/dashboard/nutrition` | local 1280 | ✅ PASS |  |
+| `/dashboard/onboarding-funnel` | local 1280 | ✅ PASS |  |
+| `/dashboard/outcomes` | local 1280 | ✅ PASS |  |
+| `/dashboard/pantry` | local 1280 | ✅ PASS |  |
+| `/dashboard/paperwork` | local 1280 | ✅ PASS |  |
+| `/dashboard/passwords` | local 1280 | ✅ PASS |  |
+| `/dashboard/payments` | local 1280 | ✅ PASS |  |
+| `/dashboard/pets` | local 1280 | ✅ PASS |  |
+| `/dashboard/photos` | local 1280 | ✅ PASS |  |
+| `/dashboard/planning` | local 1280 | ✅ PASS |  |
+| `/dashboard/playbook` | local 1280 | ✅ PASS |  |
+| `/dashboard/prep-plans` | local 1280 | ✅ PASS |  |
+| `/dashboard/profile` | local 1280 | ✅ PASS |  |
+| `/dashboard/projects` | local 1280 | ✅ PASS |  |
+| `/dashboard/readiness` | local 1280 | ✅ PASS |  |
+| `/dashboard/reasoning` | local 1280 | ✅ PASS |  |
+| `/dashboard/recipes` | local 1280 | ✅ PASS |  |
+| `/dashboard/recipes/discover` | local 1280 | ✅ PASS |  |
+| `/dashboard/recipes/vote` | local 1280 | ✅ PASS |  |
+| `/dashboard/relationship` | local 1280 | ✅ PASS |  |
+| `/dashboard/reminders` | local 1280 | ✅ PASS |  |
+| `/dashboard/renewals` | local 1280 | ✅ PASS |  |
+| `/dashboard/rewards` | local 1280 | ✅ PASS |  |
+| `/dashboard/rides` | local 1280 | ✅ PASS |  |
+| `/dashboard/savings` | local 1280 | ✅ PASS |  |
+| `/dashboard/scan` | local 1280 | ✅ PASS |  |
+| `/dashboard/school` | local 1280 | ✅ PASS |  |
+| `/dashboard/screen-time` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/search` | local 1280 | ✅ PASS |  |
+| `/dashboard/security` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/settings` | local 1280 | ✅ PASS |  |
+| `/dashboard/setup` | local 1280 | ✅ PASS |  |
+| `/dashboard/signups` | local 1280 | ✅ PASS |  |
+| `/dashboard/sleep` | local 1280 | ✅ PASS |  |
+| `/dashboard/social` | local 1280 | ✅ PASS |  |
+| `/dashboard/social-feed` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/accounts` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/accounts/connect` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/analytics` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/calendar` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/content-studio` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/content-studio/new` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/failed` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/feed` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/inbox` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/media-library` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/posts` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/posts/[id]` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/published` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/scheduled` | local 1280 | ✅ PASS |  |
+| `/dashboard/social/settings` | local 1280 | ✅ PASS |  |
+| `/dashboard/sports` | local 1280 | ✅ PASS |  |
+| `/dashboard/subscriptions` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/sync` | local 1280 | ✅ PASS |  |
+| `/dashboard/sync/accounts` | local 1280 | ✅ PASS |  |
+| `/dashboard/sync/accounts/[provider]` | local 1280 | ✅ PASS | 2 pages |
+| `/dashboard/sync/conflicts` | local 1280 | ✅ PASS |  |
+| `/dashboard/sync/history` | local 1280 | ✅ PASS |  |
+| `/dashboard/tax-vault` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/timetable` | local 1280 | ✅ PASS |  |
+| `/dashboard/todos` | local 1280 | ✅ PASS |  |
+| `/dashboard/trip-intel` | local 1280 | ✅ PASS |  |
+| `/dashboard/trip-memories` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/trips` | local 1280 | ✅ PASS |  |
+| `/dashboard/trust` | local 1280 | ✅ PASS |  |
+| `/dashboard/utilities` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/vacations` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]` | local 1280 | ✅ FIXED | 2 pages; P-07 |
+| `/dashboard/vacations/[id]/activities` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/ai-assistant` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/budget` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/documents` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/emergency` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/family` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/itinerary` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/lodging` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/overview` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/packing` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/travel` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/[id]/weather` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/calendar` | local 1280 | ✅ PASS |  |
+| `/dashboard/vacations/new` | local 1280/390 | ✅ FIXED | P-04 |
+| `/dashboard/vacations/reports` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/voice` | local 1280 | ✅ PASS |  |
+| `/dashboard/voting` | local 1280 | ✅ FIXED | P-06 |
+| `/dashboard/watchlist` | local 1280 | ✅ PASS |  |
+| `/dashboard/weather` | local 1280 | ✅ PASS |  |
+| `/dashboard/weekend` | local 1280 | ✅ PASS |  |
+| `/dashboard/weekly-briefing` | local 1280 | ✅ PASS |  |
+| `/dashboard/wishlists` | local 1280 | ✅ PASS |  |
+| `/dashboard/workload` | local 1280 | ✅ PASS |  |
+| `/display` | local 1280 | ✅ PASS |  |
+| `/display/setup` | local 1280 | ✅ PASS |  |
+| `/economy` | local 1280 | ✅ PASS |  |
+| `/f/[id]` | local + prod 1280/390 | ✅ FIXED | 2 pages; P-06; an unknown slug/id answers a real 404 page |
+| `/family-display` | local + prod 1280/390 | ✅ PASS |  |
+| `/family/activity` | local 1280 | ✅ PASS |  |
+| `/family/members` | local 1280 | ✅ PASS |  |
+| `/family/notifications` | local 1280 | ✅ PASS |  |
+| `/family/permissions` | local 1280 | ✅ PASS |  |
+| `/family/reports` | local 1280 | ✅ PASS |  |
+| `/family/settings` | local 1280 | ✅ PASS |  |
+| `/faq` | local + prod 1280/390 | ✅ PASS |  |
+| `/features` | local + prod 1280/390 | ✅ PASS |  |
+| `/features/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/feedback` | local 1280 | ✅ PASS |  |
+| `/gift/[token]` | local + prod 1280/390 | ✅ PASS | 2 pages |
+| `/glossary/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/guardian` | local 1280 | ✅ PASS |  |
+| `/guardian/contacts` | local 1280 | ✅ PASS |  |
+| `/guardian/history` | local 1280 | ✅ PASS |  |
+| `/guardian/rules` | local 1280 | ✅ PASS |  |
+| `/guardian/settings` | local 1280 | ✅ PASS |  |
+| `/guides/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/home` | local + prod 1280/390 | ✅ PASS |  |
+| `/how-it-works` | local + prod 1280/390 | ✅ PASS |  |
+| `/join` | local + prod 1280/390 | ✅ PASS |  |
+| `/kid-login` | local + prod 1280/390 | ✅ PASS | a one-off 502 on a prefetch/asset, clean on re-check one at a time (see *502s on production* above) |
+| `/kids` | local 1280 | ✅ PASS |  |
+| `/kids/submit/[assignmentId]` | local 1280 | ✅ PASS |  |
+| `/login` | local + prod 1280/390 | ✅ PASS |  |
+| `/lp/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/marketplace` | local 1280 | ✅ PASS |  |
+| `/marketplace/alerts` | local 1280 | ✅ PASS |  |
+| `/marketplace/auctions` | local 1280 | ✅ PASS |  |
+| `/marketplace/browse` | local 1280 | ✅ PASS |  |
+| `/marketplace/collections` | local 1280 | ✅ PASS |  |
+| `/marketplace/community` | local 1280 | ✅ PASS |  |
+| `/marketplace/creators` | local 1280 | ✅ PASS |  |
+| `/marketplace/creators/[id]` | local 1280 | ✅ PASS |  |
+| `/marketplace/deals` | local 1280 | ✅ PASS |  |
+| `/marketplace/following` | local 1280 | ✅ PASS |  |
+| `/marketplace/insights` | local 1280 | ✅ PASS |  |
+| `/marketplace/item/[id]` | local 1280 | ✅ PASS | 2 pages; missing id → the not-found page under the (app) loading shell (HTTP 200 + React #419, Next streaming); real ids pass |
+| `/marketplace/negotiations` | local 1280 | ✅ PASS |  |
+| `/marketplace/orders` | local 1280 | ✅ PASS |  |
+| `/marketplace/questions` | local 1280 | ✅ PASS |  |
+| `/marketplace/reviews` | local 1280 | ✅ PASS |  |
+| `/marketplace/saved` | local 1280 | ✅ PASS |  |
+| `/marketplace/seed` | local 1280 | ✅ PASS |  |
+| `/marketplace/selling` | local 1280 | ✅ PASS |  |
+| `/marketplace/store` | local 1280 | ✅ PASS |  |
+| `/missions` | local 1280 | ✅ PASS |  |
+| `/missions/new` | local 1280 | ✅ FIXED | P-06 |
+| `/mobile` | local + prod 1280/390 | ✅ FIXED | P-08 (a 503 from /api/mkt/track, first-visit race; production, answered by Vercel) |
+| `/offline` | local + prod 1280/390 | ✅ PASS |  |
+| `/onboarding` | local + prod 1280/390 | ✅ PASS |  |
+| `/p/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/parent` | local 1280 | ✅ PASS |  |
+| `/pay/[handle]` | local + prod 1280/390 | ✅ PASS | 2 pages |
+| `/pricing` | local + prod 1280/390 | ✅ PASS |  |
+| `/privacy` | local + prod 1280/390 | ✅ PASS |  |
+| `/questions/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/referrals` | local 1280 | ✅ PASS |  |
+| `/resources/[slug]` | prod 1280/390 | ✅ PASS | an unknown slug/id answers a real 404 page |
+| `/resources/benchmarks` | local + prod 1280/390 | ✅ PASS | 404 by design until an operator publishes the benchmarks |
+| `/reviews` | local + prod 1280/390 | ✅ PASS |  |
+| `/reviews/new` | local + prod 1280/390 | ✅ PASS |  |
+| `/s/[slug]` | local + prod 1280/390 | ✅ PASS | 2 pages |
+| `/security` | local + prod 1280/390 | ✅ PASS |  |
+| `/services` | local 1280 | ✅ PASS |  |
+| `/services/[category]` | local 1280 | ✅ PASS | 3 pages |
+| `/signup` | local + prod 1280/390 | ✅ PASS |  |
+| `/terms` | local + prod 1280/390 | ✅ PASS |  |
+| (any unknown URL, e.g. `/this-page-does-not-exist`) | prod 1280/390 | ✅ PASS | the site 404 page, HTTP 404, one `<h1>` |
+| `/wallet` | local 1280 | ✅ PASS |  |
+| `/wallet/activity` | local 1280 | ✅ PASS |  |
+| `/wallet/allowance` | local 1280 | ✅ PASS |  |
+| `/wallet/babysitters` | local 1280 | ✅ PASS |  |
+| `/wallet/cards` | local 1280 | ✅ PASS |  |
+| `/wallet/children/[childId]` | local 1280 | ✅ PASS | 2 pages; missing id → the not-found page under the (app) loading shell (HTTP 200 + React #419, Next streaming); real ids pass |
+| `/wallet/gift` | local 1280 | ✅ PASS |  |
+| `/wallet/goals` | local 1280 | ✅ PASS |  |
+| `/wallet/invest` | local 1280 | ✅ PASS |  |
+| `/wallet/send` | local 1280 | ✅ PASS |  |
+| `/wallet/settings` | local 1280 | ✅ PASS |  |
+| `/wallet/treasury` | local 1280 | ✅ PASS |  |
+| `/welcome` | local + prod 1280/390 | ✅ PASS | a one-off 502 on a prefetch/asset, clean on re-check one at a time (see *502s on production* above) |

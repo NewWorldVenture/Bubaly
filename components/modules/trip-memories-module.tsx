@@ -119,7 +119,7 @@ export function TripMemoriesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {t('tripMemories.tripMemories')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {t('tripMemories.tripMemories')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="memories" iconOnly />
           <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('tripMemories.addMemory')}</Button>

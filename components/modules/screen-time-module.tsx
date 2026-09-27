@@ -146,7 +146,7 @@ export function ScreenTimeModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> {t('screenTime.screenTimeBalance')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> {t('screenTime.screenTimeBalance')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="screen_time" iconOnly />
           <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('screenTime.logTime')}</Button>

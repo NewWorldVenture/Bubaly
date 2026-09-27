@@ -105,7 +105,16 @@ export async function createRequest(
   if (!text) return fail('Tell Bubaly what you need.', { code: SERVICE_CODES.invalidInput });
 
   const kind = (REQUEST_KINDS as readonly string[]).includes(input.kind) ? (input.kind as AiRequestKind) : 'concierge';
-  const db = opts?.db ?? scope.db;
+  // Only a concierge request is the person's own filing, checked by RLS on
+  // their client. 0255 lets a member insert that kind and no other ("feature,
+  // routine, trigger and handle_it requests are filed by server code"), so
+  // filing a `feature` row — every surface behind `withAiRequest` — on the
+  // member's client was refused, every time: no assistant turn, brief or coach
+  // run was ever recorded, and the Free plan's monthly allowance, which counts
+  // these rows, never counted them (2026-09-27 page audit, P-10). Server code
+  // files the other kinds on the ledger client, with the family and requester
+  // taken from the verified scope as above.
+  const db = opts?.db ?? (kind === 'concierge' ? scope.db : ledgerClient(scope, opts));
 
   const { data, error } = await db
     .from('ai_requests')
