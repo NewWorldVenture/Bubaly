@@ -6,7 +6,7 @@
 // or matching the shipped default removes the override so it falls back to code.
 // Search filters live; per-row dirty state + save/reset with toasts.
 
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2, RotateCcw, Search, Check } from 'lucide-react';
 import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
 import { saveServiceDescriptionAction } from '@/app/(app)/admin/services/actions';
@@ -21,9 +21,6 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
   overrides: Record<string, string>;
 }) {
   const t = useTranslations();
-  // Each textarea's id, so the service's name above it can be its <label>:
-  // the href (unique here, the page dedupes it) under a prefix of our own.
-  const idBase = useId();
   const { success, error: toastError } = useToast();
   const [query, setQuery] = useState('');
   // Working values start from override-or-default; saved snapshot tracks "clean".
@@ -116,7 +113,9 @@ export function ServiceDescriptionsEditor({ groups, overrides }: {
                 const dirty = value.trim() !== (saved[it.key] ?? '').trim();
                 const isOverride = (saved[it.key] ?? '') !== (SERVICE_DESCRIPTIONS[it.key] ?? '');
                 const isBusy = busy === it.key;
-                const fieldId = `${idBase}${it.key}`;
+                // The service's name above the textarea is its <label>. The key (an href,
+                // unique on this page) makes the id; there is one editor per page.
+                const fieldId = `service-blurb-${it.key.replace(/[^a-z0-9]+/gi, '-')}`;
                 return (
                   <div key={it.key} className="rounded-xl border border-border bg-surface/40 p-3">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
