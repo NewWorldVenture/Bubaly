@@ -48738,6 +48738,15 @@ switches to the reader's zone (`useSyncExternalStore`, no
 renders with React's server renderer in a process set to America/New_York:
 the hook draws the UTC text, the plain formatter (the control) the New York
 text; 3 of 5 cases fail with the hook removed.
+*Numbers in Italian, found by re-crawling the fixes:* the connect page still
+threw #418 in `it-IT` alone. CLDR gives Italian (and Spanish, Portuguese) a
+two-digit minimum before grouping, and the runtimes ship different data for
+it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
+`fmtNumber` and `fmtMoney` now pass `useGrouping: 'always'`, so both group
+every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
+(red without it). Re-crawled after the fix: food, planning, kitchen and the
+connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
+390 px; it-IT is re-checked on the next build.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
