@@ -154,20 +154,20 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // Lowered to 2,838 as twenty-four more module and trip toasts were translated.
 //
-//
 // Then to 2,825 as the AI daily-limit, sync, weather, social-feed, language,
 // medical and feedback-upload messages were translated (the feedback one is
 // now a generic message that no longer leaks the storage error).
-//
 //
 // Then to 2,812 as the thirteen "Blocked by household policy: …" refusals in
 // the wallet, money and invest actions were translated — reason included: the
 // trust engine's deny paths now carry a catalogue key and code-valued params.
 //
-//
 // Then to 2,809 with the calendar-sync count and the admin campaign-send and
 // lead-score recompute toasts.
-const CEILING = 2809;
+//
+// Then to 2,792 as the Guardian dashboard was localized as a whole: its
+// status contexts, call statuses, stat tiles, heading and both toasts.
+const CEILING = 2792;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
