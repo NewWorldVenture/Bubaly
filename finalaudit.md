@@ -45875,6 +45875,27 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][FINANCES]` C1-S9-112 — the finances overview showed English in every locale, including the categories a family picks
+
+**File/path:** `components/modules/finances-module.tsx`, `components/modules/billing-module.tsx`, new `lib/finance/category-label.ts`; seven catalogues.
+
+**Problem.** `/dashboard/finances` (part of the `C1-S9-101` burn-down) showed English in every locale:
+- the four stat tiles and their "this month" / "Set aside" lines
+- the money tip ("Your biggest category this month is …")
+- "X of Y", "Over budget" and "You’re on track!"
+- "Overdue · " and "Due " on each upcoming bill
+- the S M T W T F S row of the bills calendar
+- every spending category: in the breakdown, on each transaction, and in the add-transaction picker
+
+**Fix.**
+- Copy is catalogue keys. The bills calendar's weekday initials come from `Intl` in the reader's locale.
+- Categories stay stored as the English word, because that is data and budgets match on it. They are shown through `categoryLabel()`, which now lives in `lib/finance/category-label.ts` and is shared with billing (`C1-S9-109`). It knows both pages' pick lists.
+- Billing's `billingModule.category.*` keys are renamed `financeCategory.*`, with values unchanged.
+
+**Status:** FIXED. Scanner findings for `finances-module` drop from 26 to 19. The 19 left are the stored category values (data) and four type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
