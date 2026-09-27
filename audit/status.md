@@ -1349,8 +1349,8 @@ CURRENT: origin/main 7e54596d merged into the branch (98 conflicting files, 163 
 VERIFIED: replay 374/374 · probes 91/91 twice · tsc clean · lint 0 errors (18/18) · vitest 18,684/18,687 (3 = container Node 22) · build exit 0.
 RECORD: finalaudit.md Q68. E2E runs in CI on the pushed merge. No production migration applied by an agent; 0426-0442 reach production only when #548 merges.
 
-## PR #548 — main merged again (6ff770da, then dcc0b42b), 2026-09-27
+## PR #548 — main merged again (6ff770da, dcc0b42b, then 0306c985), 2026-09-27
 
-CURRENT: branch finish-548 from the author's 134f31a2; main merged at 6ff770da and at dcc0b42b (#579's 0344-0380, #581's 0381-0387). The block 0361-0382 moved to 0426-0443 in order; 0427, 0431, 0436 and 0437 dropped as duplicates of main's 0365, 0379, 0377 and 0364, each shown by a probe going red with the file put back (finalaudit.md Q70). Next free: 0444.
-VERIFIED (at dcc0b42b): replay 412/412 on a private PG 16.13 database · probes 137/137 twice, none skipped.
+CURRENT: branch finish-548 from the author's 134f31a2; main merged at 6ff770da, dcc0b42b and 0306c985 (#579's 0344-0380, #581's 0381-0387, #584's 0388). The block 0361-0382 moved to 0426-0443 in order; 0427, 0431, 0436 and 0437 dropped as duplicates of main's 0365, 0379, 0377 and 0364, each shown by a probe going red with the file put back (finalaudit.md Q70). Next free: 0444.
+VERIFIED (at dcc0b42b): replay 412/412 on a private PG 16.13 database · probes 137/137 twice, none skipped. (At 0306c985): replay 413/413 · probes 137/137 twice · vitest 6,881/6,882 over 423 touched/importing files (the 1 reads node_modules by a path the scratch worktree lacks; 16/16 with it reachable) · eslint 0 errors over 108 touched files · migration audit next 0444. No full-repo tsc (CI typechecks).
 RECORD: finalaudit.md Q70; docs/PENDING_PROD_MIGRATIONS.md "0426–0443". Not pushed. No production migration applied by an agent.

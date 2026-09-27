@@ -302,6 +302,13 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
+    // 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql narrows a
+    // member session's INSERT on notifications to rows addressed to the
+    // member themselves; notify() writes everyone else's with the service
+    // role. Held by docs/audit/notification-authorship-check.sql (re-
+    // controlled) and tests/a-notification-for-someone-else-is-written-by-
+    // bubaly.test.ts.
+    //
     // 0426-0443 are PR #548's block, and it has moved twice. The branch
     // numbered it 0318-0338 against a main that stopped at 0317; main then
     // landed its own 0318-0360, and the author moved the block to 0361-0382 on
@@ -331,14 +338,16 @@ describe('Supabase migration filename safety', () => {
     //
     // 0427, 0431, 0436 AND 0437 ARE PERMANENTLY UNUSED, and that is recorded
     // rather than renumbered, for the reason given for 0334 and 0337 above.
-    // Each was the branch's fix for a subject #579 had since closed, found by
-    // running main's probes against the merged chain rather than by comparing
-    // names: 0427 (driving scores) is main's 0365, whose rule makes a trip a
-    // manager's to erase; 0431 (safety check-ins, whose locator half 0335 had
-    // already taken) is main's 0379; 0436 (behaviour-note authorship) is main's
-    // 0377; 0437 (journals) is main's 0364, and main's private-journal probe
-    // fails with it in the chain. Laid over main's, each would have replaced or
-    // widened the policy main's guards stand on. The author had already dropped
+    // Each was the branch's fix for a subject #579 had since closed, and each
+    // is shown by a probe going red with the file put back on the replayed
+    // chain, not by comparing names: 0427 (driving scores) is main's 0365, a
+    // trip is a manager's to erase (driving-score-write-boundary-check); 0431
+    // (safety check-ins, whose locator half 0335 had already taken) is main's
+    // 0379 (locator-write-boundary-check, step 6: with it a child files a
+    // check-in naming nobody); 0436 (behaviour-note authorship) is main's 0377
+    // (access-record-write-boundary-check); 0437 (journals) is main's 0364
+    // (main's private-journal-check). Laid over main's, each replaced or
+    // widened the rule main's guards stand on. The author had already dropped
     // four more the same way on the first merge (numbered 0364, 0368, 0376 and
     // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
     // those never took a number in this range, and the numbers they held then
