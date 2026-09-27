@@ -330,7 +330,7 @@ export async function setPaperworkStatusAction(input: {
   // deadline inbox C1-S9-30 had to stop lying about. A silent no-op leaves the
   // parent believing it is handled while the item keeps its deadline.
   // Audit C1-S9-49.
-  const { data: rows, error } = await supabase.from('paperwork_items')
+  const { data: moved, error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId)
     .select('id');
@@ -338,7 +338,7 @@ export async function setPaperworkStatusAction(input: {
   // No error is not the same as saved: row-level security FILTERS an update it
   // refuses, so the statement matches nothing and succeeds. Ask for the row
   // back and answer a refusal when none changed (lib/supabase/errors.ts).
-  if (wroteNoRows(rows)) return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
+  if (wroteNoRows(moved)) return { ok: false, error: tr('errors.thatChangeWasNotSaved') };
   revalidatePath(PATH);
   return { ok: true };
 }

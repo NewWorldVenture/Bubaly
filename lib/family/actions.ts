@@ -360,7 +360,7 @@ export async function resolveAutomationRun(
 
   // Nothing governs this run (any more): the direct write, compare-and-set on
   // 'pending' so a run someone else just resolved is not resolved twice.
-  const { data: written, error } = await supabase
+  const { data: resolved, error } = await supabase
     .from('family_automation_runs')
     .update({
       status: decision === 'approved' ? 'approved' : 'skipped',
@@ -368,15 +368,14 @@ export async function resolveAutomationRun(
       approved_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('family_id', familyId)
     .eq('status', 'pending')
-    .select('id');
+    .eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('resolve that automation', error);
   // The same failure mode as the concierge autopilot in C1-S9-48: a manager
   // approves an automation, is told it worked, and the run stays pending — so
   // it is offered to them again, or the automation simply never executes.
   // Zero rows here also means someone else resolved it first (the CAS above).
-  if (wroteNoRows(written)) return { ok: false, error: t('actions.runNotFoundOrAlready') };
+  if (wroteNoRows(resolved)) return { ok: false, error: t('actions.runNotFoundOrAlready') };
   await audit(decision === 'approved' ? 'approve' : 'skip');
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };

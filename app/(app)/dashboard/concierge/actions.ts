@@ -298,16 +298,15 @@ async function governingApprovalFor(
  */
 async function markRunExecuted(
   sb: DB, runId: string, familyId: string, userId: string, summary: string, applied: WriteBackKind[],
-): Promise<{ error: PostgrestError | null; stamped: boolean }> {
+): Promise<{ data: { id: string }[] | null; error: PostgrestError | null }> {
   const now = new Date().toISOString();
-  const { data, error } = await sb.from('family_automation_runs').update({
+  // The rows it stamped come back so a caller can tell "stamped" from "no
+  // longer pending". After decide() the second is expected (decide closes the
+  // runs naming its approval); on the direct path it is the caller's to report.
+  return sb.from('family_automation_runs').update({
     status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
     approved_by: userId, approved_at: now, completed_at: now,
   }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id');
-  // `stamped` is false when the row was no longer pending. After decide() that
-  // is expected (it closes the runs naming its approval); on the direct path it
-  // is the caller's to report.
-  return { error, stamped: !error && !wroteNoRows(data) };
 }
 
 /**
@@ -427,12 +426,12 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // success here is what makes it necessary. (markRunExecuted is a
   // compare-and-set on 'pending', so zero rows also covers a run someone else
   // resolved between the read above and this write.)
-  const { error: runErr, stamped } = await markRunExecuted(sb, runId, familyId, ctx.user.id, summary, applied);
+  const { data: stamped, error: runErr } = await markRunExecuted(sb, runId, familyId, ctx.user.id, summary, applied);
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
-  if (!stamped) {
+  if (wroteNoRows(stamped)) {
     console.error('[concierge] executed-run status update matched no rows', { runId, familyId });
     return { ok: false, error: t('actions.appliedThePlanButCould') };
   }
@@ -508,7 +507,7 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   // This covers a close that has LANDED; a decide() still materialising when
   // this write lands finds the row dismissed, and without a lock shared by the
   // two paths that narrower window stays open.
-  const { data: dismissedRows, error: dismissErr } = await sb.from('family_automation_runs')
+  const { data: dismissed, error: dismissErr } = await sb.from('family_automation_runs')
     .update({ status: 'dismissed', state: 'cancelled' })
     .eq('id', runId).eq('family_id', ctx.active.familyId).eq('status', 'pending')
     .select('id');
@@ -518,7 +517,7 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   }
   // A dismissal that matched nothing leaves the run queued while telling the
   // manager it is gone — and the next tick offers it to them again.
-  if (!declinedHere && wroteNoRows(dismissedRows)) {
+  if (!declinedHere && wroteNoRows(dismissed)) {
     return { ok: false, error: t('actions.runNotFoundOrAlready') };
   }
 

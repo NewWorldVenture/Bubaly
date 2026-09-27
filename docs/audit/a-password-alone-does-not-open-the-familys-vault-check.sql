@@ -38,10 +38,12 @@
 --      the database must not refuse them for a code the app never asks for.
 --      CONTROL first (auth.uid() is the child, is_family_member TRUE,
 --      can_manage_family FALSE, session_cleared_step_up() FALSE — so only the
---      role clause can let them through), then: they read the binder entry and
---      the tax document, change the binder entry, and update and file
---      paperwork, exactly as the is_family_member base policies allow; and
---      they read NO credential, which is 0296's manager-only policy, not 0391;
+--      role clause can let them through), then: they read an ordinary
+--      (not sensitive) binder entry and the tax document, change that binder
+--      entry, and update and file paperwork, exactly as the base policies
+--      allow; and they read NO credential, which is 0296's manager-only
+--      policy, and NOT the sensitive binder entry, which is 0408's — neither
+--      is 0391;
 --   6. the catalogue holds exactly the fifteen guards (4 tables x insert/
 --      update/delete + 3 secret tables x select), every one RESTRICTIVE and
 --      calling session_cleared_step_up, every clause of every one carrying the
@@ -54,8 +56,10 @@
 --      refusals in 1-2 were these policies and not a decoy;
 --   8. NEGATIVE CONTROL for 5b: rebuild the household_info select guard and
 --      the paperwork_items update guard WITHOUT the role clause (the shape
---      0391 first shipped with) and require the enrolled child's aal1 binder
---      read and paperwork update to be refused — so what let the child through
+--      0391 first shipped with) and require the enrolled child's aal1 read of
+--      the ORDINARY binder entry (0408 already hides the sensitive one, so it
+--      could not show this) and paperwork update to be refused — so what let
+--      the child through
 --      in 5b was that clause, and the probe fails if it is ever dropped.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
@@ -104,6 +108,7 @@ declare
   child    constant uuid := '00000000-0000-4000-8000-000000039104';
   cred     uuid;
   info     uuid;
+  info_open uuid;
   taxdoc   uuid;
   paper    uuid;
   guards   int;
@@ -113,6 +118,10 @@ begin
     values (fam, 'wifi', 'Home Wi-Fi', null, 'correct-horse-battery', enrolled) returning id into cred;
   insert into public.household_info (family_id, category, label, value, is_sensitive, created_by)
     values (fam, 'code', 'Alarm code', '4471', true, enrolled) returning id into info;
+  -- An ordinary entry, for the child in 5b and 8: since 0408 a child reads and
+  -- writes only binder entries that are NOT sensitive.
+  insert into public.household_info (family_id, category, label, value, is_sensitive, created_by)
+    values (fam, 'instruction', 'Bin day', 'Tuesday', false, enrolled) returning id into info_open;
   insert into public.tax_documents (family_id, tax_year, category, name, created_by)
     values (fam, 2025, 'w2', 'W-2 2025', enrolled) returning id into taxdoc;
   insert into public.paperwork_items (family_id, kind, title, status, created_by)
@@ -266,15 +275,17 @@ begin
   if public.session_cleared_step_up() then
     failures := array_append(failures, 'CONTROL: session_cleared_step_up() answered true for a child with a VERIFIED factor at aal1 — then the role clause is not what 5b measures');
   end if;
+  select count(*) into n from public.household_info where id = info_open;
+  if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused an ordinary binder entry (%s rows) — needsStepUp never sends a child to the code page, so the database refused them for a code the app never asks for', n)); end if;
   select count(*) into n from public.household_info where id = info;
-  if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused the binder entry (%s rows) — needsStepUp never sends a child to the code page, so the database refused them for a code the app never asks for', n)); end if;
+  if n <> 0 then failures := array_append(failures, format('an ENROLLED CHILD read the alarm code (%s rows) — 0408 keeps a sensitive binder entry to managers whatever the assurance level', n)); end if;
   select count(*) into n from public.tax_documents where id = taxdoc;
   if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused the tax document (%s rows) — the tax vault renders empty for them with no way to enter a code', n)); end if;
   select count(*) into n from public.family_credentials where id = cred;
   if n <> 0 then failures := array_append(failures, format('an ENROLLED CHILD read a stored password (%s rows) — 0296 makes family_credentials manager-only whatever the assurance level', n)); end if;
-  update public.household_info set note = 'child' where id = info;
+  update public.household_info set note = 'child' where id = info_open;
   get diagnostics n = row_count;
-  if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused a binder change the is_family_member policy allows (%s rows)', n)); end if;
+  if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 was refused a change to an ordinary binder entry the base policy allows (%s rows)', n)); end if;
   update public.paperwork_items set status = 'needs_action' where id = paper;
   get diagnostics n = row_count;
   if n <> 1 then failures := array_append(failures, format('an ENROLLED CHILD on aal1 had a paperwork update FILTERED (%s rows) — setPaperworkStatusAction lets them through, so the row silently would not change', n)); end if;
@@ -359,7 +370,7 @@ begin
   perform set_config('role','authenticated', true);
   perform set_config('request.jwt.claim.sub', child::text, true);
   perform set_config('request.jwt.claims', '{"aal":"aal1"}', true);
-  select count(*) into n from public.household_info where id = info;
+  select count(*) into n from public.household_info where id = info_open;
   if n <> 0 then
     failures := array_append(failures, format('with the role half dropped from the binder SELECT guard the enrolled child still read %s row(s) — 5b has never been shown to depend on that clause', n));
   end if;
