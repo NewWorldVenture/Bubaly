@@ -334,7 +334,10 @@ describe('Supabase migration filename safety', () => {
     // 0396_a_proxy_bid_ceiling_is_secret.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0328 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0397');
+    // 0397_guardian_screening_is_the_parents_decision.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0330 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0398');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
