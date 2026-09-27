@@ -25,7 +25,7 @@
 --      (app/(app)/dashboard/concierge/actions.ts ~L185) reads `meta.plan_id`
 --      and `meta.approval_id` FROM THAT ROW'S OWN METADATA and decides the named
 --      `approval_requests` row `status='approved'`, `decided_by = <the parent's
---      member id>`, `decided_at`, `executed_at` (since 0344 through `decide()`,
+--      member id>`, `decided_at`, `executed_at` (since 0381 through `decide()`,
 --      which also appends the parent's own vote). That write is manager-only
 --      (`approval_requests_decide`, 0251 ~L128) and succeeds only because it is
 --      running in the parent's session. `dismissQueuedRunAction` (~L238) is the
@@ -278,7 +278,7 @@ begin
   if n = 0 then
     failures := array_append(failures, 'a MANAGER could not mark a queued run executed — executeQueuedRunAction is broken');
   end if;
-  -- Since 0344 a decision carries the decider's own vote in the same UPDATE,
+  -- Since 0381 a decision carries the decider's own vote in the same UPDATE,
   -- which is what `decide()` writes and what executeQueuedRunAction now routes
   -- through; a bare status flip is refused by approval_requests_decision_is_earned.
   update public.approval_requests

@@ -87,12 +87,18 @@ function subscribersClient(opts: {
   return { client: { from }, writes };
 }
 
-const post = async (body: Record<string, unknown>, ip = '203.0.113.9') => {
+// `visitor` is the `bubaly_vid` cookie the browser carries — the only place the
+// route takes attribution from since SEC-008 (see
+// tests/a-visitor-is-hearted-subscribed-and-bucketed-only-as-itself.test.ts).
+const post = async (body: Record<string, unknown>, ip = '203.0.113.9', visitor?: string) => {
   const { POST } = await import('@/app/api/blog/subscribe/route');
   const { NextRequest } = await import('next/server');
   return POST(new NextRequest('https://bubaly.com/api/blog/subscribe', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+    headers: {
+      'content-type': 'application/json', 'x-forwarded-for': ip,
+      ...(visitor ? { cookie: `bubaly_vid=${visitor}` } : {}),
+    },
     body: JSON.stringify(body),
   }));
 };
@@ -192,7 +198,7 @@ describe('the subscribe answer is the same for every address', () => {
     const store = subscribersClient({ existing: null });
     createServiceClient.mockReturnValue(store.client);
 
-    const res = await post({ email: ` ${UNKNOWN.toUpperCase()} `, source: 'article', visitorId: 'vid-12345678' });
+    const res = await post({ email: ` ${UNKNOWN.toUpperCase()} `, source: 'article' }, undefined, 'vid-12345678');
 
     expect((await observable(res)).body).toBe(ACCEPTED_BODY);
     expect(store.writes).toEqual([
@@ -220,7 +226,7 @@ describe('the subscribe answer is the same for every address', () => {
     const store = subscribersClient({ existing: active() });
     createServiceClient.mockReturnValue(store.client);
 
-    await post({ email: KNOWN, source: 'blog-footer', visitorId: 'attacker-999' });
+    await post({ email: KNOWN, source: 'blog-footer' }, undefined, 'attacker-999');
 
     expect(store.writes).toEqual([{ kind: 'update', id: 'sub-1', payload: { status: 'active' } }]);
   });

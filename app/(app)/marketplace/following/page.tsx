@@ -9,13 +9,15 @@ import { SaveButton } from '@/components/marketplace/save-button';
 import { buildFollowingFeed, newFromFollowingCount, type FeedListing, type StoreRow } from '@/lib/marketplace/following';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Following · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceFollowingPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -93,7 +95,7 @@ export default async function MarketplaceFollowingPage() {
           )}
           <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {feed.map(({ listing: l, storeName, storeEmoji, isNew }) => {
-              const price = priceLabel(l.kind as ListingKind, l.price_cents, (l.rent_period ?? null) as RentPeriod | null);
+              const price = priceLabel(l.kind as ListingKind, l.price_cents, (l.rent_period ?? null) as RentPeriod | null, locale.code, t);
               return (
                 <li key={l.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-3.5">
                   <div className="min-w-0 flex-1">

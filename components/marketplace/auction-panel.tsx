@@ -17,10 +17,11 @@ import {
 } from '@/lib/marketplace/auction';
 import { placeBidAction, buyNowAction } from '@/app/(app)/marketplace/auctions/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { useMoneyUnit } from '@/components/marketplace/money-unit';
 
 type Bid = { id: string; bidder_family_id: string; amount_cents: number; status: string; created_at: string; is_auto: boolean };
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export function AuctionPanel({
   listingId, isOwner, myFamilyId, initial, initialBids,
@@ -32,6 +33,13 @@ export function AuctionPanel({
   initialBids: Bid[];
 }) {
   const tr = useTranslations();
+  // Every bid is to the cent and in the READER's notation: this used to be
+  // `$${(c / 100).toFixed(2)}`, a literal symbol and a number with no locale, so a
+  // German bidder read "$2768.50" where they write "2.768,50 $".
+  const { fmtMoney } = useFormat();
+  const money = (c: number) => fmtMoney(c, MARKETPLACE_CURRENCY);
+  // The max-bid box's unit, on the side and in the spelling the reader writes it.
+  const unit = useMoneyUnit();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -151,12 +159,12 @@ export function AuctionPanel({
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
+              <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted', unit.unitClass)}>{unit.symbol}</span>
               <input
                 type="number" inputMode="decimal" min={minNext / 100} step="0.01"
                 value={maxInput} onChange={(e) => setMaxInput(e.target.value)}
-                placeholder={`Max bid (min ${money(minNext)})`}
-                className="h-11 w-full rounded-xl border border-border bg-bg pl-7 pr-3 text-sm outline-none focus:border-brand"
+                placeholder={tr('auctionPanel.maxBidMin', { amount: money(minNext) })}
+                className={cn('h-11 w-full rounded-xl border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)}
               />
             </div>
             <button
@@ -172,7 +180,7 @@ export function AuctionPanel({
           {a.buyNowCents != null && (
             <button onClick={buyNow} disabled={pending}
               className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 text-sm font-bold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50">
-              <Zap className="h-4 w-4" /> {tr('auction.buyItNowFor')} {money(a.buyNowCents)}
+              <Zap className="h-4 w-4" /> {tr('auctionPanel.buyItNowForAmount', { amount: money(a.buyNowCents) })}
             </button>
           )}
         </div>
@@ -185,9 +193,9 @@ export function AuctionPanel({
       )}
       {status === 'ended' && (
         <p className="mt-4 rounded-xl border border-border bg-surface/50 p-3 text-sm font-semibold">
-          {a.bidCount === 0 ? 'Ended with no bids.'
-            : resMet ? `Sold for ${money(a.currentBidCents)}.`
-            : `Ended at ${money(a.currentBidCents)} — reserve not met.`}
+          {a.bidCount === 0 ? tr('auctionPanel.endedWithNoBids')
+            : resMet ? tr('auctionPanel.soldFor', { amount: money(a.currentBidCents) })
+            : tr('auctionPanel.endedAtReserveNotMet', { amount: money(a.currentBidCents) })}
         </p>
       )}
 

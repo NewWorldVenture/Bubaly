@@ -34,7 +34,7 @@ import { createServer } from '@/lib/supabase/server';
 import {
   completeChoreAssignment, createChore, deleteChoreAssignment, setChoreProgress,
 } from '@/lib/services/tasks';
-import { makeKey } from '@/lib/services/idempotency';
+import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -44,7 +44,13 @@ const PATH = '/dashboard/chores';
 
 export type ChoreActionResult =
   | { ok: true; id: string }
-  | { ok: false; error: string };
+  /**
+   * `already_saved` (creates only): this submission id already wrote a chore,
+   * and that chore no longer matches the one just sent — see `KeyedCreateOptions`
+   * in lib/services/idempotency.ts. That Add is settled, so the modal mints a
+   * new id rather than retry it (`submissionSettled`).
+   */
+  | { ok: false; error: string; code?: typeof ALREADY_SAVED };
 
 /**
  * A status change reports the status it SETTLED on, not the one asked for.
@@ -201,8 +207,16 @@ export async function createChoreAction(input: CreateChoreActionInput): Promise<
       icon: input.icon ?? null,
       dueAt: input.dueAt ?? null,
       assigneeId: input.assigneeId ?? null,
+    }, {
+      // The key is a person's submission id, not a plan step: a changed Add
+      // under it is a change of mind, not the same save (see KeyedCreateOptions).
+      rejectChangedRetry: true,
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      return result.code === ALREADY_SAVED
+        ? { ok: false, error: result.error, code: ALREADY_SAVED }
+        : { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.chore.id };

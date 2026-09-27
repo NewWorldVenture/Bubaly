@@ -34,6 +34,7 @@ import {
   createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
   deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
 } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
 import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
@@ -50,6 +51,8 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import { PLAN_CURRENCY } from '@/lib/marketing/value';
+import { formatCents } from '@/lib/wallet/ledger';
 import {
   classifyChange, slugToStripePlan, stripePlanFor, annualSavingsPct, canChangeSubscriptionInPlace,
   CHANGE_LABELS, type StripePlan, type BillingInterval, type PlanChange,
@@ -77,23 +80,26 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
   incomplete_expired: { label: 'Expired', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
   unpaid: { label: 'Unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
 };
-const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
-  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
-  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
-  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: `$${(PLUS_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: `$${(PLUS_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+// No price field. There used to be one, a hand-written `$${…toFixed(2)}/mo` per
+// slug, and nothing ever rendered it: the current-plan card shows name and
+// description only, and every price a family actually sees comes from
+// PlanManager below, formatted for the reader. A dead string that no reader
+// sees has no locale to be given, so it is removed rather than "converted".
+const PLAN_LABELS: Record<string, { name: string; description: string }> = {
+  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.' },
+  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.' },
+  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.' },
+  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.' },
+  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.' },
   // Legacy slugs map to Basic.
-  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+  family: { name: 'Family Basic', description: 'Everything a busy household needs.' },
+  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.' },
 };
 
 async function openPortal() {
   const res = await fetch('/api/billing/portal', { method: 'POST' });
   const json = await res.json(); if (json.url) window.location.href = json.url;
 }
-
-const fmtUsd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 const TIER_DEFS = [
   {
@@ -114,7 +120,7 @@ const TIER_DEFS = [
  * Upgrade / Downgrade / Switch billing). One tap calls the in-place change-plan
  * flow (prorated) or Checkout when on Free.
  */
-function PlanManager({
+export function PlanManager({
   currentSlug, highlight, pending, onChoose,
 }: {
   currentSlug: string | null;
@@ -123,6 +129,9 @@ function PlanManager({
   onChoose: (plan: StripePlan) => void;
 }) {
   const tr = useTranslations();
+  // Plan prices in the reader's money format; the currency stays the plan's own.
+  const locale = useLocale();
+  const price = (cents: number) => formatCents(cents, PLAN_CURRENCY, locale.code);
   const [interval, setInterval] = useState<BillingInterval>('annual');
   const annual = interval === 'annual';
   const ref = useRef<HTMLDivElement>(null);
@@ -150,7 +159,9 @@ function PlanManager({
           const plan = stripePlanFor(t.level, interval);
           const change: PlanChange = classifyChange(currentSlug, plan);
           const perMonth = annual ? Math.round(t.annualCents / 12) : t.monthlyCents;
-          const sub = annual ? `${fmtUsd(t.annualCents)}/yr · save ${annualSavingsPct(t.level)}%` : 'billed monthly';
+          const sub = annual
+            ? tr('billing.pricePerYearSave', { amount: price(t.annualCents), percent: annualSavingsPct(t.level) })
+            : tr('billing.billedMonthly');
           const isCurrent = change === 'current';
           return (
             <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
@@ -158,7 +169,7 @@ function PlanManager({
                 <p className="font-semibold">{t.name}</p>
                 {isCurrent ? <Badge tone="success">{tr('billing.current')}</Badge> : t.featured && <Badge tone="brand">{tr('billing.mostPopular')}</Badge>}
               </div>
-              <p className="mt-1 text-2xl font-bold">{fmtUsd(perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-1 text-2xl font-bold">{price(perMonth)}<span className="text-sm font-normal text-muted">{tr('pricingValue.perMonthSuffix')}</span></p>
               <p className="text-xs text-muted">{sub}</p>
               <Button
                 className="mt-3 w-full"
@@ -326,7 +337,7 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
       accountId: accountId || null, notes: null,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionAdded'));
     reset(); onClose(); onDone();
   }
@@ -382,7 +393,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
     const supabase = createClient();
     const res = await setBudgetAction(category, parseFloat(amount), period);
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetAdded'));
     reset(); onClose(); onDone();
   }
@@ -498,7 +509,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
       targetDate: targetDate || null, emoji,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.savingsGoalAdded'));
     reset(); onClose(); onDone();
   }
@@ -892,7 +903,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   async function deleteTransaction(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteTransactionAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionRemoved'));
     void refreshTransactions();
   }
@@ -900,7 +911,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   async function deleteBudget(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteBudgetAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetRemoved'));
     void refreshBudgets();
   }
@@ -930,7 +941,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   async function deleteGoal(id: string) {
     if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteSavingsGoalAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.goalRemoved'));
     void refreshGoals();
   }

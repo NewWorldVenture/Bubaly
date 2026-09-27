@@ -107,8 +107,9 @@ describe('rememberOnboardingFacts', () => {
   it('marks them as confirmed facts the person stated, with where they came from', async () => {
     await rememberOnboardingFacts(scope(), ANSWERS);
     const [row] = db.table('family_facts');
-    // The provenance the CHECK constraint allows, plus the note that says
-    // onboarding — see lib/onboarding/facts.ts for why it is not 'onboarding'.
+    // The confirmed-lane source rememberFact routes on, plus the note that
+    // carries the provenance — see lib/onboarding/facts.ts for why 'onboarding'
+    // is the wrong value and not merely an unavailable one.
     expect(row.source).toBe(ONBOARDING_FACT_SOURCE);
     expect(row.source).toBe('user');
     expect(row.notes).toBe(ONBOARDING_FACT_NOTE);

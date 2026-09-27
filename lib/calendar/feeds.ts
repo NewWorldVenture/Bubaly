@@ -88,3 +88,18 @@ export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: stri
   }
   return [...byUid.values()];
 }
+
+/**
+ * What the calendar panel says after "Add & Sync Now" succeeds. When the URL
+ * was one the family already subscribed to, addCalendarFeed re-synced that
+ * subscription instead of adding one and did not apply the name or colour
+ * typed on this add, so "Added" would describe a row the list does not show;
+ * name the subscription it actually synced instead.
+ */
+export function feedAddedMessage(
+  res: { imported?: number; alreadySubscribedAs?: string },
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (res.alreadySubscribedAs != null) return t('calendarSync.alreadySubscribedResynced', { name: res.alreadySubscribedAs });
+  return res.imported != null ? `Added — ${res.imported} events imported` : 'Calendar added';
+}

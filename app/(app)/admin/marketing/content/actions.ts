@@ -5,6 +5,7 @@ import { AEO_TAG } from '@/lib/marketing/aeo';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { buildBlogPost } from '@/lib/marketing/blog-publish';
 import { deriveArticleAeoQuestions } from '@/lib/marketing/aeo-generate';
+import { retireAeoQuestionsForPath } from '@/lib/marketing/platform';
 import { archiveLegacyBlogOnPlatform, syncLegacyBlogToPlatform, syncLegacyBlogVisibility } from '@/lib/marketing/legacy-bridge';
 import type { Json } from '@/lib/database.types';
 
@@ -171,10 +172,19 @@ export async function unpublishBlogPostAction(slug: string): Promise<void> {
     }).eq('id', item.id).is('deleted_at', null).select('id').maybeSingle();
     if (updateError || !updated) marketingActionFailure('sync the unpublished blog item', updateError ?? new Error('Marketing content item not found.'));
   }
+  // The post is gone from /blog, but publishContentToBlogAction's generated
+  // answers are separate rows in marketing_aeo_questions and are public on
+  // `status = 'published'` alone. Left published they keep the article's Q&A on
+  // /faq and in the category FAQ block of every SIBLING article — and the answer
+  // body itself reads "Read the full guide at /blog/<slug>", which now 404s.
+  const { error: retireError } = await retireAeoQuestionsForPath(supabase, `/blog/${slug}`, ['blog_aeo_v1']);
+  if (retireError) marketingActionFailure("retire the unpublished post's public answers", retireError);
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'unpublish', resource: 'blog_post', resourceId: slug });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');
   revalidatePath(`/blog/${slug}`);
+  revalidateTag(AEO_TAG);
+  revalidatePath('/faq');
 }
 
 export async function archiveContentAction(formData: FormData): Promise<void> {
@@ -202,10 +212,19 @@ export async function archiveContentAction(formData: FormData): Promise<void> {
       const { error: unpublishError } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug);
       if (unpublishError) marketingActionFailure('unpublish the archived blog post', unpublishError);
       await archiveLegacyBlogOnPlatform(supabase, slug, actorId);
+      // archiveLegacyBlogOnPlatform retires the platform-generated rows, but the
+      // `blog_aeo_v1` rows this module writes on publish are a separate writer
+      // and survive it — and they survive even when there is no platform page for
+      // the slug at all. Without this the archived article keeps answering on
+      // /faq and inside every sibling article in the same category.
+      const { error: retireError } = await retireAeoQuestionsForPath(supabase, `/blog/${slug}`, ['blog_aeo_v1']);
+      if (retireError) marketingActionFailure("retire the archived post's public answers", retireError);
       revalidatePath(`/blog/${slug}`);
     }
   }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'archive', resource: 'marketing_content_item', resourceId: id });
   revalidatePath('/admin/marketing/content');
   revalidatePath('/blog');
+  revalidateTag(AEO_TAG);
+  revalidatePath('/faq');
 }

@@ -6,13 +6,15 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Saved · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceSavedPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
 
@@ -52,7 +54,7 @@ export default async function MarketplaceSavedPage() {
                 <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand-text">{l.title}</Link>
                 <p className="mt-1 text-xs text-muted">
                   {KIND_LABELS[l.kind as ListingKind] ?? l.kind}
-                  {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}`}
+                  {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t)}`}
                   {l.status !== 'available' && ` · ${l.status}`}
                 </p>
               </div>

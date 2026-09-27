@@ -81,6 +81,77 @@ export function scopeKey(scope: ServiceScope, operation: string, input: unknown)
 export type IdempotencyProbe<T> = (key: string) => Promise<ServiceResult<T | null>>;
 
 /**
+ * The `code` a keyed create fails with when its key already wrote a row that no
+ * longer matches this request — see `ChangedRetry`. Callers branch on it: the
+ * attempt that wrote the row is settled, so the next press is a new
+ * composition. `submissionSettled` (lib/utils/submission-id.ts) spells the same
+ * string for the browser, which cannot import this server-only module.
+ */
+export const ALREADY_SAVED = 'already_saved' as const;
+
+/** What a keyed create lets its caller choose. */
+export type KeyedCreateOptions = {
+  /**
+   * Set by a caller whose idempotency key names ONE PERSON'S COMPOSITION — the
+   * browser's submission id, held across every press until a row lands. There
+   * a found row whose content differs from this request means the person
+   * changed something (Today → Tomorrow, a typo fixed) after a press that did
+   * land, and answering with that row as a success would say "added" over a
+   * change that was dropped. It is answered ALREADY_SAVED instead.
+   *
+   * Left unset by callers whose key names an OPERATION — an executor step
+   * (lib/ai/runs/executor.ts `stepIdempotencyKey`), a per-pet trip task
+   * (trips/index.ts `createPetCareTasks`). A retry of a step is the same step
+   * even when its recomputed inputs moved (a trip renamed, the default list
+   * changed), and the row it already wrote is its outcome, as it always was.
+   */
+  rejectChangedRetry?: boolean;
+};
+
+/**
+ * How `withIdempotency` judges a row it found under the key but did not write,
+ * for a service whose caller set `rejectChangedRetry`.
+ *
+ * The key is deliberately content-free (two children each needing "Pack the
+ * kit" are two compositions, not one), so it cannot say whether the found row
+ * is THIS request. Only a comparison can, and only the service knows which
+ * columns it would have written.
+ */
+export type ChangedRetry<T> = {
+  /**
+   * The columns on which `found` differs from what this call would write; empty
+   * means the same save. Names only — the values are a family's own text and
+   * stay out of the log line this feeds.
+   */
+  drift: (found: T) => string[];
+  /**
+   * What the person reads. It must hold for a row edited after it landed as
+   * well — see `foundUnderKey` — so it names the saved row and says this press
+   * added and changed nothing, never that the press carried changes.
+   */
+  message: (found: T) => Promise<string> | string;
+  /** The found row's id, for the operator log line. */
+  id: (found: T) => string;
+};
+
+/** Two nullable ids, as Postgres compares uuids: case-insensitively, null and undefined alike. */
+export function sameId(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+}
+
+/**
+ * Two nullable timestamps, compared as instants. A `timestamptz` comes back in
+ * PostgREST's form ("…T19:00:00+00:00") whatever form went in ("…T19:00:00.000Z"),
+ * so the TEXT of an unchanged retry never matches its stored row; the instant
+ * does. A value that is not a timestamp at all is compared as text.
+ */
+export function sameInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  const [ma, mb] = [Date.parse(a), Date.parse(b)];
+  return Number.isFinite(ma) && Number.isFinite(mb) ? ma === mb : a === b;
+}
+
+/**
  * Run `create` unless `find` says the row is already there.
  *
  * Without `scope.idempotencyKey` there is nothing to deduplicate against and
@@ -88,10 +159,14 @@ export type IdempotencyProbe<T> = (key: string) => Promise<ServiceResult<T | nul
  * two rows. A probe that fails is treated as fatal rather than falling through
  * to `create`: a duplicate calendar event or a duplicate charge is worse than
  * an honest "try again", and the caller already knows how to retry.
+ *
+ * A row found under the key goes through `foundUnderKey`, which hands it back
+ * as the success it has always been unless the service asked, through
+ * `changedRetry`, for a row that no longer matches this request to be refused.
  */
 export async function withIdempotency<T>(
   scope: ServiceScope,
-  options: { operation: string; input: unknown; find: IdempotencyProbe<T> },
+  options: { operation: string; input: unknown; find: IdempotencyProbe<T>; changedRetry?: ChangedRetry<T> },
   create: (key: string | null) => Promise<ServiceResult<T>>,
 ): Promise<ServiceResult<T>> {
   if (!scope.idempotencyKey && !scope.runId && !scope.stepId && !scope.requestId) {
@@ -100,7 +175,7 @@ export async function withIdempotency<T>(
   const key = scopeKey(scope, options.operation, options.input);
   const existing = await options.find(key);
   if (!existing.ok) return existing;
-  if (existing.data !== null) return { ok: true, data: existing.data };
+  if (existing.data !== null) return foundUnderKey(scope, options, existing.data);
 
   const created = await create(key);
   if (created.ok) return created;
@@ -110,8 +185,40 @@ export async function withIdempotency<T>(
   // winner wrote is the honest answer. A failure with nothing behind it is
   // returned unchanged, so a real error is never disguised as success.
   const raced = await options.find(key);
-  if (raced.ok && raced.data !== null) return { ok: true, data: raced.data };
+  if (raced.ok && raced.data !== null) return foundUnderKey(scope, options, raced.data);
   return created;
+}
+
+/**
+ * A row the key already wrote and THIS call did not — by an earlier attempt,
+ * or by the call that won the race.
+ *
+ * Without `changedRetry` it is the success it has always been. With it, the
+ * caller's key is a person's submission id (see `KeyedCreateOptions`): a parent
+ * who pressed Today, lost the response, and then pressed Tomorrow — or fixed a
+ * typo — has sent the same key with different content, and answering with the
+ * stored row as a success would tell them "added" while their change is
+ * silently discarded. Only an identical retry is the same save.
+ *
+ * The comparison is with the row AS IT STANDS NOW, not as it was written —
+ * nothing records the original content. So a family that edited the row after
+ * it landed and then re-sent the unchanged press lands here too, which is why
+ * `ChangedRetry.message` must be true for that case as well.
+ */
+async function foundUnderKey<T>(
+  scope: ServiceScope,
+  options: { operation: string; changedRetry?: ChangedRetry<T> },
+  found: T,
+): Promise<ServiceResult<T>> {
+  const changed = options.changedRetry;
+  if (!changed) return ok(found);
+  const fields = changed.drift(found);
+  if (fields.length === 0) return ok(found);
+  // Field names only: the values are the family's own text.
+  console.warn(`[service:idempotency] a retried ${options.operation} does not match the row its key already wrote, as that row stands now`, {
+    familyId: scope.familyId, id: changed.id(found), fields,
+  });
+  return fail(await changed.message(found), { code: ALREADY_SAVED });
 }
 
 /** The tables 0256 gave an `idempotency_key` and its partial unique index. */

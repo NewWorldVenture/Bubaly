@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Heart, Star, Utensils, Receipt, Plus, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
 
 export type DiningRow = {
   id: string; name: string; kind: string; cuisine: string | null; category: string | null;
@@ -19,13 +20,35 @@ export type DiningRow = {
   is_favorite: boolean; amount_cents: number | null; item_count: number | null; visited_at: string | null;
 };
 
+/** The four tile figures, counted and summed by the database over the whole
+ *  family. They arrive as props rather than being derived here because the lists
+ *  below are capped: 30 fetched visits cannot tell this component how much the
+ *  family spent in 30 days, and a tile that guesses prints a precise dollar
+ *  figure that is short by however much the cap dropped.
+ *
+ *  `null` means UNKNOWN — the read behind it did not complete, or the figure
+ *  could not be totalled — and renders as "—". It never renders as 0. */
+export type DiningStats = {
+  favorites: number | null;
+  visits30d: number | null;
+  spend30dCents: number | null;
+  avgRating: number | null;
+};
+
+const UNKNOWN = '—';
+
+// dining_out.amount_cents has no currency column and a visit is logged in
+// dollars ("Total ($)"), so the amount is USD. The reader's locale decides only
+// where the symbol goes and how the digits group (I18N-003).
+const CURRENCY = 'USD';
+
 const priceLabel = (n: number | null) => (n && n > 0 ? '$'.repeat(Math.min(4, n)) : '');
-const usd = (cents: number | null) => (cents == null ? '' : `$${(cents / 100).toFixed(2)}`);
 const fmtDayIn = (locale: LocaleCode) => (d: string | null) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
-export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]; visits: DiningRow[] }) {
+export function DiningModule({ restaurants, visits, stats }: { restaurants: DiningRow[]; visits: DiningRow[]; stats: DiningStats }) {
   const locale = useLocale();
   const fmtDay = fmtDayIn(locale.code);
+  const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -35,19 +58,6 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addForm, setAddForm] = useState({ name: '', cuisine: '', priceLevel: '2', rating: '' });
   const [logForm, setLogForm] = useState({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
-
-  const stats = useMemo(() => {
-    const monthAgo = Date.now() - 30 * 86400_000;
-    const recent = visits.filter(v => v.visited_at && new Date(v.visited_at).getTime() >= monthAgo);
-    const spend = recent.reduce((s, v) => s + (v.amount_cents ?? 0), 0);
-    const rated = restaurants.filter(r => r.rating != null);
-    return {
-      favorites: restaurants.filter(r => r.is_favorite).length,
-      visits30d: recent.length,
-      spend30d: spend,
-      avgRating: rated.length ? Math.round(rated.reduce((s, r) => s + (r.rating ?? 0), 0) / rated.length * 10) / 10 : null,
-    };
-  }, [restaurants, visits]);
 
   function toggleFav(r: DiningRow) {
     setBusyId(r.id);
@@ -110,10 +120,10 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Favorites', value: stats.favorites, icon: '❤️' },
-          { label: 'Visits · 30d', value: stats.visits30d, icon: '🍽️' },
-          { label: 'Spend · 30d', value: usd(stats.spend30d) || '$0.00', icon: '🧾' },
-          { label: 'Avg rating', value: stats.avgRating ?? '—', icon: '⭐' },
+          { label: 'Favorites', value: stats.favorites ?? UNKNOWN, icon: '❤️' },
+          { label: 'Visits · 30d', value: stats.visits30d ?? UNKNOWN, icon: '🍽️' },
+          { label: 'Spend · 30d', value: stats.spend30dCents == null ? UNKNOWN : money(stats.spend30dCents), icon: '🧾' },
+          { label: 'Avg rating', value: stats.avgRating ?? UNKNOWN, icon: '⭐' },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
@@ -180,7 +190,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
                     {[fmtDay(v.visited_at), v.item_count != null ? `${v.item_count} items` : null].filter(Boolean).join(' · ')}
                   </p>
                 </div>
-                {v.amount_cents != null && <span className="shrink-0 text-sm font-semibold">{usd(v.amount_cents)}</span>}
+                {v.amount_cents != null && <span className="shrink-0 text-sm font-semibold">{money(v.amount_cents)}</span>}
               </li>
             ))}
           </ul>

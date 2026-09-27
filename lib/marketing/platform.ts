@@ -292,6 +292,50 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   return { pageId: page.id, version: page.version, source };
 }
 
+/** The two writers that publish AEO answers for a path, keyed the way each one
+ *  stamps its rows: `runQuestions` below (metadata.source) and
+ *  `deriveArticleAeoQuestions` for blog articles (metadata.seed). */
+export type AeoQuestionSource = 'marketing_platform' | 'blog_aeo_v1';
+
+/**
+ * Take a path's public AEO answers out of the published set.
+ *
+ * `marketing_aeo_questions` rows are world-readable on `status = 'published'`
+ * alone (migration 0228) — the policy does not join back to the page, so a page
+ * that goes dark leaves its generated answers live on /faq's Knowledge Center,
+ * in the category FAQ block of every SIBLING article, and in the FAQPage
+ * structured data submitted to search engines. For a blog article the answer body
+ * literally ends "Read the full guide at /blog/<slug>", i.e. a public answer
+ * citing a 404. Nothing self-heals it: the 0237 regeneration trigger skips rows
+ * with `deleted_at` set, and `runQuestions` refuses a deleted page.
+ *
+ * 'answered' rather than deleted, because that is exactly the status
+ * `runQuestions` (line below) writes for a page that is not published — the
+ * editorial text survives for a later re-publish, it stays visible in the admin
+ * AEO console, and it leaves the public set.
+ *
+ * Only PUBLISHED rows are touched, so an 'opportunity' or 'drafting' row an
+ * admin is still working on keeps its own status.
+ */
+export async function retireAeoQuestionsForPath(
+  supabase: MarketingPlatformDb,
+  sourcePath: string,
+  sources: AeoQuestionSource[],
+): Promise<{ error: { code?: string; message?: string } | null }> {
+  for (const source of sources) {
+    const base = supabase
+      .from('marketing_aeo_questions')
+      .update({ status: 'answered', last_reviewed: new Date().toISOString() })
+      .eq('source_path', sourcePath)
+      .eq('status', 'published');
+    const { error } = await (source === 'marketing_platform'
+      ? base.contains('metadata', { source: 'marketing_platform' })
+      : base.eq('metadata->>seed', 'blog_aeo_v1'));
+    if (error) return { error };
+  }
+  return { error: null };
+}
+
 async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Question job is missing target_id.');
   const { data: page, error } = await supabase.from('marketing_pages').select('id, path, title, summary, aeo, status').eq('id', job.target_id).is('deleted_at', null).maybeSingle();

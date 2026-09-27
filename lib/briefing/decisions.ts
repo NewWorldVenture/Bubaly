@@ -27,7 +27,7 @@ import type { ApprovalCardData } from '@/lib/approvals/card-data';
 import { isAppPath } from '@/lib/briefing/response-schema';
 import type { NeedItem } from '@/lib/home/needs-attention';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
-import type { AwaitingRunRow, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
+import type { AwaitingRunRow, NeedsReader, ParentApprovalRow, RecommendationRow } from '@/lib/home/needs-sources';
 import { listPending } from '@/lib/services/approvals';
 import { scopeNow } from '@/lib/services/scope';
 import { settleAll } from '@/lib/supabase/settle';
@@ -58,7 +58,13 @@ const WAITING_ON_A_PERSON = ['awaiting_approval', 'awaiting_context'] as const;
 /** Where a decision points when its own href cannot be trusted. */
 const DECISIONS_FALLBACK_HREF = '/dashboard/needs-you';
 
-export async function readBriefDecisions(scope: ServiceScope): Promise<ServiceResult<BriefDecisions>> {
+/**
+ * `reader` words the titles: a money approval's title carries its amount, so it
+ * is written in the reader's format and language. The route passes its
+ * request's locale; the morning-brief cron, which has no request, passes an
+ * explicit source locale and says why (lib/briefing/deliver.ts).
+ */
+export async function readBriefDecisions(scope: ServiceScope, reader: NeedsReader): Promise<ServiceResult<BriefDecisions>> {
   const now = scopeNow(scope);
   const viewer = viewerFor(scope);
   try {
@@ -110,6 +116,7 @@ export async function readBriefDecisions(scope: ServiceScope): Promise<ServiceRe
       pendingApprovals: 0, overdueMeds: false, overdueReminders: 0, dueTodayReminders: 0,
       pendingChores: 0, lowGrocery: false, openTodos: 0,
       now,
+      reader,
       aiApprovals: aiApprovals.map((a) => ({
         id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt,
       })),

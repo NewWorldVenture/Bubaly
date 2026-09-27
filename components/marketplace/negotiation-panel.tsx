@@ -18,9 +18,21 @@ import {
   type Party, type RoundKind,
 } from '@/lib/marketplace/negotiation';
 import { makeOfferAction, respondToOfferAction } from '@/app/(app)/marketplace/negotiations/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { useMoneyUnit } from '@/components/marketplace/money-unit';
 
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+/**
+ * An offer, to the cent, in the READER's notation. This used to be a module-level
+ * `$${(c / 100).toFixed(2)}` — a literal symbol and a number with no locale, so a
+ * German buyer read "$2768.50". It is a hook now because the locale is the
+ * reader's, and only the provider knows who is reading.
+ */
+function useMoney(): (c: number) => string {
+  const { fmtMoney } = useFormat();
+  return (c) => fmtMoney(c, MARKETPLACE_CURRENCY);
+}
 
 export type ThreadRound = { id: string; actorRole: Party; kind: RoundKind; amountCents: number | null; message: string | null; createdAt: string };
 export type Thread = {
@@ -38,6 +50,8 @@ export function NegotiationPanel({
   threads: Thread[];       // owner: all threads; buyer: their own (0 or 1)
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const money = useMoney();
   const router = useRouter();
   const { success, error: toastError } = useToast();
 
@@ -61,7 +75,7 @@ export function NegotiationPanel({
     <div className="rounded-2xl border border-border bg-gradient-to-br from-brand/[0.05] to-surface/40 p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-bold">
         <Handshake className="h-4 w-4 text-brand-text" /> {tr('negotiation.makeAnOffer')}
-        <span className="ml-auto text-[11px] font-normal text-muted">{tr('negotiation.asking')} {money(askCents)}</span>
+        <span className="ml-auto text-[11px] font-normal text-muted">{tr('negotiationPanel.askingAmount', { amount: money(askCents) })}</span>
       </div>
 
       {showOpener && <OfferOpener listingId={listingId} askCents={askCents} onDone={(m) => { success(m); router.refresh(); }} onError={toastError} />}
@@ -82,7 +96,7 @@ export function NegotiationPanel({
                     <span className="text-sm font-semibold">{t.buyerName}</span>
                     <span className={cn('text-[11px] font-medium',
                       t.status === 'agreed' ? 'text-emerald-400' : t.status === 'open' ? 'text-brand-text' : 'text-muted')}>
-                      {t.status === 'open' ? statusLine({ status: 'open', currentAmountCents: t.currentAmountCents, lastActor: t.lastActor }, 'seller') : statusLine({ status: t.status as never, currentAmountCents: t.currentAmountCents, lastActor: t.lastActor, agreedAmountCents: t.agreedAmountCents }, 'seller')}
+                      {t.status === 'open' ? statusLine({ status: 'open', currentAmountCents: t.currentAmountCents, lastActor: t.lastActor }, 'seller', locale.code, tr) : statusLine({ status: t.status as never, currentAmountCents: t.currentAmountCents, lastActor: t.lastActor, agreedAmountCents: t.agreedAmountCents }, 'seller', locale.code, tr)}
                     </span>
                   </div>
                   <ThreadView thread={t} viewer="seller" askCents={askCents} listingId={listingId}
@@ -101,6 +115,9 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
   listingId: string; askCents: number; onDone: (m: string) => void; onError: (m: string) => void;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const money = useMoney();
+  const unit = useMoneyUnit();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [amt, setAmt] = useState(() => (suggestedOpeningCents(askCents) / 100).toString());
@@ -117,7 +134,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
 
   function submit() {
     const cents = Math.round(parseFloat(amt) * 100);
-    const bad = validateOfferAmount(cents, askCents);
+    const bad = validateOfferAmount(cents, askCents, locale.code, tr);
     if (bad) { onError(bad); return; }
     start(async () => {
       const res = await makeOfferAction({ listingId, amountCents: cents, message: msg });
@@ -131,9 +148,9 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
     <div className="space-y-2">
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
+          <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted', unit.unitClass)}>{unit.symbol}</span>
           <input type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
-            className="h-11 w-full rounded-xl border border-border bg-bg pl-7 pr-3 text-sm outline-none focus:border-brand" />
+            className={cn('h-11 w-full rounded-xl border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
         </div>
         <button onClick={submit} disabled={pending}
           className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
@@ -142,7 +159,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
       </div>
       <input value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={500} placeholder={tr('negotiation.addANoteOptional')}
         className="h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
-      <p className="text-[11px] text-muted">{tr('negotiation.offersBelowThe')} {money(askCents)} {tr('negotiation.askingPriceTheSellerCanAccept')}</p>
+      <p className="text-[11px] text-muted">{tr('negotiationPanel.offersBelowTheAsking', { amount: money(askCents) })}</p>
     </div>
   );
 }
@@ -152,6 +169,9 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
   thread: Thread; viewer: Party; askCents: number; listingId: string; onDone: (m: string) => void; onError: (m: string) => void;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const money = useMoney();
+  const unit = useMoneyUnit();
   const [pending, start] = useTransition();
   const [countering, setCountering] = useState(false);
   const [amt, setAmt] = useState(() => (suggestedCounterCents(thread.currentAmountCents, askCents) / 100).toString());
@@ -166,17 +186,17 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
       if (!res.ok) { onError(res.error); return; }
       setCountering(false);
       onDone(
-        res.data?.status === 'agreed' ? `Deal! Agreed at ${money(thread.currentAmountCents)} — check your orders.`
-        : action === 'withdraw' ? 'Offer withdrawn.'
-        : action === 'decline' ? 'Offer declined.'
-        : 'Counter sent.');
+        res.data?.status === 'agreed' ? tr('negotiationPanel.dealAgreedCheckYourOrders', { amount: money(thread.currentAmountCents) })
+        : action === 'withdraw' ? tr('negotiationPanel.offerWithdrawn')
+        : action === 'decline' ? tr('negotiationPanel.offerDeclined')
+        : tr('negotiationPanel.counterSent'));
     });
   }
 
   function sendCounter() {
     const cents = Math.round(parseFloat(amt) * 100);
     if (viewer === 'buyer') {
-      const bad = validateOfferAmount(cents, askCents);
+      const bad = validateOfferAmount(cents, askCents, locale.code, tr);
       if (bad) { onError(bad); return; }
     } else if (!cents || cents <= 0) { onError(tr('negotiationPanel.enterAValidCounterAmount')); return; }
     // Buyers counter through the offer RPC (it appends to the same thread);
@@ -187,7 +207,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
         : await respondToOfferAction({ negotiationId: thread.id, action: 'counter', amountCents: cents });
       if (!res.ok) { onError(res.error); return; }
       setCountering(false);
-      onDone('Counter sent.');
+      onDone(tr('negotiationPanel.counterSent'));
     });
   }
 
@@ -198,7 +218,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
         {thread.rounds.map((r) => (
           <li key={r.id} className="flex items-baseline justify-between gap-2">
             <span className={cn(r.actorRole === viewer ? 'text-fg' : 'text-muted')}>
-              {roundLine({ actorRole: r.actorRole, kind: r.kind, amountCents: r.amountCents, createdAt: r.createdAt })}
+              {roundLine({ actorRole: r.actorRole, kind: r.kind, amountCents: r.amountCents, createdAt: r.createdAt }, locale.code, tr)}
               {r.message ? <span className="text-muted"> — “{r.message}”</span> : null}
             </span>
           </li>
@@ -212,7 +232,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
               {actions.includes('accept') && (
                 <button onClick={() => respond('accept')} disabled={pending}
                   className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-400 transition hover:bg-emerald-500/25 disabled:opacity-50">
-                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('negotiation.accept')} {money(thread.currentAmountCents)}
+                  {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} {tr('negotiationPanel.acceptAmount', { amount: money(thread.currentAmountCents) })}
                 </button>
               )}
               {actions.includes('counter') && (
@@ -238,9 +258,9 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
           ) : (
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">$</span>
+                <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted', unit.unitClass)}>{unit.symbol}</span>
                 <input type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-border bg-bg pl-7 pr-3 text-sm outline-none focus:border-brand" />
+                  className={cn('h-9 w-full rounded-lg border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
               </div>
               <button onClick={sendCounter} disabled={pending}
                 className="inline-flex h-9 items-center gap-1 rounded-lg bg-brand px-3 text-xs font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-50">
@@ -254,7 +274,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
 
       {thread.status === 'agreed' && (
         <p className="text-xs font-semibold text-emerald-400">
-          {tr('negotiation.agreedAt')} {money(thread.agreedAmountCents ?? thread.currentAmountCents)}
+          {tr('negotiationPanel.agreedAtAmount', { amount: money(thread.agreedAmountCents ?? thread.currentAmountCents) })}
           {savingsPercent(thread.agreedAmountCents ?? thread.currentAmountCents, askCents) > 0 && (
             <span className="text-muted"> · {savingsPercent(thread.agreedAmountCents ?? thread.currentAmountCents, askCents)}{tr('negotiation.offAsking')}</span>
           )}

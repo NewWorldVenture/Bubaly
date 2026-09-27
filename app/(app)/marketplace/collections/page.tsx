@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Collections · Marketplace | Bubaly' };
@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceCollectionsPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const { id } = await searchParams;
@@ -76,7 +78,7 @@ export default async function MarketplaceCollectionsPage({ searchParams }: { sea
         ) : (
           <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {(listings ?? []).map((l) => {
-              const price = priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null);
+              const price = priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t);
               return (
                 <li key={l.id}>
                   <Link href={`/marketplace/item/${l.id}`} className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface/60 transition hover:border-brand/40">

@@ -3,6 +3,9 @@
 // quality score, XP→level curve, and streak updates. No DB/network so the math
 // is unit-tested directly and reused by both the server engine and the UI.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
 export type RewardMode = 'fixed_cash' | 'fixed_points' | 'ai_cash' | 'ai_points' | 'prize' | 'responsibility';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -28,11 +31,16 @@ export type ChoreReward = {
   cash_max_cents: number | null;
 };
 
+// No `label`. There used to be one — "$3.00", "50 pts", "Prize unlock" — an
+// English summary that no screen ever read: the kid's submit page and the
+// parent's review card both word the reward themselves, in the reader's
+// language, from `type`, `points` and `cashCents`. Keeping it would have meant
+// either an English string in a German family's data or a locale parameter
+// threaded through the approval path purely to feed a field nobody renders.
 export type RewardOutcome = {
   type: 'cash' | 'points' | 'prize' | 'none';
   points: number;       // points to award
   cashCents: number;    // cash to award, in cents
-  label: string;        // human summary
 };
 
 /** Linearly interpolate min..max by a 0..100 score, floored to an integer. */
@@ -52,30 +60,43 @@ export function computeReward(chore: ChoreReward, score: number): RewardOutcome 
   switch (chore.reward_mode) {
     case 'fixed_points': {
       const points = Math.max(0, chore.points ?? 0);
-      return { type: 'points', points, cashCents: 0, label: `${points} pts` };
+      return { type: 'points', points, cashCents: 0 };
     }
     case 'fixed_cash': {
       const cashCents = Math.max(0, chore.cash_cents ?? 0);
-      return { type: 'cash', points: 0, cashCents, label: fmtCash(cashCents) };
+      return { type: 'cash', points: 0, cashCents };
     }
     case 'ai_points': {
       const points = scaleByScore(chore.points_min ?? 0, chore.points_max ?? chore.points_min ?? 0, score);
-      return { type: 'points', points, cashCents: 0, label: `${points} pts` };
+      return { type: 'points', points, cashCents: 0 };
     }
     case 'ai_cash': {
       const cashCents = scaleByScore(chore.cash_min_cents ?? 0, chore.cash_max_cents ?? chore.cash_min_cents ?? 0, score);
-      return { type: 'cash', points: 0, cashCents, label: fmtCash(cashCents) };
+      return { type: 'cash', points: 0, cashCents };
     }
     case 'prize':
-      return { type: 'prize', points: 0, cashCents: 0, label: 'Prize unlock' };
+      return { type: 'prize', points: 0, cashCents: 0 };
     case 'responsibility':
     default:
-      return { type: 'none', points: 0, cashCents: 0, label: 'No pay (responsibility)' };
+      return { type: 'none', points: 0, cashCents: 0 };
   }
 }
 
-export function fmtCash(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+/**
+ * A chore's cash reward, in the READER's format: "$4.40" in en-US, "4,40 $" in
+ * de-DE. It was `$${(cents / 100).toFixed(2)}`, which has no locale at all.
+ *
+ * `locale` is required, not defaulted: both callers have a reader — the kid on
+ * app/(app)/kids/submit/[assignmentId]/page.tsx (getLocaleContext) and the
+ * parent on app/(app)/missions/review-card.tsx (useLocale) — and a default is
+ * how a caller quietly stops passing one.
+ *
+ * The currency stays USD: `chores` has no currency column, so a chore's cash
+ * amounts are dollars of record whoever reads them. Converting would misstate
+ * the reward; only the separators and symbol position follow the reader.
+ */
+export function fmtCash(cents: number, locale: LocaleCode): string {
+  return formatCents(cents, 'USD', locale);
 }
 
 /**

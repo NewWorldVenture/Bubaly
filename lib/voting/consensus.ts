@@ -15,6 +15,9 @@
 // recommends; the family still decides. Deterministic + side-effect free.
 
 import { evaluateDecision, type OptionInput } from '@/lib/decisions/engine';
+import type { LocaleCode } from '@/lib/i18n/locales';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type ConsensusOption = {
   id: string;
@@ -59,7 +62,6 @@ const DEFAULT_VOTE_WEIGHT = 0.55;
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 const round = (n: number) => Math.round(n);
-const usd = (cents: number) => `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
 
 /** Does an option carry every required tag? Case-insensitive; empty req = ok. */
 function missingTags(optionTags: string[] | undefined, required: string[]): string[] {
@@ -75,7 +77,14 @@ function missingTags(optionTags: string[] | undefined, required: string[]): stri
  */
 export function facilitateConsensus(
   options: ConsensusOption[],
-  constraints: ConsensusConstraints = {},
+  constraints: ConsensusConstraints,
+  // The reader's, for the Decision Engine's budget breach ("over budget by
+  // $120.00"), which this module carries into `violations`, `rationale` and
+  // `conflicts`. Required because lib/decisions/engine.ts requires it. `t` also
+  // words this module's own sentences that carry that breach (the tag miss, the
+  // "doesn't fit" rationale and the conflicts), so no English wraps it.
+  locale: LocaleCode,
+  t: Translate,
 ): ConsensusResult {
   if (options.length === 0) {
     return { ranked: [], recommendation: null, voteLeader: null, conflicts: [], consensusLevel: 0, totalVotes: 0 };
@@ -96,7 +105,7 @@ export function facilitateConsensus(
   const engine = evaluateDecision(engineInputs, {
     budgetCents: constraints.budgetCents,
     maxTravelMinutes: constraints.maxTravelMinutes,
-  });
+  }, locale, t);
   const fitById = new Map(engine.ranked.map((r) => [r.id, r]));
   const required = constraints.requiredTags ?? [];
 
@@ -110,7 +119,9 @@ export function facilitateConsensus(
     // Hard constraints: engine budget/travel breaches + required-tag misses.
     const violations = [...(fit?.violations ?? [])];
     const missing = missingTags(o.tags, required);
-    if (missing.length) violations.push(`missing ${missing.join(', ')}`);
+    // Worded by the catalogue: it is joined into the same "doesn't fit" sentence
+    // as the engine's budget breach, which is the reader's language now.
+    if (missing.length) violations.push(t('votingConsensus.missingTags', { tags: missing.join(', ') }));
     const feasible = violations.length === 0;
 
     return {
@@ -133,7 +144,7 @@ export function facilitateConsensus(
       b.blendedScore - a.blendedScore ||
       b.votes - a.votes,
   );
-  for (const r of ranked) r.rationale = buildRationale(r, constraints);
+  for (const r of ranked) r.rationale = buildRationale(r, constraints, t);
 
   const recommendation = ranked.find((r) => r.feasible) ?? null;
 
@@ -143,7 +154,7 @@ export function facilitateConsensus(
     ? [...voted].sort((a, b) => b.votes - a.votes || b.blendedScore - a.blendedScore)[0]
     : null;
 
-  const conflicts = buildConflicts(recommendation, voteLeader);
+  const conflicts = buildConflicts(recommendation, voteLeader, t);
 
   // Agreement: leader's share of the vote (concentrated = high consensus).
   const consensusLevel = totalVotes ? clamp01(maxVotes / totalVotes) : 0;
@@ -151,8 +162,11 @@ export function facilitateConsensus(
   return { ranked, recommendation, voteLeader, conflicts, consensusLevel, totalVotes };
 }
 
-function buildRationale(r: ConsensusRanked, c: ConsensusConstraints): string {
-  if (!r.feasible) return `Doesn't fit: ${r.violations.join('; ')}.`;
+function buildRationale(r: ConsensusRanked, c: ConsensusConstraints, t: Translate): string {
+  // The same sentence, and the same key, as the Decision Engine's own rationale:
+  // the violations inside it are the reader's language, so the words around
+  // them must be too.
+  if (!r.feasible) return t('decisionEngine.doesNotFit', { reasons: r.violations.join('; ') });
   const parts: string[] = [];
   parts.push(r.votes > 0 ? `${r.votes} vote${r.votes === 1 ? '' : 's'} (${r.votePct}%)` : 'no votes yet');
   if (typeof c.budgetCents === 'number' && r.fitScore >= 60) parts.push('within budget');
@@ -161,28 +175,36 @@ function buildRationale(r: ConsensusRanked, c: ConsensusConstraints): string {
   return `${parts.join(' · ')}.`;
 }
 
+// Both conflicts are whole catalogue sentences. The first carries the engine's
+// budget breach ("over budget by 1.234,50 $"), which is in the reader's language
+// and format; English wrapped around it gave a German family half a sentence of
+// each. The second has no money in it, but it is shown in the same amber box, so
+// it is worded the same way rather than left the one English line there.
 function buildConflicts(
   recommendation: ConsensusRanked | null,
   voteLeader: ConsensusRanked | null,
+  t: Translate,
 ): string[] {
   const conflicts: string[] = [];
   if (!voteLeader) return conflicts;
 
   // The favorite can't actually be chosen as-is.
   if (!voteLeader.feasible) {
-    conflicts.push(
-      `The current favorite “${voteLeader.label}” doesn't fit — ${voteLeader.violations.join('; ')}.` +
-        (recommendation ? ` Closest workable pick: “${recommendation.label}”.` : ''),
-    );
+    const reasons = voteLeader.violations.join('; ');
+    conflicts.push(recommendation
+      ? t('votingConsensus.favoriteDoesNotFitClosestPick', { favorite: voteLeader.label, reasons, pick: recommendation.label })
+      : t('votingConsensus.favoriteDoesNotFit', { favorite: voteLeader.label, reasons }));
     return conflicts;
   }
 
   // Votes and objective fit point at different options.
   if (recommendation && recommendation.id !== voteLeader.id) {
-    conflicts.push(
-      `Votes lean toward “${voteLeader.label}”, but “${recommendation.label}” scores higher overall ` +
-        `(${recommendation.blendedScore} vs ${voteLeader.blendedScore}) once budget and fit are weighed.`,
-    );
+    conflicts.push(t('votingConsensus.votesLeanElsewhere', {
+      favorite: voteLeader.label,
+      pick: recommendation.label,
+      pickScore: recommendation.blendedScore,
+      favoriteScore: voteLeader.blendedScore,
+    }));
   }
   return conflicts;
 }

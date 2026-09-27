@@ -26,10 +26,16 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
     setState('busy');
     setMessage('');
     try {
+      // Attribution is the visitor this browser IS: the `bubaly_vid` cookie the
+      // same-origin fetch carries. No id goes in the body — the route binds to
+      // the cookie and refuses a body that names anyone else (SEC-008). This
+      // call only makes sure the cookie exists so the request carries it; a
+      // subscribe never waits on it.
+      getAnonymousId();
       const res = await fetch('/api/blog/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source, website, visitorId: getAnonymousId() }),
+        body: JSON.stringify({ email, source, website }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (res.ok && data.ok) {

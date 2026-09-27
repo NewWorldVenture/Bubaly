@@ -7,15 +7,24 @@ import { describe, expect, it } from 'vitest';
 import { buildHomeNeeds, type HomeNeedsInput } from '@/lib/home/needs-build';
 import {
   factSuggestionToNeed, inboxMessageToNeed, paperworkActionsToNeeds, REPLY_INTENTS, PAPERWORK_DECISION_KINDS,
+  type NeedsReader,
 } from '@/lib/home/needs-sources';
 import { rankNeedsAttention, summarizeNeeds } from '@/lib/home/needs-attention';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 
 const now = new Date('2026-09-07T12:00:00Z');
+/**
+ * An en-US reader through the real English catalogue — the words these titles
+ * assert. The needsSources.* sentences reach en-US with the orchestrated merge of
+ * the home-and-auto i18n asks; until it lands, the titles below print the raw
+ * key and these cases are red, which is the point: no stand-in copy here.
+ */
+const EN: NeedsReader = { locale: 'en-US', t: (key, params) => translate(SOURCE_MESSAGES, key, params) };
 
 const base: HomeNeedsInput = {
   approvals: [], renewals: [], documents: [], conflicts: [],
   pendingApprovals: 0, overdueMeds: false, overdueReminders: 0, dueTodayReminders: 0,
-  pendingChores: 0, lowGrocery: false, openTodos: 0, now,
+  pendingChores: 0, lowGrocery: false, openTodos: 0, now, reader: EN,
 };
 
 describe('factSuggestionToNeed', () => {
@@ -95,7 +104,7 @@ describe('paperworkActionsToNeeds', () => {
   };
 
   it('yields one item per open sign / pay / RSVP action, each linking to the paperwork item', () => {
-    const out = paperworkActionsToNeeds(item, now);
+    const out = paperworkActionsToNeeds(item, now, EN);
     expect(out.map((n) => n.kind)).toEqual(['paperwork_sign', 'paperwork_pay', 'paperwork_rsvp']);
     expect(out.map((n) => n.id)).toEqual(['paperwork:pw-1:0', 'paperwork:pw-1:1', 'paperwork:pw-1:2']);
     expect(new Set(out.map((n) => n.href))).toEqual(new Set(['/dashboard/paperwork#paperwork-pw-1']));
@@ -103,7 +112,7 @@ describe('paperworkActionsToNeeds', () => {
   });
 
   it('carries the amount and due date into the title, and the due date into the urgency', () => {
-    const [sign, pay] = paperworkActionsToNeeds(item, now);
+    const [sign, pay] = paperworkActionsToNeeds(item, now, EN);
     // The item's own due date (12 whole days out — a date-only due_on parses
     // as UTC midnight, the same floor the renewal and document mappers use)
     // is not urgent; the payment's own due date (a day and a half out) is.
@@ -114,18 +123,22 @@ describe('paperworkActionsToNeeds', () => {
   });
 
   it('is urgent when past due or when the triage marked the whole item urgent', () => {
-    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-01', actions: [item.actions[0]] }, now)[0]).toMatchObject({ urgency: 'urgent', title: expect.stringContaining('overdue') });
-    expect(paperworkActionsToNeeds({ ...item, due_on: null, urgency: 'urgent', actions: [item.actions[0]] }, now)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip' });
+    // Whole titles, not stringContaining('overdue'): a missing catalogue key
+    // prints as 'needsSources.overdue', which contains the word and would pass.
+    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-01', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · overdue' });
+    // Half a day out floors to 0 whole days: due today, and urgent.
+    expect(paperworkActionsToNeeds({ ...item, due_on: '2026-09-08', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip · due today' });
+    expect(paperworkActionsToNeeds({ ...item, due_on: null, urgency: 'urgent', actions: [item.actions[0]] }, now, EN)[0]).toMatchObject({ urgency: 'urgent', title: 'Sign and return — Field trip permission slip' });
   });
 
   it('skips actions already materialised into a reminder or event, and items that are done or archived', () => {
     const materialised = { ...item.actions[0], materialized_as: 'reminder', materialized_id: 'rem-1' };
-    expect(paperworkActionsToNeeds({ ...item, actions: [materialised] }, now)).toEqual([]);
-    expect(paperworkActionsToNeeds({ ...item, status: 'done' }, now)).toEqual([]);
-    expect(paperworkActionsToNeeds({ ...item, status: 'archived' }, now)).toEqual([]);
+    expect(paperworkActionsToNeeds({ ...item, actions: [materialised] }, now, EN)).toEqual([]);
+    expect(paperworkActionsToNeeds({ ...item, status: 'done' }, now, EN)).toEqual([]);
+    expect(paperworkActionsToNeeds({ ...item, status: 'archived' }, now, EN)).toEqual([]);
     // Malformed jsonb never throws.
-    expect(paperworkActionsToNeeds({ ...item, actions: null }, now)).toEqual([]);
-    expect(paperworkActionsToNeeds({ ...item, actions: [null, 'sign', { kind: 42 }] }, now)).toEqual([]);
+    expect(paperworkActionsToNeeds({ ...item, actions: null }, now, EN)).toEqual([]);
+    expect(paperworkActionsToNeeds({ ...item, actions: [null, 'sign', { kind: 42 }] }, now, EN)).toEqual([]);
   });
 });
 

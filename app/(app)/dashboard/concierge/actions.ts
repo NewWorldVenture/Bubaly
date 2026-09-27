@@ -21,7 +21,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
-import { materializeConciergePlan } from '@/lib/services/approvals';
+import { decide, materializeConciergePlan } from '@/lib/services/approvals';
 import {
   AUTOPILOT_AGENT, AUTOPILOT_CAPABILITY, AUTOPILOT_DOMAIN, AUTOPILOT_POLICY_NAME,
   approvalTitle, autonomyMode, dialEffect, isAcceptance, runSummary,
@@ -158,8 +158,16 @@ export async function planAcceptedAction(
     const summary = runSummary(plan.title, applied);
     // Written by the server: 0252 only lets a member file their own unplanned
     // queued run, and this row records work Bubaly already did.
+    // `completed_at` is not decoration: it is the only column the family's value
+    // metric will count. lib/metric/completed-plans.ts filters the 7-day
+    // headline on `completed_at`, and a row without one lands in the "excluded,
+    // week unknown" bucket permanently — so the Finances card, the upgrade
+    // paywall's value card and the Display's "Handled today" tile all read 0
+    // for work Bubaly just did. The row records work already finished, so the
+    // completion time is now.
     await createServiceClient().from('family_automation_runs').insert({
       family_id: familyId, trigger_type: 'plan_accepted', status: 'executed', state: 'completed',
+      completed_at: new Date().toISOString(),
       requested_by_member_id: ctx.active.member.id,
       summary, result: { steps: applied } as never,
       metadata: { plan_id: planId, basis: decision.basis, reason: decision.reason } as never,
@@ -189,7 +197,24 @@ export async function planAcceptedAction(
   return { ok: true, mode: 'off', applied: [], summary: null };
 }
 
-/** Approve a queued run (managers only): execute it and stamp both audits. */
+/**
+ * Approve a queued run (managers only): execute it and stamp both audits.
+ *
+ * WHY THIS DEFERS TO `decide()` WHEN AN APPROVAL ROW EXISTS. This button was a
+ * second decision surface, and it knew none of the rules the first one
+ * enforces. It checked `isManager` and then stamped the approval
+ * `status = 'approved'` itself, without ever reading `approval_model`,
+ * `required_approvals` or `approvals` — so a family that chose "Two parents" in
+ * Trust & Permissions had their plan materialised (real calendar events and
+ * reminders) by one adult's tap, while the SAME row on the approval card would
+ * have answered "This one needs two parents to agree." The threshold, the
+ * duplicate-vote check, the expiry check and the trust audit row all live in
+ * `decide`; routing through it is what makes them one rule instead of two.
+ *
+ * A run with no `approval_id` is a run the trust engine never gated (the
+ * autopilot dial downgraded an `allow` to "ask"), so there is no threshold to
+ * honour and the direct path below still applies.
+ */
 export async function executeQueuedRunAction(runId: string): Promise<LoopResult> {
   const t = await getTranslations();
   if (!runId) return { ok: false, error: t('actions.invalidRun') };
@@ -206,6 +231,23 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   const meta = (run.metadata ?? {}) as { plan_id?: string; kinds?: WriteBackKind[]; approval_id?: string | null };
   if (!meta.plan_id) return { ok: false, error: t('actions.runHasNoPlanAttached') };
 
+  if (meta.approval_id) {
+    const decided = await decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'approved');
+    if (!decided.ok) return { ok: false, error: decided.error };
+    if (decided.data.status !== 'approved') {
+      // One vote of several. Nothing was materialised and the run stays
+      // pending, so the next approver still finds it here.
+      revalidatePath(PATH);
+      return { ok: true, mode: 'ask', applied: [], summary: decided.data.summary };
+    }
+    // `decide` materialised the plan through the same `materializeConciergePlan`
+    // this action used, closed this run row on its `metadata->>approval_id`,
+    // and reports what THIS decision applied — not every kind ever logged
+    // against the plan.
+    revalidatePath(PATH);
+    return { ok: true, mode: 'auto', applied: decided.data.applied ?? [], summary: decided.data.summary };
+  }
+
   const { data: plan } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
@@ -220,24 +262,30 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // already in concierge_plan_actions), so surfacing this failure lets the
   // manager safely retry rather than leaving the run stuck "pending" with the
   // plan already applied — which would look like the approval did nothing.
+  //
+  // `state` and `completed_at` alongside the legacy `status`. Writing
+  // `status = 'executed'` while leaving `state` at the 'awaiting_approval' the
+  // row was inserted with left the run describing two different things at once,
+  // and left `completed_at` null forever: the Display's "Handled today" tile
+  // filters `state = 'completed'` and the billing value card filters
+  // `completed_at`, so a plan a parent had just approved and Bubaly had just
+  // materialised showed up in neither. `approved_at` is when the person said
+  // yes; it is not a completion time and nothing may read it as one.
+  // One clock read: the yes and the finish are the same moment on this path.
+  const now = new Date().toISOString();
   const { error: runErr } = await sb.from('family_automation_runs').update({
-    status: 'executed', summary, result: { steps: applied } as never,
-    approved_by: ctx.user.id, approved_at: new Date().toISOString(),
+    status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
+    approved_by: ctx.user.id, approved_at: now, completed_at: now,
   }).eq('id', runId).eq('family_id', familyId);
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
 
-  if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
-      // decided_by references family_members(id) (0093), not auth.users.
-      status: 'approved', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
-      executed_at: new Date().toISOString(), execution_result: summary,
-    }).eq('id', meta.approval_id).eq('family_id', familyId);
-    if (apprErr) console.error('[concierge] approval stamp after execution failed', { approvalId: meta.approval_id, familyId, error: apprErr });
-  }
-
+  // No approval stamp here on purpose. This branch is only reached when the run
+  // carries NO `approval_id`, so there is no approval row to decide; the one
+  // that used to live here wrote `status = 'approved'` with no votes, which is
+  // exactly the threshold bypass the block above closes.
   revalidatePath(PATH);
   return { ok: true, mode: 'auto', applied, summary };
 }
@@ -255,23 +303,44 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
-  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
+  // The decline half of the same rule as the approve half above. When the run
+  // is gated by an approval that is still open, "Dismiss" is a "no" on that
+  // approval, and it goes through `decide()` exactly as the approval card's
+  // Decline does: the caller's own vote is recorded (0381 refuses any other
+  // shape), the trust audit gets its decision row, and `decide` closes this run
+  // on its `metadata->>approval_id`. Writing `status = 'rejected'` here directly
+  // skipped the audit and was a second decision surface.
+  const meta = (run.metadata ?? {}) as { approval_id?: string | null };
+  if (meta.approval_id) {
+    const { data: approval, error: approvalErr } = await sb
+      .from('approval_requests').select('status, expires_at')
+      .eq('id', meta.approval_id).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (approvalErr) {
+      console.error('[concierge] could not read the approval behind a queued run', { runId, approvalId: meta.approval_id, error: approvalErr });
+      return { ok: false, error: describeActionError(approvalErr, t('actions.couldNotDismissThatRun')) };
+    }
+    const stillOpen = approval?.status === 'pending'
+      && !(approval.expires_at && Date.parse(approval.expires_at) < Date.now());
+    if (stillOpen) {
+      const declined = await decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'rejected');
+      if (!declined.ok) return { ok: false, error: declined.error };
+      revalidatePath(PATH);
+      return { ok: true, applied: [] };
+    }
+    // The approval is already closed — decided on the approval card, expired
+    // by the sweep, or gone — so there is no decision left to make, only a
+    // stale line in this panel. Clearing it below records nothing about the
+    // approval, which is why it is safe to allow.
+  }
+
+  // `state` alongside the legacy `status`, for the same reason the approve path
+  // writes both: a dismissed run left at 'awaiting_approval' stays on "Needs
+  // you" (app/(app)/dashboard/needs-you/page.tsx reads `state`) forever.
+  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed', state: 'cancelled' })
     .eq('id', runId).eq('family_id', ctx.active.familyId);
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
-  }
-
-  const meta = (run.metadata ?? {}) as { approval_id?: string | null };
-  if (meta.approval_id) {
-    const { error: apprErr } = await sb.from('approval_requests').update({
-      // 0093's CHECK allows pending|approved|rejected|modified|expired|cancelled
-      // and decided_by references family_members(id), not auth.users — the
-      // previous 'declined' + user id never satisfied either, so this stamp had
-      // always failed and only logged.
-      status: 'rejected', decided_by: ctx.active.member.id, decided_at: new Date().toISOString(),
-    }).eq('id', meta.approval_id).eq('family_id', ctx.active.familyId);
-    if (apprErr) console.error('[concierge] approval decline stamp failed', { approvalId: meta.approval_id, familyId: ctx.active.familyId, error: apprErr });
   }
 
   revalidatePath(PATH);

@@ -14,13 +14,18 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type ServiceRecord = Tables<'home_service_records'>;
 type Asset = Tables<'home_assets'>;
 
 export function ServiceClient({ records, assets }: { records: ServiceRecord[]; assets: Asset[] }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // In the reader's format. `home_service_records.cost` is dollars (numeric, not
+  // cents) with no currency column beside it, so the currency is USD.
+  const money = (dollars: number) => formatCents(Math.round(dollars * 100), 'USD', locale.code);
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const { message: actionError, run } = useActionError();
@@ -41,7 +46,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
       {records.length > 0 && (
         <div className="grid-stats">
           <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand-text"><Wrench className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{records.length}</p><p className="mt-1 text-xs text-muted">{t('serviceClient.records')}</p></div></div>
-          <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">${totalSpend.toLocaleString()}</p><p className="mt-1 text-xs text-muted">{t('serviceClient.totalLoggedSpend')}</p></div></div>
+          <div className="stat-card"><div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success"><CalendarClock className="h-5 w-5" /></div><div><p className="text-xl font-bold leading-none">{money(totalSpend)}</p><p className="mt-1 text-xs text-muted">{t('serviceClient.totalLoggedSpend')}</p></div></div>
         </div>
       )}
 
@@ -59,7 +64,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
                   <td className="px-3 py-2"><p className="font-medium">{r.title}</p>{r.provider && <p className="text-xs text-muted">{r.provider}</p>}</td>
                   <td className="px-3 py-2 text-muted">{assetName(r.asset_id) ?? '—'}</td>
                   <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
-                  <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
+                  <td className="px-3 py-2">{r.cost != null ? money(Number(r.cost)) : '—'}</td>
                   <td className="px-3 py-2">{r.next_due_on ? <Badge tone="warning">{fmtDate(r.next_due_on)}</Badge> : '—'}</td>
                   <td className="px-3 py-2 text-right"><button aria-label={t('a11y.delete')} onClick={() => start(async () => { await run(() => deleteServiceRecordAction(r.id)); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>
