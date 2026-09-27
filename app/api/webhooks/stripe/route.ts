@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { getStripe } from '@/lib/stripe';
+import { constructWebhookEvent } from '@/lib/stripe';
+import { getStripeSettings, effectiveWebhookSecret } from '@/lib/stripe/settings';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
@@ -139,13 +140,17 @@ export async function POST(req: NextRequest) {
   if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Payload too large' : 'Unable to read payload' }, { status: boundedBody.reason === 'too_large' ? 413 : 400 });
   const body = boundedBody.text;
   const sig = req.headers.get('stripe-signature') ?? '';
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
+  // Super Admin → Stripe Setup's signing secret first, then the environment —
+  // the order that page promises. Reading only the environment ignored a
+  // secret saved there, and building the client with getStripe() threw when
+  // STRIPE_SECRET_KEY was unset, which the catch below reported as a bad
+  // signature: every real event refused, and no subscription ever recorded.
+  const webhookSecret = effectiveWebhookSecret(await getStripeSettings()) ?? '';
   if (!webhookSecret) return NextResponse.json({ error: t('stripe.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
   try {
-    const stripe = getStripe();
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    event = constructWebhookEvent(body, sig, webhookSecret);
   } catch (err) {
     return NextResponse.json({ error: t('stripe.webhookSignatureInvalid') }, { status: 400 });
   }

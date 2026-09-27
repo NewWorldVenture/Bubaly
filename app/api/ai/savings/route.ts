@@ -5,6 +5,7 @@ import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
@@ -26,6 +27,11 @@ export async function POST() {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
+  // The family's money is the adults': the finance service refuses anyone else
+  // and the privacy export withholds `finances` from them. This route reads the
+  // same tables through its own queries, and answered a child with the
+  // family's overspending and subscriptions.
+  if (!isManager(ctx.active.role)) return NextResponse.json({ error: tr('savings.privateToTheAdults') }, { status: 403 });
   const supabase = await createServer();
   // The page in front of this is feature-gated; this endpoint was not, and it
   // calls a model. Same resolver, so the two cannot disagree.

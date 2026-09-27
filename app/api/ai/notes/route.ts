@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildNotesPrompt, parseNotesResponse } from '@/lib/notes/ai';
@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
+    // No key: say so before any work, rather than let the provider's throw
+    // reach the catch below as a generic failure.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-notes:${ctx.user.id}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
       { error: t('notes.tooManyNoteAnalysisRequests') },
