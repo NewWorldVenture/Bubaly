@@ -4,7 +4,7 @@
 //
 //   node scripts/page-audit.mjs --base https://www.bubaly.com --sitemap \
 //     --out /tmp/pages.jsonl [--paths file.txt] [--storage state.json] \
-//     [--concurrency 4] [--mobile] [--locale fr-FR]
+//     [--concurrency 4] [--mobile] [--locale fr-FR] [--interact]
 //
 // For each path it loads the page in Chromium and records, as one JSON line:
 //   status        the document's HTTP status (after redirects)
@@ -18,6 +18,13 @@
 //   smells        visible text that should never render: "undefined", "NaN",
 //                 "[object Object]", an error boundary, or a raw i18n key
 //   links         same-origin hrefs found on the page (for the link pass)
+//   interactions  with --interact: every tab, <summary> and button in <main>
+//                 (up to 40) is clicked in turn — never one that submits a form
+//                 and never one labelled like a delete, payment or send — and
+//                 each click that threw, logged an error, failed a request or
+//                 showed an error boundary is listed with what it did. This
+//                 one writes (to whatever `--base` is), so it is for a local
+//                 stack, not production.
 //
 // It judges nothing itself; `verdict` is a mechanical summary (PASS when the
 // document answered < 400 and none of the lists above has an entry), and a
@@ -41,6 +48,11 @@ const mobile = flag('mobile');
 // cookie or, failing that, Accept-Language, which this sets.
 const locale = opt('locale', 'en-US');
 const origin = new URL(base).origin;
+const interact = flag('interact');
+if (interact && /bubaly\.com$/.test(new URL(base).hostname)) {
+  console.error('--interact clicks controls that can write; point it at a local stack, not production');
+  process.exit(2);
+}
 
 async function loadPaths() {
   const paths = new Set();
@@ -65,6 +77,63 @@ const SMELLS = [
   // with no spaces, e.g. "billing.couldNotLoadPlans".
   [/(?:^|\s)([a-z][a-zA-Z0-9]+\.[a-z][a-zA-Z0-9]{3,}(?:\.[a-zA-Z0-9]+)*)(?=\s|$)/, 'raw i18n key'],
 ];
+
+// The controls --interact clicks, tagged in document order so the Nth one can
+// be found again after a click re-rendered the page.
+const CONTROLS = '[role="tab"],[aria-haspopup]:not([aria-haspopup="false"]),button[aria-expanded],summary,button,a[role="button"]';
+const NEVER = /delete|remove|sign ?out|log ?out|cancel|reset|archive|revoke|disconnect|leave|pay|send|buy|purchase|approve|decline|deny|reject|confirm|publish|charge|call|dial|refund|transfer|withdraw|unsubscribe|block|lock|emergency|sos|panic/i;
+
+async function tagControls(page) {
+  return page.evaluate(([sel, never]) => {
+    const neverRe = new RegExp(never, 'i');
+    const main = document.querySelector('main') ?? document.body;
+    let n = 0;
+    for (const el of document.querySelectorAll('[data-audit-i]')) el.removeAttribute('data-audit-i');
+    for (const el of main.querySelectorAll(sel)) {
+      const label = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim();
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height || el.closest('[aria-hidden="true"],[inert]') || el.disabled) continue;
+      // A button with no type submits the form it sits in; outside a form it
+      // is an ordinary button.
+      if (el.tagName === 'BUTTON' && el.type === 'submit' && el.form) continue;
+      if (el.closest('nav,header,footer,[data-sidebar]')) continue;
+      if (!label || neverRe.test(label)) continue;
+      el.setAttribute('data-audit-i', String(n++));
+    }
+    return n;
+  }, [CONTROLS, NEVER.source]);
+}
+
+async function clickThrough(page, path, seen) {
+  const failed = [];
+  let clicked = 0;
+  const count = Math.min(await tagControls(page), 40);
+  for (let i = 0; i < count; i++) {
+    const before = [seen.pageErrors.length, seen.consoleErrors.length, seen.badRequests.length];
+    const el = page.locator(`[data-audit-i="${i}"]`).first();
+    const label = ((await el.getAttribute('aria-label').catch(() => null)) || (await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    try {
+      await el.click({ timeout: 3_000 });
+      clicked += 1;
+      await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
+    } catch {
+      continue; // covered or detached by the last click: not this control's defect
+    }
+    const boundary = await page.evaluate(() => /Something went wrong|This page hit a snag|Application error/i.test(document.body?.innerText ?? ''));
+    const threw = seen.pageErrors.slice(before[0]);
+    const logged = seen.consoleErrors.slice(before[1]);
+    const requests = seen.badRequests.slice(before[2]);
+    if (boundary || threw.length || logged.length || requests.length) failed.push({ label, boundary, threw, logged, requests });
+    // Put the page back: close what opened, or reload if the click navigated.
+    await page.keyboard.press('Escape').catch(() => {});
+    const here = new URL(page.url()).pathname + new URL(page.url()).search;
+    if (here !== path || boundary) {
+      await page.goto(base + path, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {});
+    }
+    await tagControls(page);
+  }
+  return { controls: count, clicked, failed };
+}
 
 async function auditOne(context, path) {
   const page = await context.newPage();
@@ -119,6 +188,7 @@ async function auditOne(context, path) {
       .filter((h) => h && (h.startsWith('/') || h.startsWith(origin)) && !h.startsWith('//'))
       .map((h) => (h.startsWith(origin) ? h.slice(origin.length) : h).split('#')[0])
       .filter(Boolean))];
+    if (interact && !row.error) row.interactions = await clickThrough(page, path, { pageErrors, consoleErrors, badRequests });
   } catch (e) {
     row.error = String(e.message).split('\n')[0].slice(0, 300);
   }
@@ -127,7 +197,7 @@ async function auditOne(context, path) {
   row.badRequests = [...new Set(badRequests)];
   const clean = !row.error && row.status != null && row.status < 400
     && !pageErrors.length && !consoleErrors.length && !row.badRequests.length
-    && !(row.smells?.length) && !(row.overflow > 1);
+    && !(row.smells?.length) && !(row.overflow > 1) && !(row.interactions?.failed.length);
   row.verdict = clean ? 'PASS' : 'CHECK';
   await page.close();
   return row;
