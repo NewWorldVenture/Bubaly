@@ -5,9 +5,9 @@ import { parseBuildRevision } from './lib/build-identity.mjs';
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // `next build` re-runs the type-check and ESLint that CI already runs as
-  // their own steps, and it runs them in the SAME worker that is holding
-  // webpack's module graph. That co-residency, not the type-check itself, is
+  // Next 15's build re-ran the type-check and ESLint that CI already ran as
+  // their own steps, in the SAME worker that held webpack's module graph.
+  // That co-residency, not the type-check itself, is
   // what makes the build fragile: a Vercel deployment of this branch died in
   // "Linting and checking validity of types" with "Ineffective mark-compacts
   // near heap limit", and locally that worker was at 4,471 MB against the
@@ -22,10 +22,9 @@ const nextConfig = {
   // first and type-checks after, which is what keeps the coverage whole:
   // tsconfig.json includes .next/types/**, so the standalone check validates
   // every generated route signature as well as the app, and Lint is its own
-  // step. Both gate every pull request, and production only builds a commit
+  // step (Next 16 no longer runs ESLint inside the build). Both gate every pull request, and production only builds a commit
   // that passed them.
   typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
   // Next inlines this literal into the build artifact. Never derive identity
   // from a request or substitute a branch/revision when the build input is absent.
   env: {

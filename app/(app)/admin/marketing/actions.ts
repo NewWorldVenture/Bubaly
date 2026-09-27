@@ -26,7 +26,7 @@ function revalidatePublicMarketingPath(path: string | null | undefined) {
   // The public AEO read is cached per path (it renders on most marketing
   // pages, so it must not query per view). Dropping the tag is what keeps the
   // console's promise that one edit reaches every matching route immediately.
-  revalidateTag(AEO_TAG);
+  revalidateTag(AEO_TAG, { expire: 0 });
 }
 
 function requireChoice<T extends string>(value: string, choices: readonly T[], label: string): T {

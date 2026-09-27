@@ -29,7 +29,7 @@ describe('customer story editing', () => {
     await saveCaseStudyAction(form({ id: 'story', title: 'Updated story', slug: 'existing-story', body: 'Approved full account' }));
     expect(db.table('case_studies')[0].is_published).toBe(false);
     expect(revalidateTag).toHaveBeenCalledTimes(2);
-    expect(revalidateTag).toHaveBeenLastCalledWith(CASE_STUDIES_CACHE_TAG);
+    expect(revalidateTag).toHaveBeenLastCalledWith(CASE_STUDIES_CACHE_TAG, { expire: 0 });
   });
 
   it('preserves a body on older forms that do not submit the field, but allows explicit clearing', async () => {
@@ -49,6 +49,6 @@ describe('customer story editing', () => {
   it('invalidates public cards when a story is deleted', async () => {
     await deleteCaseStudyAction('story');
     expect(db.table('case_studies')).toEqual([]);
-    expect(revalidateTag).toHaveBeenCalledWith(CASE_STUDIES_CACHE_TAG);
+    expect(revalidateTag).toHaveBeenCalledWith(CASE_STUDIES_CACHE_TAG, { expire: 0 });
   });
 });

@@ -39,6 +39,7 @@ const LOADER_THROW = /throw new Error\(\s*'Unexpected [^']*(?:module|import)/;
 const SELF_MAINTAINING = [
   'auth-cache-partition.spec.ts', 'auth-initiation-order.spec.ts', 'auth-recovery-ui.spec.ts',
   'browser-session-storage.spec.ts', 'callback-completion-ui.spec.ts', 'family-media-session-ownership.spec.ts',
+  'framework-hydration-replay.spec.ts',
   'kid-login-boundaries.spec.ts',
   'kid-login-readiness.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
   'oauth-initiation.spec.ts', 'password-login-boundaries.spec.ts', 'password-session-ownership.spec.ts',

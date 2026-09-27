@@ -82,7 +82,7 @@ export async function saveCaseStudyAction(formData: FormData) {
     if (error || !data) marketingActionFailure('create the case study', error ?? new Error('The case study row was not returned after save.'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'create', resource: 'case_study', resourceId: data.id });
   }
-  revalidateTag(CASE_STUDIES_CACHE_TAG);
+  revalidateTag(CASE_STUDIES_CACHE_TAG, { expire: 0 });
   revalidatePath('/admin/marketing/reputation');
 }
 
@@ -91,6 +91,6 @@ export async function deleteCaseStudyAction(id: string) {
   const { data, error } = await supabase.from('case_studies').delete().eq('id', id).select('id').maybeSingle();
   if (error || !data) marketingActionFailure('delete the case study', error ?? new Error('Case study not found.'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'case_study', resourceId: id });
-  revalidateTag(CASE_STUDIES_CACHE_TAG);
+  revalidateTag(CASE_STUDIES_CACHE_TAG, { expire: 0 });
   revalidatePath('/admin/marketing/reputation');
 }
