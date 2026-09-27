@@ -95,7 +95,7 @@ async function audit({ path, vp }) {
         links: [...new Set(links)],
         textLen: bodyText.length,
         errorText: /something went wrong|application error|unexpected error|500|this page could not be found|404/i.test(bodyText.slice(0, 2000)) ? bodyText.slice(0, 200) : null,
-        rawKeys: (bodyText.match(/\b[a-z][a-zA-Z0-9]+\.[a-z][a-zA-Z0-9]{3,}(?:\.[a-zA-Z0-9]+)*\b/g) ?? []).filter((k) => !/\.(com|org|net|io|ai|app|js|ts|css|png|jpg|svg|html|co|uk|de|fr|es|it|nl|pt)$/i.test(k)).slice(0, 10),
+        rawKeys: (bodyText.match(/(?<![@.\w])[a-z][a-zA-Z0-9]+\.[a-z][a-zA-Z0-9]{3,}(?:\.[a-zA-Z0-9]+)*\b(?![.\w]*@)/g) ?? []).filter((k) => !/\.(com|org|net|io|ai|app|js|ts|css|png|jpg|svg|html|co|uk|de|fr|es|it|nl|pt)$/i.test(k)).slice(0, 10),
       };
     }));
     if (!process.env.NO_AXE) {

@@ -139,6 +139,8 @@ describe('a form control axe found unnamed', () => {
     ['components/knowledge/seed-screen.tsx', 'id="kb-seed-sql"'],
     ['components/marketplace/seed-screen.tsx', 'id="seed-sql"'],
     ['components/modules/behavior-module.tsx', "tr('behavior.allKids')"],
+    // The points-period picker sits in the desktop-only right rail (found at 1280 px).
+    ['components/modules/chores-module.tsx', 'setPointsWindow(e.target.value'],
     ['components/modules/health-visits-module.tsx', "t('healthVisits.everyone')"],
     ['components/modules/immunizations-module.tsx', "t('immunizations.everyone')"],
     ['components/modules/recipes-module.tsx', "tr('recipes.allCategories')"],
