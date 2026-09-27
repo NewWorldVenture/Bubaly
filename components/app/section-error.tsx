@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, RotateCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
 /**
  * Error boundary for one authenticated SECTION, mounted inside that section's
@@ -27,6 +28,8 @@ export function SectionError({
   const t = useTranslations();
   useEffect(() => {
     console.error('[Bubaly] section error:', error);
+    // A chunk that failed to load fails again on reset(); a reload fetches it.
+    reloadOnceForChunkFailure(error);
   }, [error]);
 
   return (

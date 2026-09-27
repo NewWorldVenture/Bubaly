@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
 export default function GlobalError({
   error,
@@ -16,6 +17,8 @@ export default function GlobalError({
   useEffect(() => {
     // Surfaced to the browser console and any attached logging service.
     console.error('[Bubaly] route error:', error);
+    // A chunk that failed to load fails again on reset(); a reload fetches it.
+    reloadOnceForChunkFailure(error);
   }, [error]);
 
   return (
