@@ -45457,6 +45457,18 @@ is recorded so the #419 in the logs has a known cause.
 
 ---
 
+### `[CLAUDE-1][LOW][I18N]` C1-S9-104 — a gift's occasion and its fallback names were English on every locale
+
+**File/path:** `lib/wallet/gift.ts`, `app/gift/[token]/page.tsx`, `components/wallet/gift-view.tsx`, `tests/wallet-gift.test.ts`.
+
+**Problem.** Found while reading the PUBLIC lane. `occasionLabel()` returned English ("🎂 Birthday", "Gift"). Both the public `/gift/[token]` page and the parent's gift screen (including its occasion picker) printed it. The public page also fell back to "a child" and "a family" when a name was unknown.
+
+**Fix.** It is now `occasionLabelKey()`, which returns a catalogue key that each caller renders with its own `t`. The fallbacks read `gift.aChild`, `gift.aFamily` and `gift.child`. That is eight keys in seven catalogues. The unit test pins the keys.
+
+**Status:** FIXED.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

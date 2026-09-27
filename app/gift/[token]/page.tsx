@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
-import { occasionLabel, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
+import { occasionLabelKey, DEFAULT_SUGGESTED_CENTS } from '@/lib/wallet/gift';
 import { PublicGiftForm } from '@/components/wallet/public-gift-form';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -41,8 +41,8 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
   }
 
   const active = !!link && link.is_active;
-  let childName = 'a child';
-  let familyName = 'a family';
+  let childName = t('gift.aChild');
+  let familyName = t('gift.aFamily');
   // An inactive capability must not disclose the household or child it used
   // to target. Keep all identifying lookups behind the active-link check.
   if (active && link?.child_wallet_id) {
@@ -62,7 +62,7 @@ export default async function PublicGiftPage({ params }: { params: Promise<{ tok
       <div className="text-center">
         <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-2xl">🎁</div>
         <h1 className="text-2xl font-bold">{t('gift.sendAGiftTo')} {childName}</h1>
-        <p className="mt-1 text-sm text-muted">{occasionLabel(link?.occasion ?? null)} · {familyName}</p>
+        <p className="mt-1 text-sm text-muted">{t(occasionLabelKey(link?.occasion ?? null))} · {familyName}</p>
         {link?.message && <p className="mt-3 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">“{link.message}”</p>}
       </div>
 
