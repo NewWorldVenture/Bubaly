@@ -46016,6 +46016,23 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][LOW][FAMILY]` C1-S9-119 — the family page's roles, account badges and shared-information cards were English in every locale
+
+**File/path:** `components/modules/family-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/family`, the following were English in every locale:
+- each member's role (Parent, Kid, …) and account badge (Admin, Kid Account)
+- the role picker
+- the five "Shared information" cards and their counts ("3 contacts", "View")
+
+**Fix.**
+- Roles and badges are catalogue keys.
+- Each card's label and count come from the catalogue, and the count uses the locale's plural rules.
+
+**Status:** FIXED. Scanner findings for `family-module` drop from 16 to 3. All 3 are type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
