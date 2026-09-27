@@ -46382,10 +46382,7 @@ Settings and the money timeline also carried unused English copies next to keys 
 
 These come from the catalogue now (`declutterModule.kind.*` and `declutterModule.score.*`).
 
-**OPEN:**
-- `lib/declutter/missions.ts` still words `summary.text`, the weekly plan's day labels and the mission templates in English.
-- A template's English title is written into the new mission when a family picks it, the same pattern `C1-S9-110` fixed for chores.
-- Fixing this needs keyed templates in the lib. Its unit tests (`tests/declutter*.test.ts`) pin the English strings, so it is a separate change.
+**Closed by `C1-S9-130`.** The lib's summary sentence and mission templates are now worded in the module. See below.
 
 ---
 
@@ -46400,6 +46397,27 @@ These come from the catalogue now (`declutterModule.kind.*` and `declutterModule
 **Fix.** The reasons and both failure messages now come from the catalogue.
 
 **Status:** FIXED. Scanner findings for this file drop from 7 to 0.
+
+---
+
+### `[CLAUDE-1][MEDIUM][DECLUTTER]` C1-S9-130 — a picked declutter template wrote its English title into the family's mission; the home summary was English
+
+**File/path:** `components/modules/declutter-module.tsx`; seven catalogues.
+
+**Problem.** `lib/declutter/missions.ts` holds its 27 mission templates in English, and every place that used them passed that English straight through:
+- the zone card's quick-add chips
+- the mission form's suggestions
+- the weekly plan list
+- the "plan my week" write
+
+As a result, a family in any locale got English mission titles saved to its data. Separately, the summary sentence ("3 zones due · avg clutter 3.2/5", "Home is in great shape") and a zone's "Goal:" line were English in every locale.
+
+**Fix.**
+- `templateTitle()` words a built-in template by its zone kind and index (`declutterModule.template.<kind>.t<i>`). This happens both when a template is shown and when it is written, so the saved mission is in the picker's language. A title the family typed stays as they typed it.
+- The summary is worded in the module from the lib's counts, using the locale's plural rules.
+- The lib keeps its English as canonical data, which its unit tests pin.
+
+**Status:** FIXED. Checked with 28 test files (470 tests), `tsc` and `eslint`.
 
 ---
 
