@@ -46123,6 +46123,24 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][MEDIUM][INSURANCE]` C1-S9-124 — insurance policy types, premium frequencies and the policy detail were English in every locale
+
+**File/path:** `components/modules/insurance-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/insurance` showed its vocabulary in English in every locale:
+- The twelve policy types (Health, Auto, Renters, Umbrella, …) came straight from `lib/insurance/policies.ts` data. They appeared in the list, the gaps line, the renewals line, the form and the detail title ("Auto insurance").
+- So did the four premium frequencies and every "/mo" or "/yr".
+- The detail sheet's eight row labels were English.
+- So was "Whole family".
+
+**Fix.**
+- `typeLabel()` and `perFrequency()` word each stored value through the catalogue.
+- The lib stays as data.
+
+**Status:** FIXED. Scanner findings for `insurance-module` drop from 7 to 0. The lib-sourced labels were a blind spot of the scanner and were found by reading the module.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
