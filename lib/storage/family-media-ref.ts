@@ -57,12 +57,27 @@ export type FamilyMediaRef =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Every URL shape Storage serves this bucket under: the public object path
-// getPublicUrl builds, a signed or authenticated one, and the image-render
-// variants of each.
-const STORAGE_PATH = new RegExp(
-  `^/storage/v1/(?:object|render/image)/(?:public|sign|authenticated)/${FAMILY_MEDIA_BUCKET}/(.+)$`,
-);
+/** Decode a route segment without allowing it to introduce another segment. */
+function routeSegment(segment: string | undefined): string | null {
+  try {
+    const decoded = decodeURIComponent(segment ?? '');
+    return decoded.includes('/') || decoded.includes('\\') ? null : decoded;
+  } catch { return null; }
+}
+
+/** Undefined is another URL; null is a malformed reference to our bucket. */
+function storageObjectPath(pathname: string): string | null | undefined {
+  const segments = pathname.split('/');
+  const at = (index: number) => routeSegment(segments[index]);
+  if (at(1) !== 'storage' || at(2) !== 'v1') return undefined;
+  // Storage decodes route parameters, so family%2Dmedia names this same bucket.
+  // Recognize object and image-render routes structurally before decoding the
+  // object path. Decoding the entire URL here would decode object names twice.
+  const modeIndex = at(3) === 'object' ? 4 : at(3) === 'render' && at(4) === 'image' ? 5 : -1;
+  if (modeIndex < 0 || !['public', 'sign', 'authenticated'].includes(at(modeIndex) ?? '')) return undefined;
+  if (at(modeIndex + 1) !== FAMILY_MEDIA_BUCKET) return undefined;
+  return objectPath(segments.slice(modeIndex + 2).join('/'));
+}
 
 /** A decoded object path, or null when it is not one this bucket could hold. */
 function objectPath(encoded: string): string | null {
@@ -101,9 +116,8 @@ export function parseFamilyMediaRef(ref: string | null | undefined): FamilyMedia
   try { url = new URL(value); } catch { return null; }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
 
-  const match = STORAGE_PATH.exec(url.pathname);
-  if (match) {
-    const path = objectPath(match[1]);
+  const path = storageObjectPath(url.pathname);
+  if (path !== undefined) {
     return path ? { kind: 'family-media', path } : null;
   }
   return { kind: 'external', url: value };

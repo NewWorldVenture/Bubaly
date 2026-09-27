@@ -2,42 +2,48 @@
 
 ## Codex integration — 2026-09-27
 
-CURRENT: Integrated incoming main7563462e / PR591 into the worker audit. Source
-head e7988141 passed all four jobs in CI36329827922; those are parent gates.
-Combined tree65719886 passes UTC20,701/20,701 across1,621files, build247,
-full strict types and lint with15existingwarnings. Both parents also have their
-own three-zone unit passes; these are not combined-tree three-zone proof.
-CONTROLLED:85/85 in3.8s (72cache+13registration), workerdd571476, fixture9b12ce5a;
-Temp/bubaly-sw-combined-browser-65719886-20260927.log. Focused33/33 separately.
-HOSTED: Original59f03 CI36331147265 Web/DB/MobilePASS; E2E1369/1370, sole
-native-worker fixture failure at iframe after preceding nativev6controls passed.
-FIXTURE: Finalnative507a6cd uses top-level navigation with CDP scripts disabled,
-respecting real anti-framing headers. Supplemental exactv6 native-engine proof
-passes public install/icon and200/fromServiceWorker exact offline HTML. Corrected
-full hosted case remains pending; current source is not claimed deployed.
-DELTA:878a17b verifies5,191files/modes plus only507a6cd native fixture;
-full generated-route types/lint15PASS, discovery1/1 (not runtime).
-Receipt:linux-combined-65719886/final-native-fixture-receipt.json.
-GATES: Failed Windows environment attempt retained. Three preliminary fixture
-header-union type errors corrected; full strict types then PASS. Combined gate
-receipt: Temp/bubaly-sw-reconcile-20260927/linux-combined-65719886/final-gates-receipt.json.
-INVENTORY: All incoming/original IDs and Claude sections preserved. RegisterB
-14,183=13,877NOT STARTED+297IN PROGRESS+4FIXED+PASS+4BLOCKED+1FAIL.
-Worker SUPPORT-98FD1D4C44AD and fixtures SUPPORT-1A08672F87F3 /
-SUPPORT-827E4294FC10 remain IN PROGRESS. Fixture coverage is not another
-completed product workflow. Priorv5 optimizer/write proof remains intact.
-MEDIA: SEC-001FAIL. Q59 observer-gap follow-up is reproduced with actual React,
-SDK and shared peer cookies: readyB renders/fetches synthetic A capability without
-B signing; active-switch control purges. Synthetic provider/image transport only;
-no live private bytes or media-source repair. Independent from the SW repair.
-PRODUCTION: Latest health16:01:24UTC core checksOK, degraded; six missing settings:
-CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET, GUARDIAN_INTERNAL_SECRET,
-FCM_PRIVATE_KEY, APNS_PRIVATE_KEY. Older four-setting statements are historical.
-NEXT: Publish combined correction, execute corrected hosted case, then verify
-exact deployment before scoped signoff. No production SQL/provider change.
-OWNERSHIP: Root integrates/verifies; auth_current_boundary updates these owned
-checkpoint sections. All other Claude board content below remains unchanged.
-RECORD: docs/final-audit/service-worker-private-cache-cycle.md; finalaudit.md.
+WORKER CLOSED: Corrected850 CI36332783206 all4SUCCESS; E2E1764/1764,
+no failures/flakes/skips reported, finished16:47:07UTC. Web20701x3zones,
+build247/types/lintPASS. Exact candidate/tested/e14 tree52e0d1e matches.
+Separate e14 public+native deployed acceptancePASS; native wrapper1/1 in4.3s.
+Only SUPPORT-98FD1D4C44AD/1A08672F87F3/827E4294FC10 become FIXED+PASS;
+the two fixtures are coverage, not two additional product workflows.
+MEDIA MAIN: PR595 merged57664cfc69e43bdd35b921edde69aa20cfc609ad16:47:39UTC,
+exact b78ff026 tree29a6087. 595 hosted acceptance PENDING.
+LIVE: Exact576 public build/worker guards PASS16:50:52–59UTC, hydrated
+email/phone controls, protected meals307, v6 install/offline200, corehealthOK.
+Zero page errors/failed requests/suppressed writes; six missing features remain.
+Complete native production wrapper1/1PASS2.2s, same507 assertions/guards.
+No authenticated private-provider image journey executed.
+FINAL LOCAL: Source98d5229 UTC20722/1623files, focused146/10files,
+build247/full strict types/lint15existingwarningsPASS; all5194paths mapped,
+5189 non-audit blobs/modes exactly b78. Media7/7 (4ownership+3hydration),
+display25/25 and collector guard37/37PASS. Synthetic transport/build only.
+FAILURES RETAINED: Old native iframe1369/1370; media20,721PASS/1FAIL missing
+display loader import; actual valid-cookie SSR/hydration warning, now fixed.
+SEC-001FAIL: Bucket/privacy/provider scope remains open. New family%2Dmedia
+classification bypass reproduced with actual FamilyMediaImg/SDK: raw synthetic
+A capability renders underB without B signing; canonical control denied.
+No live provider/private data or Storage RLS-bypass claim. Existing finding only.
+PARSER LOCAL:147fa9a once-decodes route/bucket; oldparser12FAIL/34PASS,
+new46/46focusedPASS. Existing browser fixture now11/11PASS3.2s (fournew
+canonical/encoded x Aallow/Bdeny controls). Initial stale-hook7PASS/4FAIL
+private attempt preserved;13 actual source hashes verify corrected rerun.
+Final whole-source gates and parser publication PENDING;576 not yet fixed.
+Calibrated browserRED: currenthook+oldparser canonical2PASS/encoded2FAIL;
+final11PASS receipt:bubaly-encoded-browser-retained-receipt-20260927.json.
+Native576 derived receipt preserves exact wrapper/log hashes and scope.
+INVENTORY:14186=13877NOTSTARTED+297INPROGRESS+7FIXEDPASS+4BLOCKED+1FAIL.
+Three media test rows remainIP; no ID removed. Claude593 page statuses and
+mainf03 laneA claim preserved; auth/device/migration scope remains separate.
+HEALTH: Verified576 degraded/coreOK (same as earlier e14), six missing features:
+CRON_SECRET, CHILD_LOGIN_SECRET, MARKETING_UNSUB_SECRET,
+GUARDIAN_INTERNAL_SECRET, FCM_PRIVATE_KEY, APNS_PRIVATE_KEY.
+RECEIPTS: Temp/bubaly-850-ci36332783206-terminal-20260927.json;
+Temp/bubaly-sw-reconcile-20260927/linux-q59-final/final-gates-receipt.json;
+Temp/bubaly-media-encoded-bucket-20260927.json.
+NEXT: Verify595 hosted CI; retain scoped parser follow-up.
+PRODUCTION READY:NO. No source/SQL/provider changes in this documentation update.
 
 > Two sessions ran this board. Both sections are kept.
 
