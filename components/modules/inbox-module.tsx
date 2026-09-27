@@ -30,22 +30,23 @@ import { createFormat } from '@/lib/utils/format';
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
 
-const CHANNELS: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
-  call:      { icon: Phone,         label: 'Call',      color: 'bg-blue-500/15 text-blue-400' },
-  sms:       { icon: MessageSquare, label: 'SMS',       color: 'bg-green-500/15 text-green-400' },
-  email:     { icon: Mail,          label: 'Email',     color: 'bg-violet-500/15 text-violet-400' },
-  whatsapp:  { icon: MessageSquare, label: 'WhatsApp',  color: 'bg-emerald-500/15 text-emerald-400' },
-  instagram: { icon: Instagram,     label: 'Instagram', color: 'bg-pink-500/15 text-pink-400' },
-  school:    { icon: BookOpen,      label: 'School',    color: 'bg-amber-500/15 text-amber-400' },
-  sports:    { icon: Trophy,        label: 'Sports',    color: 'bg-orange-500/15 text-orange-400' },
-  note:      { icon: FileText,      label: 'Note',      color: 'bg-slate-500/15 text-slate-400' },
-  other:     { icon: FileText,      label: 'Other',     color: 'bg-surface text-muted' },
+const CHANNELS: Record<string, { icon: React.ComponentType<{ className?: string }>; labelKey: string; color: string }> = {
+  call:      { icon: Phone,         labelKey: 'inboxModule.channel.call', color: 'bg-blue-500/15 text-blue-400' },
+  sms:       { icon: MessageSquare, labelKey: 'inboxModule.channel.sms', color: 'bg-green-500/15 text-green-400' },
+  email:     { icon: Mail,          labelKey: 'inboxModule.channel.email', color: 'bg-violet-500/15 text-violet-400' },
+  whatsapp:  { icon: MessageSquare, labelKey: 'inboxModule.channel.whatsapp', color: 'bg-emerald-500/15 text-emerald-400' },
+  instagram: { icon: Instagram,     labelKey: 'inboxModule.channel.instagram', color: 'bg-pink-500/15 text-pink-400' },
+  school:    { icon: BookOpen,      labelKey: 'inboxModule.channel.school', color: 'bg-amber-500/15 text-amber-400' },
+  sports:    { icon: Trophy,        labelKey: 'inboxModule.channel.sports', color: 'bg-orange-500/15 text-orange-400' },
+  note:      { icon: FileText,      labelKey: 'inboxModule.channel.note', color: 'bg-slate-500/15 text-slate-400' },
+  other:     { icon: FileText,      labelKey: 'inboxModule.channel.other', color: 'bg-surface text-muted' },
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  general: 'General', school: 'School', medical: 'Medical', sports: 'Sports',
-  social: 'Social', emergency: 'Emergency', financial: 'Financial', legal: 'Legal', other: 'Other',
-};
+// The stored category is the key; the label is worded at render.
+const CATEGORY_KEYS: Record<string, string> = Object.fromEntries(
+  ['general', 'school', 'medical', 'sports', 'social', 'emergency', 'financial', 'legal', 'other']
+    .map((c) => [c, `inboxModule.category.${c}`]),
+);
 
 type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'email' | 'archived';
 
@@ -165,14 +166,14 @@ export function InboxModule() {
   if (readError) return <ErrorState message={readError} onRetry={() => { void refreshComms(); void refreshContacts(); }} />;
 
   const TABS: { key: FilterTab; label: string }[] = [
-    { key: 'all',      label: 'All' },
-    { key: 'unread',   label: `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}` },
-    { key: 'school',   label: 'School' },
-    { key: 'sports',   label: 'Sports' },
-    { key: 'call',     label: 'Calls' },
-    { key: 'sms',      label: 'SMS' },
-    { key: 'email',    label: 'Email' },
-    { key: 'archived', label: 'Archived' },
+    { key: 'all',      label: tr('inboxModule.tab.all') },
+    { key: 'unread',   label: unreadCount > 0 ? tr('inboxModule.tab.unreadCount', { count: unreadCount }) : tr('inboxModule.tab.unread') },
+    { key: 'school',   label: tr('inboxModule.tab.school') },
+    { key: 'sports',   label: tr('inboxModule.tab.sports') },
+    { key: 'call',     label: tr('inboxModule.tab.calls') },
+    { key: 'sms',      label: tr('inboxModule.channel.sms') },
+    { key: 'email',    label: tr('inboxModule.tab.email') },
+    { key: 'archived', label: tr('inboxModule.tab.archived') },
   ];
 
   return (
@@ -201,10 +202,10 @@ export function InboxModule() {
 
           <div className="grid-stats">
             {[
-              { label: 'Total',    value: comms.filter(c => c.status !== 'archived').length, icon: '💬', color: 'text-brand-text' },
-              { label: 'Unread',   value: unreadCount,                                        icon: '🔵', color: 'text-blue-400' },
-              { label: 'School',   value: comms.filter(c => c.channel === 'school' || c.category === 'school').length, icon: '📚', color: 'text-amber-400' },
-              { label: 'Urgent',   value: comms.filter(c => c.priority === 'urgent').length,  icon: '⚡', color: 'text-red-400' },
+              { label: tr('inboxModule.stat.total'), value: comms.filter(c => c.status !== 'archived').length, icon: '💬', color: 'text-brand-text' },
+              { label: tr('inboxModule.stat.unread'), value: unreadCount,                                        icon: '🔵', color: 'text-blue-400' },
+              { label: tr('inboxModule.stat.school'), value: comms.filter(c => c.channel === 'school' || c.category === 'school').length, icon: '📚', color: 'text-amber-400' },
+              { label: tr('inboxModule.stat.urgent'), value: comms.filter(c => c.priority === 'urgent').length,  icon: '⚡', color: 'text-red-400' },
             ].map(s => (
               <div key={s.label} className="stat-card">
                 <span className="text-2xl">{s.icon}</span>
@@ -275,7 +276,7 @@ export function InboxModule() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className={cn('truncate text-sm', isUnread ? 'font-bold' : 'font-medium')}>
-                            {comm.contact?.name ?? comm.subject ?? 'No subject'}
+                            {comm.contact?.name ?? comm.subject ?? tr('inboxModule.noSubject')}
                           </span>
                           <span className="shrink-0 text-[10px] text-muted">{fmtTime(comm.received_at)}</span>
                         </div>
@@ -283,10 +284,10 @@ export function InboxModule() {
                           {comm.contact && comm.subject ? comm.subject : (comm.body?.slice(0, 80) ?? '')}
                         </div>
                         <div className="mt-1 flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted">{ch.label}</span>
+                          <span className="text-[10px] text-muted">{tr(ch.labelKey)}</span>
                           {comm.category !== 'general' && (
                             <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted border border-border/60">
-                              {CATEGORY_LABELS[comm.category]}
+                              {CATEGORY_KEYS[comm.category] ? tr(CATEGORY_KEYS[comm.category]) : comm.category}
                             </span>
                           )}
                           {(comm.action_items as unknown[]).length > 0 && (
@@ -359,7 +360,7 @@ export function InboxModule() {
                     <div className={cn('grid h-6 w-6 flex-shrink-0 place-items-center rounded-md text-[10px]', cfg.color)}>
                       <cfg.icon className="h-3 w-3" />
                     </div>
-                    <span className="flex-1 text-xs text-muted">{cfg.label}</span>
+                    <span className="flex-1 text-xs text-muted">{tr(cfg.labelKey)}</span>
                     <span className="text-xs font-semibold">{count}</span>
                   </div>
                 );
@@ -416,18 +417,18 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
         comm.contact?.name ? `From: ${comm.contact.name}` : null,
         comm.subject ? `Subject: ${comm.subject}` : null,
         comm.body ? `Message: ${comm.body}` : (comm.summary ? `Summary: ${comm.summary}` : null),
-        `Channel: ${ch.label}`,
+        `Channel: ${tr(ch.labelKey)}`,
       ].filter(Boolean).join('\n');
       const res = await fetch('/api/ai/assist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          systemPrompt: `You are a family's AI message agent. Draft a brief, warm, polite reply to the message below on the family's behalf. Match the tone to the channel (${ch.label}). Keep it natural and ready to send — no placeholders, no "[Name]", no preamble. Just the reply text.`,
+          systemPrompt: `You are a family's AI message agent. Draft a brief, warm, polite reply to the message below on the family's behalf. Match the tone to the channel (${tr(ch.labelKey)}). Keep it natural and ready to send — no placeholders, no "[Name]", no preamble. Just the reply text.`,
           messages: [{ role: 'user', content: contextLines }],
           maxTokens: 300,
         }),
       });
       const data = await res.json();
-      if (!res.ok) { toastError(data.error ?? 'Could not draft a reply.'); return; }
+      if (!res.ok) { toastError(data.error ?? tr('inboxModule.couldNotDraftAReply')); return; }
       setDraft((data.message ?? '').trim());
     } catch {
       toastError(tr('inboxModule.couldNotReachTheAi'));
@@ -486,7 +487,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
     // this one-tap button never saved anything.
     const result = await createReminderAction({
       title: text.slice(0, 200),
-      notes: comm.contact?.name ? `From ${comm.contact.name} · ${ch.label}` : `From ${ch.label}`,
+      notes: comm.contact?.name ? `From ${comm.contact.name} · ${tr(ch.labelKey)}` : `From ${tr(ch.labelKey)}`,
       kind: 'task',
       priority: comm.priority === 'urgent' ? 'high' : 'medium',
       aiSuggested: true,
@@ -508,8 +509,8 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
           <ch.icon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold">{comm.contact?.name ?? comm.subject ?? 'No subject'}</div>
-          <div className="text-[10px] text-muted">{ch.label} · {fmtTime(comm.received_at)}</div>
+          <div className="truncate text-sm font-bold">{comm.contact?.name ?? comm.subject ?? tr('inboxModule.noSubject')}</div>
+          <div className="text-[10px] text-muted">{tr(ch.labelKey)} · {fmtTime(comm.received_at)}</div>
         </div>
         <button onClick={onArchive} className="rounded-lg p-1.5 hover:bg-surface/60 transition text-muted hover:text-fg" title={tr('inbox.archive')}>
           <Archive className="h-4 w-4" />
@@ -519,7 +520,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="flex flex-wrap gap-2">
           {comm.category !== 'general' && (
-            <span className="rounded-md bg-surface border border-border px-2 py-0.5 text-[11px] font-semibold capitalize">{CATEGORY_LABELS[comm.category]}</span>
+            <span className="rounded-md bg-surface border border-border px-2 py-0.5 text-[11px] font-semibold capitalize">{CATEGORY_KEYS[comm.category] ? tr(CATEGORY_KEYS[comm.category]) : comm.category}</span>
           )}
           <span className="rounded-md bg-surface border border-border px-2 py-0.5 text-[11px] font-semibold capitalize">{comm.direction}</span>
           {comm.priority !== 'normal' && (
@@ -592,7 +593,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
               <button onClick={generateReply} disabled={drafting}
                 className="flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-[10px] font-semibold text-brand-text hover:bg-brand/20 transition disabled:opacity-60">
                 {drafting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
-                {drafting ? 'Drafting…' : draft ? 'Redraft' : 'Draft reply'}
+                {drafting ? tr('inboxModule.drafting') : draft ? tr('inboxModule.redraft') : tr('inboxModule.draftReply')}
               </button>
             </div>
             <textarea value={draft} onChange={e => setDraft(e.target.value)}
@@ -602,7 +603,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
             {draft && (
               <div className="mt-2 flex items-center justify-end gap-2">
                 <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand-text transition">
-                  {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />} {copied ? 'Copied' : 'Copy'}
+                  {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />} {copied ? tr('inboxModule.copied') : tr('inboxModule.copy')}
                 </button>
                 <button onClick={logReply} disabled={sendingReply}
                   className="flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-brand/90 transition disabled:opacity-60">
@@ -672,7 +673,7 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('inbox.channel')}>
-            {id => <Select id={id} name="channel">{Object.entries(CHANNELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>}
+            {id => <Select id={id} name="channel">{Object.entries(CHANNELS).map(([k, v]) => <option key={k} value={k}>{tr(v.labelKey)}</option>)}</Select>}
           </Field>
           <Field label={tr('inbox.direction')}>
             {id => <Select id={id} name="direction"><option value="inbound">{tr('inbox.inbound')}</option><option value="outbound">{tr('inbox.outbound')}</option></Select>}
@@ -689,10 +690,10 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('inbox.category')}>
-            {id => <Select id={id} name="category">{Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
+            {id => <Select id={id} name="category">{Object.entries(CATEGORY_KEYS).map(([k, v]) => <option key={k} value={k}>{tr(v)}</option>)}</Select>}
           </Field>
           <Field label={tr('inbox.priority')}>
-            {id => <Select id={id} name="priority"><option value="low">Low</option><option value="normal">{tr('inbox.normal')}</option><option value="high">{tr('inbox.high')}</option><option value="urgent">{tr('inbox.urgent')}</option></Select>}
+            {id => <Select id={id} name="priority"><option value="low">{tr('inboxModule.priorityLow')}</option><option value="normal">{tr('inbox.normal')}</option><option value="high">{tr('inbox.high')}</option><option value="urgent">{tr('inbox.urgent')}</option></Select>}
           </Field>
         </div>
         <Field label={tr('inbox.dateTime')}>
@@ -700,19 +701,14 @@ function AddCommModal({ familyId, userId, contacts, onClose, onSaved }: {
         </Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('inbox.cancel')}</Button>
-          <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Log Message'}</Button>
+          <Button type="submit" loading={loading}>{loading ? tr('inboxModule.saving') : tr('inbox.logMessage')}</Button>
         </div>
       </form>
     </Modal>
   );
 }
 
-const EXAMPLES = [
-  'Picture day is next Friday — wear school colors. Order forms due Wednesday.',
-  'Soccer practice moved to Tuesdays 5–6:30pm at Lincoln Park starting next week.',
-  'Dentist for Emma on the 14th at 9am. Remind me to renew car insurance by month end.',
-  'Coach called — Jake made the varsity team! First game is Saturday at 10am.',
-];
+const EXAMPLE_KEYS = ['pictureDay', 'soccerPractice', 'dentist', 'coachCalled'].map((k) => `inboxModule.example.${k}`);
 
 function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
   familyId: string; userId: string; contacts: Contact[];
@@ -737,7 +733,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
         body: JSON.stringify({ text }),
       });
       const json = await res.json();
-      if (!res.ok) { toastError(json.error ?? 'Could not process that.'); return; }
+      if (!res.ok) { toastError(json.error ?? tr('inboxModule.couldNotProcessThat')); return; }
       const items: { name: string; summary: string }[] = json.items ?? [];
       const hasSchool = items.some(it => ['event', 'reminder', 'appointment'].includes(it.name));
       setResult({
@@ -782,7 +778,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
               className="w-full rounded-xl border border-border bg-surface/60 p-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
             <div className="space-y-1.5">
               <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">{tr('inbox.examples')}</p>
-              {EXAMPLES.map((ex, i) => (
+              {EXAMPLE_KEYS.map((key) => tr(key)).map((ex, i) => (
                 <button key={i} onClick={() => setText(ex)}
                   className="w-full rounded-lg border border-border/60 px-3 py-2 text-left text-xs text-muted hover:bg-surface/60 hover:text-fg transition">
                   {ex}
@@ -792,7 +788,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={onClose}>{tr('inbox.cancel')}</Button>
               <Button onClick={parse} loading={parsing} disabled={!text.trim()}>
-                {parsing ? 'Analyzing…' : <><Wand2 className="h-3.5 w-3.5" /> {tr('inbox.parseWithAi')}</>}
+                {parsing ? tr('inboxModule.analyzing') : <><Wand2 className="h-3.5 w-3.5" /> {tr('inbox.parseWithAi')}</>}
               </Button>
             </div>
           </>
@@ -826,7 +822,7 @@ function AiImportModal({ familyId, userId, contacts, onClose, onSaved }: {
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setResult(null)}>{tr('inbox.back')}</Button>
-              <Button onClick={save} loading={saving}>{saving ? 'Saving…' : 'Save to Hub'}</Button>
+              <Button onClick={save} loading={saving}>{saving ? tr('inboxModule.saving') : tr('inboxModule.saveToHub')}</Button>
             </div>
           </div>
         )}

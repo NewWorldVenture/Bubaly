@@ -350,8 +350,8 @@ PR596 preserves Claude's reported 44 public/auth/marketing page re-crawls on e14
 ### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
 
 Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
-read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
-recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #598) and
+recorded as `C1-S9-94`…`C1-S9-111`. Every lane is claimed by another session, so the rows are
 theirs to update; the findings are listed here rather than edited under someone else's claim.
 
 PR598 (`06cef776e94278d4893fe6979fd37911b5b1b0ed`) extends this reported pass through C1-S9-111; its later detailed entries include C1-S9-112–114. The PR587 attribution above remains historical. These are Claude's source-specific local findings; the selected integration has separate acceptance evidence and does not promote any page row here.
@@ -46104,6 +46104,243 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][LOW][FRONT-DESK]` C1-S9-115 — the Front Desk's call statuses and classifications were English in every locale
+
+**File/path:** `components/modules/front-desk-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.** On `/dashboard/front-desk`, every call's status (Screened, Voicemail, Forwarded, …) and classification (Important, Robocall, …) was English in every locale. So was "Unknown caller" in the detail view. The stat tiles and "How it works" already rendered through keys, but still carried unused English copies next to them, which the scanner counted as findings.
+
+**Fix.**
+- Statuses and classifications are `labelKey`s.
+- The unused English copies are removed.
+- Both unknown-caller fallbacks use `frontDesk.unknownCaller`.
+- "Spam" is listed as invariant.
+
+**Status:** FIXED. Scanner findings for `front-desk-module` drop from 20 to 0.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SHOPPING/PANTRY]` C1-S9-116 — grocery categories, list presets and pantry stats were English in every locale
+
+**File/path:** `components/modules/shopping-module.tsx`, `components/modules/pantry-module.tsx`, new `lib/i18n/grocery-category.ts`; seven catalogues.
+
+**Problem.**
+- On `/dashboard/shopping`, English showed in every locale:
+  - the category headings on a list (Produce, Dairy & Eggs, …)
+  - the category picker
+  - the "Cleared N completed items" toast
+- The "Grocery" and "Custom" list presets wrote an English list name into the family's data.
+- On `/dashboard/pantry`, the category chips and picker and three of the four stat tiles were English.
+
+**Fix.**
+- Categories stay stored as the English word, since the list groups by it. They are shown through `groceryCategoryLabel()`, which both pages share.
+- The two generic presets are worded when shown and when picked. Store brands stay as they are.
+- The toast is a plural.
+
+**Status:** FIXED.
+- `pantry-module` has no copy findings left. Its remaining findings are the stored category values.
+- `shopping-module`'s remaining findings are the stored categories and the store brand names.
+
+---
+
+### `[CLAUDE-1][MEDIUM][RECIPES]` C1-S9-117 — recipe categories, difficulty, dietary flags and AI remix buttons were English in every locale
+
+**File/path:** `components/modules/recipes-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/recipes` (part of the `C1-S9-101` burn-down), the following were English in every locale:
+- recipe categories and difficulty, on cards, in filters and in the form
+- the dietary flags on a recipe and in the form
+- the ten "AI Remix" buttons (their labels came from `lib/recipes/ai-actions.ts`)
+- the four stat tiles
+
+**Fix.**
+- Categories and difficulty are `labelKey`s.
+- Dietary flags stay stored as the English word and are shown through `flagLabel()`.
+- Remix buttons are worded by action id. The English instruction sent to the model is unchanged.
+
+**Status:** FIXED. Scanner findings for `recipes-module` drop from 19 to 3. The 3 left are stored values: the flag list, and the "Pantry" category a grocery line is filed under.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TODOS]` C1-S9-118 — the task page's priorities, tabs, summary and quick-add were English, and a first task created an English list
+
+**File/path:** `components/modules/todos-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/todos`, the following were English in every locale:
+- the priorities
+- the four tabs
+- the summary donut's legend
+- the Today / Tomorrow / This Week quick-add buttons
+
+Adding a family's first task also created a list named "Tasks" in English, in the family's data.
+
+**Fix.**
+- The labels are catalogue keys.
+- The default list is named in the reader's language when it is created.
+
+**Status:** FIXED. Scanner findings for `todos-module` drop from 16 to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][LOW][FAMILY]` C1-S9-119 — the family page's roles, account badges and shared-information cards were English in every locale
+
+**File/path:** `components/modules/family-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/family`, the following were English in every locale:
+- each member's role (Parent, Kid, …) and account badge (Admin, Kid Account)
+- the role picker
+- the five "Shared information" cards and their counts ("3 contacts", "View")
+
+**Fix.**
+- Roles and badges are catalogue keys.
+- Each card's label and count come from the catalogue, and the count uses the locale's plural rules.
+
+**Status:** FIXED. Scanner findings for `family-module` drop from 16 to 3. All 3 are type-alias fragments.
+
+---
+
+### `[CLAUDE-1][LOW][DOCUMENTS/RELATIONSHIP]` C1-S9-120 — documents filters and actions, and relationship dates and gift statuses, were English in every locale
+
+**File/path:** `components/modules/documents-module.tsx`, `components/modules/relationship-module.tsx`, `tests/documents-import-actions.test.ts`, `tests/i18n-ungated-surface-ratchet.test.ts`; seven catalogues.
+
+**Problem.** The following were English in every locale:
+- On `/dashboard/documents`: the type filter, the sort options, the storage legend and the three quick actions.
+- On `/dashboard/relationship`: the date kinds, the gift statuses and the load-failure fallback.
+
+**Fix.**
+- These labels now come from catalogue keys (`labelKey`).
+- The documents test pins the translated calls for the three actions.
+- The ungated-surface ratchet ceiling drops from 2581 to 2419. That holds the burn-down from `C1-S9-112` to `C1-S9-120`. After merging main at `e96e745a`, the ceiling is 2432. The extra 13 are main's P-10 change (`711b15c3`), which writes a fixed English label on each AI-request ledger row across 13 route files. That is stored row data, and it stays with that change's owner.
+
+**Status:** FIXED.
+- `documents-module`: scanner findings drop from 15 to 0.
+- `relationship-module`: scanner findings drop from 15 to 3, all type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][CONCIERGE/SUBSCRIPTIONS/EXPENSES]` C1-S9-121 — concierge kinds and prompts, subscription labels and usage lines, and expense categories were English in every locale
+
+**File/path:** `components/modules/concierge-module.tsx`, `components/modules/subscriptions-module.tsx`, `components/modules/expenses-module.tsx`, `lib/finance/category-label.ts`, `tests/route-plan-gate.test.ts`; seven catalogues.
+
+**Problem.**
+- **Concierge.** The seven plan kinds, their opening lines, the five inspiration tips and their reply were English in every locale. A saved plan took its kind's English name, or "New Plan", as its title.
+- **Subscriptions.** Categories, cadence and status pickers (shown as raw ids), "/mo" and "/yr", "trial", "next …", the four usage lines and the last-used hint were English in every locale.
+- **Expenses.** Categories were English in every locale.
+
+**Fix.**
+- Every label listed above is now a catalogue key, rendered in the reader's language.
+- Stored values stay as they are. Expense categories go through the shared `categoryLabel()`, which now knows Travel and Household.
+- A saved concierge plan's title is written in the reader's language.
+- `route-plan-gate` now expects main's merged gate (#585) to treat a failed account read as "not a super admin". The family's own 403 stands, and nothing passes.
+- The health goal's stored label stays canonical English. `tests/health-localization.test.ts` pins that on purpose, so it is left unchanged.
+
+**Status:** FIXED.
+- Scanner findings: `concierge-module` 12 → 0.
+- `subscriptions-module` and `expenses-module`: only stored category values remain.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SIGNALS/SOCIAL/VOICE]` C1-S9-122 — family signals, the social feed and voice capture labels were English in every locale; the voice classifier reads only English
+
+**File/path:** `components/modules/family-signals-module.tsx`, `components/modules/social-feed-module.tsx`, `components/modules/voice-module.tsx`, `lib/voice/command-router.ts`; seven catalogues.
+
+**Problem.** English in every locale:
+- `/dashboard/signals`: pattern kinds and stat tiles.
+- `/dashboard/social`: feed tabs, quick filters and "Add {platform}".
+- `/dashboard/voice`:
+  - capture kinds
+  - the confirmation toast ("Added task · 3 items") and its Undo action
+  - history rows, including "Failed"
+
+**Separate finding (OPEN).** `classifyVoiceCommand()` recognises only English phrasing, such as "remind me to", "add … to the shopping list" and "schedule". A command spoken or typed in another language is filed as a note, whatever it asks for.
+
+**Fix.**
+- The labels, toasts and history rows above are now catalogue keys.
+- The voice module words each route itself (`voiceModule.route.*`).
+- `describeRoute()` in `lib/voice/command-router.ts` stays English, because the command bar and its test use it.
+- The four example commands stay English on purpose. Tapping one feeds the classifier, and a translated example would be filed as a note.
+
+**Status:**
+- **FIXED** for the labels. Scanner findings drop to 0 for `family-signals-module` and `social-feed-module`. `voice-module` has 4 left: the deliberate English examples.
+- **OPEN** for the classifier. Making it multilingual means per-locale intent rules or model classification. That is a feature decision for the owner, not a label fix.
+
+---
+
+### `[CLAUDE-1][LOW][RENEWALS/MESSAGES]` C1-S9-123 — renewal categories, message tabs and groups were English, and the family's first conversation was named in English
+
+**File/path:** `components/modules/renewals-module.tsx`, `components/modules/messages-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/renewals` showed English in every locale:
+  - each renewal's category badge and the category picker
+  - the load-failure fallback message
+- `/dashboard/messages` showed English in every locale:
+  - the conversation tabs
+  - the four smart recipient groups
+- The family's first conversation, created automatically, was saved as "Family Chat" in English.
+
+**Fix.**
+- Categories stay stored as their id and are worded through the catalogue.
+- Tabs and groups are `labelKey`s.
+- The first conversation is named in the reader's language.
+
+**Status:** FIXED. Scanner findings: `renewals-module` drops to 0; `messages-module` drops to 1, a type-alias fragment.
+
+---
+
+### `[CLAUDE-1][MEDIUM][INSURANCE]` C1-S9-124 — insurance policy types, premium frequencies and the policy detail were English in every locale
+
+**File/path:** `components/modules/insurance-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/insurance` showed its vocabulary in English in every locale:
+- The twelve policy types (Health, Auto, Renters, Umbrella, …) came straight from `lib/insurance/policies.ts` data. They appeared in the list, the gaps line, the renewals line, the form and the detail title ("Auto insurance").
+- So did the four premium frequencies and every "/mo" or "/yr".
+- The detail sheet's eight row labels were English.
+- So was "Whole family".
+
+**Fix.**
+- `typeLabel()` and `perFrequency()` word each stored value through the catalogue.
+- The lib stays as data.
+
+**Status:** FIXED. Scanner findings for `insurance-module` drop from 7 to 0. The lib-sourced labels were a blind spot of the scanner and were found by reading the module.
+
+---
+
+### `[CLAUDE-1][LOW][PASSWORDS/WEEKLY]` C1-S9-125 — password categories and the weekly briefing's load and stress labels were English in every locale
+
+**File/path:** `components/modules/passwords-module.tsx`, `components/modules/weekly-briefing-module.tsx`; seven catalogues.
+
+**Problem.** Two pages showed English in every locale:
+- `/dashboard/passwords`:
+  - the nine category chips, the category picker and each entry's category
+  - the "Actions for …" menu label
+- `/dashboard/weekly`: each day's load (Light, Heavy) and the stress level.
+
+**Fix.** These labels now come from catalogue keys (`labelKey`).
+
+**Status:** FIXED. Scanner findings:
+- `passwords-module`: 6 → 0.
+- `weekly-briefing-module`: 7 → 1, a CSS value.
+
+---
+
+### `[CLAUDE-1][MEDIUM][MEDICAL]` C1-S9-126 — medical and dental records spliced an English provider noun into English sentences in every locale
+
+**File/path:** `components/modules/medical-records-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/medical` and `/dashboard/dental` built their copy from an English noun ("Doctor" or "Dentist") spliced into English templates:
+- "Add Doctor", "Edit Dentist", "Doctor saved", "Could not save dentist"
+- "No doctors yet", "Add your family's dentists and generate …", "Primary doctor"
+- the empty-insurance body
+
+The page title and description, "Whole Family", "Save Changes", "Add Insurance" and both card-upload toasts were English too. None of it could be translated, because no language builds these phrases the English way.
+
+**Fix.** Each kind has whole-sentence catalogue keys (`medicalRecordsModule.{medical,dental}.*`). The module reads them through `k(name)`.
+
+**Status:** FIXED. Scanner findings drop to 2, both type-alias fragments. Most of these were template literals the scanner cannot see.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -49390,11 +49627,12 @@ because this audit has no production login and must not create data there.
 | B3 | Sign-in, sign-up, kid login, recovery, public token pages (`/gift`, `/pay`, `/s`, `/f`), production + local | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
-| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-17 found and fixed, P-18 open) | 2026-09-27 19:05 |
+| B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
 | B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px; `/kid-login` PIN sessions not yet crawled) | 2026-09-27 13:30 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP (public half) | 🔄 public half done (41 pages × 10 locales, production); signed-in half claimed 2026-09-27 17:40 (278 family routes × 10 locales, local) | 2026-09-27 12:55 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
+| B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -49590,6 +49828,27 @@ locale on both sides; money through `fmtMoney`).
 client component and fails on a bare `toLocaleString()` /
 `toLocaleDateString()` / `toLocaleTimeString()` (red with the connect-grid
 line restored).
+*Dates, after review on #604:* the locale alone was not enough for a date or
+a time. `useFormat()` binds no zone, so the server (UTC) and a browser in
+Berlin or New York still drew different text for one timestamp ("0:30",
+"2:30", or the day before) and hydration failed. The four P-11 date and time
+displays (admin notifications, social sync time, review and redemption dates)
+now use `useHydrationSafeFormat()`: the server render and the browser's
+hydrating render both format in UTC, and the render right after hydration
+switches to the reader's zone (`useSyncExternalStore`, no
+`suppressHydrationWarning`). `tests/a-date-renders-the-same-on-the-server-and-at-hydration.test.ts`
+renders with React's server renderer in a process set to America/New_York:
+the hook draws the UTC text, the plain formatter (the control) the New York
+text; 3 of 5 cases fail with the hook removed.
+*Numbers in Italian, found by re-crawling the fixes:* the connect page still
+threw #418 in `it-IT` alone. CLDR gives Italian (and Spanish, Portuguese) a
+two-digit minimum before grouping, and the runtimes ship different data for
+it: on the local stack Node formatted 2200 as "2200" and Chromium as "2.200".
+`fmtNumber` and `fmtMoney` now pass `useGrouping: 'always'`, so both group
+every thousand. `tests/a-number-groups-the-same-on-the-server-and-in-the-browser.test.ts`
+(red without it). Re-crawled after the fix: food, planning, kitchen and the
+connect page pass in de-DE, es-ES, fr-CA, fr-FR, nl-NL and pt-PT at 1280 and
+390 px; it-IT is re-checked on the next build.
 
 **P-12 · Low · Three pages scrolled sideways in German at desktop width
 (B8).** `/dashboard/food` (+17 px) and `/dashboard/planning` (+39 px): a card
@@ -49689,18 +49948,25 @@ automation action." The first action now starts ticked. Tests for P-14 to
 P-17: `tests/a-form-a-page-offers-can-be-submitted.test.ts` (all four red
 with the fixes reverted).
 
-**P-18 · Medium · OPEN · The admin marketing console answers a refusal with
-its error page.** Its actions (`app/(app)/admin/marketing/actions.ts`: ten
-`throw new Error(…)` and `marketingActionFailure`) throw on an ordinary
-refusal — a name or slug already taken ("That already exists"), a value out
-of range, a missing choice — and a plain `<form action>` turns that into the
-section error page with a reference number; in production Next omits the
-message, so the admin is not told what to change. Seen here on
-`/admin/marketing/affiliates` and `/admin/marketing/landing-pages` (a second
-"Audit 1"). P-16 and P-17 remove the three cases a form can prevent; the rest
-needs the actions to return their refusal (`useActionState`, or a redirect
-carrying a catalogue-keyed notice), which touches every marketing form — a
-batch of its own, open for anyone to claim.
+**P-18 · Medium · The admin marketing console answered a refusal with its
+error page — fixed.** Its actions (`app/(app)/admin/marketing/**/actions.ts`,
+through `marketingActionFailure` in 20 files, and fifteen direct `throw`s)
+throw on an ordinary refusal — a name or slug already taken, a date before its
+start, a link that is not a link — and a plain `<form action>` turned that into
+the section error page with a reference number; in production Next omits the
+message, so the admin was not told what to change. Seen on
+`/admin/marketing/affiliates` and `/admin/marketing/landing-pages`. Next keeps
+an error's own `digest` and hands it to the boundary, so a refusal now carries
+one of five fixed codes in it (`lib/actions/refusal.ts`: `duplicate`,
+`invalid`, `notAllowed`, `inUse`, `notSaved`, read from the Postgres error code
+— never free text), and `components/app/section-error.tsx`, the boundary of 28
+sections, says "That wasn’t saved" and the reason in the reader's language
+(seven catalogues) with a "Back to the form" button. Every other error keeps
+the page it had. The sender failures in `push/actions.ts` stay plain errors:
+they are not the admin's input. Verified on a local production build: a
+duplicate affiliate now reads "Something with that name or address already
+exists. Choose another and try again.", and the button returns to the form.
+`tests/a-refused-action-says-what-to-change.test.ts`.
 
 ### Round 2 — the merged tree, after #588 and 339 other commits from main
 

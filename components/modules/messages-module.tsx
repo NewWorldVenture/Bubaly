@@ -38,11 +38,11 @@ type Message = Tables<'family_messages'>;
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const;
 const QUICK_EMOJIS = ['😀', '🎉', '👏', '✅', '🙏', '💪', '🤣', '😍'];
 
-const CONV_TABS: { key: ConvTab; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'direct', label: 'Direct' },
-  { key: 'group', label: 'Groups' },
-  { key: 'announcement', label: 'Announcements' },
+const CONV_TABS: { key: ConvTab; labelKey: string }[] = [
+  { key: 'all', labelKey: 'messagesModule.tab.all' },
+  { key: 'direct', labelKey: 'messagesModule.tab.direct' },
+  { key: 'group', labelKey: 'messagesModule.tab.group' },
+  { key: 'announcement', labelKey: 'messagesModule.tab.announcement' },
 ];
 
 function timeGroup(iso: string): string {
@@ -180,7 +180,7 @@ export function MessagesModule() {
       if (!data?.length) {
         await createConversation({
           family_id: familyId,
-          name: 'Family Chat',
+          name: tr('messagesModule.familyChat'),
           kind: 'group',
           avatar_emoji: '👨‍👩‍👧‍👦',
           created_by: userId,
@@ -190,7 +190,7 @@ export function MessagesModule() {
         void loadConversations();
       }
     })();
-  }, [familyId, userId, members, loadConversations]);
+  }, [familyId, userId, members, loadConversations, tr]);
 
   // ── Load messages for active conv ──────────────────────────
   // `toastError` is in the deps because it IS a dependency — this callback
@@ -618,7 +618,7 @@ export function MessagesModule() {
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={cn('shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
                   tab === t.key ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
-                {t.label}
+                {tr(t.labelKey)}
               </button>
             ))}
           </div>
@@ -1153,11 +1153,11 @@ type Member = Tables<'family_members'>;
 const CONV_EMOJIS = ['💬', '👨‍👩‍👧‍👦', '🏠', '📅', '🎉', '🛒', '📚', '⚽', '🎮', '🏖️', '❤️', '🍕'];
 
 /** Smart, role-derived groups for one-tap multi-select. */
-const SMART_GROUPS: { key: string; label: string; emoji: string; roles: MemberRole[] | null }[] = [
-  { key: 'everyone', label: 'Everyone', emoji: '👨‍👩‍👧‍👦', roles: null },
-  { key: 'parents', label: 'Parents', emoji: '🧑‍🤝‍🧑', roles: ['parent', 'adult'] },
-  { key: 'kids', label: 'Kids', emoji: '🧒', roles: ['teen', 'child'] },
-  { key: 'household', label: 'Household', emoji: '🏠', roles: ['parent', 'adult', 'teen', 'child'] },
+const SMART_GROUPS: { key: string; labelKey: string; emoji: string; roles: MemberRole[] | null }[] = [
+  { key: 'everyone', labelKey: 'messagesModule.group.everyone', emoji: '👨‍👩‍👧‍👦', roles: null },
+  { key: 'parents', labelKey: 'messagesModule.group.parents', emoji: '🧑‍🤝‍🧑', roles: ['parent', 'adult'] },
+  { key: 'kids', labelKey: 'messagesModule.group.kids', emoji: '🧒', roles: ['teen', 'child'] },
+  { key: 'household', labelKey: 'messagesModule.group.household', emoji: '🏠', roles: ['parent', 'adult', 'teen', 'child'] },
 ];
 
 type Step = 'people' | 'details';
@@ -1326,7 +1326,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                       )}>
                       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-elevated text-lg">{g.emoji}</div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{g.label}</p>
+                        <p className="truncate text-sm font-semibold">{tr(g.labelKey)}</p>
                         <p className="truncate text-xs text-muted">
                           {gm.length === 0 ? 'No members' : gm.map((m) => firstName(m.display_name)).join(', ')}
                         </p>

@@ -6,6 +6,7 @@ import { AlertTriangle, RotateCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
+import { refusalFromDigest } from '@/lib/actions/refusal';
 
 /**
  * Error boundary for one authenticated SECTION, mounted inside that section's
@@ -31,6 +32,25 @@ export function SectionError({
     // A chunk that failed to load fails again on reset(); a reload fetches it.
     reloadOnceForChunkFailure(error);
   }, [error]);
+
+  // A server action that refused its input says why in the digest
+  // (lib/actions/refusal.ts). That is not a broken page: say what to change
+  // and put the form back, rather than "this page hit a snag".
+  const refusal = refusalFromDigest(error.digest);
+  if (refusal) {
+    return (
+      <div role="alert" className="flex min-h-[50dvh] flex-col items-center justify-center px-6 text-center">
+        <div className="mb-5 grid h-14 w-14 place-items-center rounded-full bg-amber-500/10">
+          <AlertTriangle className="h-7 w-7 text-amber-500" />
+        </div>
+        <h1 className="text-xl font-semibold">{t('actionRefusal.heading')}</h1>
+        <p className="mt-2 max-w-md text-sm text-muted">{t(`actionRefusal.${refusal}`)}</p>
+        <div className="mt-6">
+          <Button onClick={reset}>{t('actionRefusal.backToTheForm')}</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[50dvh] flex-col items-center justify-center px-6 text-center">

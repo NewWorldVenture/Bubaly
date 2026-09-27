@@ -19,6 +19,7 @@ import {
 import { markAdminNotesReadAction } from '@/app/(app)/admin/notifications-actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useHydrationSafeFormat } from '@/components/i18n/use-format';
 
 const ICONS: Record<string, typeof Bell> = {
   feedback_new: MessageSquare,
@@ -32,17 +33,18 @@ const ICONS: Record<string, typeof Bell> = {
   info: Info,
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, fmtDate: (v: string) => string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return 'just now';
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return fmtDate(iso);
 }
 
 export function AdminNotificationsList({ notifications }: { notifications: AdminNotificationRow[] }) {
   const t = useTranslations();
+  const { fmtDate } = useHydrationSafeFormat();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<'all' | string>('all');
@@ -159,7 +161,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                     <div className="flex items-center gap-2">
                       <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.label}</span>
                       {!n.is_read && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
-                      <span className="ml-auto text-[11px] text-muted" suppressHydrationWarning>{timeAgo(n.created_at)}</span>
+                      <span className="ml-auto text-[11px] text-muted" suppressHydrationWarning>{timeAgo(n.created_at, fmtDate)}</span>
                     </div>
                     <p className="mt-0.5 text-sm font-semibold text-fg">{n.title}</p>
                     {n.body && <p className="mt-0.5 whitespace-pre-line text-xs text-muted">{n.body}</p>}

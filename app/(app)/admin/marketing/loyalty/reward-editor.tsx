@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { REWARD_KINDS, REWARD_KIND_LABELS } from '@/lib/marketing/loyalty';
 import { saveRewardAction, deleteRewardAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type Reward = {
   id: string; name: string; description: string | null; cost_points: number; kind: string;
@@ -46,6 +47,7 @@ function RewardForm({ reward, onDone }: { reward?: Reward; onDone: () => void })
 
 export function RewardRow({ reward }: { reward: Reward }) {
   const t = useTranslations();
+  const { fmtNumber } = useFormat();
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   if (editing) return <RewardForm reward={reward} onDone={() => setEditing(false)} />;
@@ -54,7 +56,7 @@ export function RewardRow({ reward }: { reward: Reward }) {
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p className="font-semibold">{reward.name}</p>
-          <Badge tone="brand">{reward.cost_points.toLocaleString()} pts</Badge>
+          <Badge tone="brand">{fmtNumber(reward.cost_points)} pts</Badge>
           {!reward.is_active && <Badge tone="neutral">{t('adminMarketingLoyaltyRewardEditor.inactive')}</Badge>}
         </div>
         {reward.description && <p className="mt-0.5 text-sm text-muted">{reward.description}</p>}
