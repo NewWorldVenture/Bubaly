@@ -66,8 +66,12 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       {url
+        // A short-lived signed URL for a private card photo: next/image would
+        // re-host it through the optimizer, which is exactly what the signed
+        // read exists to avoid. The suppression sits on the <img> it covers;
+        // one line higher it silenced nothing.
+        // eslint-disable-next-line @next/next/no-img-element
         ? <img src={url} alt={label} className="h-24 w-full object-cover" />
         : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>

@@ -185,9 +185,15 @@ describe('the counts are bounded, and shrink', () => {
     // as a 67th. That page's four page-type selects now share one name, "Page
     // type" (platform.pageType, seven catalogues), and its page editor's status
     // select reuses the adminMarketingPlatform.status the page already had.
+    //
+    // 61: the social-settings role select above, "left alone deliberately"
+    // because its right name was copy that did not exist. It exists now —
+    // dashboardSocialSettings.socialRoleFor, "Social role for {name}", in all
+    // seven catalogues — so the select says WHAT it sets and for WHOM, rather
+    // than being named after the member alone.
     expect(
       found.length,
       `selects with no accessible name:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(62);
+    ).toBeLessThanOrEqual(61);
   });
 });

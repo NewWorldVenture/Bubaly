@@ -4394,6 +4394,7 @@
   "dashboardSocialPosts.publishTargets": "Publish targets",
   "dashboardSocialPosts.scheduledFor": "Scheduled for",
   "dashboardSocialSettings.accessControl": "Access control",
+  "dashboardSocialSettings.socialRoleFor": "Social role for {name}",
   "dashboardSocialSettings.aiTone": "AI tone",
   "dashboardSocialSettings.autoExtractHashtagsIntoVariants": "Auto-extract hashtags into variants",
   "dashboardSocialSettings.defaultPlatforms": "Default platforms",

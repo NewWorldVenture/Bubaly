@@ -23,9 +23,9 @@ import { DEFAULT_LOCALE, localeOrDefault } from '@/lib/i18n/locales';
 //
 // Importing the catalogue HERE costs nothing: this runs in Node, not in a
 // browser bundle.
-export function renderTranslated(node: ReactElement, locale = DEFAULT_LOCALE): string {
+export function renderTranslated(node: ReactNode, locale: string = DEFAULT_LOCALE): string {
   return renderToStaticMarkup(
-    <LocaleProvider locale={localeOrDefault(locale)} source="default" messages={getMessages(locale)}>
+    <LocaleProvider locale={localeOrDefault(locale)} source="default" messages={getMessages(localeOrDefault(locale).code)}>
       {node}
     </LocaleProvider>,
   );

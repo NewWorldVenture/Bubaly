@@ -34337,6 +34337,26 @@ other's committed list. A pause between the read and the insert in the lock-less
 copy would close it; it was not made, because that copy is defined as 0443's
 body minus the lock.
 
+## Q71 — CI on 5b6bddd6 stopped at lint; what a whole-repo run found beside the fix already pushed
+
+CI's **Typecheck · Lint · Test · Build** failed at its first gate on 5b6bddd6: 20 lint warnings against a budget of 18. So on that head the typecheck, the unit suites and the build never ran. Two sessions fixed it at once. The `finish-548` session's **456680cc** landed first:
+- `document-capture` bumps the counter through the ref object it captured;
+- `ai-settings` no longer depends on `t`, which is a fresh function outside a provider;
+- the marketing platform's five selects are named, taking the select ratchet from 66 to 62.
+
+This session's whole-repo run, rebased onto that, adds what a touched-files run could not see:
+
+- **Typecheck: 1 error**, invisible to the targeted run. `main` added a test that renders a `ReactNode` through `renderTranslated`, whose signature on this branch took only a `ReactElement`. The helper now takes a `ReactNode` and resolves the locale code, a superset of both sides' uses.
+- **A suppression that suppressed nothing.** `medical-records-module.tsx` had its `no-img-element` disable **one line above the `<img>`**, on the ternary's opening line. It now sits on the `<img>` it covers, with its reason: a short-lived signed URL for a private card photo, which the optimizer must not re-host. Lint drops to 17 warnings and **the budget comes down to 17 with it**, because a ratchet left slack above the real number is not a ratchet.
+- **The select 456680cc left alone, on purpose.** Its note says the social-settings role select should not be named after the member alone, and that its right name "is copy that does not exist yet". The copy now exists: `dashboardSocialSettings.socialRoleFor`, "Social role for {name}", in all seven catalogues. The select says what it sets and for whom, and the ratchet falls to **61**.
+
+**Verified on the result:**
+- `tsc` clean; lint exit 0 (17/17);
+- vitest **19,526 / 19,530** before the rebase, where 3 are this container's Node 22 against `.nvmrc`'s 24; the 4th was the select, and the ratchet and catalogue suites now pass 84/84;
+- `npm run build` exit 0; first-load JS shared 103 kB.
+
+No SQL changed; the replay and probes stand at Q70's 413/413 and 137/137 twice.
+
 # Final Regression
 
 Last updated 2026-09-26 against the merge of `origin/main` 7e54596d into this branch (Q68). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
