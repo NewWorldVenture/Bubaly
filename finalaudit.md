@@ -45916,6 +45916,27 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][TRUST]` C1-S9-114 — Trust & Permissions showed its vocabulary in English in every locale
+
+**File/path:** `components/modules/trust-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/trust` (part of the `C1-S9-101` burn-down) showed English in every locale, although `trustDomain.*`, `trustCapability.*` and `trustRole.*` keys already existed and the sharing section used them:
+- tabs and stat tiles
+- every domain and capability name, including the permissions grid, the policy form, delegations and the emergency banner
+- policy effects, audit decisions, emergency kinds and approval models. Several were the raw stored value with its underscore replaced.
+- the empty-state explanations
+- the policy modal's title and buttons
+- "Role: …" and "Member: …"
+- every "Could not …" toast fallback
+
+**Fix.**
+- `domainLabel()`, `capabilityLabel()`, `effectLabel()`, `decisionLabel()`, `emergencyKindLabel()`, `approvalModelLabel()` and `roleLabel()` word each stored value through the catalogue. An unknown value still shows as itself.
+- The approval count is a plural.
+
+**Status:** FIXED. Scanner findings for `trust-module` drop from 21 to 0.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
