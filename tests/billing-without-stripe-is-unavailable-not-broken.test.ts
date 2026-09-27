@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// Merged with #619: with no key the four routes share one message, "billing
+// isn't set up" (checkout.billingIsNotSetUp), the same 503 as before.
 import { NextRequest } from 'next/server';
 
 // Found by the API sweep of every route on a local production build, signed
@@ -76,27 +78,27 @@ describe('billing where Stripe is not configured', () => {
     const { POST } = await import('@/app/api/billing/checkout/route');
     const res = await POST(post('/api/billing/checkout', '{"plan":"basic_monthly"}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('checkout.billingAccountStatusIsTemporarily');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('the billing portal answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/portal/route');
     const res = await POST(post('/api/billing/portal', '{}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('portal.billingAccountStatusIsTemporarily');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('changing plan answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/change-plan/route');
     const res = await POST(post('/api/billing/change-plan', '{"plan":"basic_monthly"}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('changePlan.subscriptionStatusIsTemporarilyUnavailable');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('cancelling answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/cancel/route');
     const res = await POST(post('/api/billing/cancel', '{"resume":false}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('cancel.subscriptionStatusIsTemporarilyUnavailable');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 });

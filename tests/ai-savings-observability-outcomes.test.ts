@@ -61,7 +61,7 @@ const validSuggestion = { title: 'Example title', detail: 'Example detail.' };
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.settled.length = 0;
-  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1' } });
+  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: 'parent' } });
   mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
   mocks.resolveProvider.mockResolvedValue({ complete: mocks.complete });
   mocks.complete.mockResolvedValue({ text: '{}', model: 'mock-model' });

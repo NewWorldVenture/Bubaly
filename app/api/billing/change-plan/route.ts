@@ -3,7 +3,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { getUserContext, requireUserContext, type UserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { wroteNoRows } from '@/lib/supabase/errors';
-import { getStripe, STRIPE_PLANS } from '@/lib/stripe';
+import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace, slugToStripePlan } from '@/lib/billing/plans';
 import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
@@ -86,15 +87,11 @@ export async function POST(req: NextRequest) {
       { error: t('changePlan.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-    // No Stripe secret key: billing is unavailable (503), not a failure of
-    // this request (500).
-    let stripe: ReturnType<typeof getStripe>;
-    try {
-      stripe = getStripe();
-    } catch (error) {
-      console.error('[billing-change-plan] Stripe is not configured', error);
-      return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
-    }
+    // The key checkout used: Super Admin → Stripe Setup first, then the
+    // environment (getStripe() read only the environment).
+    const secretKey = effectiveSecretKey(await getStripeSettings());
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    const stripe = stripeFromKey(secretKey);
 
     if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
       console.error('[billing-change-plan] Configured Stripe price is unavailable or does not match the plan');

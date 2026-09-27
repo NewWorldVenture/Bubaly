@@ -35,7 +35,9 @@ describe('connecting Google Calendar where it is not configured', () => {
     const { GET } = await import('@/app/api/google/calendar/auth/route');
     const res = await GET(auth());
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe(`${ORIGIN}/dashboard/calendar?gcal=error`);
+    // Merged with #619, which answers this case first and more specifically:
+    // the calendar says the connection isn't set up, not that it failed.
+    expect(res.headers.get('location')).toBe(`${ORIGIN}/dashboard/calendar?gcal=not_configured`);
     // No half-started flow: nothing to complete, so no state cookie.
     expect(res.headers.get('set-cookie') ?? '').not.toContain('gcal_oauth_state=');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('GOOGLE_CLIENT_ID'));
@@ -43,6 +45,7 @@ describe('connecting Google Calendar where it is not configured', () => {
 
   it('still sends a configured deployment to Google with a single-use state', async () => {
     process.env.GOOGLE_CLIENT_ID = 'client-fixture.apps.googleusercontent.com';
+    process.env.GOOGLE_CLIENT_SECRET ??= 'secret-fixture';
     const { GET } = await import('@/app/api/google/calendar/auth/route');
     const res = await GET(auth());
     expect(res.status).toBe(307);

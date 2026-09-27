@@ -37,25 +37,18 @@ export async function POST(req: NextRequest) {
     const priceId = STRIPE_PLANS[plan];
     if (!priceId) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
 
+    // Super Admin → Stripe Setup first, then the environment. With neither,
+    // stripeFromKey threw and the catch below answered a generic 500.
+    const stripeSettings = await getStripeSettings();
+    const secretKey = effectiveSecretKey(stripeSettings);
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    const stripe = stripeFromKey(secretKey);
+
     const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('checkout.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-
-    // Stripe is reached only for a request that could become a checkout. A
-    // deployment with no secret key cannot take payment at all: billing is
-    // unavailable, the 503 an unverifiable price already answers, and not a
-    // failure of this request. Built first, the missing key made every call a
-    // 500, a malformed body included.
-    const stripeSettings = await getStripeSettings();
-    let stripe: ReturnType<typeof stripeFromKey>;
-    try {
-      stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
-    } catch (error) {
-      console.error('[billing-checkout] Stripe is not configured', error);
-      return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
-    }
 
     if (!await verifyStripePlanPrice(stripe, plan, priceId)) {
       console.error('[billing-checkout] Configured Stripe price is unavailable or does not match the plan');
