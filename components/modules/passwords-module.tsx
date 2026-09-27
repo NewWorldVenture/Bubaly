@@ -216,7 +216,7 @@ export function PasswordsModule() {
                     <p className="truncate text-xs text-muted">{meta.label}{owner ? ` · ${firstName(owner.display_name)}` : ''}</p>
                   </div>
                   <div className="relative">
-                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={`Actions for ${c.label}`} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} aria-label={t('itemAction.actionsFor', { name: c.label })} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                     {menuId === c.id && (
@@ -315,11 +315,12 @@ export function PasswordsModule() {
 }
 
 function Row({ label, value, onCopy }: { label: string; value: string; onCopy: () => void }) {
+  const t = useTranslations();
   return (
     <div className="flex items-center gap-2">
       <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">{label}</span>
       <span className="min-w-0 flex-1 truncate text-sm">{value}</span>
-      <button onClick={onCopy} aria-label={`Copy ${label}`} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
+      <button onClick={onCopy} aria-label={t('itemAction.copy', { name: label })} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
         <Copy className="h-4 w-4" />
       </button>
     </div>

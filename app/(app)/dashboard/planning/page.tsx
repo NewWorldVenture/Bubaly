@@ -49,7 +49,7 @@ async function FeatureCard({
             <h2 className="-mt-0.5 text-sm font-bold">{title}</h2>
           </div>
         </div>
-        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={`Open ${title}`}>{tr('planning.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
+        <Link href={href} className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-semibold text-brand-text transition hover:bg-brand/10" aria-label={tr('itemAction.open', { name: title })}>{tr('planning.open')}{' '}<ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
       <div className="min-h-[120px] flex-1 space-y-2">{children}</div>

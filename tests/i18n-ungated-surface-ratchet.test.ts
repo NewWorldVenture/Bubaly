@@ -193,7 +193,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Measured with the tree held fixed that adds nothing here: main had already
 // replaced the English prompts with its translated confirm dialog, and every
 // confirm() left in the tree passes a catalogue key.
-const CEILING = 2924;
+//
+// Then 63 of I18N-003's attribute templates ("Edit ${name}", "Move ${x} up",
+// "Approve: ${title}") through 34 shared itemAction.* keys, and the assistant
+// pane's "New conversation" fallback, 2,934 -> 2,860.
+const CEILING = 2860;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
