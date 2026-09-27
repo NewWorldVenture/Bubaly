@@ -50,6 +50,10 @@ vi.mock('react', async (original) => ({
         : next;
     }];
   },
+  // The form wires its labels to its inputs with useId (a stable id per
+  // mount). Outside a React render the real hook has no dispatcher, so the
+  // driver hands back a fixed one — the ids are not what this file measures.
+  useId: () => 'routing-form',
 }));
 vi.mock('@/app/(app)/guardian/actions', () => ({
   upsertMemberProfileAction: async (input: Record<string, unknown>) => {

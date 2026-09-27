@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useId } from 'react';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -337,7 +337,7 @@ export function RecipesModule() {
                     )}
                   </div>
                   {/* Favorite */}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(recipe.is_favorite)} onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60">
                     <Heart className={cn('h-4 w-4', recipe.is_favorite && 'fill-red-400 text-red-400')} />
                   </button>
@@ -386,7 +386,7 @@ export function RecipesModule() {
                   {viewing.description && <p className="mt-1 text-sm text-muted">{viewing.description}</p>}
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => toggleFavorite(viewing)}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(viewing.is_favorite)} onClick={() => toggleFavorite(viewing)}
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
@@ -583,6 +583,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   recipe: Recipe | null; familyId: string; userId: string;
   onClose: () => void; onSaved: () => void;
 }) {
+  const a11yId = useId();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -691,10 +692,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Ingredients */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.ingredients')}</label>
+            <span id={`${a11yId}-ingredients`} className="text-sm font-medium">{tr('recipes.ingredients')}</span>
             <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">{tr('recipes.addIngredient')}</button>
           </div>
-          <div className="space-y-2">
+          <div role="group" aria-labelledby={`${a11yId}-ingredients`} className="space-y-2">
             {ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
@@ -709,10 +710,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Instructions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.instructions')}</label>
+            <span id={`${a11yId}-instructions`} className="text-sm font-medium">{tr('recipes.instructions')}</span>
             <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">{tr('recipes.addStep')}</button>
           </div>
-          <div className="space-y-2">
+          <div role="group" aria-labelledby={`${a11yId}-instructions`} className="space-y-2">
             {instructions.map((step, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-fg">
@@ -728,8 +729,8 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         {/* Allergy flags */}
         <div>
-          <label className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="flex flex-wrap gap-2">
             {ALLERGY_FLAGS.map((f) => (
               <button key={f} type="button" onClick={() => toggleFlag(f)}
                 className={cn('rounded-lg border px-2.5 py-1 text-xs font-medium transition',

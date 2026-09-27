@@ -879,7 +879,7 @@ export function MessagesModule() {
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button aria-label={tr('a11y.moreActions')} onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                            <button aria-label={tr('a11y.moreActions')} aria-haspopup="menu" onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>

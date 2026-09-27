@@ -359,7 +359,7 @@ function TreeBranch({
     <div style={{ marginLeft: depth * 24 }}>
       <div className="group flex items-center gap-2 rounded-xl px-3 py-2 transition hover:bg-surface/40">
         {hasChildren ? (
-          <button aria-label={t('a11y.expand')} onClick={() => onToggle(node.id)} className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-elevated">
+          <button aria-label={t(isOpen ? 'a11y.collapse' : 'a11y.expand')} aria-expanded={isOpen} onClick={() => onToggle(node.id)} className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-elevated">
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
