@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "Neuer Assistentenschlüssel",
   "assistantsPage.noneConnectedDesc": "Erstelle rechts einen Schlüssel und füge ihn in Alexa, einen Kurzbefehl oder alles ein, was eine Webanfrage senden kann.",
   "assistantsPage.noneConnectedTitle": "Keine Assistenten verbunden",
-  "assistantsPage.notSwitchedOnDesc": "Um einen Lautsprecher zu verbinden, ist die Datenbankmigration 0283_assistant_links.sql nötig. Sobald ein Administrator sie anwendet, kannst du hier einen Schlüssel erstellen und Alexa, Siri, Google Assistant oder Home Assistant verknüpfen.",
+  "assistantsPage.notSwitchedOnDesc": "Um einen Lautsprecher zu verbinden, ist die Datenbankmigration {file} nötig. Sobald ein Administrator sie anwendet, kannst du hier einen Schlüssel erstellen und Alexa, Siri, Google Assistant oder Home Assistant verknüpfen.",
   "assistantsPage.notSwitchedOnTitle": "Assistenten sind noch nicht eingeschaltet",
   "assistantsPage.notUsedYet": "Noch nicht verwendet",
   "assistantsPage.readError": "Deine Assistentenschlüssel konnten nicht gelesen werden. Aktualisiere die Seite und versuche es erneut.",

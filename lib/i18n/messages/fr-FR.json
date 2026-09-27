@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "Nouvelle clé d’assistant",
   "assistantsPage.noneConnectedDesc": "Créez une clé à droite, puis collez-la dans Alexa, un Raccourci ou tout ce qui peut envoyer une requête web.",
   "assistantsPage.noneConnectedTitle": "Aucun assistant connecté",
-  "assistantsPage.notSwitchedOnDesc": "Connecter une enceinte nécessite la migration de base de données 0283_assistant_links.sql. Dès qu’un administrateur l’aura appliquée, vous pourrez créer une clé ici et associer Alexa, Siri, Google Assistant ou Home Assistant.",
+  "assistantsPage.notSwitchedOnDesc": "Connecter une enceinte nécessite la migration de base de données {file}. Dès qu’un administrateur l’aura appliquée, vous pourrez créer une clé ici et associer Alexa, Siri, Google Assistant ou Home Assistant.",
   "assistantsPage.notSwitchedOnTitle": "Les assistants ne sont pas encore activés",
   "assistantsPage.notUsedYet": "Pas encore utilisée",
   "assistantsPage.readError": "Impossible de lire vos clés d’assistant. Actualisez et réessayez.",

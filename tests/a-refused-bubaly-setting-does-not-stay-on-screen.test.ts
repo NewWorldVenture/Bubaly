@@ -56,6 +56,13 @@ vi.mock('react', async (original) => ({
     state.effectsRun[index] = true;
     fn();
   },
+  // A ref takes a slot from the same list, as React's hooks do, and keeps the
+  // same object across renders.
+  useRef: (initial: unknown) => {
+    const index = state.cursor++;
+    if (!(index in state.slots)) state.slots[index] = { current: initial };
+    return state.slots[index];
+  },
   useCallback: (fn: unknown) => fn,
 }));
 

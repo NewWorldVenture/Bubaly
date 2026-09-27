@@ -236,8 +236,8 @@ function GrowthProjector() {
       <h3 className="font-semibold">{tr('invest.theMagicOfCompoundGrowth')}</h3>
       <p className="mb-3 text-xs text-muted">{tr('invest.seeHowMoneyCanGrowOver')} {rate}{tr('invest.aYearJustForLearningReal')}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label={tr('invest.startAmount', { amount: '$' + start })}><input type="range" min={0} max={500} step={10} value={start} onChange={(e) => setStart(Number(e.target.value))} className="w-full" /></Field>
-        <Field label={tr('invest.eachMonthAmount', { amount: '$' + monthly })}><input type="range" min={0} max={100} step={5} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} className="w-full" /></Field>
+        <Field label={tr('invest.startAmount', { amount: formatCents(start * 100) })}><input type="range" min={0} max={500} step={10} value={start} onChange={(e) => setStart(Number(e.target.value))} className="w-full" /></Field>
+        <Field label={tr('invest.eachMonthAmount', { amount: formatCents(monthly * 100) })}><input type="range" min={0} max={100} step={5} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} className="w-full" /></Field>
         <Field label={tr('invest.forYears', { years })}><input type="range" min={1} max={18} step={1} value={years} onChange={(e) => setYears(Number(e.target.value))} className="w-full" /></Field>
       </div>
       <div className="mt-3 flex items-end justify-between rounded-xl bg-bg/40 p-3">

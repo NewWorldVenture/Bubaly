@@ -46,7 +46,7 @@ export default async function AssistantsPage() {
         <EmptyState
           icon={Speaker}
           title={t('assistantsPage.notSwitchedOnTitle')}
-          description={t('assistantsPage.notSwitchedOnDesc')}
+          description={t('assistantsPage.notSwitchedOnDesc', { file: '0283_assistant_links.sql' })}
         />
       );
     }

@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "New assistant key",
   "assistantsPage.noneConnectedDesc": "Create a key on the right, then paste it into Alexa, a Shortcut, or anything that can make a web request.",
   "assistantsPage.noneConnectedTitle": "No assistants connected",
-  "assistantsPage.notSwitchedOnDesc": "Connecting a speaker needs database migration 0283_assistant_links.sql. Once an administrator applies it, you can create a key here and link Alexa, Siri, Google Assistant or Home Assistant.",
+  "assistantsPage.notSwitchedOnDesc": "Connecting a speaker needs database migration {file}. Once an administrator applies it, you can create a key here and link Alexa, Siri, Google Assistant or Home Assistant.",
   "assistantsPage.notSwitchedOnTitle": "Assistants aren't switched on yet",
   "assistantsPage.notUsedYet": "Not used yet",
   "assistantsPage.readError": "Your assistant keys could not be read. Refresh and try again.",

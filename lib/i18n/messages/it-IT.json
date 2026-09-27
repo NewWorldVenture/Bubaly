@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "Nuova chiave assistente",
   "assistantsPage.noneConnectedDesc": "Crea una chiave a destra, poi incollala in Alexa, in un Comando rapido o in qualsiasi cosa possa inviare una richiesta web.",
   "assistantsPage.noneConnectedTitle": "Nessun assistente collegato",
-  "assistantsPage.notSwitchedOnDesc": "Per collegare uno speaker serve la migrazione del database 0283_assistant_links.sql. Quando un amministratore la applica, potrai creare qui una chiave e collegare Alexa, Siri, Google Assistant o Home Assistant.",
+  "assistantsPage.notSwitchedOnDesc": "Per collegare uno speaker serve la migrazione del database {file}. Quando un amministratore la applica, potrai creare qui una chiave e collegare Alexa, Siri, Google Assistant o Home Assistant.",
   "assistantsPage.notSwitchedOnTitle": "Gli assistenti non sono ancora attivi",
   "assistantsPage.notUsedYet": "Non ancora usata",
   "assistantsPage.readError": "Impossibile leggere le chiavi dell’assistente. Aggiorna e riprova.",

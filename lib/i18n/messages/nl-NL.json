@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "Nieuwe assistentsleutel",
   "assistantsPage.noneConnectedDesc": "Maak rechts een sleutel en plak die in Alexa, een Opdracht of iets anders dat een webverzoek kan doen.",
   "assistantsPage.noneConnectedTitle": "Geen assistenten gekoppeld",
-  "assistantsPage.notSwitchedOnDesc": "Voor het koppelen van een speaker is databasemigratie 0283_assistant_links.sql nodig. Zodra een beheerder die toepast, kun je hier een sleutel maken en Alexa, Siri, Google Assistant of Home Assistant koppelen.",
+  "assistantsPage.notSwitchedOnDesc": "Voor het koppelen van een speaker is databasemigratie {file} nodig. Zodra een beheerder die toepast, kun je hier een sleutel maken en Alexa, Siri, Google Assistant of Home Assistant koppelen.",
   "assistantsPage.notSwitchedOnTitle": "Assistenten zijn nog niet ingeschakeld",
   "assistantsPage.notUsedYet": "Nog niet gebruikt",
   "assistantsPage.readError": "Je assistentsleutels konden niet worden gelezen. Vernieuw en probeer het opnieuw.",

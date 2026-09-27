@@ -15820,7 +15820,7 @@
   "assistantsPage.newKey": "Nova chave de assistente",
   "assistantsPage.noneConnectedDesc": "Crie uma chave à direita e cole-a na Alexa, num Atalho ou em qualquer coisa que faça um pedido web.",
   "assistantsPage.noneConnectedTitle": "Nenhum assistente ligado",
-  "assistantsPage.notSwitchedOnDesc": "Ligar um altifalante requer a migração de base de dados 0283_assistant_links.sql. Assim que um administrador a aplicar, pode criar aqui uma chave e ligar a Alexa, a Siri, o Google Assistant ou o Home Assistant.",
+  "assistantsPage.notSwitchedOnDesc": "Ligar um altifalante requer a migração de base de dados {file}. Assim que um administrador a aplicar, pode criar aqui uma chave e ligar a Alexa, a Siri, o Google Assistant ou o Home Assistant.",
   "assistantsPage.notSwitchedOnTitle": "Os assistentes ainda não estão ativados",
   "assistantsPage.notUsedYet": "Ainda não utilizada",
   "assistantsPage.readError": "Não foi possível ler as suas chaves de assistente. Atualize e tente novamente.",
