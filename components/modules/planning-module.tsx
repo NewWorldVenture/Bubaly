@@ -17,7 +17,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Plan = Tables<'prep_plans'>;
@@ -31,7 +31,7 @@ const URGENCY_STYLE: Record<string, string> = {
   soon: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
   later: 'text-muted border-border',
 };
-const URGENCY_LABEL: Record<string, string> = { now: 'Start now', soon: 'Coming up', later: 'On the horizon' };
+const URGENCY_KEY: Record<string, string> = { now: 'planningModule.urgency.now', soon: 'planningModule.urgency.soon', later: 'planningModule.urgency.later' };
 
 /**
  * Whole calendar days from `todayKey` to `dateStr`, both day KEYS.
@@ -57,6 +57,7 @@ function daysUntil(dateStr: string, todayKey: string): number {
 
 export function PlanningModule({ tz }: { tz: string }) {
   const t = useTranslations();
+  const plural = usePlural();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   // The family's own day, resolved once per render. `lib/schedule/zoned.ts` is
@@ -87,9 +88,10 @@ export function PlanningModule({ tz }: { tz: string }) {
     setGenerating(true);
     const res = await generatePrepPlansAction();
     setGenerating(false);
-    if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
-    if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
-    success(`${res.plans} prep ${res.plans === 1 ? 'plan' : 'plans'} ready`);
+    if (!res.ok) { toastError(res.error ?? t('planningModule.couldNotGenerate')); return; }
+    const made = res.plans ?? 0;
+    if (made === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
+    success(plural('planningModule.plansReady', made));
   }
 
   async function toggleStep(step: Step) {
@@ -147,7 +149,7 @@ export function PlanningModule({ tz }: { tz: string }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[p.urgency] ?? URGENCY_STYLE.later)}>{URGENCY_LABEL[p.urgency] ?? p.urgency}</span>
+                    <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', URGENCY_STYLE[p.urgency] ?? URGENCY_STYLE.later)}>{URGENCY_KEY[p.urgency] ? t(URGENCY_KEY[p.urgency]) : p.urgency}</span>
                     <button onClick={() => dismiss(p.id)} className="rounded-full p-1 text-muted hover:bg-muted/10" aria-label={t('planning.dismissPlan')}><X className="size-4" /></button>
                   </div>
                 </div>

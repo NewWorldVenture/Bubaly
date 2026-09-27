@@ -28,12 +28,12 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Entry = Tables<'journal_entries'>;
 type Mood = NonNullable<Entry['mood']>;
 
-const MOODS: { id: Mood; emoji: string; label: string }[] = [
-  { id: 'great', emoji: '😄', label: 'Great' },
-  { id: 'good', emoji: '🙂', label: 'Good' },
-  { id: 'okay', emoji: '😐', label: 'Okay' },
-  { id: 'low', emoji: '😔', label: 'Low' },
-  { id: 'stressed', emoji: '😣', label: 'Stressed' },
+const MOODS: { id: Mood; emoji: string; labelKey: string }[] = [
+  { id: 'great', emoji: '😄', labelKey: 'journalModule.mood.great' },
+  { id: 'good', emoji: '🙂', labelKey: 'journalModule.mood.good' },
+  { id: 'okay', emoji: '😐', labelKey: 'journalModule.mood.okay' },
+  { id: 'low', emoji: '😔', labelKey: 'journalModule.mood.low' },
+  { id: 'stressed', emoji: '😣', labelKey: 'journalModule.mood.stressed' },
 ];
 const moodOf = (id: string | null) => MOODS.find((m) => m.id === id);
 
@@ -93,7 +93,7 @@ export function JournalModule() {
               <div key={e.id} className="group rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    {m && <span className="text-lg" title={m.label}>{m.emoji}</span>}
+                    {m && <span className="text-lg" title={t(m.labelKey)}>{m.emoji}</span>}
                     <div>
                       <p className="text-sm font-semibold">{e.title || fmtDate(e.entry_date)}</p>
                       <p className="text-[11px] text-muted">{fmtDate(e.entry_date)}</p>
@@ -229,7 +229,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
               <button key={m.id} type="button" onClick={() => setMood(mood === m.id ? null : m.id)}
                 className={cn('flex flex-1 flex-col items-center gap-1 rounded-xl border-2 py-2 text-xs transition',
                   mood === m.id ? 'border-brand bg-brand/10' : 'border-border text-muted hover:border-brand/40')}>
-                <span className="text-xl">{m.emoji}</span>{m.label}
+                <span className="text-xl">{m.emoji}</span>{t(m.labelKey)}
               </button>
             ))}
           </div>

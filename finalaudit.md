@@ -46421,6 +46421,28 @@ As a result, a family in any locale got English mission titles saved to its data
 
 ---
 
+### `[CLAUDE-1][LOW][JOURNAL/MEALS/PAPERWORK/PLANNING/PROFILE/SECURITY/KITCHEN]` C1-S9-131 — seven more modules showed labels in English in every locale
+
+**File/path:** `components/modules/{journal,meals,paperwork,planning,profile,security}-module.tsx`, `components/modules/kitchen-dashboard.tsx`; seven catalogues.
+
+**Problem.** These modules showed English in every locale:
+- journal moods
+- meals tabs
+- paperwork filters
+- planning: urgency chips and the "N prep plans ready" and failure toasts
+- the profile and security stat tiles
+- the kitchen chef's four suggested asks, which a tap sends as the reader's own message
+
+The planning toast also read "undefined prep plans ready" when the action returned no count.
+
+**Fix.**
+- These labels and toasts now come from catalogue keys, and the counts use plural forms.
+- A missing count reads as nothing on the horizon.
+
+**Status:** FIXED. Scanner findings for all seven files drop to 0, excluding type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
