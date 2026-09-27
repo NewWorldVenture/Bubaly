@@ -1159,6 +1159,19 @@ that every `page.tsx` has exactly one row there.
 - ⚠️ BLOCKED
 - ❌ FAIL
 
+## Finding claims (open and partial findings being worked)
+
+Same protocol as the page-audit batches: a finding with a claim here is being
+worked; a claim with no commit touching it for six hours may be taken over.
+
+| Finding | Claim | State |
+|---|---|---|
+| IMPORT-001 (importer duplicates on re-import) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+| AUTHZ-020 (sixteen unreferenced tables open to member writes) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+| F21 (a child could grant themselves a reward — the repo half) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+| AQ-01 / I18N-003 (literal currency symbols) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+| SRV-001 (the high-severity server-action candidates) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+
 ## Finding index
 
 <!-- finding-index:begin -->
