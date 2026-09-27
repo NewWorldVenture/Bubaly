@@ -3904,3 +3904,47 @@ member rows whose `user_id` has no matching accepted invitation, is not the
 family's `created_by`, and is not a child login the server created. The row
 records no writer, so the database alone cannot tell a planted link from a
 real one; the check narrows the list for a person to review.
+
+## `0459` — a family's photos were readable by anyone holding the link (SEC-001)
+
+`supabase/migrations/0459_family_media_is_read_by_the_family.sql`
+
+**Severity: critical (private family media on the open internet). Deploy order:
+apply after a release in which every reader signs, which production already
+serves** (`0c62fb4c`, "Every family photo is read through the viewer's own
+signature", merged 2026-09-26 and live since; every production revision since
+has carried it). On a database serving an older build, photos would show as
+broken images, not leak.
+
+`family-media` holds Photos, Create-Memory, Message attachments, Reminder
+images, Closet and Inventory. `0216` created it `public = true`, so the public
+path served every object to any request with no session, and 0216's
+member-scoped SELECT policy governed only the authenticated API. The object's
+URL was its only credential, and it outlived the row and the member's removal.
+
+0459 changes only the flag. 0216's "Family members can read their media" policy
+then decides every read: every reader signs through `signFamilyMediaRefs` with
+the viewer's own session, which Storage refuses unless the viewer belongs to
+the family in the path's first segment. Stored rows are not rewritten; the
+readers accept a stored public URL or a bare path.
+
+Measured on the local stack (real Storage API over HTTP), one photo uploaded by
+a member of family A:
+
+```
+anonymous GET of its public URL, bucket public   -> 200, the photo's bytes
+anonymous GET of its public URL, bucket private  -> 400 "Bucket not found"
+family A member: createSignedUrl, then GET       -> 200, the photo's bytes
+family B parent: createSignedUrl / download      -> refused ("Object not found")
+anonymous:       createSignedUrl                 -> refused
+```
+
+`docs/audit/family-media-answers-to-the-family-check.sql` holds the policy half
+(red on the flag before 0459, green after; a member of another family and an
+anonymous caller read nothing, the uploader and another member of the family
+read the photo); `docs/audit/bucket-visibility-is-declared-check.sql` no longer
+declares `family-media` internet-readable.
+
+**After applying:** open a photo, a message attachment and a reminder image as
+a member (they render through signed URLs) and fetch one stored
+`/storage/v1/object/public/family-media/…` URL with no session (it answers 400).
