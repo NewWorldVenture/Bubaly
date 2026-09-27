@@ -45996,6 +45996,26 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][TODOS]` C1-S9-118 — the task page's priorities, tabs, summary and quick-add were English, and a first task created an English list
+
+**File/path:** `components/modules/todos-module.tsx`; seven catalogues.
+
+**Problem.** On `/dashboard/todos`, the following were English in every locale:
+- the priorities
+- the four tabs
+- the summary donut's legend
+- the Today / Tomorrow / This Week quick-add buttons
+
+Adding a family's first task also created a list named "Tasks" in English, in the family's data.
+
+**Fix.**
+- The labels are catalogue keys.
+- The default list is named in the reader's language when it is created.
+
+**Status:** FIXED. Scanner findings for `todos-module` drop from 16 to 1, a type-alias fragment.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
