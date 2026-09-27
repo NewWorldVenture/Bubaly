@@ -79,3 +79,16 @@ export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
 export const TRIP_ITEM_KIND_LABELS: Record<TripItemKind, string> = {
   packing: 'Packing', todo: 'To-Do', reservation: 'Reservations', document: 'Documents',
 };
+
+// The labels above stay English identifiers; these are what a person reads.
+export const TRIP_STATUS_KEYS: Record<TripStatus, string> = {
+  planning: 'tripStatus.planning', booked: 'tripStatus.booked', active: 'tripStatus.active',
+  completed: 'tripStatus.completed', cancelled: 'tripStatus.cancelled',
+};
+export const TRIP_ITEM_KIND_KEYS: Record<TripItemKind, string> = {
+  packing: 'tripItemKind.packing', todo: 'tripItemKind.todo', reservation: 'tripItemKind.reservation', document: 'tripItemKind.document',
+};
+/** A whole sentence per kind: "Add a {kind} item" does not survive translation. */
+export const TRIP_ITEM_ADD_KEYS: Record<TripItemKind, string> = {
+  packing: 'tripItemKind.addPacking', todo: 'tripItemKind.addTodo', reservation: 'tripItemKind.addReservation', document: 'tripItemKind.addDocument',
+};
