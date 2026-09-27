@@ -66,6 +66,8 @@ import {
   type ApprovalCardData, type ClassifiedPayload,
 } from '@/lib/approvals/card-data';
 import { aiApprovalReminders, type AiApprovalInput } from '@/lib/notifications/approval-reminders';
+import type { NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { makeKey } from '@/lib/services/idempotency';
 import { notify } from '@/lib/services/notifications';
 import { scopeForSystem, scopeNow } from '@/lib/services/scope';
@@ -1183,6 +1185,30 @@ async function runIdForPlan(db: DB, familyId: string, planId: string): Promise<s
 // ─── Cron: reminders ────────────────────────────────────────────────────────
 
 /**
+ * Whose words the AI-approval reminders are in — and the honest answer is
+ * "nobody in particular", which is why it is spelled out rather than defaulted.
+ *
+ * `aiApprovalReminders` puts an amount in a title, so it requires a reader. This
+ * runs from a cron: there is no request, so no cookie and no Accept-Language,
+ * and no member or family table stores a language choice yet (finalaudit
+ * I18N-001 — it lives only in LOCALE_COOKIE, which a cron never sees). So the
+ * reminder each manager is sent is written in the SOURCE locale, explicitly:
+ * 'en-US' for the amount, the English catalogue for the words.
+ *
+ * SO THIS SITE IS GROUNDWORK, NOT A CONVERSION: every manager, a German one
+ * included, still reads "Needs your OK: … · $2,768.50" in the bell and in push
+ * (type 'system' is 'now' in lib/notifications/priority.ts, so never the brief).
+ * What changed is that the prose lives in the catalogue and the symbol is no
+ * longer hand-written. When a per-member locale column lands, this is the line
+ * that reads it — per recipient, since the builder already fans out one row per
+ * manager.
+ */
+const AI_APPROVAL_REMINDER_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
+
+/**
  * Tell each manager, once, about every AI approval waiting on them.
  *
  * "Once" is enforced twice over: the notify service refuses a second unread
@@ -1220,7 +1246,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       continue;
     }
     const managers = (members ?? []).filter((m) => isManager(m.role)).map((m) => ({ id: m.id, user_id: m.user_id }));
-    const candidates = aiApprovalReminders(approvals, managers, now);
+    const candidates = aiApprovalReminders(approvals, managers, AI_APPROVAL_REMINDER_READER, now);
     if (candidates.length === 0) continue;
 
     // Batched: a dedupe key is a composite string, not a uuid, so a few hundred

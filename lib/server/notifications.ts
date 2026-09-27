@@ -8,6 +8,8 @@ import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
+import type { NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
@@ -31,6 +33,33 @@ type Candidate = {
 };
 
 const HOUR = 3600_000;
+
+/**
+ * Whose words the money-approval reminders are in — and the honest answer is
+ * "nobody in particular", which is why it is spelled out rather than defaulted.
+ *
+ * `approvalReminders` puts an amount in a title, so it requires a reader. This
+ * sweep runs from two crons (app/api/cron/notifications, app/api/cron/push-scan)
+ * and from the Scan button (app/api/notifications/generate), and writes ONE row
+ * per manager — so even when a person pressed the button, wording the rows in
+ * their locale would make every other manager's record depend on who happened
+ * to press it. No member or family table stores a language choice yet (finalaudit
+ * I18N-001; it lives only in LOCALE_COOKIE, which a cron never sees), so the
+ * rows are written in the SOURCE locale, explicitly: 'en-US' for the amount, the
+ * English catalogue for the words.
+ *
+ * SO THIS SITE IS GROUNDWORK, NOT A CONVERSION: every manager, a German one
+ * included, still reads "Approval needed: Card purchase · $2,768.50" in the bell
+ * and in push (these rows are type 'system', which lib/notifications/priority.ts
+ * keeps at 'now', so they never reach the brief). What changed is that the prose
+ * lives in the catalogue and the symbol is no longer hand-written. When a
+ * per-member locale column lands, this is the line that reads it — per
+ * recipient, since the builder fans out per manager.
+ */
+const NEEDS_TO_KNOW_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
 
 function timeLabel(iso: string, allDay = false): string {
   const d = new Date(iso);
@@ -224,7 +253,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   }
 
   // Pending money approvals → notify the parents who can act on them.
-  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites)) {
+  for (const row of approvalReminders((approvalsPending ?? []) as ApprovalInput[], managerLites, NEEDS_TO_KNOW_READER)) {
     candidates.push(row);
   }
 

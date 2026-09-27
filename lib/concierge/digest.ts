@@ -12,6 +12,8 @@
 // ranks them, and the same result both *grounds the AI* and serves as a
 // guaranteed, never-fabricated answer when AI is unconfigured.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+
 export type ConciergeDomain =
   | 'bill'
   | 'medication'
@@ -109,8 +111,27 @@ function classify(offset: number, windowDays: number): ConciergeUrgency | null {
   return null;
 }
 
+/**
+ * The locale the digest's CANONICAL text is written in — named, not defaulted.
+ *
+ * `canonicalConciergeText` is not what a family reads. It is the record: the
+ * lines the model is grounded on (`digestToPromptLines`) and the reference
+ * `lib/concierge/digest-display.ts` recomputes to check an item's stored
+ * presentation facts before wording that item again for its reader. The
+ * reader's copy — "2.768,50 $ fällig morgen" for a German parent — is made
+ * there, by `formatConciergeDigest(digest, locale, t)` from `display`, and
+ * app/api/ai/briefing/route.ts hands the page that view, never this text.
+ * So the record is written once in the source locale, with the same Intl call
+ * the display uses, rather than as a hand-typed symbol beside `toFixed`, and
+ * this constant is where that choice is visible (finalaudit AQ-01 / I18N-003).
+ */
+const CANONICAL_LOCALE: LocaleCode = 'en-US';
+const canonicalUsd = new Intl.NumberFormat(CANONICAL_LOCALE, {
+  style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
+});
+
 function money(amount: number): string {
-  return `$${amount.toFixed(2)}`;
+  return canonicalUsd.format(amount);
 }
 
 /** Canonical source text, also used to reject stale presentation facts without parsing prose. */
