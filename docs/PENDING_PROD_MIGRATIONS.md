@@ -3541,3 +3541,30 @@ member rows whose `user_id` has no matching accepted invitation, is not the
 family's `created_by`, and is not a child login the server created. The row
 records no writer, so the database alone cannot tell a planted link from a
 real one; the check narrows the list for a person to review.
+
+### `0404` — a removed member and their old household still saw each other's profiles
+
+`supabase/migrations/0404_removing_a_member_ends_profile_visibility.sql`
+
+**Severity: medium (privacy). Safe in either order** relative to a deploy: no
+app path reads another user's profile through RLS; the few that need one use
+the service role.
+
+`profiles_select_self` (0118) lets co-members read each other's profiles and
+checked neither membership's `is_active`. Removing a member sets
+`is_active = false` and keeps the row for history, and `fm_select` still shows
+that row to the family, so the family went on reading the removed person's
+email, full name, date of birth and phone, including a number they changed
+after leaving. Measured on the local database: a parent read a removed adult's
+current phone number.
+
+0404 re-creates the policy requiring both memberships to be active, as
+`is_family_member` and `can_manage_family` already do, and fails the apply if
+the installed policy does not say so. `docs/audit/profile-visibility-ends-with-membership-check.sql`
+shows one breach before and none after, with controls for active co-members,
+a family still shared through another membership, and a person reading their
+own profile.
+
+**Coordination:** #548 installs an identical `profiles_select_self` (both
+memberships active). Both drop the policy before creating it, so the two apply
+in either order.

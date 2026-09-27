@@ -219,10 +219,10 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // 2,644 -> 2,636.
 //
 // Then sentence-template batch 4 and the English text beside it, 2,636 -> 2,617.
-//
 // Then the page titles (I18N-004): 248 English `metadata.title` strings moved
 // into generateMetadata() and the catalogue, 2,617 -> 2,369.
-const CEILING = 2369;
+// Then the command bar's labels, 2,369 -> 2,368.
+const CEILING = 2368;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
