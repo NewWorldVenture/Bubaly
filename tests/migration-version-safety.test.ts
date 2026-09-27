@@ -251,6 +251,57 @@ describe('Supabase migration filename safety', () => {
     // that then collided with main's 0349, 0352 and 0360 moved to 0378
     // (savings goals), 0379 (member locations) and 0380 (audit actor).
     //
+    // 0381_two_parents_means_two_parents_in_the_database_too.sql adds two
+    // BEFORE UPDATE triggers on approval_requests: a move into approved or
+    // modified must be earned by the row's own votes under its own model and
+    // threshold, a vote is signed only as yourself, and the rule of a pending
+    // row cannot be rewritten. The rule had lived in TypeScript alone, and
+    // 0251's decide policy let any adult PATCH status=approved. Held by
+    // docs/audit/two-parents-means-two-parents-check.sql.
+    //
+    // 0382_a_password_alone_does_not_delete_the_familys_budget.sql adds
+    // session_cleared_step_up() — aal2, or no factor enrolled — and a
+    // RESTRICTIVE insert/update/delete guard on budgets, savings_goals and
+    // bills: the step-up the money pages demanded was never a database rule.
+    // Held by docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql.
+    //
+    // 0383_an_archived_page_takes_its_public_answers_with_it.sql adds four
+    // AFTER triggers on marketing_pages and blog_posts that move a page's
+    // published FAQ answers to 'answered' in the same transaction as its
+    // archive, delete, rename or unpublish: the answers had no join back to
+    // their page and kept rendering after it went dark. Held by
+    // docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql
+    // and docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql.
+    //
+    // 0384_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql
+    // gives family_contact_channels.forward_to_phone the E.164 CHECK its own
+    // comment claimed, after normalizing the rows already there and keeping
+    // what they held in forward_to_phone_legacy — no country code guessed. Held
+    // by docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-
+    // be-used-check.sql.
+    //
+    // 0385_a_member_only_rewrites_their_own_memory.sql re-creates
+    // family_facts_update and family_facts_delete with the rule the service
+    // applies — can_manage_family, or a memory about me, or one I wrote — on
+    // top of 0264's category clause: any member could rewrite a parent's
+    // household fact over /rest/v1. Held by
+    // docs/audit/a-member-only-rewrites-their-own-memory-check.sql.
+    //
+    // 0386_a_family_subscribes_to_a_calendar_url_once.sql makes (family_id,
+    // url) unique on calendar_feeds: a failed first sync left the row and the
+    // next press inserted the same URL again, so every school event came in
+    // two or three times. Held by
+    // docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql.
+    //
+    // 0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql
+    // (AUTHZ-011) puts three guards in the database: RESTRICTIVE write policies
+    // on social_settings behind social_has_permission(…, 'manage_settings'),
+    // a trigger that lets a trip link only a document its caller can read from
+    // its own household, and a SECURITY DEFINER trigger that refuses to move a
+    // document to another household while a trip links it. Held by
+    // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
+    // cannot-read-check.sql.
+    //
     // 0406–0418, less 0412, 0413 and 0417, are the audit branch's (PR #556):
     // ten files, and the FIFTH time that branch's numbers have moved. They sat
     // at 0300/0304–0309, then 0318–0330, then 0361–0370, and main claimed each
@@ -269,9 +320,10 @@ describe('Supabase migration filename safety', () => {
     // 0335, and stacking them broke 0335's own negative control; and its
     // behaviour/care-log policy contradicted 0338's probe on whether a child
     // may log behaviour — recorded in finalaudit.md for the owner to decide
-    // rather than settled by whichever merge came last. 0381–0405 stay free
-    // too, spoken for by other in-flight branches when that block was picked;
-    // a number below the one pinned is still free to land.
+    // rather than settled by whichever merge came last. 0381–0387 went to
+    // the paragraphs above (#581) after that block was picked, and 0388–0405
+    // stay free, spoken for by other in-flight branches at the time; a number
+    // below the one pinned is still free to land.
     //
     // 0406 puts the OAuth token store (social_account_tokens) back behind the
     // service role — 0034 created it deny-all and said never to add a policy,

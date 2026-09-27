@@ -30,7 +30,10 @@ describe('computeReward', () => {
     const r = computeReward({ ...base, reward_mode: 'fixed_cash', cash_cents: 300 }, 0);
     expect(r.type).toBe('cash');
     expect(r.cashCents).toBe(300);
-    expect(r.label).toBe('$3.00');
+    // The English `label` ("$3.00") is gone — nothing rendered it. How the amount
+    // reads is fmtCash's job, per reader: see
+    // tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
+    expect(r).not.toHaveProperty('label');
   });
   it('ai cash scales within $1-$5 range', () => {
     const r = computeReward({ ...base, reward_mode: 'ai_cash', cash_min_cents: 100, cash_max_cents: 500 }, 85);

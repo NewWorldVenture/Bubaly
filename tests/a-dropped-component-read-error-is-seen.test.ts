@@ -42,7 +42,9 @@ describe('the service fee is never silently undisclosed (billing)', () => {
 
   it('the error branch says something true either way, and logs', () => {
     const branch = block(page, 'if (error) {');
-    expect(branch).toContain("serviceFeeNotice = t('billing.serviceFeeShownAtCheckout');");
+    // `tr`, not `t`: main's #581 (AQ-01) named the page's translator `tr` when
+    // it made the amount follow the reader's locale.
+    expect(branch).toContain("serviceFeeNotice = tr('billing.serviceFeeShownAtCheckout');");
     expect(branch).toContain('console.error(');
     // It cannot know the amount, so it must not state one…
     expect(branch).not.toContain('formatServiceFee');
@@ -52,17 +54,20 @@ describe('the service fee is never silently undisclosed (billing)', () => {
   });
 
   it('the configured-fee notice is translated, and still names the amount', () => {
-    // It was an English literal handed to a translated module.
-    expect(page).toContain("t('billing.serviceFeeAddedAtCheckout', { fee: formatServiceFee(resolveServiceFeeCents(data)) })");
+    // It was an English literal handed to a translated module. Since main's
+    // #581 (AQ-01) the amount is also formatted for the reader's locale and the
+    // placeholder is `{amount}` — tests/a-german-family-reads-their-plan-price-
+    // in-their-own-format pins that spelling, so this follows it.
+    expect(page).toContain("tr('billing.serviceFeeAddedAtCheckout', { amount: formatServiceFee(resolveServiceFeeCents(data), locale.code) })");
     const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
-    expect(en['billing.serviceFeeAddedAtCheckout']).toBe('A one-time {fee} Bubaly service fee is added at checkout.');
+    expect(en['billing.serviceFeeAddedAtCheckout']).toBe('A one-time {amount} Bubaly service fee is added at checkout.');
     expect(page).not.toMatch(/serviceFeeNotice = ['`]/);
   });
 
-  it('every base catalogue carries both notices, with the {fee} placeholder kept', () => {
+  it('every base catalogue carries both notices, with the {amount} placeholder kept', () => {
     for (const loc of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const m = JSON.parse(readFileSync(`lib/i18n/messages/${loc}.json`, 'utf8')) as Record<string, string>;
-      expect(m['billing.serviceFeeAddedAtCheckout'], loc).toContain('{fee}');
+      expect(m['billing.serviceFeeAddedAtCheckout'], loc).toContain('{amount}');
       expect(m['billing.serviceFeeShownAtCheckout'], loc).toBeTruthy();
     }
   });

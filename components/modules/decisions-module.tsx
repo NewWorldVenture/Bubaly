@@ -6,7 +6,7 @@
 // rows when you save. 100% Supabase + realtime.
 import { useMemo, useState } from 'react';
 import {
-  Scale, Plus, Trophy, Check, Trash2, Sparkles, DollarSign, Clock, MapPin, Gauge, Star,
+  Scale, Plus, Trophy, Check, Trash2, Sparkles, Wallet, Clock, MapPin, Gauge, Star,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -21,7 +21,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { evaluateDecision, type OptionInput, type Criterion } from '@/lib/decisions/engine';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Decision = Tables<'family_decisions'>;
 type Option = Tables<'decision_options'>;
@@ -30,6 +31,12 @@ const num = (v: number | null | undefined): number | undefined => (typeof v === 
 
 export function DecisionsModule() {
   const t = useTranslations();
+  // Every amount on this page is in the reader's format: the breach inside the
+  // engine's rationale, the decision's budget chip and each option's cost. USD,
+  // because family_decisions.budget_cents and decision_options.cost_cents carry
+  // no currency column. The cost sits beside a wallet, not a dollar-sign icon:
+  // the formatted amount already carries its symbol where the locale puts it.
+  const locale = useLocale();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -61,8 +68,8 @@ export function DecisionsModule() {
       budgetCents: num(selected.budget_cents),
       maxTravelMinutes: num(selected.max_travel_minutes),
       weights: (selected.weights as Partial<Record<Criterion, number>>) ?? {},
-    });
-  }, [selected, myOptions]);
+    }, locale.code, t);
+  }, [selected, myOptions, locale.code, t]);
 
   const [addDecision, setAddDecision] = useState(false);
   const [addOption, setAddOption] = useState(false);
@@ -143,7 +150,7 @@ export function DecisionsModule() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
                     {typeof selected.budget_cents === 'number' && (
-                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.budget')}{(selected.budget_cents / 100).toFixed(0)}</span>
+                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.budgetAmount', { amount: formatCents(selected.budget_cents, 'USD', locale.code) })}</span>
                     )}
                     {typeof selected.max_travel_minutes === 'number' && (
                       <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.travel')} {selected.max_travel_minutes}m</span>
@@ -190,7 +197,7 @@ export function DecisionsModule() {
                             </div>
                             <p className="mt-2 text-xs text-muted">{r.rationale}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
-                              {typeof opt.cost_cents === 'number' && <span className="flex items-center gap-1"><DollarSign className="size-3" />{(opt.cost_cents / 100).toFixed(0)}</span>}
+                              {typeof opt.cost_cents === 'number' && <span className="flex items-center gap-1"><Wallet className="size-3" />{formatCents(opt.cost_cents, 'USD', locale.code)}</span>}
                               {typeof opt.time_minutes === 'number' && <span className="flex items-center gap-1"><Clock className="size-3" />{opt.time_minutes}m</span>}
                               {typeof opt.travel_minutes === 'number' && <span className="flex items-center gap-1"><MapPin className="size-3" />{opt.travel_minutes}m</span>}
                               {typeof opt.load_delta === 'number' && <span className="flex items-center gap-1"><Gauge className="size-3" />load {opt.load_delta}</span>}

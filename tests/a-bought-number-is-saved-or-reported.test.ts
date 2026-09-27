@@ -5,6 +5,10 @@ vi.mock('@/lib/guardian/twilio', () => ({
   isTwilioConfigured: () => true,
   searchAvailableNumber: async () => '+15550001111',
   provisionNumber: async () => ({ phoneNumber: '+15550001111', sid: 'PN-test' }),
+  // main's #581 hands back a number this call could not keep; the release is
+  // modelled so the refusal below is reached rather than a missing export.
+  releaseNumber: async () => true,
+  findOwnedNumberSid: async () => null,
 }));
 vi.mock('@/lib/ai/runs/intake', () => ({ submitRequest: vi.fn() }));
 vi.mock('@/lib/services/paperwork', () => ({ enrichPaperworkEntities: vi.fn(), PaperworkEnrichmentError: class extends Error {} }));
@@ -20,6 +24,9 @@ const { provisionFamilyNumber } = await import('@/lib/contact-center/server');
  * channel held no number: inbound calls to it could not be routed to them, and
  * it went on billing.
  */
+// The save is now main's claim (`… .is('phone_number', null).select('phone_number')`,
+// #581), so the fake models `.is()` and answers the write's `.select()` with the
+// affected rows as PostgREST does — the number the claim wrote, or none.
 function admin(saveRows: unknown[]) {
   const from = () => {
     let op: 'select' | 'update' = 'select';
@@ -27,6 +34,7 @@ function admin(saveRows: unknown[]) {
     Object.assign(b, {
       select: () => (op === 'update' ? Promise.resolve({ data: saveRows, error: null }) : b),
       eq: () => b,
+      is: () => b,
       update: () => { op = 'update'; return b; },
       maybeSingle: async () => ({ data: { family_id: 'fam-1', phone_number: null }, error: null }),
     });
@@ -44,7 +52,7 @@ describe('provisionFamilyNumber (C1-S9-69)', () => {
   });
 
   it('returns the number when the save landed', async () => {
-    const res = await provisionFamilyNumber(admin([{ id: 'channel-1' }]), 'fam-1');
+    const res = await provisionFamilyNumber(admin([{ phone_number: '+15550001111' }]), 'fam-1');
     expect(res).toEqual({ ok: true, phoneNumber: '+15550001111' });
   });
 });

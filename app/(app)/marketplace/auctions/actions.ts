@@ -6,6 +6,8 @@
 // never both win. Reads stay under RLS.
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
+import { getFormat } from '@/lib/utils/format-server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 
@@ -49,13 +51,14 @@ export async function placeBidAction(input: { listingId: string; maxCents: numbe
   if (!res.ok) {
     // BID_REASON holds KEYS, because it is built once at module load and the
     // locale belongs to the request. Translating happens here, where it is known.
-    const msg = t(BID_REASON[res.reason ?? ''] ?? 'actions.couldNotPlaceThatBid');
-    return {
-      ok: false,
-      error: res.reason === 'too_low' && res.min_cents
-        ? t('actions.minimumBidIs', { amount: `$${(res.min_cents / 100).toFixed(2)}` })
-        : msg,
-    };
+    if (res.reason === 'too_low' && res.min_cents) {
+      // The bidder reads this in a toast, so the minimum is in THEIR notation: it
+      // was `$${(min / 100).toFixed(2)}`, a literal symbol with no locale at all.
+      // getFormat() reads the same request locale getTranslations() just did.
+      const { fmtMoney } = await getFormat();
+      return { ok: false, error: t('actions.minimumBidIs', { amount: fmtMoney(res.min_cents, MARKETPLACE_CURRENCY) }) };
+    }
+    return { ok: false, error: t(BID_REASON[res.reason ?? ''] ?? 'actions.couldNotPlaceThatBid') };
   }
 
   revalidatePath(`/marketplace/item/${input.listingId}`);

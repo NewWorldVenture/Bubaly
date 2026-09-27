@@ -7,8 +7,8 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
+import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
-import { toCallableE164 } from '@/lib/contact-center/phone';
 
 type Fail = { ok: false; error: string };
 
@@ -85,21 +85,23 @@ export async function updateConciergeAction(input: {
   const patch: Partial<{ ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }> = {};
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;
+  // The fallback number is the one thing on this card that leaves the product: it
+  // is dialled and texted from Bubaly's own Twilio account, so it is stored only
+  // in the form the provider accepts, and the parent is told now instead of every
+  // future urgent text being dropped in silence. It used to be stored as typed:
+  // the field's own placeholder format ("+1 555 123 4567") then failed the E.164
+  // check in urgent SMS delivery on every message, and anything else typed here
+  // reached the call's TwiML. `normalizeFallbackPhone` also refuses a number
+  // without its country code rather than guessing +1 — see its header.
   if (input.forwardTo !== undefined) {
-    // The greeting beside this is trimmed and capped; this was stored raw, and
-    // unlike the greeting it is DIALLED — it reaches `<Dial>` in the voice
-    // route and Twilio's `To` in three escalation paths, and the field's own
-    // placeholder format ("+1 555 123 4567") then failed the E.164 check in
-    // urgent SMS delivery on every message. Normalise to E.164 or refuse,
-    // rather than storing something that is not a number — through
-    // toCallableE164, which admits only phone punctuation before toE164 keeps
-    // the digits, so a URL, a TwiML fragment or a note with a date in it is
-    // refused rather than made into a number. Clearing the fallback stays
-    // possible: an empty value is null, not an error. Audit C1-S7-05.
-    const cleared = input.forwardTo === null || input.forwardTo.trim() === '';
-    const normalized = cleared ? null : toCallableE164(input.forwardTo);
-    if (!cleared && !normalized) return { ok: false, error: t('actions.forwardingNumberNotCallable') };
-    patch.forward_to_phone = normalized;
+    // Unlike the greeting beside it, this value is DIALLED — it reaches `<Dial>`
+    // in the voice route and Twilio's `To` in three escalation paths — so a URL,
+    // a TwiML fragment or a note with a date in it is refused rather than made
+    // into a number (C1-S7-05, merged with main's #581 rule). Clearing the
+    // fallback stays possible: an empty value is null, not an error.
+    const fallback = normalizeFallbackPhone(input.forwardTo);
+    if (!fallback.ok) return { ok: false, error: t('actions.enterTheFallbackNumberIn') };
+    patch.forward_to_phone = fallback.value;
   }
   const { data: patched, error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId).select('family_id');
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheConcierge')) };

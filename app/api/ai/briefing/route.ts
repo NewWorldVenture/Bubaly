@@ -99,7 +99,9 @@ export async function POST(req: NextRequest) {
     // model's word: see `lib/briefing/decisions.ts`. A ServiceResult, not a
     // Postgrest response, so it is awaited BESIDE the batch: settleAll
     // substitutes the { data, error } shape for a rejection, which has no `ok`.
-    const decisionsRes = await readBriefDecisions(scope).catch((cause) => {
+    // The decisions go back to THIS reader as the brief's list, so a money
+    // approval's amount and the words around it are in their locale.
+    const decisionsRes = await readBriefDecisions(scope, { locale: locale.code, t: tr }).catch((cause) => {
       console.error('[briefing] decisions read threw', cause);
       return { ok: false as const, error: String(cause) };
     });

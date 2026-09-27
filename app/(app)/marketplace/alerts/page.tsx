@@ -15,13 +15,15 @@ import {
   KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Alerts · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceAlertsPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -89,7 +91,7 @@ export default async function MarketplaceAlertsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="flex items-center gap-1.5 font-semibold">
                         <BellRing className="h-4 w-4 text-brand-text" />
-                        {s.label?.trim() || describeSearch(criteria, KIND_LABELS, CATEGORY_LABELS)}
+                        {s.label?.trim() || describeSearch(criteria, locale.code, t, KIND_LABELS, CATEGORY_LABELS)}
                       </h2>
                       {newCount > 0 && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand-text">
@@ -97,7 +99,7 @@ export default async function MarketplaceAlertsPage() {
                         </span>
                       )}
                     </div>
-                    {s.label?.trim() && <p className="mt-0.5 text-xs text-muted">{describeSearch(criteria, KIND_LABELS, CATEGORY_LABELS)}</p>}
+                    {s.label?.trim() && <p className="mt-0.5 text-xs text-muted">{describeSearch(criteria, locale.code, t, KIND_LABELS, CATEGORY_LABELS)}</p>}
                     <p className="mt-0.5 text-xs text-muted">{matches.length} match{matches.length === 1 ? '' : 'es'} on the board</p>
                   </div>
                   <AlertActions id={s.id} newCount={newCount} />
@@ -110,7 +112,7 @@ export default async function MarketplaceAlertsPage() {
                     {matches.slice(0, 12).map((l) => {
                       const isNew = l.created_at > s.last_seen_at;
                       const rentPeriod = (candidates.find((c) => c.id === l.id)?.rent_period ?? null) as RentPeriod | null;
-                      const price = priceLabel(l.kind as ListingKind, l.price_cents, rentPeriod);
+                      const price = priceLabel(l.kind as ListingKind, l.price_cents, rentPeriod, locale.code, t);
                       return (
                         <li key={l.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface/60 p-3.5">
                           <div className="min-w-0 flex-1">

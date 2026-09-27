@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { twimlDial } from '@/lib/guardian/twilio';
 import { toE164 } from '@/lib/guardian/phone';
+import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 
@@ -75,17 +76,36 @@ describe('a dialled number is a number (C1-S7-05)', () => {
     expect(src, 'forward_to_phone is stored raw again').not.toMatch(
       /patch\.forward_to_phone = input\.forwardTo;/,
     );
-    // Through toCallableE164 (lib/contact-center/phone), which admits only phone
-    // punctuation and then hands the value to toE164 — stricter than calling
-    // toE164 directly, and the shape main's a-forwarding-number-is-a-number
-    // test drives end to end.
-    expect(src).toMatch(/toCallableE164\(input\.forwardTo\)/);
+    // Through normalizeFallbackPhone (lib/contact-center/phone): main's #581
+    // made the WRITE side stricter than toCallableE164, which this pinned
+    // before — a plus and phone punctuation only, and no country code guessed
+    // (0384 is the same rule as a CHECK). What this test exists for is that
+    // the normaliser refuses a payload rather than keeping its digits, so the
+    // payloads the toE164 cases above refuse are asserted against it too.
+    expect(src).toMatch(/normalizeFallbackPhone\(input\.forwardTo\)/);
+    expect(src).toMatch(/if \(!fallback\.ok\) return \{ ok: false/);
+    expect(src).toContain('patch.forward_to_phone = fallback.value;');
+    for (const payload of [
+      '+15551234567</Dial><Dial>+19005551234',
+      'not a phone number',
+      'https://evil.example/+15551234567',
+      'call 555 123 4567 after 6',
+      '+1',
+    ]) {
+      expect(normalizeFallbackPhone(payload), payload).toEqual({ ok: false });
+    }
+    expect(normalizeFallbackPhone('+1 (555) 123-4567')).toEqual({ ok: true, value: '+15551234567' });
   });
 
   it('clearing the fallback is still possible', () => {
     // A guard that refuses null would trap a family into forwarding forever.
+    // Asserted on the normaliser the write goes through rather than on a local
+    // variable's name: null, empty and blank all clear the number.
     const src = read('app/(app)/dashboard/contact-center/actions.ts');
-    expect(src).toMatch(/cleared/);
+    expect(src).toContain('patch.forward_to_phone = fallback.value;');
+    for (const empty of [null, undefined, '', '   ']) {
+      expect(normalizeFallbackPhone(empty), String(empty)).toEqual({ ok: true, value: null });
+    }
     expect(toE164(null)).toBeNull();
   });
 

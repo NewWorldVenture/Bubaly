@@ -60,7 +60,9 @@ const BASELINE = new Map<string, number>([
   ['lib/marketing/automation-events.ts', 1],
   ['lib/marketing/automation-runner.ts', 1],
   ['lib/marketing/identity.ts', 2],
-  ['lib/marketing/platform.ts', 2],
+  // 3 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement
+  // in retireAeoQuestionsForPath, where zero rows is the ordinary case.
+  ['lib/marketing/platform.ts', 3],
   ['lib/marketing/recurring-ads-runner.ts', 1],
   ['lib/network/aggregate-server.ts', 3],
   ['lib/server/notification-emails.ts', 1],
@@ -146,7 +148,8 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
 
   it('the baseline total matches what finalaudit.md records', () => {
     // 51 since the merge with main (Audit C1-S9-89): the twin edge prune.
+    // 52 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(51);
+    expect(total).toBe(52);
   });
 });

@@ -9,11 +9,12 @@ import { useToast } from '@/components/ui/toast';
 import {
   PLANS, BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
-import { formatPerDay, perDayCents, valueTierForLevel } from '@/lib/marketing/value';
+import { formatPerDay, perDayCents, valueTierForLevel, PLAN_CURRENCY } from '@/lib/marketing/value';
+import { formatCents } from '@/lib/wallet/ledger';
 import type { StripePlan } from '@/lib/stripe';
 import { useApp } from './app-context';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 
 /**
@@ -33,9 +34,6 @@ async function startCheckout(plan: StripePlan, t: (key: string) => string): Prom
   if (json.url) return json.url;
   throw new Error(json.error ?? t('upgradeModal.couldNotStartCheckout'));
 }
-
-const dollars = (cents: number) =>
-  (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 // Tier presentation, keyed by the plan level a locked feature requires.
 const TIERS = {
@@ -80,6 +78,9 @@ export function UpgradeModal({
   requiredLevel?: number;
 }) {
   const t = useTranslations();
+  // Prices in the reader's money format; the currency stays the plan's own.
+  const locale = useLocale();
+  const dollars = (cents: number) => formatCents(cents, PLAN_CURRENCY, locale.code);
   const { role } = useApp();
   const { error: toastError } = useToast();
   const [pending, setPending] = useState<StripePlan | null>(null);
@@ -88,8 +89,8 @@ export function UpgradeModal({
   const tier = TIERS[requiredLevel === 2 ? 2 : 1];
   const { plan } = tier;
   const copy = valueTierForLevel(requiredLevel === 2 ? 2 : 1);
-  const monthlyPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.monthlyCents, 'monthly')) });
-  const annualPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.annualCents, 'yearly')) });
+  const monthlyPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.monthlyCents, 'monthly'), locale.code) });
+  const annualPerDay = t('pricingValue.perDay', { amount: formatPerDay(perDayCents(tier.annualCents, 'yearly'), locale.code) });
 
   async function checkout(stripePlan: StripePlan) {
     setPending(stripePlan);
@@ -153,7 +154,7 @@ export function UpgradeModal({
               className="rounded-2xl border border-border bg-surface/40 p-4 text-left transition hover:bg-elevated disabled:opacity-60"
             >
               <p className="text-sm font-semibold">{t('upgradeModal.monthly')}</p>
-              <p className="mt-1 text-2xl font-bold">{dollars(tier.monthlyCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-1 text-2xl font-bold">{dollars(tier.monthlyCents)}<span className="text-sm font-normal text-muted">{t('pricingValue.perMonthSuffix')}</span></p>
               <p className="mt-0.5 text-xs text-muted">{monthlyPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">
                 {pending === tier.monthlyPlan ? t('upgradeModal.redirecting') : t('upgradeModal.chooseMonthly')}
@@ -168,7 +169,7 @@ export function UpgradeModal({
                 <p className="text-sm font-semibold">{t('upgradeModal.annual')}</p>
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">{t('upgradeModal.save17')}</span>
               </div>
-              <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-1 text-2xl font-bold">{dollars(tier.annualPerMoCents)}<span className="text-sm font-normal text-muted">{t('pricingValue.perMonthSuffix')}</span></p>
               <p className="mt-0.5 text-xs font-medium text-fg/80">{t('upgradeModal.billedAnnually', { amount: dollars(tier.annualCents) })}</p>
               <p className="mt-0.5 text-xs text-muted">{annualPerDay}</p>
               <span className="mt-2 inline-block text-xs font-semibold text-brand-text">

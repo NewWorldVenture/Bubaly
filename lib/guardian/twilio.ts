@@ -95,9 +95,13 @@ export function twimlRecord(opts: {
  * this one did not. `<Dial>` is the one verb where unescaped content is not a
  * broken sentence but a different call: text carrying `</Dial><Dial>…` appends a
  * second destination, and the family's Twilio account pays for wherever it goes.
- * `phoneNumber` reaches here from `family_contact_channels.forward_to_phone`,
- * which a manager sets — so this is defence in depth rather than the only
- * boundary, and `toE164` in the action is the other half. Audit C1-S7-05.
+ * The number is a stored family setting (`family_contact_channels.forward_to_phone`,
+ * which a manager sets) and the callerId comes off the provider's callback, so
+ * neither is ours to assume clean: a legacy row holding "Mom & Dad 555-0200"
+ * used to emit a document Twilio could not parse, and the neighbour calling the
+ * family line heard an application error and was dropped rather than being put
+ * through. Defence in depth rather than the only boundary: the E.164 normaliser
+ * in the action is the other half. Audit C1-S7-05.
  */
 export function twimlDial(phoneNumber: string, callerId?: string): string {
   const callerAttr = callerId ? ` callerId="${xml(callerId)}"` : '';
@@ -229,6 +233,41 @@ export async function provisionNumber(params: {
     ...(params.friendlyName ? { FriendlyName: params.friendlyName } : {}),
   }) as { sid: string; phone_number: string };
   return { phoneNumber: data.phone_number, sid: data.sid };
+}
+
+/** The SID of a number THIS account already owns, or null.
+ *
+ *  A purchase whose response we never saw (the 15s deadline) may still have
+ *  completed at the provider, and without this the number cannot even be named
+ *  afterwards: it keeps billing and keeps posting to our webhooks forever. */
+export async function findOwnedNumberSid(phoneNumber: string): Promise<string | null> {
+  if (!isTwilioConfigured() || !phoneNumber) return null;
+  const qs = new URLSearchParams({ PhoneNumber: phoneNumber, PageSize: '1' });
+  const data = await twilioFetch(`/IncomingPhoneNumbers.json?${qs.toString()}`) as {
+    incoming_phone_numbers?: { sid?: unknown; phone_number?: unknown }[];
+  };
+  const found = data.incoming_phone_numbers?.[0];
+  if (!found || found.phone_number !== phoneNumber || typeof found.sid !== 'string') return null;
+  return found.sid;
+}
+
+/** Give a number back. True ONLY when the provider confirmed it is gone (204) or
+ *  had already lost it (404) — the same end state. Any other answer is false and
+ *  a transport failure rejects: an unreleased number keeps billing, so the
+ *  caller has to be able to see that it is still there. */
+export async function releaseNumber(sid: string): Promise<boolean> {
+  if (!isTwilioConfigured() || !/^PN[0-9a-f]{32}$/i.test(sid)) return false;
+  let res: Response | undefined;
+  try {
+    res = await fetchExternal(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${encodeURIComponent(sid)}.json`,
+      { method: 'DELETE', redirect: 'manual', cache: 'no-store', headers: { authorization: authHeader() } },
+      15_000,
+    );
+    return res.status === 204 || res.status === 404;
+  } finally {
+    if (res?.body && !res.body.locked) await res.body.cancel().catch(() => undefined);
+  }
 }
 
 /** Look up caller ID name via Twilio Lookup API. */

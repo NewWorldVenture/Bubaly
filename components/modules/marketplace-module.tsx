@@ -28,7 +28,7 @@ import {
   type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod, type ListingLike,
 } from '@/lib/marketplace/listings';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Listing = Tables<'marketplace_listings'>;
@@ -68,6 +68,8 @@ export function MarketplaceModule({
   autoOpenPost?: ListingKind | null;
 }) {
   const t = useTranslations();
+  // Price chips are in the READER's notation — priceLabel requires their locale.
+  const locale = useLocale();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -295,7 +297,7 @@ export function MarketplaceModule({
               const kind = l.kind as ListingKind;
               const KindIcon = KIND_ICON[kind];
               const owner = isOwner(l as ListingLike, selfId);
-              const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null);
+              const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t);
               const offerN = openOfferCount(l.id);
               const alreadyOffered = myOpenOffers.has(l.id);
               const offerable = canOffer(l as ListingLike, selfId, offers ?? []);

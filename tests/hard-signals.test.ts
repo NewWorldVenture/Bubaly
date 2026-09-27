@@ -2,9 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   detectIgnoredReminders, detectStressWindows, detectChoreConflicts,
   detectRoutineAdherence, detectBudgetDrift, buildHardSignals,
-  type ReminderRow, type ChoreRow, type RoutineRow,
+  type ReminderRow, type ChoreRow, type RoutineRow, type HardSignalInputs,
 } from '@/lib/intelligence/hard-signals';
 import type { BudgetRow, ExpenseRow } from '@/lib/operating-index/inputs';
+
+// Budget drift words its sentence through the READER's catalogue and formats its
+// amounts in the reader's locale. These cases assert the sentence chosen and the
+// amounts, so an echo translator is enough; what a reader actually sees is in
+// tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+const drift = (budgets: BudgetRow[], expenses: ExpenseRow[], now: Date) => detectBudgetDrift(budgets, expenses, now, 'en-US', echo);
+const hardSignals = (inp: HardSignalInputs, now: Date) => buildHardSignals(inp, now, 'en-US', echo);
 
 const NOW = new Date('2026-07-07T12:00:00.000Z'); // Tuesday
 const past = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
@@ -97,7 +105,7 @@ describe('detectRoutineAdherence', () => {
 
 describe('buildHardSignals', () => {
   it('runs every detector and ranks by severity', () => {
-    const sigs = buildHardSignals({
+    const sigs = hardSignals({
       reminders: [
         { id: '1', title: 'Trash', remindAt: past(5), status: 'active', completedAt: null, memberId: null },
         { id: '2', title: 'Trash', remindAt: past(30), status: 'active', completedAt: null, memberId: null },
@@ -129,7 +137,7 @@ describe('detectBudgetDrift', () => {
   const exp = (category: string, amount: number, date: string): ExpenseRow => ({ category, amount, date });
 
   it('flags a category over its monthly cap this period', () => {
-    const sigs = detectBudgetDrift(
+    const sigs = drift(
       [budget('Groceries', 500)],
       [exp('Groceries', 400, '2026-07-03'), exp('groceries', 200, '2026-07-06')], // $600 > $500
       NOW,
@@ -137,16 +145,17 @@ describe('detectBudgetDrift', () => {
     expect(sigs).toHaveLength(1);
     expect(sigs[0]).toMatchObject({ kind: 'budget_drift', subjectKey: 'budget:groceries' });
     expect(sigs[0].evidence).toMatchObject({ limit: 500, spent: 600, overBy: 100, recurring: false });
+    expect(sigs[0].detail).toContain('hardSignals.budgetDrift.monthly');
     expect(sigs[0].detail).toContain('$600');
   });
 
   it('does not flag a category within its cap', () => {
-    expect(detectBudgetDrift([budget('Dining', 300)], [exp('Dining', 120, '2026-07-02')], NOW)).toHaveLength(0);
+    expect(drift([budget('Dining', 300)], [exp('Dining', 120, '2026-07-02')], NOW)).toHaveLength(0);
   });
 
   it('scores higher + marks recurring when the prior period was also over', () => {
-    const oneOff = detectBudgetDrift([budget('Gas', 100)], [exp('Gas', 120, '2026-07-04')], NOW)[0];
-    const recurring = detectBudgetDrift(
+    const oneOff = drift([budget('Gas', 100)], [exp('Gas', 120, '2026-07-04')], NOW)[0];
+    const recurring = drift(
       [budget('Gas', 100)],
       [exp('Gas', 120, '2026-07-04'), exp('Gas', 150, '2026-06-15')], // prior month over too
       NOW,
@@ -158,13 +167,13 @@ describe('detectBudgetDrift', () => {
   });
 
   it('ignores zero/negative budgets and matches categories case-insensitively', () => {
-    expect(detectBudgetDrift([budget('X', 0)], [exp('X', 50, '2026-07-01')], NOW)).toHaveLength(0);
-    const s = detectBudgetDrift([budget('KIDS', 50)], [exp('kids', 90, '2026-07-02')], NOW);
+    expect(drift([budget('X', 0)], [exp('X', 50, '2026-07-01')], NOW)).toHaveLength(0);
+    const s = drift([budget('KIDS', 50)], [exp('kids', 90, '2026-07-02')], NOW);
     expect(s).toHaveLength(1);
   });
 
   it('is included in buildHardSignals', () => {
-    const sigs = buildHardSignals(
+    const sigs = hardSignals(
       { reminders: [], events: [], conflicts: [], overdue: [], chores: [], routines: [], routineCompletions: [],
         budgets: [budget('Fun', 40)], expenses: [exp('Fun', 90, '2026-07-05')] },
       NOW,

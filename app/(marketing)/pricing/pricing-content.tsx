@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils/cn';
 import { familiesNote } from '@/lib/marketing/format';
 import { HERO_OUTCOMES } from '@/lib/marketing/hero-outcomes';
 import {
+  PLAN_CURRENCY,
   formatPerDay,
   perDayCents,
   valueTier,
@@ -32,6 +33,7 @@ import {
   PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Period = BillingPeriod;
 
@@ -45,9 +47,6 @@ export type PricingCaseStudy = {
   /** Only an admin can set case_studies.verified_at; the badge renders on nothing else. */
   verified: boolean;
 };
-
-const fmt = (cents: number) =>
-  cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 
 const basicSavings = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
 const plusSavings  = Math.round((1 - PLUS_ANNUAL_CENTS  / (PLUS_MONTHLY_CENTS  * 12)) * 100);
@@ -196,7 +195,7 @@ function PlanCard({
   icon: React.ReactNode;
   price: string;
   priceSub: string;
-  /** "≈ 28¢ a day" — rendered UNDER the monthly price, never instead of it; paid tiers only. */
+  /** "≈ $0.33 a day" — rendered UNDER the monthly price, never instead of it; paid tiers only. */
   perDay?: string;
   /** A one-line reassurance under the price block (Family+: cancel or downgrade anytime). */
   footnote?: string;
@@ -230,7 +229,7 @@ function PlanCard({
 
       <div className="mt-5 flex items-end gap-1">
         <span className="text-4xl font-black">{price}</span>
-        {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">/mo</span>}
+        {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">{tr('pricingValue.perMonthSuffix')}</span>}
       </div>
       {/* Under the monthly price, never instead of it — and only on the paid
           tiers, where a per-day figure means something. */}
@@ -450,8 +449,10 @@ export function PricingContent({
   switching?: ReactNode;
 }) {
   const tr = useTranslations();
-  // The family-count grouping follows the visitor's chosen locale.
+  // The family-count grouping and every price follow the visitor's chosen
+  // locale; the currency stays the plan's own.
   const locale = useLocale();
+  const fmt = (cents: number) => formatCents(cents, PLAN_CURRENCY, locale.code);
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
   const router = useRouter();
@@ -487,14 +488,18 @@ export function PricingContent({
   }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
-  const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';
+  const basicPriceSub = yearly
+    ? tr('pricingContent.billedPerYearSave', { amount: fmt(BASIC_ANNUAL_CENTS), percent: basicSavings })
+    : tr('pricingContent.billedMonthly');
   const plusPrice     = yearly ? fmt(Math.round(PLUS_ANNUAL_CENTS / 12))  : fmt(PLUS_MONTHLY_CENTS);
-  const plusPriceSub  = yearly ? `billed ${fmt(PLUS_ANNUAL_CENTS)}/yr · save ${plusSavings}%`  : 'billed monthly';
+  const plusPriceSub  = yearly
+    ? tr('pricingContent.billedPerYearSave', { amount: fmt(PLUS_ANNUAL_CENTS), percent: plusSavings })
+    : tr('pricingContent.billedMonthly');
   // Per-day framing (lib/marketing/value.ts): ceil-derived from the same plan
   // constants the price above it uses, so the line can never claim a cheaper
   // day than the family actually pays. Paid tiers only — the trial has no price.
-  const basicPerDay = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? BASIC_ANNUAL_CENTS : BASIC_MONTHLY_CENTS, period)) });
-  const plusPerDay  = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? PLUS_ANNUAL_CENTS : PLUS_MONTHLY_CENTS, period)) });
+  const basicPerDay = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? BASIC_ANNUAL_CENTS : BASIC_MONTHLY_CENTS, period), locale.code) });
+  const plusPerDay  = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? PLUS_ANNUAL_CENTS : PLUS_MONTHLY_CENTS, period), locale.code) });
   // Outcome-first tier copy — label, goal line and what stops landing on the
   // family — from the registry both /pricing and the in-app upgrade modal read.
   const trialCopy = valueTier('trial');

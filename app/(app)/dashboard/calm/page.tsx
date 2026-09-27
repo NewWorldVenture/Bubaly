@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeReadError } from '@/lib/supabase/settle';
@@ -8,6 +8,7 @@ import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
+import { autopilotTitleFor } from '@/lib/autopilot/engine';
 
 export const metadata: Metadata = { title: 'Calm | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<
 
 export default async function CalmPage() {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -46,7 +48,7 @@ export default async function CalmPage() {
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
       .eq('family_id', familyId).eq('status', 'active').in('severity', ['action', 'attention']).order('created_at', { ascending: false }).limit(100)),
-    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency')
+    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency, payload')
       .eq('family_id', familyId).eq('status', 'open').limit(100)),
     safe(supabase.from('family_operating_index').select('suggestions')
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
@@ -94,9 +96,11 @@ export default async function CalmPage() {
   for (const a of agentRows as { id: string; agent: string; title: string; detail: string | null; href: string | null; severity: string }[]) {
     items.push({ id: `agent:${a.id}`, source: 'agent', title: a.title, detail: a.detail, href: a.href, severity: (a.severity as ItemSeverity) });
   }
-  for (const s of autopilotRows as { id: string; title: string; detail: string | null; urgency: number }[]) {
+  for (const s of autopilotRows as { id: string; title: string; detail: string | null; urgency: number; payload: unknown }[]) {
     const severity: ItemSeverity = s.urgency >= 3 ? 'action' : s.urgency >= 2 ? 'attention' : 'info';
-    items.push({ id: `autopilot:${s.id}`, source: 'autopilot', title: s.title, detail: s.detail, href: '/dashboard/autopilot', severity });
+    // A subscription title carries money, worded by whichever scan inserted it
+    // (usually the cron, in en-US); worded again here for this reader.
+    items.push({ id: `autopilot:${s.id}`, source: 'autopilot', title: autopilotTitleFor(s, locale.code, t), detail: s.detail, href: '/dashboard/autopilot', severity });
   }
   const foiSuggestions = ((foiRows[0]?.suggestions as FoiSuggestion[] | undefined) ?? []);
   for (const g of foiSuggestions) {

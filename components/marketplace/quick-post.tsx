@@ -16,14 +16,15 @@ import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import {
-  CATEGORY_LABELS, CONDITION_LABELS, KIND_LABELS, KIND_ORDER, dollarsToCents, kindHasPrice,
+  CATEGORY_LABELS, CONDITION_LABELS, KIND_LABELS, KIND_ORDER, dollarsToCents, formatCents, kindHasPrice,
   type ListingCategory, type ListingCondition, type ListingKind,
 } from '@/lib/marketplace/listings';
 import { draftListing, suggestPriceCents, type Comparable, type QuickDraft } from '@/lib/marketplace/quick-post';
 import { PhotoUpload } from '@/components/marketplace/photo-upload';
 import { removeMarketplacePhotoPath } from '@/lib/storage/marketplace-photos';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useMoneyUnit } from '@/components/marketplace/money-unit';
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ListingCategory[];
 const CONDITIONS = Object.keys(CONDITION_LABELS) as ListingCondition[];
@@ -34,6 +35,12 @@ const MATCH_LABEL: Record<QuickDraft['matched'][number], string> = {
 
 export function QuickPost({ className }: { className?: string }) {
   const t = useTranslations();
+  // The suggested price and the price box's unit are in the READER's notation.
+  // The suggestion used to be `{t('quickPost.aiSuggests')}{suggested / 100}`:
+  // the "$" lived at the end of the catalogue value, so a German reader got
+  // "KI schlägt vor: $2768" and a Dutch one "AI stelt $ voor2768".
+  const locale = useLocale();
+  const unit = useMoneyUnit();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -233,14 +240,14 @@ export function QuickPost({ className }: { className?: string }) {
             </select>
             {kindHasPrice(draft.kind) ? (
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted">$</span>
+                <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs text-muted', unit.unitClass)}>{unit.symbol}</span>
                 <input
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   inputMode="decimal"
                   aria-label={t('quickPost.price')}
                   placeholder="0"
-                  className="h-10 w-full rounded-xl border border-border bg-bg pl-6 pr-2 text-xs outline-none focus:border-brand"
+                  className={cn('h-10 w-full rounded-xl border border-border bg-bg text-xs outline-none focus:border-brand', unit.padClass)}
                 />
               </div>
             ) : (
@@ -254,7 +261,7 @@ export function QuickPost({ className }: { className?: string }) {
               onClick={() => setPrice(String(suggested / 100))}
               className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300 ring-1 ring-emerald-400/30 transition hover:bg-emerald-500/20"
             >
-              <Sparkles className="h-3 w-3" /> {t('quickPost.aiSuggests')}{suggested / 100} {t('quickPost.fromYourFamilyAposSComparable')}
+              <Sparkles className="h-3 w-3" /> {t('quickPost.aiSuggestsFromComparables', { amount: formatCents(suggested, locale.code) })}
             </button>
           )}
 

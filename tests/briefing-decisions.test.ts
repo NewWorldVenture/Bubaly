@@ -11,6 +11,7 @@ import { entitledServiceClient } from './helpers/entitled-service-client';
 import { NextRequest } from 'next/server';
 import { briefSchema, buildBrief, type BriefInput } from '@/lib/briefing/build';
 import { readBriefDecisions } from '@/lib/briefing/decisions';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { BriefDecisionSchema } from '@/lib/briefing/response-schema';
 import type { NeedItem } from '@/lib/home/needs-attention';
 import type { ServiceScope } from '@/lib/services/types';
@@ -85,6 +86,9 @@ describe('buildBrief decisions', () => {
 
 // ─── readBriefDecisions ───────────────────────────────────────────────────────
 
+/** An en-US reader through the real English catalogue. */
+const EN = { locale: 'en-US' as const, t: (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+
 function approvalRow(over: Record<string, unknown>) {
   return {
     family_id: 'fam-1', status: 'pending', domain: 'reminders', capability: 'reminders.create',
@@ -136,7 +140,7 @@ function scopeFor(db: unknown, role: ServiceScope['role'], memberId: string | nu
 describe('readBriefDecisions', () => {
   it('reads every pending approval, parked run and recommendation the way Home does, for a manager', async () => {
     const db = seededDb();
-    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'));
+    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'), EN);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
@@ -173,7 +177,7 @@ describe('readBriefDecisions', () => {
       { id: 'rec-bad', family_id: 'fam-1', title: 'Look at this', status: 'pending', priority: 'normal', cta_href: 'https://evil.example/approve', created_at: '2026-09-07T10:05:00Z' },
       { id: 'rec-rel', family_id: 'fam-1', title: 'No leading slash', status: 'pending', priority: 'normal', cta_href: 'dashboard/somewhere', created_at: '2026-09-07T10:06:00Z' },
     ]);
-    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'));
+    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'), EN);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const bad = res.data.items.find((i) => i.id === 'recommendation:rec-bad');
@@ -188,7 +192,7 @@ describe('readBriefDecisions', () => {
 
   it('never reads the money table for a child, and hands them a read-only list', async () => {
     const db = seededDb();
-    const res = await readBriefDecisions(scopeFor(db, 'child', 'm-child'));
+    const res = await readBriefDecisions(scopeFor(db, 'child', 'm-child'), EN);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(db.log.some((l) => l.table === 'parent_approvals')).toBe(false);
@@ -201,7 +205,7 @@ describe('readBriefDecisions', () => {
 
   it('treats the cron as a manager: a system scope sees the money approvals', async () => {
     const db = seededDb();
-    const res = await readBriefDecisions(scopeFor(db, 'system', null));
+    const res = await readBriefDecisions(scopeFor(db, 'system', null), EN);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.items.map((i) => i.id)).toContain('approval:pa-1');
@@ -219,7 +223,7 @@ describe('readBriefDecisions', () => {
     };
     const db = { from: (table: string) => chain(table === 'approval_requests' ? { data: null, error: failing } : { data: [], error: null }) };
 
-    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'));
+    const res = await readBriefDecisions(scopeFor(db, 'parent', 'm-parent'), EN);
     expect(res).toMatchObject({ ok: false, retryable: true });
     expect(err.mock.calls.map((c) => String(c[0]))).toContain('[briefing] pending approvals read failed');
     err.mockRestore();

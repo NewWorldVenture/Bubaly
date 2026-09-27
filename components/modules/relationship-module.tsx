@@ -1,9 +1,9 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useState } from 'react';
 import {
   Heart, Cake, Sparkles, Wine, Star, CalendarDays, Gift, Plus, Pencil, Trash2,
-  ExternalLink, DollarSign, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
+  ExternalLink, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
   CalendarPlus, CalendarCheck,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -23,8 +23,9 @@ import {
 } from '@/lib/relationship/dates';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { formatCents } from '@/lib/wallet/ledger';
 import type { Format } from '@/lib/utils/format';
 import { useConfirm } from '@/components/ui/confirm';
 
@@ -57,13 +58,20 @@ const blankDate = {
 };
 const blankGift = { id: '', title: '', url: '', price: '', occasion: '', forName: '', reason: '', status: 'idea' as RelationshipGiftStatus };
 const fmtDateIn = (f: Format) => (iso: string) => f.fmtDate(`${iso}T00:00:00`, 'MMMM d, yyyy');
-const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`);
+// relationship_gift_ideas.price_cents and relationship_profile.gift_budget_cents
+// have no currency column, the forms take dollars ("Approx. price ($)"), and a
+// wishlist price is dollars too — so the money is USD. The reader's locale decides
+// only where the symbol goes and how the digits group (I18N-003).
+const CURRENCY = 'USD';
 
 export function RelationshipModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
   // Dates follow the reader, not the browser (I18N-002).
   const fmtDate = fmtDateIn(useFormat());
+  // So does money: the reader's locale places the symbol and groups the digits.
+  const locale = useLocale();
+  const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -458,7 +466,12 @@ export function RelationshipModule() {
             <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-sm text-muted">
                 <span className="font-semibold text-fg">{giftSummary.open}</span> {t('relationship.toBuy')}
-                {giftSummary.openCents > 0 && <> · <span className="font-semibold text-fg">{dollars(giftSummary.openCents)}</span> {t('relationship.toGo')}</>}
+                {/* The whole phrase is the catalogue's, so a language that puts the
+                    amount after its words can; split on the placeholder so the
+                    amount keeps its emphasis wherever the translation puts it. */}
+                {giftSummary.openCents > 0 && <> · {t('relationship.amountToGo').split(/(\{amount\})/).map((part, i) => (part === '{amount}'
+                  ? <span key={i} className="font-semibold text-fg">{money(giftSummary.openCents)}</span>
+                  : <Fragment key={i}>{part}</Fragment>))}</>}
                 {giftSummary.done > 0 && <> · {giftSummary.done} done</>}
               </p>
               <div className="flex flex-wrap gap-1 sm:ml-auto">
@@ -490,7 +503,9 @@ export function RelationshipModule() {
                 {g.reason && <p className="mt-0.5 text-sm text-muted">{g.reason}</p>}
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                  {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
+                  {/* No dollar-sign icon: the formatted amount carries the symbol,
+                      where the reader's locale puts it. */}
+                  {g.price_cents != null && <span className="inline-flex items-center gap-0.5">{money(g.price_cents)}</span>}
                   {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
@@ -640,7 +655,7 @@ export function RelationshipModule() {
                   <div key={c.wishlistItemId} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{c.title}</p>
-                      <p className="text-xs text-muted">{c.priceCents != null ? dollars(c.priceCents) : 'No price'} · {c.priority} priority</p>
+                      <p className="text-xs text-muted">{c.priceCents != null ? money(c.priceCents) : t('relationship.noPrice')} · {c.priority} priority</p>
                     </div>
                     <Button size="sm" variant={already ? 'outline' : 'primary'} disabled={already} onClick={() => addWishGift(w)} className="shrink-0 gap-1">
                       {already ? <><Check className="h-3.5 w-3.5" /> {t('relationship.added')}</> : <><Plus className="h-3.5 w-3.5" /> Add</>}

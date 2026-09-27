@@ -2,8 +2,25 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
+import { retireAeoQuestionsForPath } from './platform';
 
 type MarketingDb = SupabaseClient<Database>;
+
+/**
+ * A path whose page has just left the public set must not keep its generated AEO
+ * answers published: the 0228 public-read policy keys on `status = 'published'`
+ * alone, so those rows stay world-readable on /faq and in every sibling
+ * article's FAQ block even though the page itself is now hidden.
+ *
+ * This lives at the bridge because the bridge — not the calling action — is what
+ * actually takes the marketing_pages row down, and it has three callers. It runs
+ * only after that take-down succeeded, so the missing-platform-schema
+ * compatibility path never reaches it; any error here is real and is thrown.
+ */
+async function retirePublicAnswers(db: MarketingDb, path: string): Promise<void> {
+  const { error } = await retireAeoQuestionsForPath(db, path, ['marketing_platform']);
+  if (error) throw error;
+}
 
 type LegacyBlog = {
   id: string;
@@ -80,6 +97,10 @@ export async function syncLegacyBlogVisibility(db: MarketingDb, slug: string, ac
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
+  // 'draft' hides the page behind marketing_pages_public_read, and this update
+  // does not bump `version`, so the 0237 regeneration trigger never fires and
+  // nothing else would ever take the page's answers out of the published set.
+  if (!published) await retirePublicAnswers(db, `/blog/${slug}`);
   return Boolean(data?.id);
 }
 
@@ -91,6 +112,7 @@ export async function archiveLegacyBlogOnPlatform(db: MarketingDb, slug: string,
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
+  await retirePublicAnswers(db, `/blog/${slug}`);
   return Boolean(data?.id);
 }
 
@@ -130,5 +152,6 @@ export async function archiveLegacyLandingOnPlatform(db: MarketingDb, slug: stri
     if (isMissingPlatformSchema(error)) return false;
     throw error;
   }
+  await retirePublicAnswers(db, `/lp/${slug}`);
   return Boolean(data?.id);
 }

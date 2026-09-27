@@ -11,7 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
-import { newSubmissionId } from '@/lib/utils/submission-id';
+import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
@@ -742,7 +742,9 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const [loading, setLoading] = useState(false);
   // One id per open modal, so a retry after a failed save is the SAME chore and
   // a second Add (a new modal) is a different one. The modal is mounted only
-  // while `addOpen`, so closing and reopening mints a fresh id.
+  // while `addOpen`, so closing and reopening mints a fresh id. The one failure
+  // that re-mints is `already_saved` (below): the server has said an earlier Add
+  // landed, so this composition is over.
   const submissionId = useRef('');
   if (!submissionId.current) submissionId.current = newSubmissionId();
 
@@ -773,7 +775,14 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         title, description, points, priority, recurrence, icon,
         dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
       });
-      if (!result.ok) { toastError(result.error); return; }
+      if (!result.ok) {
+        // `already_saved`: an earlier Add of this modal landed as the chore the
+        // message names, and it no longer matches these fields. That save is
+        // settled; a further Add is a new chore, which the message offers.
+        if (submissionSettled(result)) submissionId.current = newSubmissionId();
+        toastError(result.error);
+        return;
+      }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

@@ -17,7 +17,7 @@ import {
   type ListingKind, type ListingCategory, type RentPeriod,
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Storefront · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -29,6 +29,8 @@ const KIND_ICON: Record<string, typeof ShoppingBag> = {
 
 export default async function StorefrontPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const { id } = await params;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -118,7 +120,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
           {listings.map((l) => {
             const kind = l.kind as ListingKind;
             const KindIcon = KIND_ICON[kind] ?? ShoppingBag;
-            const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null);
+            const price = priceLabel(kind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t);
             return (
               <Link key={l.id} href={`/marketplace/item/${l.id}`} className="group flex flex-col overflow-hidden rounded-xl border border-border bg-surface/60 transition hover:border-brand/40">
                 <ListingImage

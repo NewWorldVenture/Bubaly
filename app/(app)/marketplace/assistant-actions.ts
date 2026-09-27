@@ -10,7 +10,7 @@
 // missing key. History is passed through for multi-turn context (LLM tier).
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import {
   answerMarketQuestion, marketSystemPrompt, routeMarketIntent,
@@ -71,7 +71,11 @@ export async function askMarketAssistantAction(
     selfMemberId: ctx.active.member?.id ?? null,
   };
 
-  const grounded = answerMarketQuestion(q, snapshot);
+  // Both replies are shown to the asker verbatim, so both are in their locale:
+  // the grounded reply's amounts and sentences, and the amounts the model is
+  // given to quote (see marketSystemPrompt).
+  const { locale } = await getLocaleContext();
+  const grounded = answerMarketQuestion(q, snapshot, locale.code, t);
 
   // Tier 2 (LLM) — best-effort on top of the same snapshot; the deterministic
   // links still ride along so the UI always has somewhere to go.
@@ -91,7 +95,7 @@ export async function askMarketAssistantAction(
             { role: 'user', content: q },
           ];
           const completion = await provider.complete({
-            system: marketSystemPrompt(snapshot),
+            system: marketSystemPrompt(snapshot, locale.code),
             messages,
             tools: [],
             maxTokens: 400,

@@ -30,6 +30,9 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
   locked: DashFeature[];         // above-tier features (upgrade discovery)
   canCustomize?: boolean;        // false → child where the family disabled it, or locked-to-default
   canManage?: boolean;           // parent/admin → family controls
+  // The family's saved settings, OMITTED when they could not be read. Without
+  // them there is nothing true to prefill the Family modal with, so no Family
+  // button, and nothing to say about who set the lock, so no "Set by a parent".
   settings?: DashSettings;
 }) {
   const t = useTranslations();
@@ -93,7 +96,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('quickActions.quickAccess')}</h2>
         {!editing ? (
           <div className="flex items-center gap-1">
-            {canManage && (
+            {canManage && settings && (
               <button onClick={() => setFamilyOpen(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-elevated hover:text-fg transition">
                 <Users className="h-3.5 w-3.5" /> {t('quickActions.family')}
               </button>
@@ -102,9 +105,9 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
               <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition">
                 <Settings2 className="h-3.5 w-3.5" /> {t('quickActions.customize')}
               </button>
-            ) : (
+            ) : settings ? (
               <span className="flex items-center gap-1 text-[11px] text-muted"><Lock className="h-3 w-3" /> {t('quickActions.setByAParent')}</span>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-1">

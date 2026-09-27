@@ -137,7 +137,7 @@ begin
   --     the shape checks 4 and 7 assert on); the control's five landings prove
   --     it does not raise for a live family.
   --   * `trg_documents_linked_trip_stays_home`, BEFORE UPDATE OF family_id
-  --     WHEN family_id changes, from 0365 — untracked in this tree at the time
+  --     WHEN family_id changes, from 0387 — untracked in this tree at the time
   --     of writing and absent from a database bootstrapped before it, so the
   --     assertion below tolerates its absence. SECURITY DEFINER, and it DOES
   --     raise 42501 — but only while a trip in another household still links
@@ -164,7 +164,7 @@ begin
   --     more files, none of which touches a policy on this table: 0303 names
   --     `documents_select` in a comment (its policies are on storage.objects);
   --     0312 rewrote the FUNCTION `is_sensitive_document` (per-word matching,
-  --     so "Medical Records" classifies) without touching a policy; 0365 names
+  --     so "Medical Records" classifies) without touching a policy; 0387 names
   --     it in prose to explain why its vacation_documents guard is SECURITY
   --     INVOKER, creates its own policies on social_settings, and adds the
   --     family_id trigger inventoried above. `grep -l documents_update` adds
@@ -200,7 +200,7 @@ begin
   --     raises 42501 through is_family_member, and a guard TRIGGER raises 42501
   --     — which is exactly how this repository refuses writes in 0223, 0305,
   --     0326 and 0331. documents already carries row triggers (0003, 0134 and,
-  --     with 0365, one that raises 42501 itself), and 0134's has broken a write
+  --     with 0387, one that raises 42501 itself), and 0134's has broken a write
   --     on this very table once before (0249).
   --   * Checks 1 and 2 count rows, and `count(*)` needs no column privilege at
   --     all: a `revoke select (storage_path) on public.documents` would leave
@@ -444,7 +444,7 @@ begin
   -- guard trigger asking the same sensitivity-plus-manager question, or with a
   -- fifth, RESTRICTIVE policy that happens to agree. The MECHANISM paragraph
   -- credits 0266 because its author read the migrations; this is what makes
-  -- that credit self-verifying, the way 0299 and 0365 verify their own
+  -- that credit self-verifying, the way 0299 and 0387 verify their own
   -- mechanism out of pg_trigger. It runs AFTER the checks on purpose: a
   -- loosened documents_select or documents_insert must fail on a refusal
   -- assertion above, not here — and a loosened documents_update or
@@ -492,7 +492,7 @@ begin
 
   -- (iii) And the two that could interfere keep the shape that keeps them
   -- inert here. trg_mark_model_dirty is AFTER (a BEFORE trigger can veto a row
-  -- silently, which is what checks 4 and 7 measure); the 0365 trigger, when
+  -- silently, which is what checks 4 and 7 measure); the 0387 trigger, when
   -- present, fires on family_id and nothing else, because a column list widened
   -- to is_secure would make it a second refuser of checks 4 and 5.
   if exists (
@@ -512,7 +512,7 @@ begin
      where t.tgrelid = 'public.documents'::regclass
        and t.tgname = 'trg_documents_linked_trip_stays_home';
     if trip_cols <> array['family_id'] then
-      raise exception 'ATTRIBUTION UNPROVEN: trg_documents_linked_trip_stays_home (0365) fires on columns % rather than on family_id alone, so it can now refuse the very UPDATEs checks 4 and 5 credit to documents_update', trip_cols;
+      raise exception 'ATTRIBUTION UNPROVEN: trg_documents_linked_trip_stays_home (0387) fires on columns % rather than on family_id alone, so it can now refuse the very UPDATEs checks 4 and 5 credit to documents_update', trip_cols;
     end if;
   end if;
 

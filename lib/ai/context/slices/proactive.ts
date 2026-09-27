@@ -13,6 +13,9 @@ import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { gatherSignalsResult, type FamilySignals } from '@/lib/family/signals';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
+import { getMessages, translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { signalWordsFor } from '@/lib/intelligence/hard-signals';
 import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -35,6 +38,20 @@ const MANAGER_ONLY_RE = /\b(budget|bill|bills|spend|spending|money|financ|transa
 function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
   return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
 }
+
+/**
+ * The words this slice reads a hard signal in: en-US, explicitly. Its reader is
+ * the model, and the filter above is ENGLISH — but a stored signal is worded for
+ * whichever scan last wrote it, and a Refresh stores the presser's language. A
+ * translated budget drift need not contain any word MANAGER_ONLY_RE knows
+ * (Spanish says "presupuesto"), and `kind` cannot catch it either: \bbudget\b
+ * does not match inside "budget_drift". Read as stored it would reach a child's
+ * context. So budget drift is worded again from its `evidence` in en-US
+ * (signalWordsFor) before the filter sees it, in the live signals here and in
+ * the reasoning report.
+ */
+const MODEL_LOCALE: LocaleCode = 'en-US';
+const modelText = (key: string, params?: Record<string, string | number>) => translate(getMessages(MODEL_LOCALE), key, params);
 
 export type ProactiveSliceData = {
   counts: FamilySignals['counts'] | null;
@@ -117,8 +134,8 @@ export const proactiveSlice: SliceDefinition = {
 
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
       loadSignals(scope.familyId, env.tz, env.now),
-      loadReasoningReport(scope.db, scope.familyId, env.tz, env.now),
-      settle(scope.db.from('family_signals').select('kind, title, detail, score').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
+      settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
       settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
       // The four life-event reads take settle() like the three above them: this
@@ -169,7 +186,8 @@ export const proactiveSlice: SliceDefinition = {
         })),
         readErrors: report.readErrors,
       },
-      signals: (liveSignals.data ?? []).filter((s) => keep(s.kind, s.title, s.detail)).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score })),
+      signals: (liveSignals.data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, MODEL_LOCALE, modelText), score: s.score }))
+        .filter((s) => keep(s.kind, s.title, s.detail)),
       autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
       lifeEvents,

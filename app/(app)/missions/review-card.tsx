@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
 import { REWARD_MODE_LABELS, fmtCash, type RewardMode } from '@/lib/chores/logic';
 import { approveSubmissionAction, rejectSubmissionAction } from './actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type ReviewItem = {
   submissionId: string;
@@ -44,6 +44,7 @@ function scoreTone(score: number | null): 'success' | 'warning' | 'danger' | 'ne
 
 export function ReviewCard({ item }: { item: ReviewItem }) {
   const t = useTranslations();
+  const locale = useLocale();
   const [pending, start] = useTransition();
   const [override, setOverride] = useState(false);
   // Both review actions used to return nothing, so a refused approval stopped
@@ -106,7 +107,9 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
             <Badge tone={scoreTone(item.aiScore)}>{t('missionsReviewCard.score')} {item.aiScore ?? '—'}</Badge>
             <span className="text-muted">{item.aiKidFeedback ?? item.aiParentSummary ?? 'Reviewed.'}</span>
             {item.recommendedType && item.recommendedType !== 'none' && (
-              <span className="ml-auto text-xs text-muted">Suggests: {item.recommendedType === 'cash' ? fmtCash(Math.round((item.recommendedAmount ?? 0) * 100)) : `${item.recommendedAmount ?? 0} pts`}</span>
+              <span className="ml-auto text-xs text-muted">{item.recommendedType === 'cash'
+                ? t('missionsReviewCard.suggestsAmount', { amount: fmtCash(Math.round((item.recommendedAmount ?? 0) * 100), locale.code) })
+                : t('missionsReviewCard.suggestsPoints', { points: item.recommendedAmount ?? 0 })}</span>
             )}
           </>
         )}

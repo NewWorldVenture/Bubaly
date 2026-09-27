@@ -8,8 +8,12 @@
 // No I/O — the dashboard derives the numeric inputs from Supabase and passes
 // them here, so the whole thing is deterministic and unit-testable.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
 import type { Nutrition } from '@/lib/meals/nutrition';
 import { DAILY_VALUES } from '@/lib/meals/nutrition';
+import { formatCents } from '@/lib/wallet/ledger';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type FoodScoreKey =
   | 'planning' | 'variety' | 'nutrition' | 'waste' | 'pantry' | 'budget' | 'satisfaction';
@@ -52,6 +56,7 @@ export interface FoodScore {
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+const wholeDollars = (cents: number) => Math.round(cents / 100) * 100;
 
 const LABELS: Record<FoodScoreKey, string> = {
   planning: 'Meal Prep', variety: 'Variety', nutrition: 'Nutrition', waste: 'Food Waste',
@@ -88,7 +93,19 @@ export function nutritionBalanceScore(perDay: Nutrition | null | undefined): num
   return clamp(score);
 }
 
-export function computeFoodScore(input: FoodScoreInput): FoodScore {
+/**
+ * `locale` and `t` are the READER's, and required: the one caller is
+ * app/(app)/dashboard/kitchen/page.tsx, a server component that has them from
+ * getLocaleContext(). They word the budget line, which carries money — see below.
+ *
+ * NO FAMILY SEES THAT LINE TODAY, twice over. The budget sub-score is computed
+ * only when `weeklyBudgetCents > 0`, and the kitchen page passes `null` ("no
+ * household food budget table yet"); and components/modules/kitchen-dashboard.tsx
+ * renders each sub-score's label and number, never its `detail`. The line is
+ * converted anyway because it is money text waiting for a reader: the day a
+ * food budget exists and the detail is shown, it must not arrive as "$2769".
+ */
+export function computeFoodScore(input: FoodScoreInput, locale: LocaleCode, t: Translate): FoodScore {
   const subs: SubScore[] = [];
 
   // Planning / meal-prep coverage.
@@ -133,7 +150,15 @@ export function computeFoodScore(input: FoodScoreInput): FoodScore {
     const ratio = input.plannedCostCents / input.weeklyBudgetCents;
     const s = clamp(ratio <= 1 ? 100 : 100 - (ratio - 1) * 100);
     subs.push({ key: 'budget', label: LABELS.budget, score: s,
-      detail: `$${(input.plannedCostCents / 100).toFixed(0)} of $${(input.weeklyBudgetCents / 100).toFixed(0)} budget` });
+      // The reader's format, and the sentence from the catalogue: this was
+      // `$${(cents / 100).toFixed(0)} of $…`, which has no locale at all and put
+      // the symbol on the American side for everyone. Whole dollars, as before —
+      // the sub-score line is a glance, not a ledger. USD because neither
+      // family_recipes.estimated_cost_cents nor any food budget carries a currency.
+      detail: t('foodScore.budgetDetail', {
+        planned: formatCents(wholeDollars(input.plannedCostCents), 'USD', locale),
+        budget: formatCents(wholeDollars(input.weeklyBudgetCents), 'USD', locale),
+      }) });
   }
 
   // Family satisfaction — average rating out of 5.

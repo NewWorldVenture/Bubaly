@@ -7,6 +7,11 @@
 // The engine is deterministic and pure; the server feeds it real context (budget,
 // calendar load) and persists the chosen option.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type Criterion = 'cost' | 'time' | 'travel' | 'load' | 'benefit';
 
 /** One option under consideration. All metrics optional; missing = neutral. */
@@ -71,7 +76,20 @@ const LABEL: Record<Criterion, string> = {
  * corrected so 1 is always "good", then combined by weight. Options that breach a
  * hard cap are marked infeasible and pushed below every feasible option.
  */
-export function evaluateDecision(options: OptionInput[], constraints: DecisionConstraints = {}): DecisionResult {
+/**
+ * `locale` and `t` are the READER's, and required. A hard-constraint breach is
+ * a sentence with money in it — "over budget by $120.00" — and it reaches two
+ * screens: components/modules/decisions-module.tsx (useLocale / useTranslations)
+ * and, through lib/voting/consensus.ts, components/modules/voting-module.tsx.
+ * Both are client components with a reader; a default here is how one of them
+ * would quietly stop passing it.
+ */
+export function evaluateDecision(
+  options: OptionInput[],
+  constraints: DecisionConstraints,
+  locale: LocaleCode,
+  t: Translate,
+): DecisionResult {
   if (options.length === 0) return { ranked: [], recommendation: null };
   const weights = { ...DEFAULT_WEIGHTS, ...(constraints.weights ?? {}) };
 
@@ -101,10 +119,17 @@ export function evaluateDecision(options: OptionInput[], constraints: DecisionCo
     // Hard constraints.
     const violations: string[] = [];
     if (typeof constraints.budgetCents === 'number' && typeof o.costCents === 'number' && o.costCents > constraints.budgetCents) {
-      violations.push(`over budget by ${formatUsd(o.costCents - constraints.budgetCents)}`);
+      // The reader's format — this was `$${(cents / 100).toFixed(2)}`, which has no
+      // locale — and the sentence from the catalogue, not English around it. USD:
+      // decision_options.cost_cents and family_decisions.budget_cents carry no
+      // currency column, so the amounts are dollars of record.
+      violations.push(t('decisionEngine.overBudgetBy', { amount: formatCents(o.costCents - constraints.budgetCents, 'USD', locale) }));
     }
     if (typeof constraints.maxTravelMinutes === 'number' && typeof o.travelMinutes === 'number' && o.travelMinutes > constraints.maxTravelMinutes) {
-      violations.push(`${o.travelMinutes - constraints.maxTravelMinutes} min over the travel limit`);
+      // Worded by the catalogue too: it is joined into the SAME "Doesn't fit"
+      // sentence as the budget breach, and half a translated sentence is worse
+      // than none.
+      violations.push(t('decisionEngine.overTravelLimit', { minutes: o.travelMinutes - constraints.maxTravelMinutes }));
     }
 
     return { id: o.id, label: o.label, score, breakdown, violations, feasible: violations.length === 0, rationale: '' };
@@ -114,14 +139,14 @@ export function evaluateDecision(options: OptionInput[], constraints: DecisionCo
   scored.sort((a, b) => (Number(b.feasible) - Number(a.feasible)) || (b.score - a.score));
 
   // Rationale references each option's strongest + weakest polarity-corrected criteria.
-  for (const s of scored) s.rationale = buildRationale(s);
+  for (const s of scored) s.rationale = buildRationale(s, t);
 
   const recommendation = scored.find((s) => s.feasible) ?? null;
   return { ranked: scored, recommendation };
 }
 
-function buildRationale(s: ScoredOption): string {
-  if (!s.feasible) return `Doesn't fit: ${s.violations.join('; ')}.`;
+function buildRationale(s: ScoredOption, t: Translate): string {
+  if (!s.feasible) return t('decisionEngine.doesNotFit', { reasons: s.violations.join('; ') });
   const present = CRITERIA.filter((c) => s.breakdown[c] !== 0.5);
   if (present.length === 0) return 'No metrics provided — needs more detail to compare.';
   const best = [...present].sort((a, b) => s.breakdown[b] - s.breakdown[a])[0];
@@ -132,6 +157,5 @@ function buildRationale(s: ScoredOption): string {
 }
 
 function round(n: number): number { return Math.round(n * 1000) / 1000; }
-function formatUsd(cents: number): string { return `$${(cents / 100).toFixed(2)}`; }
 
 export const DECISION_CRITERIA = CRITERIA;

@@ -46,7 +46,7 @@
 --     CHECK on payload_kind that admits NULL, three NON-unique indexes, and
 --     drops and re-creates the policies; 0252 and 0255 re-create the INSERT
 --     policy; 0273 is the index; 0304, 0327 and 0329 name it only in comments;
---     0344 adds two triggers (below) and touches no policy.
+--     0381 adds two triggers (below) and touches no policy.
 --   * `approval_requests_pending_once` appears only in 0273, and no migration
 --     after 0273 touches `approval_requests.dedupe_key` (the other
 --     `dedupe_key` hits in the corpus are other tables'). The only other
@@ -54,8 +54,8 @@
 --   * The table carries THREE triggers, all BEFORE UPDATE — none fires on the
 --     INSERTs that 1 and 1b make:
 --       approval_requests_updated_at          0093:176-184
---       approval_requests_decision_is_earned  0344:332-335
---       approval_requests_rule_is_immutable   0344:364-367
+--       approval_requests_decision_is_earned  0381:332-335
+--       approval_requests_rule_is_immutable   0381:364-367
 --     The first is attached by dynamic SQL, `EXECUTE format('CREATE TRIGGER
 --     %I_updated_at BEFORE UPDATE ON public.%I ...', t, t)` in a loop over an
 --     array literal, so the table's name never sits next to the word
@@ -67,7 +67,7 @@
 --     1's constraint-name check is what catches it, not this list.
 --     2's UPDATE (status only) passes through all three: set_updated_at
 --     stamps updated_at; approval_decision_is_earned returns NEW at once for a
---     session that bypasses RLS (0344 tests rolsuper / rolbypassrls, and the
+--     session that bypasses RLS (0381 tests rolsuper / rolbypassrls, and the
 --     session is measured below); approval_rule_is_immutable compares only
 --     approval_model and required_approvals, which 2 leaves alone.
 --   * No migration creates a RULE (`grep -rin "create rule\|do instead"` is
@@ -80,7 +80,7 @@
 -- command at the foot of this header) and refuses to run otherwise. For 1 the
 -- role is no longer a premise at all — a policy or a grant refuses an INSERT
 -- with 42501, never with 23505 naming an index — but 2 marks a row approved
--- with no votes, which 0344's approval_requests_decision_is_earned refuses
+-- with no votes, which 0381's approval_requests_decision_is_earned refuses
 -- (42501) for any caller that does not bypass RLS. So it is checked, and the
 -- check mirrors the trigger's own test.
 --
@@ -181,12 +181,12 @@ begin
   select id into fam from public.families order by created_at limit 1;
   if fam is null then raise exception 'approval dedupe check needs a seeded family'; end if;
 
-  -- The session, measured (see the header). The same test 0344's
+  -- The session, measured (see the header). The same test 0381's
   -- approval_decision_is_earned makes before it lets 2's UPDATE through.
   select r.rolsuper or r.rolbypassrls into bypass
     from pg_catalog.pg_roles r where r.rolname = current_user;
   if not coalesce(bypass, false) then
-    raise exception 'approval dedupe check must run as a role that bypasses row-level security (superuser or BYPASSRLS — the header documents postgres), and % does not: 2 marks a vote-less row approved, which 0344''s approval_requests_decision_is_earned refuses for any other caller', current_user;
+    raise exception 'approval dedupe check must run as a role that bypasses row-level security (superuser or BYPASSRLS — the header documents postgres), and % does not: 2 marks a vote-less row approved, which 0381''s approval_requests_decision_is_earned refuses for any other caller', current_user;
   end if;
 
   -- ── NEGATIVE CONTROL: two INSERTs one key apart, and BOTH MUST LAND ──────

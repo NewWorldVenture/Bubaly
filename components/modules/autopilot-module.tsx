@@ -24,10 +24,10 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { successProbability, confidenceTier } from '@/lib/autopilot/engine';
+import { successProbability, confidenceTier, autopilotTitleFor } from '@/lib/autopilot/engine';
 import { WhyThis } from '@/components/ai/why-this';
 import { explainAutopilot } from '@/lib/ai/explanation';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = Tables<'autopilot_suggestions'>;
 
@@ -262,12 +262,18 @@ function Section({ icon: Icon, title, tone, children }: {
 }
 
 function HandledRow({ s }: { s: Suggestion }) {
+  const t = useTranslations();
+  const locale = useLocale();
   const Icon = iconFor(s.kind);
+  // Worded for THIS reader: a subscription title carries money, and the stored
+  // one is in whatever locale the scan that inserted it had (usually the cron's
+  // en-US). See SubscriptionTitleFacts in lib/autopilot/engine.ts.
+  const title = autopilotTitleFor(s, locale.code, t);
   return (
     <div className="flex items-center gap-3 rounded-xl border border-success/20 bg-success/5 px-4 py-3">
       <Icon className="h-4 w-4 flex-shrink-0 text-success" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{s.title}</p>
+        <p className="truncate text-sm font-medium">{title}</p>
         {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}
       </div>
       <Check className="h-4 w-4 flex-shrink-0 text-success" />
@@ -279,7 +285,10 @@ function SuggestionRow({ s, onApprove, onDismiss, busy, outcome, onRefresh }: {
   s: Suggestion; onApprove: () => void; onDismiss: () => void; busy: boolean; outcome?: ResolutionResult; onRefresh: () => void;
 }) {
   const t = useTranslations();
+  const locale = useLocale();
   const Icon = iconFor(s.kind);
+  // The reader's words for a money title, as in HandledRow.
+  const title = autopilotTitleFor(s, locale.code, t);
   const urgent = s.urgency === 3;
   const action = suggestionAction(s);
   return (
@@ -288,7 +297,7 @@ function SuggestionRow({ s, onApprove, onDismiss, busy, outcome, onRefresh }: {
       <div className="flex items-center gap-3">
         <Icon className={cn('h-4 w-4 flex-shrink-0', urgent ? 'text-danger' : 'text-brand-text')} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{s.title}</p>
+          <p className="truncate text-sm font-semibold">{title}</p>
           {s.detail && <p className="truncate text-xs text-muted">{s.detail}</p>}
         </div>
         <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted sm:block">{s.confidence}%</span>
@@ -315,7 +324,7 @@ function SuggestionRow({ s, onApprove, onDismiss, busy, outcome, onRefresh }: {
         <WhyThis
           surface="autopilot" refId={s.id} refKind={s.kind}
           explanation={explainAutopilot({
-            kind: s.kind, title: s.title, detail: s.detail,
+            kind: s.kind, title, detail: s.detail,
             confidence: s.confidence, urgency: s.urgency,
             source_kind: s.source_kind, action_label: s.action_label,
           })}

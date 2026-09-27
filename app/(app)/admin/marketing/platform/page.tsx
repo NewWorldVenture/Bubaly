@@ -142,9 +142,9 @@ export default async function MarketingPlatformPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.templates')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.reusablePageInstructionsAndDefaults')}</p></div><Badge tone="neutral">{templates.length}</Badge></div><div className="space-y-3">{templates.map((template) => <div key={template.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{template.name}</span><Badge tone={template.status === 'active' ? 'success' : 'neutral'}>{template.page_type}</Badge></div><p className="mt-1 text-xs text-muted">{template.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><input name="name" required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} /><select name="page_type" className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder={t('adminMarketingPlatform.description')} className={inputCls} /><input name="cta_label" placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder={t('adminMarketingPlatform.sections')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> {t('adminMarketingPlatform.defaultForThisType')}</label><textarea name="instructions" rows={3} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} /><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingPlatform.saveTemplate')}</SubmitButton></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.templates')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.reusablePageInstructionsAndDefaults')}</p></div><Badge tone="neutral">{templates.length}</Badge></div><div className="space-y-3">{templates.map((template) => <TemplateEditor key={template.id} template={template} />)}</div><form action={saveMarketingTemplate} className="mt-4 grid gap-2 border-t border-border pt-4 sm:grid-cols-2"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:col-span-2">{t('platform.addATemplate')}</p><input name="name" required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} /><select name="page_type" className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select><input name="description" placeholder={t('adminMarketingPlatform.description')} className={inputCls} /><input name="cta_label" placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} /><input name="section_count" type="number" min="1" max="12" defaultValue="3" placeholder={t('adminMarketingPlatform.sections')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" /> {t('adminMarketingPlatform.defaultForThisType')}</label><textarea name="instructions" rows={3} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} /><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingPlatform.saveTemplate')}</SubmitButton></form></Card>
 
-        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.brandRules')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.factsAndConstraintsEveryGeneratedPage')}</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <div key={rule.id} className="rounded-lg border border-border p-3"><div className="flex items-center justify-between"><span className="font-medium">{rule.name}</span><Badge tone={rule.active ? 'success' : 'neutral'}>{rule.rule_key}</Badge></div><p className="mt-1 text-xs text-muted">{rule.instructions || 'No instructions yet.'}</p></div>)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} /><input name="examples" placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} /><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('adminMarketingPlatform.saveBrandRule')}</SubmitButton></form></Card>
+        <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.brandRules')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.factsAndConstraintsEveryGeneratedPage')}</p></div><Badge tone="neutral">{rules.length}</Badge></div><div className="space-y-3">{rules.map((rule) => <BrandRuleEditor key={rule.id} rule={rule} />)}</div><form action={saveMarketingBrandRule} className="mt-4 space-y-2 border-t border-border pt-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{t('platform.addABrandRule')}</p><div className="grid gap-2 sm:grid-cols-2"><input name="rule_key" required placeholder="brand_voice" className={inputCls} /><input name="name" required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} /></div><textarea name="instructions" rows={3} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} /><input name="examples" placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked /> {t('platform.activeFedToEveryGeneration')}</label><SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('adminMarketingPlatform.saveBrandRule')}</SubmitButton></form></Card>
       </div>
 
       <Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">{t('adminMarketingPlatform.generationQueue')}</h3><p className="text-xs text-muted">{t('adminMarketingPlatform.claimedByTheFiveMinuteWorker')}</p></div><Badge tone={failed || staleJobs ? 'danger' : 'success'}>{failed ? `${failed} attention` : staleJobs ? `${staleJobs} stale` : 'Healthy'}</Badge></div>
@@ -173,3 +173,78 @@ async function PageEditor({ page }: { page: Awaited<ReturnType<typeof createServ
 type DatabasePage = {
   id: string; page_type: string; slug: string; path: string; title: string; summary: string | null; body: string | null; status: string; version: number;
 };
+
+type DatabaseTemplate = {
+  id: string; name: string; page_type: string; description: string | null; instructions: string; defaults: unknown; status: string; is_default: boolean;
+};
+
+type DatabaseRule = {
+  id: string; rule_key: string; name: string; instructions: string; value: unknown; active: boolean;
+};
+
+/** Read one scalar out of a jsonb column without pretending to know its shape. */
+function jsonText(value: unknown, key: string): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const found = (value as Record<string, unknown>)[key];
+  if (typeof found === 'string') return found;
+  if (typeof found === 'number') return String(found);
+  return '';
+}
+
+/**
+ * Both of these editors exist because the cards above them used to be read-only.
+ * `saveMarketingTemplate` and `saveMarketingBrandRule` have always had an update
+ * branch keyed on a posted `id`, and no form on this page ever posted one — so the
+ * branch was dead and the only affordance for changing an existing row was the
+ * create form underneath. For a brand rule that is a hard dead end: `rule_key` is
+ * UNIQUE (0237), so re-saving the same key answered "That already exists. Try a
+ * different value." and the correction was discarded — with no delete and no
+ * deactivate anywhere in the action set, a rule typed wrong stayed wrong and
+ * stayed in the prompt of every regenerated public page. For a template it was
+ * quieter and worse: the save succeeded, a duplicate row appeared, and the
+ * operator had no way to tell which row generation actually reads.
+ */
+async function TemplateEditor({ template }: { template: DatabaseTemplate }) {
+  const t = await getTranslations();
+  return <div className="rounded-lg border border-border p-3">
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <span className="font-medium">{template.name}</span>
+      <span className="flex items-center gap-2">
+        {template.is_default && template.status === 'active' ? <Badge tone="success">{t('platform.usedForGeneration')}</Badge> : null}
+        <Badge tone={template.status === 'active' ? 'success' : 'neutral'}>{template.page_type}</Badge>
+      </span>
+    </div>
+    <form action={saveMarketingTemplate} className="grid gap-2 sm:grid-cols-2">
+      <input type="hidden" name="id" value={template.id} />
+      <input name="name" defaultValue={template.name} required placeholder={t('adminMarketingPlatform.templateName')} className={inputCls} />
+      <select name="page_type" defaultValue={template.page_type} className={inputCls}>{PAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select>
+      <input name="description" defaultValue={template.description ?? ''} placeholder={t('adminMarketingPlatform.description')} className={inputCls} />
+      <input name="cta_label" defaultValue={jsonText(template.defaults, 'cta_label')} placeholder={t('adminMarketingPlatform.defaultCta')} className={inputCls} />
+      <input name="section_count" type="number" min="1" max="12" defaultValue={jsonText(template.defaults, 'section_count') || '3'} placeholder={t('adminMarketingPlatform.sections')} className={inputCls} />
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_default" defaultChecked={template.is_default} /> {t('adminMarketingPlatform.defaultForThisType')}</label>
+      <textarea name="instructions" rows={3} defaultValue={template.instructions} placeholder={t('adminMarketingPlatform.generationInstructions')} className={`${areaCls} sm:col-span-2`} />
+      <SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('platform.saveChanges')}</SubmitButton>
+    </form>
+  </div>;
+}
+
+async function BrandRuleEditor({ rule }: { rule: DatabaseRule }) {
+  const t = await getTranslations();
+  return <div className="rounded-lg border border-border p-3">
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <span className="font-medium">{rule.name}</span>
+      <Badge tone={rule.active ? 'success' : 'neutral'}>{rule.rule_key}</Badge>
+    </div>
+    <form action={saveMarketingBrandRule} className="space-y-2">
+      <input type="hidden" name="id" value={rule.id} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input name="rule_key" defaultValue={rule.rule_key} required placeholder="brand_voice" className={inputCls} />
+        <input name="name" defaultValue={rule.name} required placeholder={t('adminMarketingPlatform.brandVoice')} className={inputCls} />
+      </div>
+      <textarea name="instructions" rows={3} defaultValue={rule.instructions} required placeholder={t('adminMarketingPlatform.writeTheRuleInPlainLanguage')} className={areaCls} />
+      <input name="examples" defaultValue={jsonText(rule.value, 'examples')} placeholder={t('adminMarketingPlatform.approvedExamplesOrFacts')} className={inputCls} />
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="active" defaultChecked={rule.active} /> {t('platform.activeFedToEveryGeneration')}</label>
+      <SubmitButton className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated">{t('platform.saveChanges')}</SubmitButton>
+    </form>
+  </div>;
+}

@@ -60,7 +60,13 @@ vi.mock('@/lib/supabase/auth', () => ({
 
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key),
+    // The on-demand scan words the suggestions it stores for the member who
+    // pressed Rescan, so the route reads the request's locale too.
+    getLocaleContext: async () => ({ locale: localeOrDefault('en-US'), source: 'default', messages: SOURCE_MESSAGES }),
+  };
 });
 
 // The scan itself is covered by tests/autopilot-persistence-boundaries.test.ts.

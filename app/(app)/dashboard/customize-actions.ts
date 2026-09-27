@@ -8,12 +8,33 @@ import { isManager } from '@/lib/constants/roles';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel } from '@/lib/dashboard/registry';
 import { validateLayout } from '@/lib/dashboard/layout';
-import { canCustomizeDashboard, normalizeSettings, type DashSettings } from '@/lib/dashboard/permissions';
+import { canCustomizeDashboard, readDashSettings, type DashSettings } from '@/lib/dashboard/permissions';
 
-async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings> {
-  const { data } = await supabase.from('family_dashboard_settings')
+/**
+ * The family's dashboard settings, or NULL when they could not be read.
+ *
+ * The null matters. A family with no settings row is legitimately permissive —
+ * `allow_child_customization` DEFAULTs to true (0094) — but PostgREST resolves a
+ * failed read with `{ data: null, error }` too, so dropping the error makes a
+ * statement timeout look exactly like "this family never touched the setting"
+ * and `normalizeSettings(null)` then answers `allowChildCustomization: true`.
+ * That is the parent's "off" switch failing open. Callers must treat null as
+ * unknown and refuse, not as allowed.
+ *
+ * The row→rules mapping is `readDashSettings`, the same function the /dashboard
+ * render uses, so the two readers cannot drift apart. This caller discards the
+ * assumed-closed shape it returns on failure: an action can refuse outright,
+ * which is more honest than acting on an assumption.
+ */
+async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings | null> {
+  const { data, error } = await supabase.from('family_dashboard_settings')
     .select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
-  return normalizeSettings(data ? { allowChildCustomization: data.allow_child_customization, lockToFamilyDefault: data.lock_to_family_default } : null);
+  const read = readDashSettings(data, error);
+  if (read.unknown) {
+    console.error('[customize] family dashboard settings read failed', error);
+    return null;
+  }
+  return read.settings;
 }
 
 type Result = { ok: boolean; error?: string };
@@ -38,12 +59,17 @@ async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, fami
  * validated (tier entitlement, dedupe, max count, no fixed/locked injection).
  */
 export async function saveDashboardLayoutAction(input: { featureKeys: string[]; deviceContext?: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const supabase = await createServer();
 
   const [tier, settings] = await Promise.all([userTier(supabase, familyId), familyDashSettings(supabase, familyId)]);
+  // Settings unreadable → refuse, and say it is a transient failure. Guessing
+  // here would either grant a permission a parent turned off, or claim a parent
+  // turned something off that we never actually read.
+  if (!settings) return { ok: false, error: t('customizeActions.settingsUnreadable') };
   if (!canCustomizeDashboard(isManager(ctx.active.role), settings)) {
     return { ok: false, error: settings.lockToFamilyDefault ? 'Your family uses a shared dashboard set by a parent.' : 'A parent has turned off dashboard customization for children.' };
   }

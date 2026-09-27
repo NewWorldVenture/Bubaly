@@ -7,7 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { marketplaceInsights, type InsightListing } from '@/lib/marketplace/insights';
 import { KIND_LABELS, CATEGORY_LABELS, formatCents, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 
@@ -40,6 +40,8 @@ function Tile({ icon: Icon, label, value }: { icon: typeof Activity; label: stri
 
 export default async function MarketplaceInsightsPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -138,8 +140,8 @@ export default async function MarketplaceInsightsPage() {
                   <tr key={p.category} className="border-b border-border/50 last:border-0">
                     <td className="py-2 font-medium">{catLabel(p.category)}</td>
                     <td className="py-2 tabular-nums text-muted">{p.count}</td>
-                    <td className="py-2 tabular-nums">{formatCents(p.medianCents)}</td>
-                    <td className="py-2 tabular-nums text-muted">{formatCents(p.avgCents)}</td>
+                    <td className="py-2 tabular-nums">{formatCents(p.medianCents, locale.code)}</td>
+                    <td className="py-2 tabular-nums text-muted">{formatCents(p.avgCents, locale.code)}</td>
                   </tr>
                 ))}
               </tbody>

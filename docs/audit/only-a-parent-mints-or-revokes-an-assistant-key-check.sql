@@ -116,7 +116,7 @@
 --     any verdict is reached, and credited to nothing;
 --   * a row the adult simply cannot see, which gives UPDATE 0 / DELETE 0 just
 --     as readily as a USING clause does (point 2 closes the other half);
---   * an ownership guard — a `created_by = auth.uid()` clause, as 0357 writes
+--   * an ownership guard — a `created_by = auth.uid()` clause, as 0385 writes
 --     into family_facts' policies — or a family-creator check, added to this
 --     table later:
 --     every row either side touches belongs to the PARENT, in a household the

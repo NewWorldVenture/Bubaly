@@ -11,11 +11,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { fmtTime } from '@/lib/utils/format';
 import { Rocket, Gauge, ShieldCheck } from 'lucide-react';
-import { successProbability } from '@/lib/autopilot/engine';
+import { successProbability, autopilotTitleFor } from '@/lib/autopilot/engine';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel, FIXED_FEATURES } from '@/lib/dashboard/registry';
 import { resolvePrimary, availableFeatures, lockedFeatures } from '@/lib/dashboard/layout';
-import { normalizeSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
+import { readDashSettings, canCustomizeDashboard, effectiveSavedKeys } from '@/lib/dashboard/permissions';
 import { DashboardQuickActions } from '@/components/dashboard/quick-actions';
 import { AskBubaly } from '@/components/concierge/ask-bubaly';
 import { NeedsAttention } from '@/components/concierge/needs-attention';
@@ -150,7 +150,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .or(briefingCalendarWindow(todayKey, tz, 1, 7))
       .order('starts_at').limit(5),
     supabase.from('autopilot_suggestions')
-      .select('id, title, detail, kind, urgency, confidence')
+      .select('id, title, detail, kind, urgency, confidence, payload')
       .eq('family_id', familyId).eq('status', 'open')
       .order('urgency', { ascending: false }).order('confidence', { ascending: false }).limit(20),
     supabase.from('autopilot_suggestions').select('id', { count: 'exact', head: true })
@@ -279,7 +279,11 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .map((d) => ({ id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status })),
   )[0];
 
-  const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];
+  // A subscription suggestion's title carries money and was worded by whichever
+  // scan inserted it — usually the cron, in en-US — so it is worded again here for
+  // THIS reader from the facts in its payload (lib/autopilot/engine.ts).
+  const openSuggestions = ((autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number; payload: unknown }[])
+    .map((s) => ({ ...s, title: autopilotTitleFor(s, locale.code, t) }));
   const concierge = (activeConcierge ?? []) as { id: string; title: string; kind: string; status: string }[];
   const autopilotProbability = successProbability(openSuggestions.map((s) => ({ urgency: s.urgency as 1 | 2 | 3, confidence: s.confidence } as never)));
   const autopilotHandled = autopilotHandledCount ?? 0;
@@ -287,9 +291,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const showAutopilot = openSuggestions.length > 0 || autopilotHandled > 0;
 
   // ── Customizable, tier-aware quick actions ──
-  const { data: dashSettingsRow } = await supabase
+  const { data: dashSettingsRow, error: dashSettingsError } = await supabase
     .from('family_dashboard_settings').select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
-  const dashSettings = normalizeSettings(dashSettingsRow ? { allowChildCustomization: dashSettingsRow.allow_child_customization, lockToFamilyDefault: dashSettingsRow.lock_to_family_default } : null);
+  if (dashSettingsError) console.error('[dashboard-home] dashboard settings read failed', dashSettingsError);
+  // A read that FAILED is not a family that never set anything — both arrive as
+  // `data: null`. Normalizing that to the permissive default would render the
+  // Customize control to a child whose parent turned it off. readDashSettings
+  // closes that permission and reports the settings as unknown — see
+  // lib/dashboard/permissions.ts for why it leaves the layout lock open.
+  const { settings: dashSettings, unknown: dashSettingsUnknown } = readDashSettings(dashSettingsRow, dashSettingsError);
   // Super-admins are fully unlocked everywhere — no plan gating on Quick Access
   // (every tile available, nothing locked, no "Unlock more"), matching the nav
   // which already treats super-admins as having access to everything.
@@ -331,6 +341,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     lowGrocery: (groceryCount ?? 0) > 0,
     openTodos: openTodos ?? 0,
     now,
+    // A money approval's amount and the words around it, in this reader's locale.
+    reader: { locale: locale.code, t },
     aiApprovals: aiApprovals.map((a) => ({ id: a.id, title: a.title, runId: a.runId, priority: a.priority ?? null, requestedAt: a.requestedAt, expiresAt: a.expiresAt })),
     awaitingRuns: activeRuns as AwaitingRunRow[],
     recommendations,
@@ -688,8 +700,17 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
         available={availableButtons}
         locked={lockedButtons}
         canCustomize={canCustomize}
-        canManage={manager}
-        settings={dashSettings}
+        // Withheld when the settings read failed. FamilySettingsModal PREFILLS a
+        // parent's two toggles from `settings`, so the assumed shape would let
+        // one Save persist a policy nobody chose; without it there is no Family
+        // button and no "Set by a parent" caption either (quick-actions.tsx).
+        // canManage goes too, for "Set family default": it publishes the
+        // editor's tiles to every member, and those tiles were picked by
+        // effectiveSavedKeys under a lock flag we did not read — in a locked
+        // family that is this parent's own personal layout, not the family
+        // default they would think they were editing.
+        canManage={manager && !dashSettingsUnknown}
+        settings={dashSettingsUnknown ? undefined : dashSettings}
       />
 
       {/* T3: Outcome-first home — a real "here's your week + next steps + dinners"

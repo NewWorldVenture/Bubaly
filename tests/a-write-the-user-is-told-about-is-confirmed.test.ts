@@ -410,8 +410,9 @@ describe('an address the family is told they have is confirmed (C1-S9-47)', () =
       expect(contactCenter, binding).toContain(`wroteNoRows(${binding})`);
     }
     // The concierge patch includes call forwarding, which is why it is not
-    // treated as a cosmetic settings write.
-    expect(contactCenter).toContain('patch.forward_to_phone = normalized;');
+    // treated as a cosmetic settings write. (Spelt `fallback.value` since main's
+    // #581 normaliser replaced `normalized` on this path; Audit C1-S9-92.)
+    expect(contactCenter).toContain('patch.forward_to_phone = fallback.value;');
   });
 });
 
@@ -459,11 +460,17 @@ describe('the home records repeat auto\'s split, not its omission (C1-S9-47)', (
  * success. The reasoning was right; it just stopped one verb short.
  */
 const concierge = readFileSync('app/(app)/dashboard/concierge/actions.ts', 'utf8');
+const approvalsService = readFileSync('lib/services/approvals/index.ts', 'utf8');
 
 describe('an autopilot run is not left queued over work already done (C1-S9-48)', () => {
   it('the executed stamp is confirmed, not just error-checked', () => {
     expect(concierge).toContain('wroteNoRows(stamped)');
-    expect(at(concierge, 'wroteNoRows(stamped)')).toBeLessThan(at(concierge, "return { ok: true, mode: 'auto'"));
+    // The success return this stamp guards — the queued run with no approval
+    // behind it. main's #581 added an earlier `mode: 'auto'` return for a run
+    // decided through decide(), which closes its own run; the stamp check must
+    // still precede the one that reports THIS stamp's work done.
+    expect(at(concierge, 'wroteNoRows(stamped)')).toBeLessThan(at(concierge, "return { ok: true, mode: 'auto', applied, summary };"));
+    expect(at(concierge, "const { data: stamped, error: runErr }")).toBeLessThan(at(concierge, 'wroteNoRows(stamped)'));
   });
 
   it('the dismissal is confirmed', () => {
@@ -478,14 +485,28 @@ describe('an autopilot run is not left queued over work already done (C1-S9-48)'
     expect(concierge).toContain('materializePlan is idempotent');
   });
 
-  it('the approval stamps stay best-effort, and are not hardened', () => {
-    // Both `approval_requests` stamps are explicitly logged-not-raised: the plan
-    // is applied and the run is recorded by then, so failing the action would
-    // report failure for work that succeeded. Asserting the ABSENCE of a bail
-    // stops a later consistency sweep from inverting that.
-    for (const marker of ['approval stamp after execution failed', 'approval decline stamp failed']) {
-      const block = bodyOf(concierge, marker, ');');
-      expect(block, marker).not.toContain('return { ok: false');
+  it('the approval is decided by decide(), never stamped here; the run close stays best-effort', () => {
+    // This pinned two `approval_requests` stamps as logged-not-raised. main's
+    // #581 removed both: the executed-path stamp wrote `status = 'approved'`
+    // with no votes — the threshold bypass 0381 now refuses in the database —
+    // and an open approval is now approved or declined through `decide()`,
+    // which records the caller's own vote and closes this run itself
+    // (tests/one-adult-cannot-approve-what-the-family-said-needs-two drives it).
+    // So the property is asserted where it now lives: this file writes no
+    // approval row, both verdicts go through decide(), and the run close that
+    // moved into the service is still logged, not raised — the plan is applied
+    // by then, and failing would report failure for work that succeeded.
+    expect(stripComments(concierge)).not.toContain("from('approval_requests').update(");
+    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'approved')");
+    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'rejected')");
+    for (const marker of ['could not close the concierge automation run', 'could not dismiss the concierge automation run']) {
+      // One-line `if (…) console.error(…)` statements: the guard is the line
+      // itself and the two after it, none of which may turn the log into a bail.
+      const line = approvalsService.split('\n').find((l) => l.includes(marker)) ?? '';
+      expect(line.trim(), marker).toMatch(/^if \((runError|error)\) console\.error\(/);
+      expect(line, marker).not.toMatch(/\breturn\b|\bthrow\b/);
+      const after = approvalsService.slice(at(approvalsService, marker)).split('\n').slice(1, 3).join('\n');
+      expect(after, marker).not.toMatch(/return fail\(|\bthrow\b/);
     }
   });
 
@@ -1284,11 +1305,11 @@ describe('best-effort side writes are confirmed for the log, not for a bail (C1-
     ['home asset last-serviced', homeActions, 'assetTouched', "'[home] home_assets last_serviced_on update failed'"],
     ['paperwork draft persist', paperworkActions, 'persisted', "'[paperwork] draft_reply persist failed'"],
     ['dispute rollback', missionsFile, 'cleaned', "'[chore state] dispute cleanup failed — an orphan dispute may remain'"],
-    // C1-S9-48 made these two logged-not-raised; C1-S9-60 makes the log
-    // reachable by zero rows. `ifBlock` also closes a gap in the older guard,
-    // whose slice ends at the log call's `);` and so cannot see a bail after it.
-    ['approval stamp after execution', concierge, 'approvedStamp', "'[concierge] approval stamp after execution failed'"],
-    ['approval decline stamp', concierge, 'declinedStamp', "'[concierge] approval decline stamp failed'"],
+    // The two concierge `approval_requests` stamps C1-S9-48/60 held here were
+    // removed by main's #581 (a stamp with no votes was the threshold bypass
+    // 0381 closes); the approval is now decided through decide(), asserted in
+    // C1-S9-48's block above, which also holds the moved run close to
+    // logged-not-raised.
   ];
   for (const [name, src, binding, log] of cases) {
     it(`${name}: asks, and logs zero rows`, () => {

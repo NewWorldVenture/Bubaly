@@ -65,6 +65,16 @@ export type ApprovalCardData = {
   approvalsRecorded?: number;
   /** True when only a parent's yes counts (the two-parent model). */
   parentsOnly?: boolean;
+  /**
+   * The LABELS of the fields an earlier approver already changed, when this row
+   * carries a recorded edit (`edited_payload`).
+   *
+   * A multi-approver row is decided more than once, and the deciding vote runs
+   * the stored edit — so a second approver who was shown Bubaly's original text
+   * was approving something other than what would happen. Absent when nothing
+   * was edited, so a card with no history says nothing.
+   */
+  editedFields?: string[];
 };
 
 /**
@@ -188,6 +198,42 @@ export function editableArgsOf(classified: ClassifiedPayload | null): Record<str
   }
 }
 
+/**
+ * What this approval would ACTUALLY do, given any edit an earlier approver
+ * recorded — and which fields they changed.
+ *
+ * `edited_payload` is a column any manager may write, so the stored object is
+ * never trusted as-is: it is re-merged over the original through the same
+ * allow-list the Edit modal offered, and only scalars are taken. That is the
+ * first half of the service's `storedEdit` (lib/services/approvals/index.ts),
+ * kept here so the card and `decide()` agree about the merge; the service
+ * adds the tool's own `safeParse` on top, which needs the registry and so
+ * cannot live in a module the client imports. (A `plan_steps` row is run by
+ * lib/ai/runs/executor.ts, which reads `edited_payload` raw — see storedEdit.)
+ *
+ * Returns the original untouched when nothing usable was stored, so a row with
+ * no edit behind it renders exactly as it always did.
+ */
+export function effectiveArgsOf(
+  classified: ClassifiedPayload | null,
+  editedPayload: unknown,
+): { args: Record<string, unknown> | null; changed: string[] } {
+  const original = editableArgsOf(classified);
+  const stored = asRecord(editedPayload);
+  if (!original || !stored) return { args: original, changed: [] };
+  const allowed = new Set(editableFieldsFor(original).map((f) => f.key));
+  const merged: Record<string, unknown> = { ...original };
+  const changed: string[] = [];
+  for (const [key, value] of Object.entries(stored)) {
+    if (!allowed.has(key)) continue;
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue;
+    if (merged[key] === value) continue;
+    merged[key] = value;
+    changed.push(key);
+  }
+  return changed.length ? { args: merged, changed } : { args: original, changed: [] };
+}
+
 export function consequencesOf(row: Pick<TrustApproval, 'consequences'>): string[] {
   return stringList(row.consequences).map((c) => c.trim()).filter(Boolean).slice(0, 8);
 }
@@ -230,7 +276,13 @@ export function toApprovalCardData(
   },
 ): ApprovalCardData {
   const classified = classifyPayload(row);
-  const editableFields = editableFieldsFor(editableArgsOf(classified));
+  // The card must show what WILL run, not what Bubaly first proposed. On a
+  // two-parent row the first approver's correction lives on `edited_payload`
+  // and is what the deciding vote executes; building the card from `payload`
+  // alone showed the second approver text nobody was going to act on, and
+  // prefilled the Edit modal with it so saving reverted the correction.
+  const effective = effectiveArgsOf(classified, row.edited_payload);
+  const editableFields = editableFieldsFor(effective.args);
   // What the request is waiting for is part of the request. Before this, a
   // parent tapping Approve on a two-parent row learned it needed a second yes
   // only from the toast that came back.
@@ -241,6 +293,7 @@ export function toApprovalCardData(
     requiredApprovals: threshold.required,
     approvalsRecorded: recorded,
     parentsOnly: threshold.parentsOnly,
+    editedFields: effective.changed.length ? effective.changed.map(humanLabel) : undefined,
     id: row.id,
     title: row.title,
     summary: row.summary,

@@ -172,7 +172,7 @@ export default async function MarketplaceHomePage() {
   const matchCount = matches.length;
 
   const listingChip = (l: ListingRow) =>
-    priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) || KIND_LABELS[l.kind as ListingKind];
+    priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t) || KIND_LABELS[l.kind as ListingKind];
 
   const ratingChip = (id: string) => {
     const { avg, count } = ratingSummary(ratingsByListing.get(id) ?? []);

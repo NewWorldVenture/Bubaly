@@ -3,14 +3,18 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { describeReadError, settleAll } from '@/lib/supabase/settle';
+import { describeReadError, settle, settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
-import type { Database } from '@/lib/database.types';
-import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { addItems, type GroceryItemInput } from '@/lib/services/groceries';
+import { parseIngredients } from '@/lib/services/meals';
+import { scopeFromUserContext } from '@/lib/services/scope';
 
-type Json = Database['public']['Tables']['grocery_items']['Insert'];
-type Result = { ok: true; id?: string } | { ok: false; error: string };
+type Refusal = { ok: false; error: string };
+type Result = { ok: true; id?: string } | Refusal;
+/** What the Grocery button did: `skipped` is what was already on the list, so the toast can say so. */
+export type WinnerGroceryResult = { ok: true; added: number; skipped: string[] } | Refusal;
 
 /** Create a meal vote with options (recipes from the vault and/or free text). */
 export async function createMealVote(input: {
@@ -104,48 +108,104 @@ export async function reopenMealVote(voteId: string): Promise<Result> {
   return { ok: true };
 }
 
-/** Add the winning recipe's ingredients to a grocery list (create one if needed). */
-export async function addWinnerToGrocery(voteId: string): Promise<Result> {
+/** Add the winning recipe's ingredients to the family's grocery list (created if they have none). */
+export async function addWinnerToGrocery(voteId: string): Promise<WinnerGroceryResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const { data: vote, error: voteReadError } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
-  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
-  if (voteReadError) return { ok: false, error: describeActionError(voteReadError, t('actions.couldNotCheckThatRefresh')) };
+  // Each guard below was written for a benign absence — no winner stamped yet, a
+  // free-text option that is not a saved recipe, a recipe with an empty
+  // ingredient list (and, inside the grocery service, a family with no grocery
+  // list). Every one of those absences arrives as `data: null`, which is also
+  // exactly what a REFUSED read arrives as. Destructuring `data` alone therefore
+  // spells a statement timeout, an exhausted pool or an expired JWT as a
+  // confident claim about the family's own food: "No winner yet — close the
+  // vote first." about a vote they just closed (the button that says it only
+  // renders on a closed vote, and obeying it means reopening, which nulls
+  // `winner_option_id` and erases the verdict), or "That recipe has no
+  // ingredients." about a recipe with eight — `?? []` on the line below is what
+  // launders the failure into an empty list.
+  //
+  // So bind the error and refuse first, the way `closeMealVote` above does and
+  // the way components/modules/recipes-module.tsx and `ensureDefaultList`
+  // already do on the `grocery_lists` lookup. `settle` is here because a
+  // transport failure REJECTS rather than resolving with { error } (see
+  // lib/supabase/settle.ts): unwrapped it threw out of the action, so the
+  // client's transition had no result to toast.
+  const readFailed = (label: string, error: unknown, message: string): Refusal => {
+    console.error(`[recipes/vote] ${label} read failed`, { reason: describeReadError(error) });
+    return { ok: false, error: message };
+  };
+
+  const { data: vote, error: voteError } = await settle(supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle());
+  if (voteError) return readFailed('meal_votes', voteError, t('actions.couldNotCheckThisVote'));
   if (!vote?.winner_option_id) return { ok: false, error: t('actions.noWinnerYetCloseThe') };
-  const { data: option, error: optionReadError } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
-  if (optionReadError) return { ok: false, error: describeActionError(optionReadError, t('actions.couldNotCheckThatRefresh')) };
+  // Family-scoped like the two reads either side of it and like `closeMealVote`'s
+  // own read of this table. The id comes from a family-scoped vote row, so this
+  // is belt-and-braces rather than a hole being closed, but a read that answers
+  // for one family should not be the one read in this action that would not.
+  const { data: option, error: optionError } = await settle(supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).eq('family_id', familyId).maybeSingle());
+  if (optionError) return readFailed('meal_vote_options', optionError, t('actions.couldNotCheckThisVote'));
   if (!option?.recipe_id) return { ok: false, error: t('actions.theWinningOptionIsNot') };
-  const { data: recipe, error: recipeReadError } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
-  if (recipeReadError) return { ok: false, error: describeActionError(recipeReadError, t('actions.couldNotCheckThatRefresh')) };
-  const ingredients = (recipe?.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [];
+  const { data: recipe, error: recipeError } = await settle(supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle());
+  if (recipeError) return readFailed('family_recipes', recipeError, t('actions.couldNotCheckThisVote'));
+  // Read through the one parser of the recipe-ingredients JSON rather than a
+  // cast. The column is untyped jsonb with more than one writer, and the service
+  // below refuses the WHOLE add when any single item has a non-string name, so a
+  // bare-string entry ("2 eggs") or a nameless one would have cost the family
+  // every other ingredient. `parseIngredients` keeps a string entry as its name,
+  // reads `quantity` or `qty` (string or number), and drops an entry with no
+  // name, which could never have been a grocery line anyway.
+  const ingredients = parseIngredients(recipe?.ingredients);
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
-  // Get or create a default grocery list.
-  // Both archive columns, as lib/services/groceries explains: only `archived_at`
-  // is ever written, so an `is_archived`-only reader hands the shopping list a
-  // list the family already put away.
+  // Into the list through the grocery service, the way the recipe vault's own
+  // "add this recipe's ingredients" already goes (recipes-module.tsx ->
+  // addGroceryItemsAction -> `addItems`). This action used to find-or-create
+  // the list and INSERT the rows itself, which skipped every rule `addItems`
+  // exists to enforce: no duplicate check, so tapping Grocery twice on the same
+  // won vote, or adding taco night when the tortillas were already there, put a
+  // second copy of every line on the list and still toasted "Added"; no aisle,
+  // so the whole dinner sat in an uncategorised heap at the bottom; no
+  // read-back and no household trail entry, so the add never appeared in the
+  // family's activity. Resolving the list is `ensureDefaultList`'s job too, and
+  // it already refuses on a failed lookup instead of creating a second
+  // "Groceries" over the one the family shops from.
   //
-  // A refused read left `list` null, and "get or create" then CREATED: a second
-  // "Groceries" list beside the one the family shops from. Audit C1-S9-75.
-  const { data: list, error: listReadError } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
-    .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
-  if (listReadError) return { ok: false, error: describeActionError(listReadError, t('actions.couldNotCheckThatRefresh')) };
-  let listId = list?.id;
-  if (!listId) {
-    const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();
-    if (error || !created) return { ok: false, error: error?.message ?? 'Could not create a grocery list' };
-    listId = created.id;
-  }
-
-  const items: Json[] = ingredients.map((ing) => ({
-    family_id: familyId, list_id: listId!, created_by: ctx.user.id,
-    name: ing.name, quantity: [ing.quantity, ing.unit].filter(Boolean).join(' ').trim() || null,
+  // Not screened for allergies, and not by omission here: `addItems` screens
+  // nothing, the fail-closed dietary check lives only in `addFromMealPlan`, and
+  // the vault's per-recipe button is exactly as unscreened as this one. Where
+  // dish-derived adds get screened is one decision for both buttons, not a
+  // check bolted onto one of them.
+  const scope = scopeFromUserContext(ctx, supabase);
+  const items: GroceryItemInput[] = ingredients.map((ing) => ({
+    name: ing.name,
+    quantity: [ing.quantity, ing.unit].filter(Boolean).join(' ').trim() || null,
   }));
-  const { error: insErr } = await supabase.from('grocery_items').insert(items);
-  if (insErr) return { ok: false, error: insErr.message };
+  let added: Awaited<ReturnType<typeof addItems>>;
+  try {
+    added = await addItems(scope, { items });
+  } catch (err) {
+    // The service's reads are not `settle`-wrapped, so a request that never
+    // completed REJECTS out of it. Report it as the failure it is rather than
+    // letting it escape the action with no result for the client to toast.
+    // Not "could not add": the rejection can come from the insert or the
+    // read-back AFTER the rows landed, and nothing here can tell which. Say
+    // only what is known, and point at the list; a retry is safe because the
+    // service skips what is already on it.
+    console.error('[recipes/vote] grocery add failed', { reason: describeReadError(err) });
+    return { ok: false, error: t('actions.couldNotConfirmWhetherTheWinning') };
+  }
+  if (!added.ok) {
+    // The service's own sentence, as addGroceryItemsAction passes it: it is the
+    // one that knows WHICH step failed, and one of them ("Could not confirm the
+    // added items. Refresh the list before trying again.") is reached only after
+    // the insert succeeded, where a generic "Could not add those items." is false.
+    console.error('[recipes/vote] grocery add refused', { code: added.code, reason: added.error });
+    return { ok: false, error: added.error };
+  }
   revalidatePath('/dashboard/grocery');
-  return { ok: true };
+  return { ok: true, added: added.data.added.length, skipped: added.data.skipped };
 }

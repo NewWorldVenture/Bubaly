@@ -49,8 +49,10 @@ import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type DB = SupabaseClient<Database>;
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type AutopilotScanResult = {
   scanned: number;
@@ -145,6 +147,14 @@ export async function runAutopilotScan(
   familyId: string,
   userId: string | null,
   tz: string,
+  // Whose words the STORED suggestions (and the notification sent for the
+  // urgent ones) are in — the subscription suggestions carry money. Required for
+  // the same reason `tz` is: both callers know the answer.
+  // app/api/autopilot/scan/route.ts passes the member who pressed Rescan
+  // (getLocaleContext); app/api/cron/autopilot-scan/route.ts has no reader and
+  // passes en-US explicitly. The screens re-word from payload.titleFacts.
+  locale: LocaleCode,
+  t: Translate,
   now: Date = new Date(),
 ): Promise<AutopilotScanResult> {
   // Built once, lazily: the scope read costs a query, and most scans produce no
@@ -294,7 +304,7 @@ export async function runAutopilotScan(
     }
   }
 
-  const drafts = buildSuggestions(snapshot, traitsByMember);
+  const drafts = buildSuggestions(snapshot, locale, t, traitsByMember);
   const draftKeys = new Set(drafts.map((d) => d.dedupeKey));
   const existingByKey = new Map((existing ?? []).map((e) => [e.dedupe_key, e]));
 
