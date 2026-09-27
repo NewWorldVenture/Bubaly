@@ -181,12 +181,15 @@ export function SportsModule() {
         {/* Stats grid */}
         <div className="grid-stats gap-3">
           {[
-            { icon: Trophy, label: 'Active Sports', value: activeSports.length, sub: 'This season', bg: 'bg-violet-600/20 text-violet-300' },
-            { icon: Calendar, label: 'Upcoming Events', value: upcoming.length, sub: 'Next 14 days', bg: 'bg-blue-600/20 text-blue-300' },
-            { icon: Zap, label: 'Games This Month', value: gamesThisMonth.length, sub: 'Across all sports', bg: 'bg-emerald-600/20 text-emerald-300' },
-            { icon: Users, label: 'Active Teams', value: activeTeams.length, sub: 'This season', bg: 'bg-orange-600/20 text-orange-300' },
+            { icon: Trophy, label: tr('sports.statActiveSports'), value: activeSports.length, sub: tr('sports.statThisSeason'), bg: 'bg-violet-600/20 text-violet-300' },
+            { icon: Calendar, label: tr('sports.upcomingEvents'), value: upcoming.length, sub: tr('familySports.next14Days'), bg: 'bg-blue-600/20 text-blue-300' },
+            { icon: Zap, label: tr('sports.statGamesThisMonth'), value: gamesThisMonth.length, sub: tr('sports.statAcrossAllSports'), bg: 'bg-emerald-600/20 text-emerald-300' },
+            { icon: Users, label: tr('sports.statActiveTeams'), value: activeTeams.length, sub: tr('sports.statThisSeason'), bg: 'bg-orange-600/20 text-orange-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="stat-card">
+            // Stacked, as the icon's mb-3 intends: `.stat-card` alone is a ROW,
+            // which put four blocks side by side and pushed the last past a
+            // phone's edge. Audit C1-S9-99.
+            <div key={label} className="stat-card min-w-0 flex-col items-start gap-0">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
               <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>

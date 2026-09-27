@@ -437,12 +437,14 @@ export function SchoolModule() {
         {/* Stats grid */}
         <div className="grid-stats gap-3">
           {[
-            { icon: GraduationCap, label: 'Students', value: studentIds.size, sub: 'Enrolled', bg: 'bg-violet-600/20 text-violet-300' },
-            { icon: BookOpen, label: 'Assignments Due', value: assignments.length, sub: 'Upcoming', bg: 'bg-emerald-600/20 text-emerald-300' },
-            { icon: Calendar, label: 'Events', value: eventsThisWeek.length, sub: 'This week', bg: 'bg-orange-600/20 text-orange-300' },
-            { icon: GraduationCap, label: 'Average Grade', value: gradeStats.avgPct > 0 ? letterGrade(gradeStats.avgPct) : '—', sub: 'This term', bg: 'bg-blue-600/20 text-blue-300' },
+            { icon: GraduationCap, label: tr('school.statStudents'), value: studentIds.size, sub: tr('school.statEnrolled'), bg: 'bg-violet-600/20 text-violet-300' },
+            { icon: BookOpen, label: tr('school.statAssignmentsDue'), value: assignments.length, sub: tr('school.statUpcoming'), bg: 'bg-emerald-600/20 text-emerald-300' },
+            { icon: Calendar, label: tr('school.statEvents'), value: eventsThisWeek.length, sub: tr('school.statThisWeek'), bg: 'bg-orange-600/20 text-orange-300' },
+            { icon: GraduationCap, label: tr('school.statAverageGrade'), value: gradeStats.avgPct > 0 ? letterGrade(gradeStats.avgPct) : '—', sub: tr('school.statThisTerm'), bg: 'bg-blue-600/20 text-blue-300' },
           ].map(({ icon: Icon, label, value, sub, bg }) => (
-            <div key={label} className="stat-card">
+            // Stacked, as the icon's mb-3 intends — see the same tiles in
+            // sports-module. Audit C1-S9-99.
+            <div key={label} className="stat-card min-w-0 flex-col items-start gap-0">
               <div className={cn('mb-3 grid h-10 w-10 place-items-center rounded-xl', bg)}><Icon className="h-5 w-5" /></div>
               <p className="text-2xl font-black">{value}</p><p className="text-sm font-semibold">{label}</p><p className="text-xs text-muted">{sub}</p>
             </div>

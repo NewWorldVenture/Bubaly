@@ -749,7 +749,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
             </p>
             <h1 className="mt-1 truncate text-3xl font-black sm:text-4xl lg:text-5xl">{greeting(part, data.familyName)}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <WeatherChip />
             <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />
             <div className="flex items-center gap-1.5">

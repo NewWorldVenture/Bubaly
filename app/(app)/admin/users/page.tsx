@@ -233,7 +233,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
       </div>
 
       {tab === 'all' && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <div className="grid-stats">
               <StatCard icon={UsersRound} label={tr('adminUsers.totalMembers')} value={totalUsers} tone="bg-brand/10 text-brand-text" />
