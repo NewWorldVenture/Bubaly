@@ -46466,6 +46466,25 @@ The planning toast also read "undefined prep plans ready" when the action return
 
 ---
 
+### `[CLAUDE-1][MEDIUM][TRIPS]` C1-S9-133 — every trip tab's forms were English in every locale, including the emergency tab
+
+**File/path:** `components/vacations/shared.tsx`, new `components/vacations/trip-labels.ts`, `components/vacations/trip-emergency.tsx`, `components/vacations/trip-family.tsx`; seven catalogues.
+
+**Problem.** Each tab of a trip (`/dashboard/vacations/[id]`) declares its form as English `FieldDef` data: travel, lodging, activities, budget, documents, family and emergency. The shared `TripCrudSection` rendered that data as-is. In every locale this left English on:
+- every field label, select option and add button
+- the "field is required" toast
+- the dialog title, assembled as "Edit {section}" and "Add {section}"
+
+The emergency tab also showed English in its rows: "Traveler", "Allergies:", "Meds:" and the raw contact category id.
+
+**Fix.**
+- `TripCrudSection` now words every label, option, add button and required field through `tripLabel()`. It looks up a map of each form's 83 labels (`tripLabel.*`). A label missing from the map still reads as its English, never as a raw key.
+- The dialog titles and the emergency rows now come from the catalogue.
+
+**Status:** FIXED across all seven tabs. Checked with 60 test files (1,350 tests), `tsc` and `eslint`.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

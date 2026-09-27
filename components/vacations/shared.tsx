@@ -12,6 +12,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { tripLabel } from '@/components/vacations/trip-labels';
 
 // ---- small presentational helpers reused across trip pages ----
 
@@ -134,7 +135,7 @@ export function TripCrudSection<T extends Row>({
     try {
       if (!form) return;
       const req = fields.find((f) => f.required && !String(form[f.name] ?? '').trim());
-      if (req) return toastError(t('trips.fieldIsRequired', { field: req.label }));
+      if (req) return toastError(t('trips.fieldIsRequired', { field: tripLabel(t, req.label) }));
       const supabase = createClient() as any;
       const row = toRow(form, fields);
       const id = form.id as string;
@@ -162,7 +163,7 @@ export function TripCrudSection<T extends Row>({
   return (
     <div className="space-y-4">
       <SectionHeader icon={icon} title={title} action={
-        <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {addLabel}</Button>
+        <Button size="sm" onClick={() => setForm(blankFrom(fields))}><Plus className="h-4 w-4" /> {tripLabel(t, addLabel)}</Button>
       } />
       {loading ? <LoadingBlock /> : error ? <ErrorState message={`Could not load ${title.toLowerCase()}. Refresh and try again.`} onRetry={refresh} /> : rows.length === 0 ? (
         <EmptyState icon={icon} title={emptyText} description={t('shared.addYourFirstOneTo')} />
@@ -183,7 +184,7 @@ export function TripCrudSection<T extends Row>({
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? `Edit ${title}` : `Add ${title}`}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('trips.editSection', { section: title }) : t('trips.addSection', { section: title })}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               {fields.map((f) => {
@@ -192,18 +193,18 @@ export function TripCrudSection<T extends Row>({
                 if (f.type === 'checkbox') return (
                   <label key={f.name} className={`${span} flex items-center gap-2 text-sm`}>
                     <input type="checkbox" checked={!!form[f.name]} onChange={(e) => set(e.target.checked)} className="h-4 w-4 rounded border-border" />
-                    {f.label}
+                    {tripLabel(t, f.label)}
                   </label>
                 );
                 return (
                   <div key={f.name} className={span}>
-                    <Field label={f.label} required={f.required}>{(id) => {
+                    <Field label={tripLabel(t, f.label)} required={f.required}>{(id) => {
                       const val = String(form[f.name] ?? '');
                       if (f.type === 'textarea') return <Textarea id={id} value={val} onChange={(e) => set(e.target.value)} rows={2} placeholder={f.placeholder} />;
                       if (f.type === 'select') return (
                         <Select id={id} value={val} onChange={(e) => set(e.target.value)}>
                           {!f.required && <option value="">—</option>}
-                          {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          {f.options?.map((o) => <option key={o.value} value={o.value}>{tripLabel(t, o.label)}</option>)}
                         </Select>
                       );
                       if (f.type === 'member') return (
