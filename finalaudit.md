@@ -45954,6 +45954,29 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SHOPPING/PANTRY]` C1-S9-116 — grocery categories, list presets and pantry stats were English in every locale
+
+**File/path:** `components/modules/shopping-module.tsx`, `components/modules/pantry-module.tsx`, new `lib/i18n/grocery-category.ts`; seven catalogues.
+
+**Problem.**
+- On `/dashboard/shopping`, English showed in every locale:
+  - the category headings on a list (Produce, Dairy & Eggs, …)
+  - the category picker
+  - the "Cleared N completed items" toast
+- The "Grocery" and "Custom" list presets wrote an English list name into the family's data.
+- On `/dashboard/pantry`, the category chips and picker and three of the four stat tiles were English.
+
+**Fix.**
+- Categories stay stored as the English word, since the list groups by it. They are shown through `groceryCategoryLabel()`, which both pages share.
+- The two generic presets are worded when shown and when picked. Store brands stay as they are.
+- The toast is a plural.
+
+**Status:** FIXED.
+- `pantry-module` has no copy findings left. Its remaining findings are the stored category values.
+- `shopping-module`'s remaining findings are the stored categories and the store brand names.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
