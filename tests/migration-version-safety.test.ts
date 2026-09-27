@@ -308,7 +308,12 @@ describe('Supabase migration filename safety', () => {
     // from 0176 on. Ported from the claude/logged-in-pages-supabase-7q6vtf audit
     // branch, where it was numbered 0318 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0389');
+    // 0389_an_approved_investment_can_actually_be_approved.sql casts the
+    // ledger direction in invest_decide_order: a CASE over two literals is
+    // `text`, which does not cast to the enum, so every APPROVAL raised 42804
+    // from 0196 on while rejection worked. Ported from the same branch (0321).
+    //
+    expect(audit.nextVersion).toBe('0390');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
