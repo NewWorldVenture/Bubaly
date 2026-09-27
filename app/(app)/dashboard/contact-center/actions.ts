@@ -7,6 +7,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { describeActionError } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
+import { normalizeFallbackPhone } from '@/lib/contact-center/phone';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
 
 type Fail = { ok: false; error: string };
@@ -78,7 +79,14 @@ export async function updateConciergeAction(input: {
   const patch: Partial<{ ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }> = {};
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;
-  if (input.forwardTo !== undefined) patch.forward_to_phone = input.forwardTo;
+  // The fallback number is the one thing on this card that leaves the product: it
+  // is dialled and texted. Store it in the only form the provider accepts, and
+  // tell the parent now instead of dropping every future urgent text in silence.
+  if (input.forwardTo !== undefined) {
+    const fallback = normalizeFallbackPhone(input.forwardTo);
+    if (!fallback.ok) return { ok: false, error: t('actions.enterTheFallbackNumberIn') };
+    patch.forward_to_phone = fallback.value;
+  }
   const { error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId);
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheConcierge')) };
   revalidatePath('/dashboard/contact-center');

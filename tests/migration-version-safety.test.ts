@@ -259,6 +259,13 @@ describe('Supabase migration filename safety', () => {
     // on every member's calendar. Held by
     // docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql.
     //
+    // 0356_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql
+    // gives family_contact_channels.forward_to_phone the E.164 CHECK its own
+    // comment claimed, after normalizing the rows already there and keeping
+    // what they held in forward_to_phone_legacy — no country code guessed. Held
+    // by docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-
+    // be-used-check.sql.
+    //
     // 0357_a_member_only_rewrites_their_own_memory.sql re-creates
     // family_facts_update and family_facts_delete with the rule the service
     // applies — can_manage_family, or a memory about me, or one I wrote — on
@@ -272,10 +279,19 @@ describe('Supabase migration filename safety', () => {
     // two or three times. Held by
     // docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql.
     //
-    // The numbers between 0343 and 0363 are held by migrations still in
+    // 0365_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql
+    // (AUTHZ-011) puts three guards in the database: RESTRICTIVE write policies
+    // on social_settings behind social_has_permission(…, 'manage_settings'),
+    // a trigger that lets a trip link only a document its caller can read from
+    // its own household, and a SECURITY DEFINER trigger that refuses to move a
+    // document to another household while a trip links it. Held by
+    // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
+    // cannot-read-check.sql.
+    //
+    // The numbers between 0343 and 0365 are held by migrations still in
     // review; each lands with its own paragraph here. A number below the one
     // pinned is still free to land: the pin says only which number is next.
-    expect(audit.nextVersion).toBe('0364');
+    expect(audit.nextVersion).toBe('0366');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

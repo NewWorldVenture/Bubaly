@@ -2409,6 +2409,56 @@ runs its negative control first (a parent and an adult making the same writes
 must land) and went red on that control when the write grant was revoked with
 0352 in place.
 
+### `0356` stores the urgent fallback number the only way it can be used — unapplied
+
+`0356_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql`
+(SRV-001 leads `m13+m14`). `family_contact_channels.forward_to_phone` is the
+number the family says to call or text when something at their Contact Center
+line is urgent. 0214 created it with the comment "optional human fallback
+(E.164)" and no constraint, and the write path stored whatever was typed —
+while every consumer requires E.164 and none can say so: `sendSmsWithReceipt`
+refuses anything else as `invalid_message` (the urgent text never left the
+server, and the receipt's error is rendered on no screen), and `twimlDial`
+interpolates the value into a `<Dial>` element, so a stored `&` or `<` made the
+TwiML unparseable and the caller heard an application error. The field's own
+placeholder was "+1 555 123 4567" — with spaces — so typing exactly what the UI
+taught produced a fallback number that never once worked.
+
+**What closes it**: the column gets the CHECK its comment already claimed
+(`forward_to_phone is null or forward_to_phone ~ '^\+[1-9][0-9]{7,14}$'`),
+added only if absent. **This migration rewrites rows before it constrains
+them**: every value that is not already E.164 is copied to a new
+`forward_to_phone_legacy` column, then normalized the way
+`lib/contact-center/phone.ts` does it — a `+`-prefixed number with spaces,
+dots, dashes or parentheses becomes its digits behind the `+`; anything else
+becomes NULL. No country code is guessed: a bare ten digits is not read as +1,
+because an Italian or Mexican mobile typed the local way would become a valid
+American number and the urgent text would be delivered to a stranger. Nothing a
+parent typed is destroyed; the legacy column keeps it, and the app never reads
+that column. Replay-safe: `add column if not exists`, the UPDATE matches only
+rows still outside the pattern, the CHECK is added inside a `pg_constraint`
+guard.
+
+**Ships on its own.** The application half is live on merge: the server
+action normalizes through `normalizeFallbackPhone` and refuses with a sentence
+that says the form the number needs (`actions.enterTheFallbackNumberIn`); the
+one-number-per-family provisioning path no longer leaves a second billed number
+behind. There is no client INSERT or UPDATE policy on this table (0214 grants
+SELECT only) and every write goes through the service role, so this is defence
+in depth for the next write path rather than a boundary a client can route
+around today.
+
+**Evidence.** `docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-be-used-check.sql`
+— control first (the service role stores an E.164 number and a NULL, both
+land), then a spaced, a letter-bearing and a `<`-bearing value must each be
+refused by the named constraint, and a legacy row planted before the migration
+is shown normalized with its original kept. Mutation-tested three ways on
+private clones of a HEAD template with the migration applied (as written 0,
+constraint dropped red on a refusal, decoy red on the control).
+`tests/the-urgent-fallback-number-a-parent-types-still-reaches-their-phone.test.ts`
+covers the normalizer and the action, `tests/one-family-keeps-one-number-and-nothing-is-left-billing.test.ts`
+the provisioning path.
+
 ### `0357` gives family_facts the member rule the service already applied — unapplied
 
 `0357_a_member_only_rewrites_their_own_memory.sql` (SRV-001 lead `m21`). 0264
@@ -2544,3 +2594,46 @@ action: a failed first sync leaves no row and is retried against one
 subscription, an already-subscribed URL is re-synced rather than added, the
 loser of a same-moment race syncs the winner's row, a failed lookup adds
 nothing, and an over-long link is refused before anything is saved.
+
+### `0365` puts the publish lock and a trip's document link in the database — unapplied
+
+`0365_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`
+(AUTHZ-011). Three guards, one migration:
+
+- **`social_settings`**: three RESTRICTIVE policies (insert, update, delete) on
+  `social_has_permission(family_id, 'manage_settings')`, the same rule
+  `updateSettingsAction` applies. Until it is applied, any member can turn off
+  `require_approval` (the family's stop on publishing) or delete the row over
+  `/rest/v1`. SELECT stays open because `needsPublishApproval` reads it on the
+  publisher's own client.
+- **`vacation_documents.document_id`**: a SECURITY INVOKER BEFORE trigger. A
+  trip may link a document only if the caller can read it (through
+  `documents_select`) and it belongs to the trip's household. The Trip →
+  Documents form never writes the column and is unaffected.
+- **`documents.family_id`**: a SECURITY DEFINER BEFORE UPDATE OF `family_id`
+  trigger that refuses to move a document to another household while a trip
+  links it. EXECUTE is revoked from public, anon and authenticated.
+
+**Data it changes on apply.** Any `vacation_documents.document_id` that already
+points at another household's document is set to NULL, and a NOTICE reports how
+many. A pointer at a sensitive document of the row's own household is left
+alone: `created_by` is supplied by the client, so a link a child planted cannot
+be told apart from one a parent made.
+
+**Ships on its own.** No application code changes with it. It ends with a DO
+block that raises unless all five guards are in force as described.
+
+**Evidence.**
+`docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read-check.sql`
+tests each guard behind its own negative control. It passes on a full replay.
+It fails on a replay with the guards dropped, and it fails with only the
+documents trigger dropped. `tests/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read.test.ts`
+replays the migration corpus and evaluates the policies and triggers.
+
+**Not closed, named so they are not assumed closed.** An upsert
+(`INSERT … ON CONFLICT DO UPDATE`) into `vacation_documents` that re-sends an
+unchanged sensitive pointer is checked as an INSERT and refused for a caller who
+cannot read the document. No writer upserts this table. `vacation_flights` and
+`vacation_tickets` carry the same `document_id` column with the same FK, and
+this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
+writes either column or follows it today.

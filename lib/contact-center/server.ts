@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { createServiceClient } from '@/lib/supabase/server';
 import type { Json, Tables } from '@/lib/database.types';
 import {
-  isTwilioConfigured, searchAvailableNumber, provisionNumber,
+  isTwilioConfigured, searchAvailableNumber, provisionNumber, findOwnedNumberSid, releaseNumber,
 } from '@/lib/guardian/twilio';
 import { submitRequest } from '@/lib/ai/runs/intake';
 import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/paperwork/triage';
@@ -112,42 +112,96 @@ export async function resolveFamilyByEmailLocal(admin: Admin, local: string): Pr
 }
 
 /**
+ * Hand back a number this call bought but did NOT get to keep.
+ *
+ * A stranded purchase is not a tidiness problem. The number stays live on our
+ * account, stays pointed at our webhooks, and stays billing — while nothing in
+ * the database names it, because `phone_number_sid` is the only record of it. A
+ * caller then reaches a number that answers "This number is not in service" and
+ * a text to it is dropped without ever reaching the family's inbox.
+ *
+ * `bought` is null when the purchase call itself threw: Twilio may still have
+ * created the number before our 15s deadline, so the candidate is looked up by
+ * value rather than assumed gone.
+ */
+async function releaseStrandedNumber(bought: { phoneNumber: string; sid: string } | null, candidate: string | null): Promise<void> {
+  const phoneNumber = bought?.phoneNumber ?? candidate;
+  try {
+    const sid = bought?.sid ?? (candidate ? await findOwnedNumberSid(candidate) : null);
+    if (!sid) return;
+    if (await releaseNumber(sid)) return;
+    // Unconfirmed: say which number, so it can be reconciled instead of billing
+    // silently for a family that never received it.
+    console.error('[contact-center] a provisioned number was not saved and could not be released', { sid, phoneNumber });
+  } catch (e) {
+    console.error('[contact-center] releasing an unsaved provisioned number failed', { sid: bought?.sid ?? null, phoneNumber }, e);
+  }
+}
+
+/**
  * Buy + wire a dedicated Twilio number for a family. Key-gated: with no Twilio
  * config it flips the row to `pending` (a human/owner provisions it) and returns
  * a skipped result — the rest of the Contact Center works without it. Never
  * throws; returns a discriminated result.
+ *
+ * IDEMPOTENT, and that is load-bearing twice over. A family has ONE number and
+ * it is the one they gave the school, the pediatrician and the plumber, so a
+ * second call must return what they already own rather than buying a second
+ * number and repointing the row at it — which silently took the published number
+ * out of service. And a purchase is real money that starts recurring the instant
+ * it succeeds, so a purchase this call cannot persist is given straight back.
  */
 export async function provisionFamilyNumber(
   admin: Admin, familyId: string, areaCode?: string,
 ): Promise<{ ok: true; phoneNumber: string } | { ok: false; skipped: boolean; error?: string }> {
   const channel = await getOrCreateChannelResult(admin, familyId);
   if (channel.error) return { ok: false, skipped: false, error: 'Could not load the family contact channel.' };
+  const existing = channel.data?.phone_number?.trim();
+  if (existing) return { ok: true, phoneNumber: existing };
   if (!isTwilioConfigured()) {
     const { error } = await admin.from('family_contact_channels').update({ provisioning_status: 'pending' }).eq('family_id', familyId);
     if (error) return { ok: false, skipped: false, error: 'Could not save the phone request.' };
     return { ok: false, skipped: true };
   }
+  let candidate: string | null = null;
+  let bought: { phoneNumber: string; sid: string } | null = null;
+  let kept = false;
   try {
-    const number = await searchAvailableNumber(areaCode);
-    if (!number) return { ok: false, skipped: false, error: 'No numbers available for that area code.' };
-    const provisioned = await provisionNumber({
-      phoneNumber: number,
+    candidate = await searchAvailableNumber(areaCode);
+    if (!candidate) return { ok: false, skipped: false, error: 'No numbers available for that area code.' };
+    bought = await provisionNumber({
+      phoneNumber: candidate,
       voiceUrl: `${appUrl()}/api/contact-center/voice`,
       smsUrl: `${appUrl()}/api/contact-center/sms`,
       friendlyName: `Bubaly Family ${familyId.slice(0, 8)}`,
     });
-    const { error } = await admin.from('family_contact_channels').update({
-      phone_number: provisioned.phoneNumber,
-      phone_number_sid: provisioned.sid,
+    // The write IS the claim: `phone_number is null` makes it the one that can
+    // only be won once, so two parents clicking together (or one parent with a
+    // stale tab) cannot end with two numbers bought and one of them orphaned.
+    const claim = await admin.from('family_contact_channels').update({
+      phone_number: bought.phoneNumber,
+      phone_number_sid: bought.sid,
       provisioning_status: 'active',
-    }).eq('family_id', familyId);
-    if (error) return { ok: false, skipped: false, error: 'The number was provisioned but could not be saved. Please contact support.' };
-    return { ok: true, phoneNumber: provisioned.phoneNumber };
+    }).eq('family_id', familyId).is('phone_number', null).select('phone_number');
+    if (claim.error) return { ok: false, skipped: false, error: 'The number could not be saved. Please try again.' };
+    const claimed = Array.isArray(claim.data) && claim.data.length === 1 && claim.data[0]?.phone_number === bought.phoneNumber;
+    if (!claimed) {
+      // Someone else got there first. Their number is the family's number; ours
+      // goes back (in the `finally`, since `kept` stays false).
+      const current = await getOrCreateChannelResult(admin, familyId);
+      const winner = current.data?.phone_number?.trim();
+      if (winner) return { ok: true, phoneNumber: winner };
+      return { ok: false, skipped: false, error: 'The number could not be saved. Please try again.' };
+    }
+    kept = true;
+    return { ok: true, phoneNumber: bought.phoneNumber };
   } catch (e) {
     const { error: statusError } = await admin.from('family_contact_channels').update({ provisioning_status: 'failed' }).eq('family_id', familyId);
     if (statusError) console.error('[contact-center] failed to save provisioning failure status', statusError);
     console.error('[contact-center] number provisioning failed', e);
     return { ok: false, skipped: false, error: 'Could not provision a number. Please try again.' };
+  } finally {
+    if (!kept) await releaseStrandedNumber(bought, candidate);
   }
 }
 

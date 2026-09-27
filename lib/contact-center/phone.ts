@@ -24,3 +24,43 @@ export function toE164(input: string | null | undefined, defaultCc = '1'): strin
 export function isE164(value: string | null | undefined): boolean {
   return !!value && /^\+[1-9]\d{7,14}$/.test(value);
 }
+
+/**
+ * The family's urgent fallback number as it must be STORED.
+ *
+ * Everything downstream of that column requires E.164 and has no way to say so:
+ * the urgent-SMS escalation hands the stored string to the provider, which
+ * refuses anything else outright (and the refusal surfaces nowhere in the app),
+ * and the value is also interpolated into the TwiML `<Dial>` for a forwarded
+ * call. A parent typing the field's own placeholder — "+1 555 123 4567" — was
+ * therefore saved successfully and silently never called.
+ *
+ * So: strip the spacing and punctuation a person types around a number, and
+ * REFUSE what cannot be read as an international number rather than storing it
+ * and failing later.
+ *
+ * The country code is REQUIRED, deliberately — this does NOT use `toE164`'s
+ * "ten digits means +1" default. For this field that guess is not a harmless
+ * convenience: Bubaly ships it-IT, es-MX and nine other catalogues; an Italian
+ * mobile typed the local way ("312 345 6789") is ten digits with no leading
+ * zero, and "+13123456789" is a real Chicago number. The provider would accept
+ * the family's urgent text and deliver it to a stranger — a worse failure than
+ * the silent one this fixes. Nothing available here can say which country a
+ * bare local number belongs to (the reader's locale is a language choice, and
+ * the family's own line is always a US Twilio number), so the one form that
+ * carries its own country is the one accepted, and the refusal copy asks for
+ * exactly that. Letters are refused too: "+1 555 CALL MOM" is not a number the
+ * parent meant, and dropping the letters would store one they did not type.
+ */
+export function normalizeFallbackPhone(
+  input: string | null | undefined,
+): { ok: true; value: string | null } | { ok: false } {
+  if (input === null || input === undefined) return { ok: true, value: null };
+  const typed = input.trim();
+  if (!typed) return { ok: true, value: null };
+  // A plus, then digits and the spacing/punctuation people put between them.
+  // Mirrored in supabase/migrations/0356 for the rows written before this.
+  if (!/^\+[\d\s().-]+$/.test(typed)) return { ok: false };
+  const e164 = `+${typed.replace(/\D/g, '')}`;
+  return isE164(e164) ? { ok: true, value: e164 } : { ok: false };
+}

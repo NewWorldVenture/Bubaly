@@ -6,6 +6,7 @@ import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { normalizeEmail, normalizeSource, normalizeVisitorId } from '@/lib/blog/engagement';
 import { sendSubscribeNotice, type SubscribeOutcome } from '@/lib/blog/subscribe-notice';
+import { carriedVisitorId, namesAnotherVisitor } from '@/lib/marketing/visitor-cookie';
 
 export const runtime = 'nodejs';
 
@@ -45,6 +46,20 @@ export const runtime = 'nodejs';
 // that answers without doing that work, and equalising it would mean writing
 // bot rows or sleeping — the body it returns is identical, which is what the
 // caller can actually read.
+//
+// WHICH VISITOR THE ADDRESS IS ATTRIBUTED TO COMES FROM THE COOKIE (SEC-008).
+//
+// `visitor_id` used to be read from the body, so a request could stitch an
+// email to any visitor id it chose, on insert and on re-activation. It is now
+// the `bubaly_vid` cookie the request carries, through the same helpers as
+// /api/mkt/consent (SEC-006) and /api/mkt/track (SEC-007), with the same stated
+// limit: the cookie is the same bearer bytes, so this stops a caller naming a
+// visitor other than the one its browser is, not a holder of an id presenting
+// it. No cookie means no attribution, which is what the column has always
+// allowed. A body that still names an id (a cached older form) is accepted only
+// when it IS the cookie; any other is refused, 403, before the honeypot and
+// before the lookup — it is a property of the request alone, so the refusal is
+// the same for every address and says nothing about any of them.
 
 const MAX_BODY_BYTES = 4_096;
 
@@ -78,6 +93,11 @@ export async function POST(req: NextRequest) {
     email?: unknown; source?: unknown; visitorId?: unknown; website?: unknown;
   };
 
+  const carried = carriedVisitorId(req);
+  if (namesAnotherVisitor(body.visitorId, carried)) {
+    return NextResponse.json({ error: t('subscribe.notThisVisitor') }, { status: 403 });
+  }
+
   // Honeypot: real users never see (or fill) the "website" field. The same
   // answer as everything else, so a bot learns neither that it was caught nor
   // which field caught it.
@@ -89,7 +109,7 @@ export async function POST(req: NextRequest) {
   if (!email) return NextResponse.json({ error: t('subscribe.enterAValidEmailAddress') }, { status: 400 });
 
   const source = normalizeSource(body.source);
-  const visitorId = normalizeVisitorId(body.visitorId);
+  const visitorId = normalizeVisitorId(carried);
 
   // Per-ADDRESS throttle, on top of the per-IP one above. The notice below is
   // mail we send to an address the caller only claims to own, so repeating the
