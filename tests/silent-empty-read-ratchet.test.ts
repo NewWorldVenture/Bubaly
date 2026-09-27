@@ -54,7 +54,11 @@ const BASELINE = new Set<string>([
   'app/(app)/dashboard/paperwork/page.tsx',
   // feedback-board comment thread fixed under A-17 §3e (PLA-0796) — a failed
   // read now shows a retryable message, not a silent empty discussion. Removed.
-  'app/(app)/missions/page.tsx',
+  //
+  // missions/page.tsx removed under PERF-004 (F-F03). Batching the proof-photo
+  // signing took the discarded per-photo `error` with it: an object that cannot
+  // be signed is now left out of the list rather than added as an empty src,
+  // and a signing outage is logged instead of silently producing no photos.
   // marketing lp/[slug] + f/[id] fixed under A-17 §3e slice (PLA-0793) — loaders
   // now throw on a real read error (retryable 5xx) instead of 404-ing a live page;
   // notFound() reserved for a genuinely missing row. Removed from baseline.
