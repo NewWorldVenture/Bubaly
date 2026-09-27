@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
+import { getTranslations } from '@/lib/i18n/server';
 import { NewAssistantKey, RevokeAssistantKey } from './controls';
 
 export const metadata: Metadata = { title: 'Assistants' };
@@ -22,6 +23,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export default async function AssistantsPage() {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   // token_hash is deliberately absent: migration 0283 withholds that column
@@ -40,13 +42,13 @@ export default async function AssistantsPage() {
       return (
         <EmptyState
           icon={Speaker}
-          title="Assistants aren't switched on yet"
-          description="Connecting a speaker needs database migration 0283_assistant_links.sql. Once an administrator applies it, you can create a key here and link Alexa, Siri, Google Assistant or Home Assistant."
+          title={t('assistantsPage.notSwitchedOnTitle')}
+          description={t('assistantsPage.notSwitchedOnDesc')}
         />
       );
     }
     console.error('[assistants] list read failed', error);
-    return <ErrorState message="Your assistant keys could not be read. Refresh and try again." />;
+    return <ErrorState message={t('assistantsPage.readError')} />;
   }
   const links = (data ?? []) as unknown as LinkRow[];
   const live = links.filter((link) => !link.revoked_at);
@@ -54,18 +56,15 @@ export default async function AssistantsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Assistants</h1>
-        <p className="mt-1 text-sm text-muted">
-          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, what you are
-          forgetting, or what is on the shopping list — and add things to your lists without opening the app.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t('assistantsPage.title')}</h1>
+        <p className="mt-1 text-sm text-muted">{t('assistantsPage.intro')}</p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-3">
           {links.length === 0 ? (
-            <EmptyState icon={Speaker} title="No assistants connected"
-              description="Create a key on the right, then paste it into Alexa, a Shortcut, or anything that can make a web request." />
+            <EmptyState icon={Speaker} title={t('assistantsPage.noneConnectedTitle')}
+              description={t('assistantsPage.noneConnectedDesc')} />
           ) : links.map((link) => (
             <Card key={link.id} className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -76,25 +75,25 @@ export default async function AssistantsPage() {
                   </p>
                 </div>
                 <Badge tone={link.revoked_at ? 'neutral' : 'success'}>
-                  {link.revoked_at ? 'Revoked' : 'Active'}
+                  {link.revoked_at ? t('assistantsPage.revoked') : t('assistantsPage.active')}
                 </Badge>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                <Badge tone="neutral">Reads your day</Badge>
+                <Badge tone="neutral">{t('assistantsPage.readsYourDay')}</Badge>
                 {(link.scopes ?? []).includes('capture')
-                  ? <Badge tone="brand">Can add things</Badge>
-                  : <Badge tone="neutral">Read only</Badge>}
+                  ? <Badge tone="brand">{t('assistantsPage.canAddThings')}</Badge>
+                  : <Badge tone="neutral">{t('assistantsPage.readOnly')}</Badge>}
               </div>
               <p className="text-xs text-muted">
-                {link.last_used_at ? `Last used ${fmtDate(link.last_used_at)}` : 'Not used yet'}
-                {' · '}Added {fmtDate(link.created_at)}
+                {link.last_used_at ? t('assistantsPage.lastUsed', { date: fmtDate(link.last_used_at) }) : t('assistantsPage.notUsedYet')}
+                {' · '}{t('assistantsPage.added', { date: fmtDate(link.created_at) })}
               </p>
               {!link.revoked_at && <RevokeAssistantKey id={link.id} />}
             </Card>
           ))}
 
           <Card className="space-y-3">
-            <h2 className="font-semibold">How to connect</h2>
+            <h2 className="font-semibold">{t('assistantsPage.howToConnect')}</h2>
             <div className="space-y-3 text-sm text-muted">
               <div>
                 <p className="font-medium text-fg">Siri, on an iPhone or iPad</p>
@@ -134,21 +133,21 @@ export default async function AssistantsPage() {
 
         <div className="space-y-4">
           <Card className="h-fit">
-            <h2 className="mb-3 font-semibold">New assistant key</h2>
+            <h2 className="mb-3 font-semibold">{t('assistantsPage.newKey')}</h2>
             <NewAssistantKey />
           </Card>
 
           <Card className="space-y-2">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-success" aria-hidden />
-              <h2 className="font-semibold">What a key can do</h2>
+              <h2 className="font-semibold">{t('assistantsPage.whatKeyCanDo')}</h2>
             </div>
             <ul className="space-y-1.5 text-xs text-muted">
-              <li>Reads your calendar and open tasks to answer out loud.</li>
-              <li>Adds tasks, events, notes and shopping items — only if you allowed it.</li>
-              <li>Cannot see messages, documents, photos, money or anyone&apos;s location.</li>
-              <li>Every use is recorded, so you can see what a speaker did.</li>
-              <li>Revoking stops it working immediately. {live.length} active now.</li>
+              <li>{t('assistantsPage.keyReads')}</li>
+              <li>{t('assistantsPage.keyAdds')}</li>
+              <li>{t('assistantsPage.keyCannotSee')}</li>
+              <li>{t('assistantsPage.keyRecorded')}</li>
+              <li>{live.length === 1 ? t('assistantsPage.keyRevokeOne') : t('assistantsPage.keyRevokeMany', { n: live.length })}</li>
             </ul>
           </Card>
         </div>

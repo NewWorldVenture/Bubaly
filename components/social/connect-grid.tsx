@@ -34,9 +34,9 @@ export function ConnectGrid({ readiness }: { readiness: Record<SocialPlatform, b
       if (!r.ok) {
         setMessage(r.error ?? 'Could not start connection.');
       } else if (r.requiresSetup) {
-        setMessage(`${PROVIDERS[platform].label}: app credentials are not configured, so the account was added in a "requires setup" state. Add credentials to authorize.`);
+        setMessage(t('connectGrid.needsCredentials', { provider: PROVIDERS[platform].label }));
       } else {
-        setMessage(`${PROVIDERS[platform].label}: ready to authorize. Complete the OAuth step to finish connecting.`);
+        setMessage(t('connectGrid.readyToAuthorize', { provider: PROVIDERS[platform].label }));
       }
       router.refresh();
     });
