@@ -16018,6 +16018,14 @@ The bucket half is an owner decision between two designs, and neither buys anyth
 
 Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
 
+*Added 2026-09-27 (PORT-001).* The second design is **implemented and ready**, on the audit branch, as commit `68a5a7a1` on `claude/logged-in-pages-supabase-7q6vtf` (24 files). It contains:
+- a reference parser that reads either a stored public URL or a bare path, so no row is rewritten;
+- a batched server signer and a client hook, with every reader listed above moved onto them;
+- the service-worker exclusion;
+- a deploy-coupled migration that sets the bucket private and adds a member-scoped SELECT policy. It is applied only after the readers are live, which is the order stated here.
+
+It is deliberately **not** in the port (#586): this entry leaves the choice between the two designs to the owner. If the owner picks signed URLs, it re-applies onto main in one step. If the owner picks the media route, its reference parser still applies unchanged.
+
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
 
@@ -31517,6 +31525,8 @@ here rather than half-fixed.
 The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
 
 The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **deferred, not dropped**. Main records exactly this as an owner decision ("an adult can make themselves the family's Admin, or demote the parents": not changed without that answer). That entry now also notes that the escalation reaches `families_delete` and points at the ready fix.
+
+The branch's `0338` with its SEC-001 readers (family media private, via signed URLs) is **deferred** for the same reason. Main records the bucket half as the owner's choice between a same-origin media route and signed URLs, and this implements one of them. The SEC-001 entry now points at the ready implementation.
 
 **Found by the port itself** (on main, not on the branch):
 - The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
