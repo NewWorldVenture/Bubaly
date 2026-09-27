@@ -151,7 +151,7 @@ describe('archiving a page retires the answers it published', () => {
 
     // /faq caches its read for an hour under one tag. Without dropping it the
     // archived page keeps answering publicly regardless of the row's status.
-    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG);
+    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG, { expire: 0 });
   });
 
   it('stops an archived article answering inside a live sibling article in the same category', async () => {
@@ -179,7 +179,7 @@ describe('archiving a page retires the answers it published', () => {
     // And nothing on /faq cites the dead URL either.
     const faq = await readPublishedAeoQuestions(60);
     expect(citations(faq.questions).some((a) => a.includes(`/blog/${ARCHIVED_SLUG}`))).toBe(false);
-    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG);
+    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG, { expire: 0 });
   });
 
   it('stops a pulled-down post answering on /faq when the admin only unpublishes it', async () => {
@@ -196,7 +196,7 @@ describe('archiving a page retires the answers it published', () => {
     expect(after.available).toBe(true);
     expect(citations(after.questions).some((a) => a.includes(`/blog/${ARCHIVED_SLUG}`))).toBe(false);
     expect(citations(after.questions).some((a) => a.includes(`/blog/${LIVE_SLUG}`))).toBe(true);
-    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG);
+    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG, { expire: 0 });
   });
 
   it('leaves an answer an admin is still drafting at its own status', async () => {
@@ -261,7 +261,7 @@ describe('a save that renames the page retires the answers filed under its old p
     expect(citations(after.questions)).not.toContain('It builds the week from what your family already eats.');
     expect(citations(after.questions)).toContain('Everyone sees the same list.');
     expect(fake.table('marketing_aeo_questions').find((r) => r.source_path === '/features/meal-planning')).toMatchObject({ status: 'answered' });
-    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG);
+    expect(state.revalidateTag).toHaveBeenCalledWith(AEO_TAG, { expire: 0 });
     expect(state.revalidatePath).toHaveBeenCalledWith('/features/meal-planning');
   });
 

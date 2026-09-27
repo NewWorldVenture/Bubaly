@@ -64,7 +64,7 @@ export async function saveSocialLinksAction(formData: FormData): Promise<SaveSoc
     // The footer's read is cached under this tag (it renders on every public
     // page, so it must not hit Postgres per view). Dropping the tag is what
     // keeps an admin edit immediate despite that cache.
-    revalidateTag(SOCIAL_LINKS_TAG);
+    revalidateTag(SOCIAL_LINKS_TAG, { expire: 0 });
     revalidatePath('/admin/settings/social-links');
     // The footer renders on every marketing route, so the whole tree is stale.
     revalidatePath('/', 'layout');
