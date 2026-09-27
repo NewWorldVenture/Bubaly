@@ -6,7 +6,9 @@
 -- family_id a row claims never reaches the delivery decision.
 --
 -- Three things a client could do, none of them legitimate:
---   1. address a notification to a user in ANOTHER family
+--   1. address a notification to a user in ANOTHER family (since 0388: to
+--      anyone but themselves — every notification for someone else is written
+--      by Bubaly's own service role; see checks 5 and 6)
 --   2. rewrite the text of a family-wide notice the product itself generated
 --   3. clear sent_at/pushed_at, re-arming a delivered row so the cron sends
 --      it again
@@ -67,7 +69,7 @@ begin
   -- WHERE clauses before any role switch — the ground truth control B/C and the
   -- must-still-work line compare against, instead of a hand-counted "1" that
   -- goes red on a healthy database the day this seed gains a row. Control A's
-  -- row is addressed to `par`, so it joins neither set.
+  -- row is addressed to the child (0388), so it is added to `own_n` there.
   select count(*) into wide_n from public.notifications where family_id = fam and user_id is null;
   select count(*) into own_n  from public.notifications where user_id = kid;
   if wide_n < 1 or own_n < 1 then
@@ -188,18 +190,24 @@ begin
   -- and `kid` anchors and the two rows the seed above already plants, so it
   -- cannot collide with any of the other probes that share the database.
   begin
+    -- Since 0388 the recipient conjunct is `user_id = auth.uid()`, so the
+    -- mirror of check 1 addresses the child THEMSELVES: the same family, the
+    -- same columns, only the recipient moves (out_u -> kid).
     insert into public.notifications (family_id,user_id,type,title,body)
-      values (fam, par, 'system', 'control: recipient IS a member of this family', 'x');
+      values (fam, kid, 'system', 'control: recipient IS the caller', 'x');
     get diagnostics n = row_count;
+    -- That row is the child's own, so it joins the set check 3 and control C
+    -- name.
+    own_n := own_n + n;
     if n <> 1 then
       control_ok := false;
       ctl := array_append(ctl, format(
-        'CONTROL A FAILED: the child stored %s row(s) addressing a notification to a member of their OWN family, expected 1 — so check 1''s refusal says nothing about notif_insert''s recipient conjunct', n));
+        'CONTROL A FAILED: the child stored %s row(s) addressing a notification to THEMSELVES, expected 1 — so check 1''s refusal says nothing about notif_insert''s recipient conjunct', n));
     end if;
   exception when others then
     control_ok := false;
     ctl := array_append(ctl, format(
-      'CONTROL A FAILED: the child was refused a notification addressed to a member of their OWN family (%s: %s) — check 1''s refusal is not attributable to notif_insert; a revoked INSERT grant, a guard trigger and a dead auth.uid() all land here too', sqlstate, sqlerrm));
+      'CONTROL A FAILED: the child was refused a notification addressed to THEMSELVES (%s: %s) — check 1''s refusal is not attributable to notif_insert; a revoked INSERT grant, a guard trigger and a dead auth.uid() all land here too', sqlstate, sqlerrm));
   end;
 
   if control_ok then
@@ -287,9 +295,32 @@ begin
   end if;
 
   insert into public.notifications (family_id,user_id,type,title,body)
-    values (fam, par, 'system', 'in-family recipient', 'x');
-  insert into public.notifications (family_id,user_id,type,title,body)
-    values (fam, null, 'system', 'family-wide row', 'x');
+    values (fam, kid, 'system', 'a reminder to myself', 'x');
+
+  -- 5 and 6 (0388). A notification addressed to anyone else — a parent in the
+  --    same family, or the whole family (user_id NULL) — is a push and an email
+  --    from Bubaly's sender with text the member chose. The product builds
+  --    those server-side (notify() writes them with the service role), so a
+  --    member's session is refused both. Control A above is the same INSERT
+  --    addressed to the caller, so these refusals are the recipient rule.
+  blocked := false;
+  begin
+    insert into public.notifications (family_id,user_id,type,title,body)
+      values (fam, par, 'system', 'Your account is locked — sign in again here', 'x');
+  exception when insufficient_privilege then blocked := true;
+  end;
+  if not blocked then
+    raise exception '0388: a member sent another member of their family a notification with text of their choosing';
+  end if;
+  blocked := false;
+  begin
+    insert into public.notifications (family_id,user_id,type,title,body)
+      values (fam, null, 'system', 'Family plan cancelled — update payment here', 'x');
+  exception when insufficient_privilege then blocked := true;
+  end;
+  if not blocked then
+    raise exception '0388: a member sent the whole family a notification with text of their choosing';
+  end if;
 
   -- 4. Control: a non-member is refused the same insert, so the assertions
   --    above are measuring the recipient rule and not an empty capability.
@@ -302,12 +333,9 @@ begin
   --    one at the top and for the same reason: THIS actor, the same statement,
   --    the same `notif_insert` predicate, with the truth of ONE conjunct
   --    flipped — `is_family_member(family_id)`, asked about the outsider's OWN
-  --    family instead of `fam`. Two literals move to do it, (fam, par) ->
-  --    (other, out_u), and that is forced: the recipient conjunct is TRUE in
-  --    both statements (`par` is active in `fam`, `out_u` is active in
-  --    `other`), whereas keeping `par` with `other` would make the recipient
-  --    conjunct false too and the control would fail for the wrong reason. So
-  --    two values move, one conjunct's value does. It must land. Without it, "the outsider was
+  --    family instead of `fam`. Since 0388 both statements address the
+  --    outsider themselves, so the recipient conjunct (`user_id = auth.uid()`)
+  --    is TRUE in both and only `family_id` moves (fam -> other). It must land. Without it, "the outsider was
   --    refused" is equally consistent with an outsider who could not address a
   --    notification anywhere at all, which is not a boundary; and the child's
   --    control above cannot stand in for it, because the whole question here is
@@ -332,7 +360,7 @@ begin
   blocked := false;
   begin
     insert into public.notifications (family_id,user_id,type,title,body)
-      values (fam, par, 'system', 'outsider', 'x');
+      values (fam, out_u, 'system', 'outsider', 'x');
   exception when insufficient_privilege then blocked := true;
   end;
   if not blocked then
@@ -340,7 +368,7 @@ begin
   end if;
 
   reset role;
-  raise notice '0301 notification authorship OK — control: the same child CAN address a notification to a member of their own family and CAN set is_read on both rows under test, and the outsider CAN write in their own family, so the refusals above are the recipient rule and the is_read-only column grant rather than a missing privilege, a guard trigger or a row nobody could see';
+  raise notice '0301/0388 notification authorship OK — a member addresses only themselves (not a sibling, a parent or the whole family); control: the same child CAN address a notification to themselves and CAN set is_read on both rows under test, and the outsider CAN write in their own family, so the refusals above are the recipient rule and the is_read-only column grant rather than a missing privilege, a guard trigger or a row nobody could see';
 end $$;
 
 -- The grants AND the policy body from the catalog, because the attribution
@@ -362,8 +390,11 @@ declare n int; wc text; begin
   if wc is null then
     raise exception '0301: notif_insert is gone from notifications (or no longer an INSERT policy) — checks 1 and 4 are refused by something this probe does not attribute';
   end if;
-  if wc not like '%family_members%' then
-    raise exception '0301: notif_insert no longer pins the recipient to the family — its WITH CHECK is now: %', wc;
+  -- 0301 pinned the recipient to the family (a family_members join); 0388
+  -- narrowed it to the caller, which implies the family (the caller must be
+  -- a member). Either is a pin; neither is bare is_family_member.
+  if wc not like '%family_members%' and wc not like '%user_id = auth.uid()%' then
+    raise exception '0301: notif_insert no longer pins the recipient — its WITH CHECK is now: %', wc;
   end if;
   if wc not like '%is_family_member(family_id)%' then
     raise exception '0301: notif_insert no longer requires the WRITER to be a family member — its WITH CHECK is now: %', wc;

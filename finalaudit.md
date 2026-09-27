@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-27T01:06:00Z
+- Last Updated: 2026-09-27T02:02:00Z
 - Released: **#541 merged to `main` at `533554be` on 2026-09-26 18:55Z** (merge commit, 242 commits). `main`'s CI on that head is green in all four jobs — Typecheck · Lint · Test · Build (unit tests on three host zones), Mobile, Database (migration replay, 68 boundary probes, re-apply onto an existing schema) and E2E. Production serves it: `GET https://www.bubaly.com/api/build-info` answered `{"revision":"533554be…"}` at 19:13Z, and `/api/health` answered database, auth and service-role **ok** and `status: degraded` because four feature secrets are unset in the production runtime (see Critical Blockers). **Then #580 merged to `main` at `7e54596d` on 2026-09-26 20:21Z** (the units verified after #541: AUDIT-011's 39 re-controlled probes, SEC-009, m6/m9/m12/m30/m0/m28+m29/m42+m43/m18/m35, migrations 0343 and 0349/0352/0360 unapplied and in the ledger); `main`'s CI on that head failed one E2E case (`phone-auth-http` durable-session close) that passed on the next `main` run untouched, and production answered `{"revision":"7e54596d…"}`. **Then #579 merged at `671c5f6a` on 2026-09-27 00:00Z** (another session's pass C1-K: member-write boundaries 0344–0380, trust fail-safes; recorded by that session in the *Release · #579* section below, with the production-migration blocker at 0177) and #582 at `6ff770da`, its release note. Production answered `{"revision":"6ff770da…"}` at 00:44Z, `/api/health` still `degraded` on the same four missing secrets. **This is a deployment, not a readiness declaration**: no migration from `0318` on has been applied to production, and `PRODUCTION READY` stays **NO**.
 - Total Audit Items: 14075 — **+4 in Pass BU**: SEC-007 (raised by the review of the SEC-006 fix) and SEC-008 (raised by the SEC-007 fix), each re-read against its routes before being recorded; SEC-009 (an opt-out a family set comes back on whenever the settings read fails — found by the `m35` fixer, re-read at every call site); and I18N-010 (a `t()` key no catalogue carries — found by three separate reviewers, measured tree-wide, fixed with a guard). **+33 the pass before**: SEC-006, TIME-010, SRV-001, TIME-009, CONC-001, DOC-002, AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005, METRIC-001, SPEC-001, SPEC-002, IMPORT-001, AUTH-004, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-009, AUDIT-010, TIME-001, TIME-002, TIME-003, TIME-004, TIME-005, TIME-006, TIME-007, TIME-008, AUDIT-011
 - Not Started: 13838
@@ -31294,18 +31294,43 @@ pass twice in a row against one database; `tsc` clean; `next lint` clean
 container runs Node 22 (`node-version-is-pinned`, two
 `stream-cancellation-runtime` cases; both pass on CI's pinned Node).
 
-## Follow-up · a member can push a notification with any text to another member
+## C1-K-56 · MEDIUM · A member could send the family a push and an email in Bubaly's name, with any text
 
-`notifications` INSERT lets a family member address any member of their family
-(`user_id` in the family), with any `title` and `body`. Rows are pushed to the
-recipient's phone by the notification cron, looking like any Bubaly
-notification. The application's own writers build the text server-side, via
-`lib/services/notifications` `notify` and the locator, gift and vacation
-actions. Several of those run in the member's own session, so the INSERT
-policy cannot simply be closed. The fix is to route `notify` through the
-service role, then restrict member INSERT to `user_id = auth.uid()`. That is a
-multi-caller refactor, so it is recorded here rather than rushed. Read, update
-and delete are already recipient-scoped.
+*(Recorded earlier as a follow-up; now fixed.)* `notifications` INSERT (0301)
+let a family member address any active member of their family, or the whole
+family (`user_id` NULL), with any `title` and `body`. The notification cron
+turns every row into a device push and an email from Bubaly's own sender, so
+a member (or a compromised child account) could send a parent "Your account
+is locked, sign in again here: …" that is indistinguishable from Bubaly.
+0301 closed only the cross-family half.
+
+Fix. The product never needed a member to author someone else's
+notification; every one is built server-side. `notify()`
+(`lib/services/notifications`) still resolves recipients under the caller's
+own RLS (so it can address only their family), but writes the rows, and does
+its duplicate read, with the service role for any non-system actor (a member,
+or the AI in a member's session). `/api/notifications/generate` runs the
+generator as the service role, as the cron does, for the caller's own active
+family. The guardian, contact-centre, approval-reminder and cron writers were
+already service role. `0388_a_notification_is_written_by_bubaly_not_by_a_member.sql`
+then narrows member INSERT to `is_family_member(family_id) and user_id =
+auth.uid()` and revokes anon INSERT. Read, mark-read (the 0301 `is_read`
+column grant) and delete are unchanged.
+
+Evidence. `docs/audit/notification-authorship-check.sql` (0301's probe) is
+re-controlled for the new rule: its control A now addresses the caller, and
+new checks 5 and 6 refuse a member addressing a parent and the whole family.
+With 0301's policy restored in a rolled-back transaction it fails ("a member
+sent another member of their family a notification with text of their
+choosing"), and with 0388 it passes. The duplicate read also changes: under a
+member's RLS it saw only that member's own and family-wide rows, so it missed
+copies already sent to others. `tests/a-notification-for-someone-else-is-written-by-bubaly.test.ts`
+(4 cases) pins that a member or AI scope never inserts through its own
+client, that recipients are still read through it, and that a system scope
+keeps its client; 2 of 4 fail with the service change reverted. Fresh replay
+399 migrations, 115/115 probes, `tsc` clean, lint 0 errors, 18,988 unit tests
+pass (3 fail only on this container's Node 22). Inert in production until
+F-001, like every migration after 0177.
 
 ## Swept clean · the API routes this file never named
 

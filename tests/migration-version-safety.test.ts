@@ -302,7 +302,13 @@ describe('Supabase migration filename safety', () => {
     // docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-
     // cannot-read-check.sql.
     //
-    expect(audit.nextVersion).toBe('0388');
+    // 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql narrows a
+    // member session's INSERT on notifications to rows addressed to the
+    // member themselves; notify() writes everyone else's with the service
+    // role. Held by docs/audit/notification-authorship-check.sql (re-
+    // controlled) and tests/a-notification-for-someone-else-is-written-by-
+    // bubaly.test.ts.
+    expect(audit.nextVersion).toBe('0389');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
