@@ -13,6 +13,9 @@ const sources = Object.fromEntries([
   'components/app/trial-paywall-gate.tsx', 'components/ui/modal.tsx', 'components/ui/button.tsx', 'components/ui/card.tsx',
   'lib/hooks/use-lock-body-scroll.ts', 'lib/auth/mfa.ts', 'lib/constants/roles.ts', 'lib/security/app-lock.ts',
   'lib/a11y/use-dialog-behavior.ts', 'lib/supabase/settle.ts',
+  // trial-paywall-gate prints the yearly price through formatCents in the
+  // reader's locale (AQ-01); PLAN_CURRENCY comes from the mocked lib/marketing/value.
+  'lib/wallet/ledger.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -39,7 +42,7 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
   await page.addScriptTag({ content: react });
   await page.addScriptTag({ content: reactDom });
   await page.addScriptTag({ content: `(() => {
-    const sources = ${JSON.stringify(sources)}, messages = ${JSON.stringify(messages)}, modules = {};
+    const sources = ${JSON.stringify(sources)}, messages = ${JSON.stringify(messages)}, localeCode = ${JSON.stringify(locale)}, modules = {};
     const p = window.__signoutForm = { current: 'session-a', canCapture: true, unavailable: false, switchDuringSignout: false,
       captures: 0, calls: [], navigations: [], refreshes: 0, errors: [], prevented: 0 };
     window.addEventListener('error', event => p.errors.push(event.message));
@@ -52,7 +55,8 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       react: React, 'react-dom': ReactDOM, 'next/navigation': { useRouter: () => router },
       'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
       'lucide-react': new Proxy({}, { get: () => () => null }),
-      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key, useLocale: () => ({ code: localeCode }) },
+      '@/lib/marketing/value': { PLAN_CURRENCY: 'USD' },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/app/app-context': { useApp: () => ({ role: 'child', members: [], userEmail: 'fixture@example.invalid' }) },
