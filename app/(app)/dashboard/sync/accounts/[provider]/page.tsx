@@ -227,9 +227,15 @@ export default async function SyncProviderPage({
         )}
         <div className="mt-4 flex flex-wrap gap-2">
           {setup.connectHref && (!getAdapter(provider as SyncProviderEnum) || isProviderConfigured(provider as SyncProviderEnum)) && (
-            <Link href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
+            // A plain <a>, never <Link>: connectHref is a route handler that
+            // mints an OAuth state, sets its cookie and redirects to the
+            // provider. <Link> prefetched it whenever the button was on screen,
+            // so merely opening this page overwrote the state and cleared the
+            // calendar-onboarding continuation, and a click went through an
+            // RSC fetch that fails cross-origin before falling back.
+            <a href={setup.connectHref} className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg shadow-glow transition hover:opacity-90">
               {t('dashboardSyncAccounts.connect')} {PROVIDER_LABELS[provider]}
-            </Link>
+            </a>
           )}
           <a href={setup.docsHref} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium transition hover:bg-elevated">
             {t('dashboardSyncAccounts.providerDocs')} <ExternalLink className="h-3.5 w-3.5" />
