@@ -108,7 +108,7 @@ export async function validateChoreSubmission(scope: ServiceScope, input: Valida
       scope,
       // The chore title, not the child's note: a kid's own words about what they
       // did are not something the request ledger needs to carry.
-      { feature: 'chores.validate', text: `Validate a chore submission: ${input.choreTitle}` },
+      { feature: 'chores.validate', text: 'Validate a chore submission' },
       async (obs) => {
         const provider = getProvider();
         const completion = await provider.complete({
@@ -167,7 +167,7 @@ export async function generateChorePlan(
   try {
     return await withAiRequest(
       scope,
-      { feature: 'chores.plan', text: prompt.slice(0, 200) },
+      { feature: 'chores.plan', text: 'Plan chores' },
       async (obs) => {
         const provider = getProvider();
         const completion = await provider.complete({ system: PLAN_SYSTEM, messages: [{ role: 'user', content: userText }], tools: [] });

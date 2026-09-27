@@ -86,7 +86,7 @@ export async function generate(scope: ServiceScope, input: AiGenerateInput): Pro
   // `social_ai_logs` error row and answers honestly.
   return withAiRequest(
     scope,
-    { feature: `social.${input.kind}`, text: (input.topic ?? input.kind).slice(0, 200) },
+    { feature: `social.${input.kind}`, text: 'Draft a social post' },
     async (obs) => {
       const provider = await resolveProvider();
       const completion = await provider.complete({

@@ -455,7 +455,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
     // `createRequest` silently coerces an unknown one to 'concierge' — which
     // would file every assistant turn under the concierge planner, a different
     // surface entirely. The `feature` string is what names this one.
-    { feature: 'assistant.turn', text: input.message, conversationId: input.conversationId },
+    { feature: 'assistant.turn', text: 'Assistant turn', conversationId: input.conversationId },
     async (obs) => {
       const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
       obs.used(provider.model, result.usage);
@@ -503,7 +503,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
       // solves it the same way.
       await withAiRequest(
         prepared.scope,
-        { feature: 'assistant.stream', text: input.message, conversationId: input.conversationId },
+        { feature: 'assistant.stream', text: 'Assistant stream', conversationId: input.conversationId },
         async (obs) => {
           const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
           let content = '';

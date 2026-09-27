@@ -348,7 +348,7 @@ ${UNTRUSTED_CONTENT_RULE}
         // behaviour is unchanged.
         briefing = await withAiRequest(
           scope,
-          { feature: `briefing.${type}`, text: `Generate ${type} briefing` },
+          { feature: `briefing.${type}`, text: 'Generate a briefing' },
           async (obs) => {
             const provider = await resolveProvider();
             const completion = await provider.complete({

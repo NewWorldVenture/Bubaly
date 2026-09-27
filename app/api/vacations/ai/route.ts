@@ -136,7 +136,7 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
     try {
       const built = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
-        { feature: 'vacations.build', text: `Build a plan for ${nights} nights` },
+        { feature: 'vacations.build', text: 'Build a vacation plan' },
         async (obs) => {
           const provider = await resolveProvider();
           const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 2000 });
