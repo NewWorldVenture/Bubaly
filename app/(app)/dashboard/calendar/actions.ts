@@ -36,7 +36,7 @@ import {
   createEvent, createEvents, deleteEvent, deleteEvents, updateEvent,
   EVENT_CATEGORIES, EVENT_RECURRENCES,
 } from '@/lib/services/calendar';
-import { makeKey } from '@/lib/services/idempotency';
+import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -48,7 +48,13 @@ const PATH = '/dashboard/calendar';
 
 export type CalendarActionResult =
   | { ok: true; id: string }
-  | { ok: false; error: string };
+  /**
+   * `already_saved` (creates only): this submission id already wrote an event,
+   * and that event no longer matches the one just sent — see `KeyedCreateOptions`
+   * in lib/services/idempotency.ts. That Save is settled, so the modal mints a
+   * new id rather than retry it (`submissionSettled`).
+   */
+  | { ok: false; error: string; code?: typeof ALREADY_SAVED };
 
 export type CalendarEventFields = {
   title?: string;
@@ -176,8 +182,16 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
       location: asText(input.location) ?? null,
       description: asText(input.description) ?? null,
       assigneeId: input.assigneeId ?? null,
+    }, {
+      // The key is a person's submission id, not a plan step: a changed Save
+      // under it is a change of mind, not the same save (see KeyedCreateOptions).
+      rejectChangedRetry: true,
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      return result.code === ALREADY_SAVED
+        ? { ok: false, error: result.error, code: ALREADY_SAVED }
+        : { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };
