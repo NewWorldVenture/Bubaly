@@ -45871,6 +45871,8 @@ Two registers means two answers to "what state is this page in". The second one 
 - Scanner findings: `reminders-module` 29 → 1 (a type-alias fragment) and `inbox-module` 29 → 0.
 - `tests/i18n-ungated-surface-ratchet.test.ts` CEILING drops from 2819 to 2581, which holds the burn-down so far.
 
+**Correction (merge of main at `a6dcd18e`).** The merge commit says `i18n-propagate` had overwritten six `appNotFound.*` values. That is wrong: the script never overwrites. They were this branch's own `C1-S9-97` wording for keys that main added independently in `199a94b5`, and the merge keeps main's wording, as with every overlap.
+
 ---
 
 ## What this pass did NOT establish
