@@ -25,6 +25,12 @@ vi.mock('react', async (original) => ({
   useMemo: (factory: () => unknown) => factory(),
   useCallback: (fn: unknown) => fn,
   useId: () => 'test-sidebar',
+  // A ref is a slot that keeps its object across renders, like useState's.
+  useRef: (initial: unknown) => {
+    const index = mocks.cursor++;
+    if (!(index in mocks.slots)) mocks.slots[index] = { current: initial };
+    return mocks.slots[index];
+  },
   useState: (initial: unknown) => {
     const index = mocks.cursor++;
     if (!(index in mocks.slots)) mocks.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -230,5 +236,51 @@ describe('a sidebar layout we could not read is not one we may overwrite', () =>
     await vi.waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
     expect(mocks.save).toHaveBeenCalledWith({ keys: [...DEFAULT_SIDEBAR_NAV_KEYS, PAID_CFO] });
     expect(mocks.error).not.toHaveBeenCalled();
+  });
+
+  it('reads again when the router cancelled the read, instead of reporting it failed', async () => {
+    // A client redirect landing while the server action is in flight rejects
+    // it with a network TypeError; the sidebar stays mounted (2026-09-27 page
+    // audit: /dashboard/vacations/<id> → /overview logged "preference read
+    // failed" and closed the write gate on a read that never failed).
+    vi.useFakeTimers();
+    try {
+      mocks.load
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValue({ nav: REAL_LAYOUT, children: null });
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let tree = await mounted();
+      expect(alerts(tree)).toEqual([]);
+      await vi.advanceTimersByTimeAsync(800);
+      tree = render();
+      await Promise.resolve();
+      tree = render();
+      expect(mocks.load).toHaveBeenCalledTimes(2);
+      expect(alerts(tree)).toEqual([]);
+      expect(logged).not.toHaveBeenCalledWith('[sidebar] preference read failed', expect.anything());
+      expect(storage.get(SIDEBAR_NAV_STORAGE_KEY)).toBe(JSON.stringify(REAL_LAYOUT));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still reports a read that keeps failing (control)', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.load.mockRejectedValue(new TypeError('Failed to fetch'));
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await mounted();
+      for (let i = 1; i <= 2; i += 1) {
+        await vi.advanceTimersByTimeAsync(800 * i);
+        render(); // the timer bumped `reload`; this render runs the effect again
+        await vi.advanceTimersByTimeAsync(0); // let that read reject
+      }
+      const tree = render();
+      expect(mocks.load).toHaveBeenCalledTimes(3);
+      expect(logged).toHaveBeenCalledWith('[sidebar] preference read failed', expect.any(TypeError));
+      expect(alerts(tree).join(' ')).toContain('could not be loaded');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
