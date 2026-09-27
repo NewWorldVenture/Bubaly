@@ -313,7 +313,13 @@ describe('Supabase migration filename safety', () => {
     // `text`, which does not cast to the enum, so every APPROVAL raised 42804
     // from 0196 on while rejection worked. Ported from the same branch (0321).
     //
-    expect(audit.nextVersion).toBe('0390');
+    // 0390_a_single_choice_poll_takes_one_vote.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0322 before main claimed that number.
+    //
+    // 0391_a_family_timezone_is_a_zone_that_exists.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0323 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0392');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
