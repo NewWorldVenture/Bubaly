@@ -77,10 +77,10 @@ where not exists (
 --     family_id table with NO SELECT/ALL policy, and calendar_events has
 --     01050's, so 0118 skips it.
 --     0339_a_calendar_event_names_who_actually_made_it.sql is the last migration
---     to change this table's policies, triggers or grants. 0360 and 0363 come
+--     to change this table's policies, triggers or grants. 0360 and 0386 come
 --     later but only reach its ROWS: 0360 puts an AFTER DELETE trigger on
 --     departure_plans whose SECURITY INVOKER function deletes calendar_events
---     rows under this table's own RLS, and 0363 counts them. 0339 does NOT
+--     rows under this table's own RLS, and 0386 counts them. 0339 does NOT
 --     re-create the four. It READS three back (lines 376-404: it raises unless
 --     calendar_events_{select,insert,update} still carry 01050's
 --     `is_family_member(family_id)`; it does not re-check _delete). It ADDS a
