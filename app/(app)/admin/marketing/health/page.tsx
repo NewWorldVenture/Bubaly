@@ -69,7 +69,7 @@ export default async function CustomerHealthPage() {
         {rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('adminMarketingHealth.noCustomersYet')}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div role="region" tabIndex={0} aria-label={t('adminMarketingHealth.customersNeedingAttention')} className="focus-ring overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr><th className="pb-2">{t('adminMarketingHealth.family')}</th><th className="pb-2">{t('adminMarketingHealth.plan')}</th><th className="pb-2">{t('adminMarketingHealth.lifecycle')}</th><th className="pb-2">{t('adminMarketingHealth.inactive')}</th><th className="pb-2">{t('adminMarketingHealth.health')}</th><th className="pb-2 text-right">{t('adminMarketingHealth.risk')}</th></tr>

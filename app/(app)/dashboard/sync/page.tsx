@@ -119,7 +119,7 @@ export default async function SyncHubPage() {
         <p className="mb-4 text-xs text-muted">
           {tr('dashboardSync.basedOnEachProvidersRealPublic')}
         </p>
-        <div className="overflow-x-auto">
+        <div role="region" tabIndex={0} aria-label={t('dashboardSync.whatEachProviderSupports')} className="focus-ring overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-muted">

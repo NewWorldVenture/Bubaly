@@ -142,7 +142,7 @@ export function ScanModule() {
         ) : (
           <>
             <p className="text-sm font-semibold">{fileName ?? 'Take a photo or upload a flyer'}</p>
-            <p className="mt-1 text-xs text-muted/60">{t('scan.jpgPngWebpOrPdfUp')}</p>
+            <p className="mt-1 text-xs text-muted">{t('scan.jpgPngWebpOrPdfUp')}</p>
           </>
         )}
       </div>
@@ -191,7 +191,7 @@ export function ScanModule() {
         <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface/30 p-5 text-sm text-muted">
           <ImageIcon className="h-5 w-5 shrink-0" />
           <span>
-            {t('scan.worksGreatWithSchoolNewslettersPicture')} <Link href="/dashboard/inbox" className="text-brand-text hover:underline">{t('scan.magicImportInbox')}</Link>.
+            {t('scan.worksGreatWithSchoolNewslettersPicture')} <Link href="/dashboard/inbox" className="text-brand-text underline hover:decoration-2">{t('scan.magicImportInbox')}</Link>.
           </span>
         </div>
       )}

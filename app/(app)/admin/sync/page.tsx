@@ -73,7 +73,7 @@ export default async function AdminSyncPage() {
       <Card>
         <h2 className="mb-3 text-base font-semibold">{t('adminSync.providerCatalog')}</h2>
         <div className="table-responsive">
-          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
+          <div role="region" tabIndex={0} aria-label={t('adminSync.providerCatalog')} className="focus-ring overflow-x-auto"><table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted">
                 <th className="px-3 py-2 font-medium">{t('adminSync.provider')}</th>

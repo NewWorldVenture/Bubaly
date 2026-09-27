@@ -153,7 +153,7 @@ export default async function AdminBillingPage() {
         {recent.length === 0 ? (
           <div className="p-4"><EmptyState icon={RefreshCw} title={tr('adminBilling.noSubscriptionsYet')} description={tr('billing.subscriptionsAppearHereAsFamilies')} /></div>
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <div role="region" tabIndex={0} aria-label={tr('adminBilling.recentSubscriptions')} className="focus-ring mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-y border-border text-left text-xs text-muted">
@@ -183,7 +183,7 @@ export default async function AdminBillingPage() {
       </Card>
 
       <p className="text-center text-xs text-muted">
-        {tr('adminBilling.managePlansAmpProcessorSettingsIn')} <Link href="/admin/subscriptions" className="text-brand-text hover:underline">{tr('adminBilling.subscriptions')}</Link>{tr('adminBilling.refundsDisputesAndIndividualChargesAre')}
+        {tr('adminBilling.managePlansAmpProcessorSettingsIn')} <Link href="/admin/subscriptions" className="text-brand-text underline hover:decoration-2">{tr('adminBilling.subscriptions')}</Link>{tr('adminBilling.refundsDisputesAndIndividualChargesAre')}
       </p>
     </div>
   );
