@@ -45469,6 +45469,66 @@ is recorded so the #419 in the logs has a known cause.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CONTROLS]` C1-S9-105 — buttons that did nothing when pressed
+
+**File/path:**
+- `app/(app)/admin/admins/page.tsx`
+- `app/(app)/admin/support-tickets/{page,actions}.ts(x)`
+- `components/admin/{invite-admin-button,new-ticket-button,ticket-row-actions}.tsx`
+- `app/api/admin/support-tickets/export/route.ts`, `lib/admin/tickets-csv.ts`
+- `components/modules/{sports,school}-module.tsx`
+
+**Problem.** Found while reading the pages the crawl had flagged. None of these could be seen by a crawl, because each one looked like a control and had no handler:
+- **`/admin/admins`: "Invite Admin".** `inviteAdminAction` existed and nothing called it.
+- **`/admin/support-tickets`: "Export" and "New Ticket".** `createTicketAction` existed and nothing called it. The row menu's "Assign agent" had neither a handler nor an action.
+- **`/dashboard/sports` and `/dashboard/school`: "Ask AI"** in each sidebar.
+- **The same two pages: a "more options" button on every table row**, with no menu behind it.
+- **The sports tab bar:** the six tabs changed only their own highlight. Messages and Resources had nothing behind them at all.
+
+**Fix.**
+- **Invite Admin and New Ticket** open a form that calls their existing action and shows the action's own refusal.
+- **Export** downloads a CSV from a new super-admin route:
+  - a failed read is a 502, not an empty file
+  - the export is audit-logged
+  - a cell starting `=` `+` `-` `@` is written as text, so a ticket subject can't become a spreadsheet formula
+- **"Assign agent"** is now "Assign to me", backed by a new `assignTicketToMeAction`.
+- **Ask AI** opens the page's AI insight, as the header icon already did.
+- **Each row's "more options"** is now a delete: confirmed first, and read back afterwards.
+- **The sports tabs** each show their own sections. The two empty tabs are gone.
+- **School's tab labels and weekday names** are now translated (weekdays via `Intl`), and "3 days left" comes from `Intl.RelativeTimeFormat`.
+- About 40 keys in seven catalogues.
+
+**Guard.** `tests/a-button-does-something.test.ts` scans every page and component for a `<button>` or `<Button>` with no onClick, type, formAction or asChild that isn't inside a `<form>`, `<Link>` or `<a>`. The scan strips comments first. A self-test proves it catches the original patterns and passes the legitimate ones. The CSV injection guard has its own unit cases.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SECURITY]` C1-S9-106 — the admin console claimed security policies it does not enforce
+
+**File/path:** `app/(app)/admin/admins/page.tsx` (Settings tab); `app/(app)/admin/layout.tsx`.
+
+**Problem.** The Settings tab of `/admin/admins` showed four switches:
+- "Require 2FA for all admins" (**on**)
+- "Admin session timeout — auto-logout after 8 hours" (**on**)
+- "IP allowlist" (off)
+- "Audit all admin actions" (**on**)
+
+They were hardcoded and did nothing when pressed. The code checks the three "on" claims as follows:
+- The admin layout checks only `isSuperAdmin()`; nothing requires a second factor for the console.
+- No admin session times out.
+- About 12 of the 35 admin page directories write an audit record.
+
+An operator reading this page to learn the console's security was told it had protections it does not have.
+
+**Fix.** The switches are replaced by four read-only statements of what is enforced today: two-step sign-in not required, no idle timeout, no IP allowlist, audit log partial. The intro says these aren't settings yet. All of it is translated.
+
+**Owner decision (OPEN).** Whether the admin console should *require* two-step sign-in (`requireAal2` exists and guards money, document and trust pages) and an idle timeout. Either is a product and security choice. It is recorded here and not decided by the audit.
+
+**Status:** FIXED (the page tells the truth). The policy gap is OPEN for the owner.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

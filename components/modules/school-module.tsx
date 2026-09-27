@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { firstName } from '@/lib/utils/format';
-import { BookOpen, Calendar, ChevronRight, GraduationCap, Inbox, MoreHorizontal, Plus, Sparkles } from 'lucide-react';
+import { BookOpen, Calendar, ChevronRight, GraduationCap, Inbox, Trash2, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -12,6 +12,8 @@ import { todayInZone } from '@/lib/schedule/zoned';
 import { classify, type FrontDeskSubKind } from '@/lib/front-desk/school-sports';
 import { proposeFrontDeskAction } from '@/app/(app)/dashboard/school/actions';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -29,12 +31,18 @@ type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
 type Grade = Tables<'grades'>;
 
-const TABS = ['Overview', 'Assignments', 'Classes', 'Grades'] as const;
+const TABS = ['overview', 'assignments', 'classes', 'grades'] as const;
 type Tab = (typeof TABS)[number];
+// The tab ids stay as they are; what a reader sees comes from the catalogue.
+// Audit C1-S9-105.
+const TAB_LABEL: Record<Tab, string> = {
+  overview: 'schoolModule.overview', assignments: 'schoolModule.assignments', classes: 'schoolModule.classes', grades: 'schoolModule.grades',
+};
 
 const EVENT_TYPES = ['general', 'holiday', 'field_trip', 'parent_meeting', 'exam', 'concert', 'sport', 'graduation', 'assignment', 'announcement'];
 const GRADE_TYPES: GradeType[] = ['test', 'quiz', 'homework', 'project', 'final', 'participation', 'other'];
-const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/** The weekday a class meets, in the reader's language (0 = Sunday). 2023-01-01 was a Sunday. */
+const weekdayName = (i: number, locale: string) => new Date(2023, 0, 1 + i).toLocaleDateString(locale, { weekday: 'long' });
 
 const SUBJECT_ICONS: Record<string, string> = { Math: '📐', English: '📝', Science: '🔬', History: '🏛️', Spanish: '🌎', Art: '🎨', Music: '🎵', PE: '⚽' };
 const SUBJECT_COLORS: Record<string, string> = { Math: 'bg-violet-500', English: 'bg-blue-500', Science: 'bg-emerald-500', History: 'bg-orange-500', Spanish: 'bg-rose-500', Art: 'bg-pink-500', Music: 'bg-amber-500', PE: 'bg-cyan-500' };
@@ -75,7 +83,7 @@ const GRADE_DIST_COLORS = [
   { label: 'B (80-89%)', min: 80, color: '#60a5fa' },
   { label: 'C (70-79%)', min: 70, color: '#fbbf24' },
   { label: 'D (60-69%)', min: 60, color: '#fb923c' },
-  { label: 'F (Below 60%)', min: 0, color: '#f87171' },
+  { label: 'F (<60%)', min: 0, color: '#f87171' },
 ];
 
 const fmtDueIn = (locale: LocaleCode) => (iso: string) => {
@@ -83,9 +91,12 @@ const fmtDueIn = (locale: LocaleCode) => (iso: string) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
-  if (diff <= 0) return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: 'Today', urgent: true };
-  if (diff === 1) return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: 'Tomorrow', urgent: true };
-  return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: `${diff} days left`, urgent: false };
+  // "today" / "tomorrow" / "in 3 days" in the reader's language, not English.
+  const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  const label = d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  if (diff <= 0) return { label, sub: rel.format(0, 'day'), urgent: true };
+  if (diff === 1) return { label, sub: rel.format(1, 'day'), urgent: true };
+  return { label, sub: rel.format(diff, 'day'), urgent: false };
 };
 
 function letterGrade(pct: number): string {
@@ -124,7 +135,7 @@ export function SchoolModule() {
   const { fmtTimeAgo } = useFormat();
   const { familyId, userId, members, family } = useApp();
   const { toast, success, error: toastError } = useToast();
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [tab, setTab] = useState<Tab>('overview');
   const [scheduleIdx, setScheduleIdx] = useState(0);
 
   // Modal states
@@ -403,6 +414,20 @@ export function SchoolModule() {
     refreshGrades();
   }
 
+
+  // The row's "more options" button had no handler and no menu. What a family
+  // does with a listed event is remove it, so the row carries that, confirmed
+  // first and read back after. Audit C1-S9-105.
+  const askConfirm = useConfirm();
+  async function removeEvent(id: string, title: string) {
+    if (!(await askConfirm({ title: tr('schoolModule.deleteEventTitle', { title }), confirmLabel: tr('schoolModule.delete') }))) return;
+    const { data: removed, error: err } = await createClient().from('school_events').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
+    success(tr('schoolModule.eventDeleted'));
+    void refreshEvents();
+  }
+
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} />;
 
@@ -431,7 +456,7 @@ export function SchoolModule() {
 
         {/* Tab bar */}
         <div className="flex items-center justify-between border-b border-border">
-          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{t}</button>)}</div>
+          <div className="tab-bar">{TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={cn('tab-item', tab === t ? 'tab-item-active' : 'tab-item-inactive')}>{tr(TAB_LABEL[t])}</button>)}</div>
         </div>
 
         {/* Stats grid */}
@@ -452,7 +477,7 @@ export function SchoolModule() {
         </div>
 
         {/* School & Sports desk — inbox messages this module can act on */}
-        {tab === 'Overview' && (
+        {tab === 'overview' && (
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
               <div>
@@ -515,11 +540,11 @@ export function SchoolModule() {
         )}
 
         {/* Upcoming Assignments */}
-        {(tab === 'Overview' || tab === 'Assignments') && (
+        {(tab === 'overview' || tab === 'assignments') && (
           <div className="rounded-2xl border border-border bg-surface/40">
             <div className="flex items-center justify-between p-5">
               <h2 className="font-semibold">{tr('school.upcomingAssignments')}</h2>
-              <button onClick={() => setTab('Assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('school.viewAllAssignments')} <ChevronRight className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTab('assignments')} className="flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('school.viewAllAssignments')} <ChevronRight className="h-3.5 w-3.5" /></button>
             </div>
             {assignments.length === 0 ? (
               <div className="p-5 pt-0">
@@ -537,7 +562,7 @@ export function SchoolModule() {
                       <th className="w-8 px-4 py-3" />
                     </tr></thead>
                     <tbody className="divide-y divide-border">
-                      {(tab === 'Assignments' ? assignments : assignments.slice(0, 5)).map((e) => {
+                      {(tab === 'assignments' ? assignments : assignments.slice(0, 5)).map((e) => {
                         const due = fmtDue(e.starts_at);
                         const member = e.member_id ? memberById.get(e.member_id) : undefined;
                         return (
@@ -553,16 +578,16 @@ export function SchoolModule() {
                             </td>
                             <td className="px-4 py-3.5 capitalize text-fg">{(e.event_type ?? 'general').replace('_', ' ')}</td>
                             <td className="px-4 py-3.5"><p className="font-medium">{due.label}</p><p className={cn('text-xs', due.urgent ? 'text-orange-400' : 'text-muted')}>{due.sub}</p></td>
-                            <td className="px-4 py-3.5"><button aria-label={tr('school.moreOptions')} className="text-muted/60 hover:text-muted"><MoreHorizontal className="h-4 w-4" /></button></td>
+                            <td className="px-4 py-3.5"><button type="button" onClick={() => void removeEvent(e.id, e.title)} aria-label={tr('schoolModule.deleteEventTitle', { title: e.title })} className="text-muted/60 hover:text-danger focus-ring rounded"><Trash2 className="h-4 w-4" /></button></td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
-                {tab === 'Overview' && assignments.length > 5 && (
+                {tab === 'overview' && assignments.length > 5 && (
                   <div className="border-t border-border p-4 text-center">
-                    <button onClick={() => setTab('Assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('school.viewAll')} {assignments.length} assignments <ChevronRight className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setTab('assignments')} className="mx-auto flex items-center gap-1 text-xs font-semibold text-brand-text">{tr('schoolModule.viewAllNAssignments', { count: assignments.length })} <ChevronRight className="h-3.5 w-3.5" /></button>
                   </div>
                 )}
               </>
@@ -571,7 +596,7 @@ export function SchoolModule() {
         )}
 
         {/* Classes tab */}
-        {tab === 'Classes' && (
+        {tab === 'classes' && (
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{tr('school.allClasses')}</h2>
@@ -589,7 +614,7 @@ export function SchoolModule() {
                       <span className="text-lg">{SUBJECT_ICONS[c.subject] ?? '📚'}</span>
                       <div className="flex-1">
                         <p className="font-medium">{c.subject}</p>
-                        <p className="text-xs text-muted">{[c.teacher, c.room, c.day_of_week != null ? DAYS_OF_WEEK[c.day_of_week] : null].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-muted">{[c.teacher, c.room, c.day_of_week != null ? weekdayName(c.day_of_week, locale.code) : null].filter(Boolean).join(' · ')}</p>
                       </div>
                       {member && <Avatar name={member.display_name} color={member.color} size={24} />}
                       {c.time_slot && <span className="text-xs text-muted tabular-nums">{c.time_slot}</span>}
@@ -602,7 +627,7 @@ export function SchoolModule() {
         )}
 
         {/* Grades tab */}
-        {tab === 'Grades' && (
+        {tab === 'grades' && (
           <div className="rounded-2xl border border-border bg-surface/40 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">{tr('school.allGrades')}</h2>
@@ -650,13 +675,13 @@ export function SchoolModule() {
         )}
 
         {/* Two-column grid: Class Schedules + Announcements (Overview) */}
-        {tab === 'Overview' && (
+        {tab === 'overview' && (
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Class Schedules */}
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-semibold">{tr('school.todayAposSClasses')}</h2>
-                <button onClick={() => setTab('Classes')} className="text-xs font-semibold text-brand-text">{tr('school.viewFullSchedule')}</button>
+                <button onClick={() => setTab('classes')} className="text-xs font-semibold text-brand-text">{tr('school.viewFullSchedule')}</button>
               </div>
               {members.length > 0 && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
@@ -761,7 +786,7 @@ export function SchoolModule() {
                   ))}
                 </div>
               </div>
-              <button onClick={() => setTab('Grades')} className="mt-4 flex items-center gap-1 text-xs text-brand-text">{tr('school.viewGradeDetails')} <ChevronRight className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setTab('grades')} className="mt-4 flex items-center gap-1 text-xs text-brand-text">{tr('school.viewGradeDetails')} <ChevronRight className="h-3.5 w-3.5" /></button>
             </>
           )}
         </div>
@@ -793,7 +818,8 @@ export function SchoolModule() {
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand/15"><Sparkles className="h-6 w-6 text-brand-text" /></div>
           <h3 className="font-bold">{tr('school.aiStudyHelper')}</h3>
           <p className="mt-2 text-xs leading-5 text-muted">{tr('school.getStudyTipsHomeworkHelpAnd')}</p>
-          <Button className="mt-4 w-full">{tr('school.askAi')}</Button>
+          {/* This button did nothing. It opens the school insight, as the header's icon does. Audit C1-S9-105. */}
+          <AiInsight kind="school" label={tr('school.askAi')} variant="primary" className="mt-4 w-full justify-center" />
         </div>
       </aside>
 
@@ -817,7 +843,7 @@ export function SchoolModule() {
           <Field label={tr('school.teacher')}>{(id) => <Input id={id} value={classForm.teacher} onChange={(e) => setClassForm((f) => ({ ...f, teacher: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
           <Field label={tr('school.room')}>{(id) => <Input id={id} value={classForm.room} onChange={(e) => setClassForm((f) => ({ ...f, room: e.target.value }))} placeholder={tr('school.eGRoom203')} />}</Field>
           <Field label={tr('school.time')}>{(id) => <Input id={id} value={classForm.time_slot} onChange={(e) => setClassForm((f) => ({ ...f, time_slot: e.target.value }))} placeholder={tr('school.eG800Am')} />}</Field>
-          <Field label={tr('school.dayOfWeek')}>{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{DAYS_OF_WEEK.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}</Select>}</Field>
+          <Field label={tr('school.dayOfWeek')}>{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{[0, 1, 2, 3, 4, 5, 6].map((i) => <option key={i} value={String(i)}>{weekdayName(i, locale.code)}</option>)}</Select>}</Field>
           <Field label={tr('school.school')}>{(id) => <Input id={id} value={classForm.school_name} onChange={(e) => setClassForm((f) => ({ ...f, school_name: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
           <Button className="w-full" onClick={saveClass} disabled={saving || !classForm.member_id || !classForm.subject}>{saving ? 'Saving...' : 'Add Class'}</Button>
         </div>
