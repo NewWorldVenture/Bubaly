@@ -13,6 +13,7 @@ import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/
 import { AdminRowActions } from '@/components/admin/admin-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
 import { fmtDate } from '@/lib/utils/format';
+import { InviteAdminButton } from '@/components/admin/invite-admin-button';
 
 export const metadata: Metadata = { title: 'Admin Management', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -149,8 +150,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{tr('admins.admin')}</h1>
           <p className="mt-1 text-sm text-muted">{tr('admins.manageAdministratorsAndSystemAccess')}</p>
         </div>
-        <button className="flex h-9 items-center gap-1.5 self-start rounded-lg bg-brand px-4 text-sm font-semibold text-brand-fg hover:brightness-110 sm:self-auto">
-          <Plus className="h-4 w-4" />{' '}{tr('admins.inviteAdmin')}</button>
+        <InviteAdminButton />
       </div>
 
       {/* Tabs */}
@@ -165,7 +165,7 @@ export default async function AdminManagementPage({ searchParams }: Params) {
 
       {/* Admin Users tab */}
       {tab === 'users' && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           {/* Left */}
           <div className="space-y-5">
             {/* Stat cards */}
@@ -437,25 +437,28 @@ export default async function AdminManagementPage({ searchParams }: Params) {
       {tab === 'settings' && (
         <Card>
           <h2 className="mb-1 text-base font-semibold">{tr('admins.adminSettings')}</h2>
-          <p className="mb-5 text-sm text-muted">{tr('admins.configureGlobalAdminAccessPolicies')}</p>
+          {/* These were four switches that did nothing, and two of them said a
+              policy was ON that the code does not enforce: nothing requires a
+              second factor for the admin console, and no admin session times
+              out. A page an operator reads to learn the console's security has
+              to say what is true. They are statements now, not controls, until
+              each policy exists. Audit C1-S9-106. */}
+          <p className="mb-5 text-sm text-muted">{tr('admins.policiesAsTheyStand')}</p>
           <div className="space-y-4 max-w-lg">
-            {[
-              { label: 'Require 2FA for all admins', desc: 'All administrators must use two-factor authentication', enabled: true },
-              { label: 'Admin session timeout',       desc: 'Auto-logout after 8 hours of inactivity',             enabled: true },
-              { label: 'IP allowlist enforcement',    desc: 'Restrict admin access to approved IP ranges',         enabled: false },
-              { label: 'Audit all admin actions',     desc: 'Log every admin action to the audit trail',           enabled: true },
-            ].map(({ label, desc, enabled }) => (
-              <div key={label} className="flex items-start justify-between gap-4 rounded-xl border border-border p-4">
+            {([
+              ['twoFactor', 'notEnforced'],
+              ['sessionTimeout', 'notEnforced'],
+              ['ipAllowlist', 'notEnforced'],
+              ['auditLog', 'partial'],
+            ] as const).map(([policy, state]) => (
+              <div key={policy} className="flex items-start justify-between gap-4 rounded-xl border border-border p-4">
                 <div>
-                  <p className="text-sm font-medium">{label}</p>
-                  <p className="mt-0.5 text-xs text-muted">{desc}</p>
+                  <p className="text-sm font-medium">{tr(`admins.policy.${policy}.label`)}</p>
+                  <p className="mt-0.5 text-xs text-muted">{tr(`admins.policy.${policy}.state`)}</p>
                 </div>
-                <button
-                  className={`mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors ${enabled ? 'bg-brand' : 'bg-elevated'}`}
-                  aria-label={label}
-                >
-                  <span className={`block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : ''}`} />
-                </button>
+                <span className={`mt-0.5 shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${state === 'partial' ? 'bg-warning/15 text-warning' : 'bg-elevated text-muted'}`}>
+                  {tr(`admins.policyState.${state}`)}
+                </span>
               </div>
             ))}
           </div>

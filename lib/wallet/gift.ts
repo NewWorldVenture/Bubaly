@@ -37,12 +37,17 @@ export function giftPath(token: string): string {
 }
 
 /** A friendly label for an occasion. */
-export function occasionLabel(occasion: string | null): string {
+/**
+ * The catalogue key for an occasion's label. It returned English, which the
+ * public gift page and the parent's gift screen printed in every locale; the
+ * caller words it with its own `t`. Audit C1-S9-104.
+ */
+export function occasionLabelKey(occasion: string | null): string {
   switch (occasion) {
-    case 'birthday': return '🎂 Birthday';
-    case 'holiday': return '🎄 Holiday';
-    case 'graduation': return '🎓 Graduation';
-    case 'just_because': return '💝 Just because';
-    default: return 'Gift';
+    case 'birthday': return 'gift.occasionBirthday';
+    case 'holiday': return 'gift.occasionHoliday';
+    case 'graduation': return 'gift.occasionGraduation';
+    case 'just_because': return 'gift.occasionJustBecause';
+    default: return 'gift.occasionGift';
   }
 }

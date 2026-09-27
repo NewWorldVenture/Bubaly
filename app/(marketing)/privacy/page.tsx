@@ -34,10 +34,10 @@ const SECTIONS: LegalSection[] = [
       [
         'privacy.accountDetailsYourNameEmail',
         'privacy.familyContentCalendarEventsTo',
-        'Family member profiles — names, roles (parent, adult, teen, child, caregiver, guest), and optional details like birthdays and colors. Profiles for children are created and managed by a parent or guardian.',
+        'privacy.familyMemberProfilesNamesRoles',
         'privacy.paymentInformationIfYouSubscribe',
       ],
-      'Information created through use: the records you create, your in‑app activity (such as completing a chore), and your notification and display preferences.',
+      'privacy.informationCreatedThroughUse',
       'privacy.informationCollectedAutomaticallyBasicDevice',
     ],
   },

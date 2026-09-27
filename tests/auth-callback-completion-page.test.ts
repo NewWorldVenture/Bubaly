@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Execute the real async route and query parser; only its client UI is a seam.
 vi.mock('@/components/auth/callback-completion', () => ({ CallbackCompletion: () => null }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
-import CallbackCompletionPage, { metadata } from '@/app/(auth)/auth/complete/page';
+// The tab title is translated (C1-S9-100), so the page's metadata is generated.
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+});
+import CallbackCompletionPage, { generateMetadata } from '@/app/(auth)/auth/complete/page';
 
 type Query = Record<string, string | string[] | undefined>;
 const page = (query: Query) => CallbackCompletionPage({ searchParams: Promise.resolve(query) });
@@ -14,7 +19,7 @@ describe('direct completion page admission', () => {
   it('awaits Next 15 searchParams and passes one admitted code and internal destination', async () => {
     const tree = await page({ code: 'synthetic-code', next: '/dashboard/meals?week=next', ignored: undefined });
     expect(tree.props).toEqual({ code: 'synthetic-code', next: '/dashboard/meals?week=next', admission: expect.any(String), attempt: null });
-    expect(metadata).toMatchObject({ robots: { index: false, follow: false }, referrer: 'no-referrer' });
+    expect(await generateMetadata()).toMatchObject({ title: 'Complete sign in', robots: { index: false, follow: false }, referrer: 'no-referrer' });
   });
 
   it.each<[string, Query]>([

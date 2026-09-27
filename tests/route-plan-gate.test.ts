@@ -22,10 +22,14 @@ const CATALOG_HREFS = new Set(FEATURE_CATALOG.map((f) => f.href).filter((h): h i
  * the same resolver the page uses.
  */
 
-const state = vi.hoisted(() => ({ db: null as unknown, familyId: 'family-plus', failSubscriptionsRead: false }));
+const state = vi.hoisted(() => ({ db: null as unknown, familyId: 'family-plus', failSubscriptionsRead: false, superAdmin: false as boolean | 'throws' }));
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({
+  isSuperAdmin: async () => {
+    if (state.superAdmin === 'throws') throw new Error('Account context is temporarily unavailable.');
+    return state.superAdmin;
+  },
   requireUserContext: async () => ({
     user: { id: 'user-1', email: 'parent@example.com' },
     memberships: [],
@@ -73,6 +77,7 @@ function failingSubscriptions(db: ReturnType<typeof createInMemorySupabase<DB>>)
 beforeEach(() => {
   limiter.enforce.mockClear();
   state.failSubscriptionsRead = false;
+  state.superAdmin = false;
   state.familyId = PLUS;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   const db = createInMemorySupabase<DB>();
@@ -102,6 +107,29 @@ describe('an AI endpoint refuses before it spends anything', () => {
 
     expect(response.status).not.toBe(403);
     expect(limiter.enforce).toHaveBeenCalled();
+  });
+
+  it('lets a super administrator through below the tier, as requireFeature does on the page (C1-S9-98)', async () => {
+    // The page let them in to preview; every endpoint behind it answered 403,
+    // and the screens showed that as their own result.
+    state.familyId = FREE;
+    state.superAdmin = true;
+
+    const response = await savings();
+
+    expect(response.status).not.toBe(403);
+    expect(limiter.enforce).toHaveBeenCalled();
+  });
+
+  it('answers 503 when the account cannot be read to know — not 403, and not a pass', async () => {
+    state.familyId = FREE;
+    state.superAdmin = 'throws';
+
+    const response = await savings();
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'unavailable' });
+    expect(limiter.enforce).not.toHaveBeenCalled();
   });
 
   it('answers 503 — not 403 — when the plan cannot be read', async () => {

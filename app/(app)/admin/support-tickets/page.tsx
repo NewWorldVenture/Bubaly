@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
+import { NewTicketButton } from '@/components/admin/new-ticket-button';
 import { TicketRowActions } from '@/components/admin/ticket-row-actions';
 import { StatusDonut } from '@/components/admin/status-donut';
 import { fmtDate } from '@/lib/utils/format';
@@ -159,12 +160,11 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
           <p className="mt-1 text-sm text-muted">{tr('adminSupportTickets.manageAndResolveCustomerSupportRequests')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 text-sm font-medium hover:bg-elevated">
+          {/* Both were buttons with no handler. Audit C1-S9-105. */}
+          <a href="/api/admin/support-tickets/export" download className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface/60 px-3 text-sm font-medium hover:bg-elevated">
             <ArrowDownToLine className="h-4 w-4" /> {tr('adminSupportTickets.export')}
-          </button>
-          <button className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-fg hover:brightness-110">
-            <Plus className="h-4 w-4" /> {tr('adminSupportTickets.newTicket')}
-          </button>
+          </a>
+          <NewTicketButton />
         </div>
       </div>
 
@@ -179,7 +179,7 @@ export default async function SupportTicketsPage({ searchParams }: Params) {
       </div>
 
       {/* Main grid */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* Left: table */}
         <div className="space-y-5">
           <Card>

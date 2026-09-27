@@ -93,7 +93,7 @@ export function CommunityModule({
       )}
 
       {/* Create + join */}
-      <section className="mt-5 grid gap-3 sm:grid-cols-2">
+      <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <form
           className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-3"
           onSubmit={(e) => { e.preventDefault(); if (name.trim()) { run(() => createCircleAction(name), 'Circle created — share the invite code'); setName(''); } }}

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { requireUserContext } from '@/lib/supabase/auth';
+import { isSuperAdmin, requireUserContext } from '@/lib/supabase/auth';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 
@@ -28,7 +28,20 @@ export async function POST() {
     console.error('[autopilot] plan read failed', err);
     return NextResponse.json({ error: t('scan.autopilotScanFailed') }, { status: 503 });
   }
+  // A super administrator previews the page past its plan (requireFeature),
+  // so the scan behind it lets them through too — the route gate does the same
+  // (lib/server/route-feature-gate.ts). The nightly cron does not: it runs each
+  // family on its real plan. Audit C1-S9-98.
+  let previewing = false;
   if (!entitlement.allowed) {
+    try {
+      previewing = await isSuperAdmin();
+    } catch (err) {
+      console.error('[autopilot] account read failed', err);
+      return NextResponse.json({ error: t('scan.autopilotScanFailed') }, { status: 503 });
+    }
+  }
+  if (!entitlement.allowed && !previewing) {
     // 'off' is not a plan problem and must not read as one: the feature does
     // not exist for anybody, so it is a 404 exactly as the page's notFound().
     if (entitlement.reason === 'off') return NextResponse.json({ error: t('scan.autopilotScanFailed') }, { status: 404 });

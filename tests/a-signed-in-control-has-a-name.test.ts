@@ -19,7 +19,7 @@ const read = (path: string) => readFileSync(path, 'utf8');
 function sourceFiles(dir: string): string[] {
   return (readdirSync(dir, { recursive: true }) as string[])
     .filter((f) => f.endsWith('.tsx'))
-    .map((f) => join(dir, f));
+    .map((f) => join(dir, f).replaceAll('\\', '/'));
 }
 const SURFACE = [...sourceFiles('app'), ...sourceFiles('components')];
 
