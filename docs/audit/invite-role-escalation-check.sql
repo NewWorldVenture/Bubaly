@@ -290,11 +290,16 @@ begin
   -- refusal with an attribution too — and this is the leg that converts a real
   -- false green: that control SWALLOWS 42501, so without this a missing INSERT
   -- grant or a guard trigger on family_members would read as fm_insert holding.
-  -- `owner` is not yet a member of ctl_fam, so the unique (family_id, user_id)
-  -- index is not what is being measured.
+  -- The row carries NO login (user_id null). Since 0403 a client may not write
+  -- a login onto a member row at all — that is the server's job, through an
+  -- invitation — so a row naming a user would be refused by 0403's trigger and
+  -- this control would measure the trigger, not fm_insert. A login-less member
+  -- (a child profile, a grandparent without an account) is the ordinary client
+  -- insert, and it is what fm_insert alone decides. The login case is held by
+  -- docs/audit/member-login-link-check.sql.
   begin
     insert into public.family_members(family_id, user_id, role, display_name, is_active)
-      values (ctl_fam, owner, 'parent', 'Control member', true);
+      values (ctl_fam, null, 'parent', 'Control member', true);
     get diagnostics n = ROW_COUNT;
     if n <> 1 then
       ctl_err := format('this invitee''s INSERT into family_members in the family they DO manage stored %s rows, not 1', n);
@@ -312,8 +317,10 @@ begin
     raise exception 'INVITE-ESC FAIL: another person''s invite is visible (% rows) — invites_select is not holding', n;
   end if;
   begin
+    -- No login on the row, for the reason the control above gives: this is
+    -- fm_insert's refusal to measure, and a user_id would bring 0403's in too.
     insert into public.family_members(family_id, user_id, role, display_name, is_active)
-      values (fid, invitee, 'parent', 'sneak', true);
+      values (fid, null, 'parent', 'sneak', true);
     blocked := false;
   exception when insufficient_privilege then blocked := true;
   end;

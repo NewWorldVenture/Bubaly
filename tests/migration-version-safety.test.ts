@@ -356,7 +356,10 @@ describe('Supabase migration filename safety', () => {
     // 0402_an_auction_can_close.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0334 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0403');
+    // 0403_only_the_server_links_a_login_to_a_member.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0335 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0404');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
