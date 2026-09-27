@@ -97,7 +97,7 @@ export function MarketingSubnav() {
     <nav className="space-y-2 rounded-2xl border border-border bg-surface/30 p-3">
       {GROUPS.map((group) => (
         <div key={group.title} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">
-          <span className="shrink-0 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted/70 sm:w-32">
+          <span className="shrink-0 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted sm:w-32">
             {group.title}
           </span>
           <div className="flex flex-wrap gap-1.5">
