@@ -4994,6 +4994,7 @@
   "dashboardSocialSettings.saveSettings": "Instellingen opslaan",
   "dashboardSocialSettings.signatureAppendedOnSupportedPlatforms": "Handtekening (toegevoegd op ondersteunde platforms)",
   "dashboardSocialSettings.workspaceSettings": "Werkruimte-instellingen",
+  "dashboardSocialSettings.yourRoleCantChangeAccess": "Alleen een eigenaar kan wijzigen wie toegang heeft.",
   "dashboardSocialSettings.yourRoleCantChangeSettings": "Je rol kan geen instellingen wijzigen.",
   "dashboardSync.basedOnEachProvidersRealPublic": "Gebaseerd op de echte openbare API van elke provider. Waar tweerichtingssynchronisatie niet kan, zeggen we dat gewoon in plaats van te doen alsof.",
   "dashboardSync.connectAnAccount": "Account koppelen",

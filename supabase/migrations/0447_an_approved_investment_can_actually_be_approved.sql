@@ -38,7 +38,7 @@
 -- Found by `plpgsql_check`, which resolves a plpgsql body against the real
 -- catalogue instead of waiting for the line to be reached. A plpgsql function
 -- binds its SQL at CALL time, so a body can be catastrophically wrong and still
--- install cleanly — the same property that hid 0446's unreachable
+-- install cleanly — the same property that hid 0444's unreachable
 -- `gen_random_bytes` behind a membership check. It reported exactly one error
 -- across every non-trigger plpgsql function in `public`, and this was it.
 

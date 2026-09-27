@@ -59,7 +59,7 @@ export default async function VideoPage() {
             <option value="published">{tr('adminMarketingVideo.published')}</option>
           </select>
           <input name="duration_seconds" type="number" min="0" placeholder={tr('adminMarketingVideo.durationSec')} className={inputCls} />
-          <input name="url" placeholder={tr('adminMarketingVideo.youtubeVimeoUrl')} className={`${inputCls} lg:col-span-2`} />
+          <input name="url" type="url" pattern="https?://([a-z0-9\-]+\.)*(youtube\.com|youtu\.be|vimeo\.com)/.+" placeholder={tr('adminMarketingVideo.youtubeVimeoUrl')} className={`${inputCls} lg:col-span-2`} />
           <input name="attribution" placeholder={tr('adminMarketingVideo.attributionIfRequired')} className={inputCls} />
           <select name="asset_id" defaultValue="" className={inputCls} aria-label={tr('adminMarketingVideo.orPickAnUploadedVideo')}>
             <option value="">{tr('adminMarketingVideo.orPickUploadedVideo')}</option>

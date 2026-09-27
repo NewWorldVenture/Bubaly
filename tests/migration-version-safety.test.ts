@@ -461,20 +461,22 @@ describe('Supabase migration filename safety', () => {
     // four more the same way on the first merge (numbered 0364, 0368, 0376 and
     // 0377 then; duplicates of main's 0298, 0306/0322/0324, 0318 and 0319);
     // those never took a number in this range, and the numbers they held then
-    // are main's now. 0444 and 0445 are the rest of this PR's range, unused.
+    // are main's now. 0444 and 0445 were the rest of this PR's range, unused;
+    // 0444 is now the circle search-path fix (pgcrypto lives in `extensions`
+    // on Supabase), and 0445 is free.
     //
-    // 0446-0458 are the claude/logged-in-pages-supabase-7q6vtf audit branch's,
+    // 0447-0458 are the claude/logged-in-pages-supabase-7q6vtf audit branch's,
     // ported onto main (PORT-001). They were 0318-0336 on that branch and
     // 0389-0404 on the port until main's #583 took 0389-0391 and 0406-0445;
-    // they moved as one block, in order, above main's newest. Three were
+    // they moved as one block, in order, above main's newest. Four were
     // dropped rather than renumbered, because main now carries the same rule:
     // the port's 0393 (the OAuth token store is service-role only) is main's
-    // 0406, its 0395 (the vaults ask for the second factor) is main's 0391, and
+    // 0406, its 0395 (the vaults ask for the second factor) is main's 0391,
     // its 0404 (a removed member's profile visibility) is main's 0426, which
-    // installs the identical policy. What the thirteen touch:
+    // installs the identical policy, and its 0446 (the circle search_path) is
+    // main's 0444, which installs the identical function. What the twelve
+    // touch:
     //
-    // 0446 pins marketplace_create_circle's search_path to `public, extensions`
-    // (pgcrypto lives in `extensions`; 42883 on every call from 0176 on).
     // 0447 casts the ledger direction in invest_decide_order (every APPROVAL
     // raised 42804 from 0196 on while rejection worked). 0448 makes a
     // single-choice poll take one vote. 0449 refuses a family timezone the

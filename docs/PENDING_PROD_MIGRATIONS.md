@@ -3177,16 +3177,22 @@ replaced or widened `main`'s rule. They are recorded rather than renumbered, as
 applied, 0 failed; `docs/audit/run-probes.sh` twice on it, 137 of 137 passed,
 none skipped. Each empty number's file was then put back on a copy of that
 database and the probe named above went red.
-## Ported from the audit branch — `0446`–`0458`, all unapplied
+## Ported from the audit branch — `0447`–`0458`, all unapplied
 
-These thirteen were written on `claude/logged-in-pages-supabase-7q6vtf`, whose
+These twelve were written on `claude/logged-in-pages-supabase-7q6vtf`, whose
 own numbering (`0318`–`0336`) collided with migrations main had already applied
 to its ledger. They are re-applied here one fix at a time, each against main as
 it stands, and numbered after main's highest (`0443`, #583; #583 keeps `0444`
 and `0445` for itself). Every one was checked for an equivalent already on main
 first; where main already covered part of a finding the migration was reduced
-to the remainder, and each entry says so under **On main**. Four were not
+to the remainder, and each entry says so under **On main**. Five were not
 carried at all, because main already carries the same rule:
+
+- The branch's circle fix (the port's `0446`, `marketplace_create_circle`'s
+  search_path reaching `extensions`) is main's `0444`, which arrived with #609
+  while #586 was open and installs the identical function. The port's file is
+  removed; the analysis below is kept under that heading because it is still
+  the explanation of what `0444` fixes.
 
 - The branch's `0329` (SEC-017: gift links, gift payments, Pay-IDs and savings
   goals were member-writable) — main's `0350` and `0378` had already rebuilt
@@ -3217,7 +3223,6 @@ of these, so none gates a deploy:
 
 | Migration | Needs code? | Before it is applied |
 |---|---|---|
-| `0446` circle creation | no | circles cannot be created (as today) |
 | `0447` investment approval | no | approving an order raises 42804 (as today) |
 | `0448` single-choice poll | no | a forged extra vote is accepted |
 | `0449` family timezone | no | the app refuses a bad zone; the table does not |
@@ -3231,7 +3236,9 @@ of these, so none gates a deploy:
 | `0457` auction close | no | no auction closes (as today) |
 | `0458` member login link | no | a manager can write a stranger's login onto a member row |
 
-### `0446` — a sharing circle could never be created
+### The port's `0446`, now main's `0444` — a sharing circle could never be created
+
+*Not carried: main's `0444` installs the identical function. The analysis stands.*
 
 `marketplace_create_circle` is `security definer` and pinned
 `set search_path = public`. Pinning is the correct instinct for a definer
@@ -3259,7 +3266,7 @@ a genuine ambiguous-character bug in the code generator (`translate` runs before
 `upper`, so a lowercase `o`/`i` was uppercased back into the character the line
 existed to remove) inside a generator that never reached the point of generating.
 
-`0446` pins `public, extensions`, matching the working precedent already in the
+The fix pins `public, extensions`, matching the working precedent already in the
 tree: `0238`'s `sync_blog_image_provenance` pins the same pair and calls
 `digest()` happily. **Adding `extensions` does not loosen the pin** — the schema
 holds extension functions, is not writable by `authenticated`, and so cannot be
@@ -3280,7 +3287,7 @@ every definer function *pins* a search_path — a rule this function passed whil
 being broken. It now also asserts that a pinned search_path **reaches what the
 body calls**, resolving each function's effective (last `create or replace`)
 definition so it judges the database as it stands rather than flagging `0176`
-forever. Reverting `0446` turns it red.
+forever. Reverting `0444` turns it red.
 
 Verified end to end against a local stack with all 318 migrations applied:
 
@@ -3339,7 +3346,7 @@ returned `{"ok": true}`, which is a claim rather than an outcome.
 `docs/audit/plpgsql-bodies-resolve-check.sql` is the general one: it resolves
 every plpgsql body in `public` (70 functions, trigger bodies checked against each
 relation that fires them) against the live catalogue. That is what found this,
-and it is what would have found `0446` — a plpgsql function binds its SQL at CALL
+and it is what would have found the circle bug (`0444`) — a plpgsql function binds its SQL at CALL
 time, so a body can be catastrophically wrong and still install, deploy and pass
 CI cleanly.
 

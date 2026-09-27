@@ -8,7 +8,7 @@
 --
 --   marketplace_create_circle  pinned `search_path = public` while calling
 --                              gen_random_bytes, which lives in `extensions`
---                              → 42883 on every call since 0176 (fixed in 0446)
+--                              → 42883 on every call since 0176 (fixed in 0444)
 --
 --   invest_decide_order        wrote `direction` from a CASE over two string
 --                              literals, which is `text` and does not cast to

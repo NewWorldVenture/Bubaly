@@ -4994,6 +4994,7 @@
   "dashboardSocialSettings.saveSettings": "Salva impostazioni",
   "dashboardSocialSettings.signatureAppendedOnSupportedPlatforms": "Firma (aggiunta sulle piattaforme supportate)",
   "dashboardSocialSettings.workspaceSettings": "Impostazioni dello spazio di lavoro",
+  "dashboardSocialSettings.yourRoleCantChangeAccess": "Solo un proprietario può modificare chi ha accesso.",
   "dashboardSocialSettings.yourRoleCantChangeSettings": "Il tuo ruolo non può modificare le impostazioni.",
   "dashboardSync.basedOnEachProvidersRealPublic": "Basato sull'API pubblica reale di ogni provider. Dove la sincronizzazione bidirezionale non è possibile lo diciamo chiaramente invece di fingere.",
   "dashboardSync.connectAnAccount": "Collega un account",

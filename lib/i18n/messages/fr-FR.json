@@ -4994,6 +4994,7 @@
   "dashboardSocialSettings.saveSettings": "Enregistrer les paramètres",
   "dashboardSocialSettings.signatureAppendedOnSupportedPlatforms": "Signature (ajoutée sur les plateformes prises en charge)",
   "dashboardSocialSettings.workspaceSettings": "Paramètres de l'espace de travail",
+  "dashboardSocialSettings.yourRoleCantChangeAccess": "Seul un propriétaire peut modifier qui a accès.",
   "dashboardSocialSettings.yourRoleCantChangeSettings": "Votre rôle ne permet pas de modifier les paramètres.",
   "dashboardSync.basedOnEachProvidersRealPublic": "Basé sur l'API publique réelle de chaque fournisseur. Lorsque la synchronisation bidirectionnelle est impossible, nous le disons clairement plutôt que de faire semblant.",
   "dashboardSync.connectAnAccount": "Connecter un compte",

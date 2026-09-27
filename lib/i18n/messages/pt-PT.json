@@ -4995,6 +4995,7 @@
   "dashboardSocialSettings.saveSettings": "Guardar definições",
   "dashboardSocialSettings.signatureAppendedOnSupportedPlatforms": "Assinatura (acrescentada nas plataformas suportadas)",
   "dashboardSocialSettings.workspaceSettings": "Definições do espaço de trabalho",
+  "dashboardSocialSettings.yourRoleCantChangeAccess": "Só um proprietário pode alterar quem tem acesso.",
   "dashboardSocialSettings.yourRoleCantChangeSettings": "A sua função não pode alterar definições.",
   "dashboardSync.basedOnEachProvidersRealPublic": "Baseado na API pública real de cada fornecedor. Quando a sincronização bidirecional não é possível, dizemo-lo claramente em vez de fingir.",
   "dashboardSync.connectAnAccount": "Ligar uma conta",
