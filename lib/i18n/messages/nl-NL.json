@@ -529,6 +529,7 @@
   "actions.surveyNotFound": "Enquête niet gevonden.",
   "actions.thatActionIsnTValid": "Die actie is niet geldig.",
   "actions.thatAddressIsAlreadyTaken": "Dat adres is al bezet — probeer een ander.",
+  "actions.thatAppIsNotAvailableToInstallYet": "Die app kan nog niet worden geïnstalleerd.",
   "actions.thatBudgetCouldNotBe": "Dat budget is niet gevonden.",
   "actions.thatChoreCouldNotBe": "Dat klusje is niet gevonden.",
   "actions.thatChoreIsNoLonger": "Dat klusje staat niet meer open — vernieuw en probeer het opnieuw.",

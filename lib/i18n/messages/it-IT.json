@@ -529,6 +529,7 @@
   "actions.surveyNotFound": "Sondaggio non trovato.",
   "actions.thatActionIsnTValid": "Quell’azione non è valida.",
   "actions.thatAddressIsAlreadyTaken": "Quell’indirizzo è già in uso: provane un altro.",
+  "actions.thatAppIsNotAvailableToInstallYet": "Questa app non si può ancora installare.",
   "actions.thatBudgetCouldNotBe": "Impossibile trovare quel budget.",
   "actions.thatChoreCouldNotBe": "Impossibile trovare quella faccenda.",
   "actions.thatChoreIsNoLonger": "Quella faccenda non è più aperta: aggiorna e riprova.",

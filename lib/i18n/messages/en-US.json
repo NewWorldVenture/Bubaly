@@ -529,6 +529,7 @@
   "actions.surveyNotFound": "Survey not found.",
   "actions.thatActionIsnTValid": "That action isn’t valid.",
   "actions.thatAddressIsAlreadyTaken": "That address is already taken — try another.",
+  "actions.thatAppIsNotAvailableToInstallYet": "That app isn't available to install yet.",
   "actions.thatBudgetCouldNotBe": "That budget could not be found.",
   "actions.thatChoreCouldNotBe": "That chore could not be found.",
   "actions.thatChoreIsNoLonger": "That chore is no longer open — refresh and try again.",

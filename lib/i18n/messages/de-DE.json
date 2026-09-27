@@ -529,6 +529,7 @@
   "actions.surveyNotFound": "Umfrage nicht gefunden.",
   "actions.thatActionIsnTValid": "Diese Aktion ist ungültig.",
   "actions.thatAddressIsAlreadyTaken": "Diese Adresse ist bereits vergeben – versuchen Sie eine andere.",
+  "actions.thatAppIsNotAvailableToInstallYet": "Diese App kann noch nicht installiert werden.",
   "actions.thatBudgetCouldNotBe": "Dieses Budget konnte nicht gefunden werden.",
   "actions.thatChoreCouldNotBe": "Diese Aufgabe konnte nicht gefunden werden.",
   "actions.thatChoreIsNoLonger": "Diese Aufgabe ist nicht mehr offen – aktualisieren Sie und versuchen Sie es erneut.",

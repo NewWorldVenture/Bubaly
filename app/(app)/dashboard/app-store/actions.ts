@@ -10,12 +10,26 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 const PATH = '/dashboard/app-store';
+/** family_apps.status values a family may install (0165's CHECK; 0420). */
+const INSTALLABLE = new Set(['published', 'beta']);
 
 export async function installAppAction(appId: string): Promise<Result> {
   const t = await getTranslations();
   if (!appId) return { ok: false, error: t('actions.invalidApp') };
   const ctx = await requireUserContext();
   const sb = await createServer();
+  // Only a published or beta app installs. The catalogue page drew no Install
+  // button for a coming-soon app, and that was the whole rule: this action
+  // upserted any app id it was handed, and an app installed that way showed
+  // "Unavailable" with no way to remove it (SRV-001 l8). 0420 holds the same
+  // rule in the database. The status is read strictly — a read that failed is
+  // not "installable".
+  const { data: app, error: appError } = await sb.from('family_apps')
+    .select('status').eq('id', appId).maybeSingle();
+  if (appError) return { ok: false, error: t('actions.couldNotInstallThatApp') };
+  if (!app || !INSTALLABLE.has((app as { status: string }).status)) {
+    return { ok: false, error: t('actions.thatAppIsNotAvailableToInstallYet') };
+  }
   // PostgREST returns affected rows only when asked, so without `.select()`
   // `data` is null whether one row was written or none was. `InstallButton`
   // holds its state in `useState(initial)`, which is read once at mount and

@@ -411,7 +411,14 @@ describe('Supabase migration filename safety', () => {
     // plus a backfill for keys already orphaned. The application half,
     // resolveAssistantLink requiring an active parent owner, holds without it.
     // Held by docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql.
-    expect(audit.nextVersion).toBe('0420');
+    //
+    // 0420_only_a_released_app_installs.sql (SRV-001 l8) adds two RESTRICTIVE
+    // policies on family_app_installs, INSERT and UPDATE (WITH CHECK), that
+    // require the app to be published or beta; 0165's install policies were
+    // membership alone, so a member could install a coming-soon or retired app
+    // over /rest/v1. DELETE stays open, so a stranded install can always be
+    // removed. Held by docs/audit/only-a-released-app-installs-check.sql.
+    expect(audit.nextVersion).toBe('0421');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

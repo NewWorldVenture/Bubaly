@@ -3098,3 +3098,33 @@ catalogue carries the trigger for UPDATE and DELETE and a definer function
 the API roles cannot execute; and a negative control that drops only the
 trigger leaves the removed parent's key live. Measured red with the migration
 absent and with a trigger function that does nothing.
+
+### `0420` lets only a released app be installed — unapplied
+
+`0420_only_a_released_app_installs.sql` (SRV-001 l8). `family_apps.status` is
+published, beta, coming_soon or retired, and the App Store page drew no
+Install button for a coming-soon app — that was the whole rule. 0165's install
+policies are `is_family_member(family_id)` and nothing else, so any member,
+a child included, could install an unreleased app through the action or over
+`/rest/v1`, and the card then showed "Unavailable" with nothing to press.
+
+**What closes it**: two RESTRICTIVE policies on `family_app_installs`, for
+INSERT and UPDATE (WITH CHECK), requiring the row's app to be published or
+beta, `to authenticated, anon`. DELETE is deliberately left open, so an
+install whose app later moved back to coming-soon can always be removed.
+Existing rows are untouched. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: `installAppAction`
+reads the app's status (strictly — a failed read refuses) and refuses anything
+but published or beta with a sentence in seven locales, and an installed app
+keeps its Remove control whatever its status now says. In production the
+catalogue is empty (no migration seeds `family_apps`) and `/dashboard/app-store`
+is linked from nowhere, so this is a boundary set before it is needed.
+
+**Evidence.** `docs/audit/only-a-released-app-installs-check.sql`: a member
+installs a published and a beta app; a coming-soon and a retired app are
+refused with 42501 and nothing is written; an install cannot be re-pointed at
+an unreleased app; an install whose app went back to coming-soon can still be
+removed; exactly two restrictive guards and none on delete; negative control:
+with the guards dropped the coming-soon install lands. Measured red without
+the migration (five named failures).

@@ -529,6 +529,7 @@
   "actions.surveyNotFound": "Enquête introuvable.",
   "actions.thatActionIsnTValid": "Cette action n’est pas valide.",
   "actions.thatAddressIsAlreadyTaken": "Cette adresse est déjà prise — essayez-en une autre.",
+  "actions.thatAppIsNotAvailableToInstallYet": "Cette application ne peut pas encore être installée.",
   "actions.thatBudgetCouldNotBe": "Ce budget est introuvable.",
   "actions.thatChoreCouldNotBe": "Cette corvée est introuvable.",
   "actions.thatChoreIsNoLonger": "Cette corvée n’est plus ouverte — actualisez et réessayez.",
