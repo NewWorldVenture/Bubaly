@@ -382,7 +382,9 @@ function FeatureMatrixTable({ matrix }: { matrix: FeatureMatrix }) {
       <h2 className="text-center text-2xl font-black">{tr('pricingPricingContent.everyFeatureByPlan')}</h2>
       <p className="mx-auto mt-2 max-w-xl text-center text-sm text-white/60">{tr('pricingContent.your5DayFreeTrial')}</p>
       <PositioningCallouts />
-      <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
+      {/* Scrolls sideways on a phone, so a keyboard must be able to reach it
+          (axe scrollable-region-focusable). */}
+      <div role="region" tabIndex={0} aria-label={tr('pricingPricingContent.everyFeatureByPlan')} className="focus-ring mt-7 overflow-x-auto rounded-2xl border border-white/10">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.03]">

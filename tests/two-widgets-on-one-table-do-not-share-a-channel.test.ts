@@ -29,10 +29,11 @@ describe('two widgets reading one table', () => {
     void client.removeAllChannels();
   });
 
-  it('useRealtimeQuery opens its channel under a per-hook topic', () => {
+  it('useRealtimeQuery opens its channel through ownChannel, one topic per subscription', () => {
     const src = readFileSync('lib/hooks/use-realtime-query.ts', 'utf8');
-    expect(src).toMatch(/const channelId = useId\(\);/);
-    expect(src).toMatch(/\.channel\(`\$\{spec\.name\}:\$\{channelId\}`\)/);
+    expect(src).toMatch(/ownChannel\(supabase, spec\.name\)/);
     expect(src).not.toMatch(/\.channel\(spec\.name\)/);
+    const own = readFileSync('lib/realtime/own-channel.ts', 'utf8');
+    expect(own).toMatch(/client\.channel\(`\$\{name\}:sub\$\{sequence\}`\)/);
   });
 });

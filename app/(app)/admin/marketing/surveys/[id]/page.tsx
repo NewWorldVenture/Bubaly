@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
@@ -12,6 +11,7 @@ import {
 } from '@/lib/marketing/surveys';
 import { SurveyControls } from './survey-controls';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Survey · Marketing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
     console.error('[admin-marketing-survey-detail] survey read failed', surveyError);
     return <SurveyDetailReadError />;
   }
-  if (!survey) notFound();
+  if (!survey) return <AppNotFound backHref="/admin/marketing/surveys" />;
 
   const { data: responses, error: responsesError } = await supabase
     .from('survey_responses').select('*').eq('survey_id', id).order('submitted_at', { ascending: false });

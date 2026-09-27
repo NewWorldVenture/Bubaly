@@ -102,7 +102,7 @@ export function AgentsModule({ briefings, activity }: { briefings: AgentBriefing
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_1.3fr]">
         {/* Specialist roster */}
         <div className="grid grid-cols-2 gap-3 self-start sm:grid-cols-3 lg:grid-cols-2">
           {specialists.map((a) => {

@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 
-export const metadata: Metadata = { title: 'Deals · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Deals · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

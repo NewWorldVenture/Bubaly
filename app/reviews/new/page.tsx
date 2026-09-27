@@ -5,7 +5,7 @@ import { realTextOr } from '@/lib/marketing/reputation';
 import { ReviewForm, type PublicLink } from './review-form';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Leave a review · Bubaly', robots: { index: false } };
+export const metadata: Metadata = { title: 'Leave a review', robots: { index: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function NewReviewPage() {

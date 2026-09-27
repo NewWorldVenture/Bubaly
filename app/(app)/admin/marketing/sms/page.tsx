@@ -58,7 +58,7 @@ export default async function SmsPage() {
         <Card className="h-fit">
           <h2 className="mb-3 font-semibold">{t('adminMarketingSms.newSmsDraft')}</h2>
           <form action={createSmsDraft} className="space-y-3 text-sm">
-            <select name="segment_id" className={inputCls}>
+            <select name="segment_id" aria-label={t('adminMarketingSms.audience')} className={inputCls}>
               <option value="">{t('adminMarketingSms.smsConsentedContacts')}</option>
               {(segments ?? []).map((sg) => <option key={sg.id} value={sg.id}>{sg.name}</option>)}
             </select>

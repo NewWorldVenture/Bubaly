@@ -5,7 +5,7 @@ import { ExperienceScorecardModule } from '@/components/modules/experience-score
 import { TimeSavedBanner } from '@/components/metric/time-saved-banner';
 import { loadTimeSaved } from '@/lib/metric/time-saved-server';
 
-export const metadata: Metadata = { title: 'Experience Scorecard | Bubaly' };
+export const metadata: Metadata = { title: 'Experience Scorecard' };
 export const dynamic = 'force-dynamic';
 
 export default async function ExperiencePage() {

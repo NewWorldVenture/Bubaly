@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { setCampaignStatus } from '../../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Marketing · Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
     console.error('[admin-marketing-campaign-detail] campaign read failed', campaignError);
     return <CampaignDetailReadError />;
   }
-  if (!c) notFound();
+  if (!c) return <AppNotFound backHref="/admin/marketing/campaigns" />;
 
   let audience = 0;
   let segmentName: string | null = null;

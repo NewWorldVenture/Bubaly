@@ -89,7 +89,7 @@ export function OutcomesLauncher({ plans, initialOutcomeId }: { plans: OutcomePl
         description={t('outcomesLauncher.pickAnOutcomeWeLl')}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_1.1fr]">
         {/* Outcome picker */}
         <div className="grid grid-cols-2 gap-3 self-start">
           {plans.map(({ outcome, urgency }) => {

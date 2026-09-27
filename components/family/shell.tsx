@@ -56,7 +56,7 @@ export function MiniEmpty({ icon: Icon, text }: { icon: React.ComponentType<{ cl
   return (
     <div className="flex flex-col items-center justify-center py-10 text-center">
       <Icon className="h-8 w-8 text-muted/30" />
-      <p className="mt-2 text-sm text-muted/60">{text}</p>
+      <p className="mt-2 text-sm text-muted">{text}</p>
     </div>
   );
 }

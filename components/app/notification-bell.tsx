@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { bellLabel, badgeCount } from '@/lib/tone/partner-phrasing';
 import { DIGEST_NOTIFICATION_TYPES } from '@/lib/notifications/priority';
 import { useApp } from './app-context';
+import { ownChannel } from '@/lib/realtime/own-channel';
 
 export function NotificationBell() {
   const { familyId, userId } = useApp();
@@ -43,8 +44,7 @@ export function NotificationBell() {
       setCount(c ?? 0);
     };
     void load();
-    const channel = supabase
-      .channel(`notif-bell:${familyId}`)
+    const channel = ownChannel(supabase, `notif-bell:${familyId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `family_id=eq.${familyId}` },

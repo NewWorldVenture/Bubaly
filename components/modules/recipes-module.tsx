@@ -300,7 +300,7 @@ export function RecipesModule() {
             </button>
           ))}
         </div>
-        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label={tr('recipes.category')}
           className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
           <option value="all">{tr('recipes.allCategories')}</option>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}

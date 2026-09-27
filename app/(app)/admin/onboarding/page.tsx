@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { isSuperAdmin } from '@/lib/supabase/auth';
-import { notFound } from 'next/navigation';
 import { loadOnboardingProgress } from '@/lib/analytics/onboarding-server';
 import { ThirtyMinuteSummary } from '@/components/analytics/thirty-minute-summary';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -31,7 +31,7 @@ async function ReadFailure() {
 }
 
 export default async function OnboardingAuditPage() {
-  if (!(await isSuperAdmin())) notFound();
+  if (!(await isSuperAdmin())) return <AppNotFound backHref="/admin" />;
   const t = await getTranslations();
   const supabase = createServiceClient();
 

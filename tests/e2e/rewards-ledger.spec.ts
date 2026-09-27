@@ -11,7 +11,7 @@ const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/pack
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
-  'components/modules/rewards-module.tsx', 'lib/hooks/use-realtime-query.ts',
+  'components/modules/rewards-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',

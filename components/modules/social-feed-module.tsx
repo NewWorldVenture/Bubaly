@@ -270,7 +270,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                     <PlatformGlyph platform={i.platform} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{i.authorName}</p>
-                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
+                      <p suppressHydrationWarning className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -322,7 +322,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             <p className="flex items-center gap-1 text-sm font-semibold">
               {item.authorName}
               {item.verified && <BadgeCheck className="h-3.5 w-3.5 text-sky-500" />}
-              <span className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
+              <span suppressHydrationWarning className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
             </p>
             <p className={cn('text-xs', m.tint)}>{m.label}{item.authorHandle ? ` · ${item.authorHandle}` : ''}</p>
           </div>

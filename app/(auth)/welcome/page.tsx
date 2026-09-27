@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
+import { titleWithoutDoubledBrand } from '@/lib/marketing/seo';
 import Link from 'next/link';
 import { Sparkles, ArrowRight } from 'lucide-react';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
-  return { title: t('welcome.welcomeToBubaly') };
+  // Ends in the brand in every locale, so it replaces the template's suffix.
+  return { title: titleWithoutDoubledBrand(t('welcome.welcomeToBubaly')) };
 }
 
 // Screen 1 of the onboarding mockups: a dedicated welcome / get-started card that

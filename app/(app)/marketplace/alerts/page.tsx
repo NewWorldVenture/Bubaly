@@ -17,7 +17,7 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Alerts · Marketplace | Bubaly' };
+export const metadata: Metadata = { title: 'Alerts · Marketplace' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceAlertsPage() {

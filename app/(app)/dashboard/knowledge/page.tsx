@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { KnowledgeBaseModule } from '@/components/modules/knowledge-base-module';
 
-export const metadata: Metadata = { title: 'Family Knowledge Base | Bubaly' };
+export const metadata: Metadata = { title: 'Family Knowledge Base' };
 
 export default async function KnowledgePage() {
   await requireUserContext();

@@ -58,7 +58,7 @@ export default async function FamilyPermissionsPage() {
 
       <SectionCard title={t('familyPermissions.permissionMatrix')} description={t('permissions.createReadUpdateDeletePer')}>
         {resources.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div role="region" tabIndex={0} aria-label={t('familyPermissions.permissionMatrix')} className="focus-ring overflow-x-auto">
             <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="text-left text-muted">

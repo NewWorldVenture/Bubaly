@@ -91,7 +91,7 @@ export function FindPhoneView() {
 
       <p className="text-center text-xs text-muted">
         {t('findPhone.locationUpdatesComeFromEachMember')}{' '}
-        <Link href="/dashboard/locator" className="text-brand-text">{t('findPhone.locationSettings')}</Link>.
+        <Link href="/dashboard/locator" className="text-brand-text underline hover:decoration-2">{t('findPhone.locationSettings')}</Link>.
       </p>
     </div>
   );

@@ -1,4 +1,3 @@
-import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
@@ -8,6 +7,7 @@ import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta'
 import { countdownLabel } from '@/lib/vacations/dates';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export default async function TripLayout({
   children, params,
@@ -28,7 +28,7 @@ export default async function TripLayout({
       </div>
     );
   }
-  if (!trip) notFound();
+  if (!trip) return <AppNotFound backHref="/dashboard/vacations" />;
 
   const kind = lookup(VACATION_KINDS, trip.kind);
   const status = VACATION_STATUSES.find((s) => s.value === trip.status);

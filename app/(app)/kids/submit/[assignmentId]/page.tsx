@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ArrowLeft, Clock, Camera, Star } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReward, DIFFICULTY_LABELS, fmtCash, type Difficulty } from '@/lib/chores/logic';
 import { SubmitProofForm } from './submit-form';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Submit your work' };
 export const dynamic = 'force-dynamic';
@@ -24,10 +24,10 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
   const { data: assignment, error: assignmentError } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (assignmentError) throw new Error(`Failed to load chore assignment "${assignmentId}": ${assignmentError.message}`);
-  if (!assignment) notFound();
+  if (!assignment) return <AppNotFound backHref="/kids" />;
   const { data: chore, error: choreError } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
   if (choreError) throw new Error(`Failed to load chore "${assignment.chore_id}": ${choreError.message}`);
-  if (!chore) notFound();
+  if (!chore) return <AppNotFound backHref="/kids" />;
 
   const proofKind = (chore.proof_required as string) ?? 'none';
   // Reward preview at a "great job" score so kids see the upside.

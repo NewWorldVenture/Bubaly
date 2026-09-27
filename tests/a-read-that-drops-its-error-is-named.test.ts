@@ -69,7 +69,7 @@ describe('a read that drops its error is named, with why that is harmless', () =
     // main's C1-S9-45 renders the failure in place of throwing it; either way
     // a failed read is answered before `notFound()` can call it a missing trip.
     const layout = src('app/(app)/dashboard/vacations/[id]/layout.tsx');
-    expect(layout).toMatch(/if \(tripError\) \{[\s\S]{0,300}<ErrorState[\s\S]{0,200}\n\s*if \(!trip\) notFound\(\);/);
+    expect(layout).toMatch(/if \(tripError\) \{[\s\S]{0,300}<ErrorState[\s\S]{0,200}\n\s*if \(!trip\) return <AppNotFound /);
     const concierge = src('components/vacations/trip-concierge.tsx');
     expect(concierge).toMatch(/if \(convoError\) \{ setLoadFailed\(true\); return; \}/);
     expect(concierge).toMatch(/if \(msgsError\) \{ setLoadFailed\(true\); return; \}/);

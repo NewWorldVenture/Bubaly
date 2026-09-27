@@ -215,7 +215,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
                           ? <span className="text-[10px] font-bold uppercase tracking-wide text-muted">{t('contactCenter.conciergeReply')}</span>
                           : <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.emoji} {meta.label}</span>}
                         <span className="text-xs text-muted">{outbound ? `to ${formatPhone(m.to_addr) }` : `from ${m.from_addr ? formatPhone(m.from_addr) : 'unknown'}`}</span>
-                        <span className="ml-auto text-[11px] text-muted/70">{fmtTimeAgo7(m.occurred_at)}</span>
+                        <span suppressHydrationWarning className="ml-auto text-[11px] text-muted">{fmtTimeAgo7(m.occurred_at)}</span>
                       </div>
                       <p className="mt-1 text-sm text-fg">{m.ai_summary || m.body}</p>
                       {replyCopy && (
