@@ -65,7 +65,9 @@ describe('a thrown server action is reported to the person who caused it', () =>
     // money-cards-view counted the children it MEANT to issue for, then threw
     // part-way and told nobody; the toast still named the full number.
     const cards = readFileSync('components/wallet/money-cards-view.tsx', 'utf8');
-    expect(cards).toMatch(/if \(issued > 0\) success\(`Issued \$\{issued\}/);
+    // The count actually issued, not the count intended — now through the
+    // catalogue (I18N-002), singular and plural.
+    expect(cards).toMatch(/if \(issued > 0\) \{\s*success\(issued === 1[\s\S]{0,160}\{ count: issued \}/);
     expect(cards).toMatch(/finally \{\s*\n\s*setBusy\(null\);/);
   });
 
