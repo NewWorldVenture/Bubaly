@@ -201,8 +201,8 @@ posts is the parallel session's work (#588, #590).
 ### Fixes from Claude-1's pass on lanes A–F (for each lane holder to fold into the rows)
 
 Found by Claude-1's local crawls as a parent, a super admin, a child and a German reader, plus a
-read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #587) and
-recorded as `C1-S9-94`…`C1-S9-106`. Every lane is claimed by another session, so the rows are
+read of each flagged page. They are fixed on `claude/bubaly-repo-connect-45d8k6` (PR #598) and
+recorded as `C1-S9-94`…`C1-S9-111`. Every lane is claimed by another session, so the rows are
 theirs to update; the findings are listed here rather than edited under someone else's claim.
 
 | Route(s) | Lane | Finding → fix |
@@ -221,6 +221,11 @@ theirs to update; the findings are listed here rather than edited under someone 
 | `/reviews/new` | A | "Review us on …" buttons and star labels English → `C1-S9-100` |
 | `/gift/[token]` | A | tab title, occasion label and "a child"/"a family" English → `C1-S9-100`, `C1-S9-104` (composes with main's dead-link card) |
 | `/blog`, `/blog/[slug]` | A | "copy link" copied the host, not the canonical URL → `C1-S9-95`; save button's labels and subscribe failure English → `C1-S9-103` |
+| `/`, `/ai`, `/privacy`, `/reviews/new` and every page that ends in the shared CTA | A | English to a German reader: the CTA's defaults, the `/ai` subtitle, two privacy lines, the review form's default copy; two legal titles overflowed a phone → `C1-S9-108` |
+| `/dashboard/billing` | C | plan buttons, statuses, plan names, tabs, stats and categories English; "Payment & invoices" failed silently → `C1-S9-109` |
+| `/dashboard/chores` | C | statuses, tabs, "N pts" English; a template wrote an English chore → `C1-S9-110` |
+| `/dashboard/inbox` | D | channels, categories, tabs, stats, buttons, sample texts English; an action item's reminder noted "From … · Call" in English → `C1-S9-111` |
+| `/dashboard/reminders` | D | types, priorities, repeats, stats, lead times, snooze toast English; a template wrote an English reminder → `C1-S9-111` |
 
 ### Every page
 
@@ -45809,6 +45814,36 @@ Two registers means two answers to "what state is this page in". The second one 
 - 33 keys added to seven catalogues.
 
 **Status:** FIXED. Scanner findings for `chores-module` drop from 36 to 3, and those 3 are type-alias fragments.
+
+---
+
+### `[CLAUDE-1][MEDIUM][REMINDERS/INBOX]` C1-S9-111 — reminders and the Communications Hub showed English in every locale, and two actions wrote English into family data
+
+**File/path:** `components/modules/reminders-module.tsx`, `components/modules/inbox-module.tsx`; seven catalogues; `lib/i18n/messages/INVARIANT.txt`.
+
+**Problem.**
+- **`/dashboard/reminders`** showed English in every locale:
+  - reminder types, priorities and repeat options
+  - the four stat tiles
+  - the early-reminder lead times ("15 minutes before")
+  - the snooze toast ("Snoozed for 15 min")
+- **`/dashboard/inbox`** showed English in every locale:
+  - channels, categories, tabs and stats
+  - the Draft reply / Copy / Save buttons
+  - the four AI-import sample texts
+- **Two actions wrote English into the family's data:**
+  - Quick-add templates created each reminder with an English title and English notes.
+  - Turning an inbox action item into a reminder noted it "From <name> · Call".
+
+**Fix.**
+- Labels are catalogue keys, and counted phrases go through the locale's plural rules (`usePlural`).
+- Templates and the "From …" note are worded in the picker's language when they are written.
+- Stored values are unchanged. Kind, priority, recurrence, channel and category stay the key and are worded at render.
+- The AI reply prompt names the channel by its id, since the prompt is instructions to the model rather than reader copy.
+
+**Status:** FIXED.
+- Scanner findings: `reminders-module` 29 → 1 (a type-alias fragment) and `inbox-module` 29 → 0.
+- `tests/i18n-ungated-surface-ratchet.test.ts` CEILING drops from 2819 to 2581, which holds the burn-down so far.
 
 ---
 
